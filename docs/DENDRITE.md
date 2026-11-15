@@ -1,7 +1,15 @@
-# Dendrite: a spiking Transformer with delayed address memory
+# Dendrite: spike-addressed memory and hybrid successor modeling
 
 See the [benchmark report](BENCHMARKS.md) for charts and the
 [reproduction guide](REPRODUCE_DENDRITE.md) for a source map and commands.
+
+The spiking-backbone models use address memory for recall and byte
+prediction. The separate successor language model uses a conventional
+Transformer, an exact suffix cache and a spike readout. Its lower
+enwik8 loss measures the hybrid. The spiking event language model
+scored **4.469 bits per byte** on its sampled test, versus **2.431**
+for the local Transformer control. These experiments do not establish
+a spiking-backbone language modeling advantage or frontier performance.
 
 Dendrite also has an [event memory](#event-memory-for-variable-delays)
 that learns when to capture an address and when to write a value. It can
@@ -297,10 +305,14 @@ analog attention and spike memory.
 | Local RoPE Transformer | 357,696 | 3 | 2.431 |
 | Compact local Transformer + event memory | 357,486 | 3 | 2.516 |
 | Full-width local Transformer + event memory | 358,134 | 1 | 2.834 |
-| Pure spiking Dendrite event | 341,203 | 1 | 4.469 |
+| Dendrite event, integer-spike backbone (one neuron step per byte) | 341,203 | 1 | 4.469 |
 
 All rows train on 3.072M sampled byte targets at context 256 and
-evaluate on the same 307,200 held-out bytes. Reducing the memory
+evaluate on the same 307,200 held-out bytes. In the event model, a
+single neuron step per byte produces bounded spike counts. Address
+memory persists across bytes. The recall result measures binding
+across distractors, while the language modeling run measures next-byte
+prediction. Reducing the memory
 branch's width and initial residual scale improved the hybrid. Both
 hybrids still scored above the conventional baseline's loss. For
 published scale, LongVQ reports 0.97 bpb on enwik8 at 47M parameters.
@@ -333,9 +345,10 @@ trained hybrid's memory residual for a paired evaluation.
 
 ## Predicting bytes from verified successor memory
 
-The `transformer_successor` variant adds memory at the output of the
-local Transformer. A write stores the observed byte under an exact
-suffix of earlier bytes. Each suffix length has 2,048 slots. The hash
+The hybrid `transformer_successor` variant adds memory at the output of
+a conventional local Transformer with sliding-window softmax attention
+and a continuous feed-forward network. A write stores the observed byte
+under an exact suffix of earlier bytes. Each suffix length has 2,048 slots. The hash
 chooses a slot, and a read compares the entire packed suffix. A hash
 collision can evict a record. A slot for an unrelated suffix cannot
 vote for a prediction. When several matching suffixes predict the

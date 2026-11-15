@@ -1,31 +1,156 @@
-# ShuntFormer — a spike-driven transformer with competitive, shunting-normalised attention
+# ShuntFormer
 
-**Dendrite** extends ShuntFormer with two bounded memory experiments.
-The [event memory](docs/DENDRITE.md#event-memory-for-variable-delays)
-averaged **99.95%** accuracy on typed recall with 128 distractors
-between key and value after training with at most four. The
-[verified successor model](docs/DENDRITE.md#predicting-bytes-from-verified-successor-memory)
-uses exact byte suffixes and a learned spike readout. It reached
-**2.025 bits per byte** on the continuous enwik8 test stream, versus
-**2.457** for the local Transformer trained on the same byte budget.
+The current release is a spiking byte language model with coincidence-routed
+delay groups and a bounded correction memory. Native CPU inference uses
+integer synapses and emits one population of signed vocabulary spikes per
+byte. The fixed-threshold model has 815,232 parameters and uses 32,696 bytes
+of streaming tensor state.
+
+## Run the current model
+
+From the repository root, use Python 3.11 or 3.12.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python experiments/generate_event_lm.py models/spiking-byte-lm/weights.pt \
+  --prompt 'The first chapter' --bytes 128
+```
+
+The checkout includes one checkpoint selected by enwik8 validation loss.
+The [checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v1)
+contains every seed in the two-size comparison, both Transformer references,
+and the parent checkpoints for the paired router test.
+
+[Model card, architecture and training handoff](models/spiking-byte-lm/README.md) ·
+[Leaderboards and charts](docs/LEADERBOARD.md) ·
+[Per-seed results and interventions](docs/SPIKE_CODE_FORECAST.md#learned-context-keys-and-firing-thresholds) ·
+[Browser report](docs/report.html#spiking-byte-lm)
+
+## Current benchmark
+
+Three-seed means in bits per byte. Each model in this comparison has about
+815,000 parameters and saw 13,107,200 enwik8 training targets. The test
+scores cover the complete enwik8 test split and 16 complete PG-19 books.
+Full attention saw a causal prefix of up to 512 bytes per scored window
+and reports the FP32 key and value storage at that length.
+
+<!-- event-lm-leaderboard:start -->
+
+| Model | enwik8 | PG-19 | State |
+|---|---:|---:|---:|
+| Context tags, fixed thresholds | 2.24015 | **3.25043** | 32,696 B |
+| Context tags, learned thresholds | 2.25351 | 3.25233 | 32,696 B |
+| Local Transformer | 2.04457 | 3.26187 | 32,768 B |
+| Full-attention Transformer | **2.01841** | 3.29072 | 1.5 MiB |
+
+<!-- event-lm-leaderboard:end -->
+
+The fixed-threshold spiking bank led on mean PG-19 loss. Its advantage
+over the local Transformer came from one seed. Both Transformer
+references led on enwik8. The [matched leaderboard](docs/LEADERBOARD.md)
+includes the smaller models and the native pulse counts.
+
+![Held-out loss across the two matched sizes and corpora](results/figures/event_lm_loss.png)
+
+Regenerate the current leaderboards, charts, and browser report from the
+checked-in JSON results with
+`python experiments/plot_event_lm_study.py` and
+`python experiments/make_report.py docs/report.html`.
+
+## Earlier research
+
+**Benchmark scope.** Next-byte prediction uses held-out real text from
+enwik8 and PG-19. Associative recall uses generated sequences. PyTorch
+runs the models on CPUs and Apple GPUs through Metal (MPS), including
+the simulation of spike dynamics. The historical energy figures apply
+assumed costs to counted operations.
+
+[Coincidence-routed spiking byte decoders](docs/EVENT_LM.md) route delayed
+spikes into separate pathways. They emit signed vocabulary spikes and
+generate bytes using the integer CPU export. The report compares these
+decoders and routing controls against matched Transformers on real text.
+The [routing follow-up](docs/EVENT_ROUTING_V2.md) tests delay feedback, spike
+timing, and signed steering on enwik8 and PG-19.
+
+[Spike correction memory](docs/SPIKE_CORRECTION.md) pairs finer spike counts
+with a learned memory that writes only when charge falls outside a learned
+tolerance. The fine-count router improved on the earlier spike model.
+The 39-byte Transformer led the shorter-budget loss comparison, where
+hiding old memory reads slightly improved PG-19 loss.
+
+[Direct spike forecasts](docs/SPIKE_CODE_FORECAST.md) use the 16× router
+to forecast the next byte’s input spike code. The memory emits correction
+spikes through the original vocabulary head. It improved held-out loss
+over the plain router and used 47.8% fewer integrate-and-fire emissions
+than the hard-guess bank on the validation activity sample.
+
+[Temporal Spiking LM](docs/TEMPORAL_SNN.md) uses spike counts throughout the
+hidden backbone and carries membrane charge across bytes. Its 32-spike
+variant scored **2.501 bits per byte** on enwik8 across three seeds. The
+reset-every-byte control scored **2.483**, and the conventional local
+Transformer scored **2.431** on the same training budget.
+
+[Paired-pulse membrane memory](docs/PULSE_MEMORY.md) adds a spiking memory
+bank whose read pulses restore the stored charge. It achieved **96.6%**
+on a final synthetic query after a 2,048-token gap, with both erasure
+controls near **25%** chance. On enwik8, the bank and the reset-per-byte
+spiking control both scored **2.48 bits per byte** across three seeds.
+
+[Write protection and four-pulse reads](docs/PULSE_ITERATION.md) extend
+that bank with per-cell write cooldowns and a timing code. The strongest
+synthetic variant reached **40.49%** with competing writes at a
+32-token gap, with 25% chance accuracy. Write protection substantially
+increased reads of old charge on enwik8, with negligible loss changes
+when those old phases were hidden from the model.
+
+[Individual write credit](docs/PULSE_WRITE_CREDIT.md) measures whether an
+accepted write helps prediction 128–512 bytes later. It also compares
+query-dependent timing with learned thresholds shared across queries.
+
+[Charge transfer memory](docs/CHARGE_MEMORY.md) preserves the total charge
+of a cell pair during fine writes. The real-text comparison evaluates it
+on enwik8 and 16 held-out PG-19 excerpts against a spiking decoder without
+the bank, an independent-write control, and local and full-context
+Transformers. The local Transformer had the best mean loss on both
+datasets. Hiding old conserved charge barely changed enwik8 loss.
+
+**Dendrite** studies bounded memory in two model families.
+
+- **Spiking-backbone event model.** The event memory averaged **99.95%**
+  accuracy on typed recall with 128 distractors between key and value
+  after training with at most four. The separate event language model
+  used one neuron step per byte and scored **4.469 bits per byte** on
+  its sampled enwik8 test, versus **2.431** for the local Transformer
+  control. [Event memory and results](docs/DENDRITE.md#event-memory-in-language-models)
+- **Hybrid successor language model.** A conventional local Transformer
+  with an exact byte suffix cache and a learned spike readout reached
+  **2.025 bits per byte** on the continuous enwik8 test stream, versus
+  **2.457** for the local Transformer trained on the same byte budget.
+  [Successor architecture](docs/DENDRITE.md#predicting-bytes-from-verified-successor-memory)
+
+The Dendrite language modeling gain above is for the hybrid. The
+charge transfer study records the results of a separate matched
+comparison with the spiking backbone.
 
 [Benchmarks and charts](docs/BENCHMARKS.md) ·
 [Architecture and prior work](docs/DENDRITE.md) ·
 [Source map and reproduction](docs/REPRODUCE_DENDRITE.md) ·
 [Browser report](docs/report.html)
 
-![Continuous successor model loss on enwik8 and eight PG-19 excerpts](results/figures/dendrite_successor_loss.png)
+![Continuous loss for the conventional Transformer and its hybrid successor variants on enwik8 and eight PG-19 excerpts](results/figures/dendrite_successor_loss.png)
 
 ShuntFormer is a spiking transformer in the Spikformer / Meta-SpikeFormer
-lineage. Its attention replaces softmax with two cortical inhibition motifs,
-using only accumulates and comparisons:
+lineage. Its attention replaces the softmax weights with two inhibition
+motifs applied to spike coincidence scores.
 
 * **Lateral inhibition.** Each query's firing threshold tracks the mean
   excitation it receives (`θ_i = γ·q_i·k̄ + b`, O(N·d)). Only keys that beat
   this threshold fire, so the number of winners adapts per query.
-* **Shunting inhibition.** The attended values are divided by the number of
-  winners. On neuromorphic hardware this is done by scaling the output
-  neuron's threshold, not by a division.
+* **Shunting inhibition.** The PyTorch implementation divides the pooled
+  value by the total winner count, or by the total spike weight for graded
+  attention.
 
 Because the output is bounded for every query and every sequence length, the
 same block runs bidirectionally (vision) and causally (language modelling).
@@ -38,8 +163,8 @@ How the residual-saturation failure was found:
 
 ## Historical ShuntFormer results
 
-Everything was trained from scratch on a 4-core CPU with no GPU, so the
-models are small (0.1–0.9M parameters) and the budgets short. **Every variant
+The historical comparisons in this section trained models from scratch
+on a four-core CPU with short budgets and 0.1–0.9M parameters. **Every variant
 uses the same backbone:** integer LIF neurons (T=1, up to D=4 spikes), a
 membrane-shortcut residual with pre-neuron BN, and the same widths, depth,
 data, steps and seeds. Only the attention changes; ablations also swap the
@@ -87,7 +212,7 @@ the context gives 15–20%.
 4 layers, d = 128, context 128, ≈0.88M parameters, 1,500 steps (6.1M tokens),
 standard 90M/5M/5M split, one seed.
 
-| model | spike-driven | val bpb | test bpb | tokens to reach 3.5 bpb | firing rate | est. energy / token |
+| model | spike-driven | val bpb | test bpb | tokens to reach 3.5 bpb | firing rate | operation-count energy estimate / token |
 |---|---|---|---|---|---|---|
 | ANN transformer | – | 2.647 | 2.633 | 1.44M | – | 4.37 µJ |
 | softmax over spikes | no | 3.145 | 3.138 | 2.42M | 0.14 | 0.47 µJ |
@@ -111,7 +236,7 @@ one seed. Absolute numbers are far below the literature's 300–400-epoch
 results with 9M-parameter models. Only the comparison between rows is
 meaningful.
 
-| model | spike-driven | test acc. | accuracy by epoch | firing rate | est. energy / image |
+| model | spike-driven | test acc. | accuracy by epoch | firing rate | operation-count energy estimate / image |
 |---|---|---|---|---|---|
 | ANN transformer | – | 78.9 | 53.3 → 67.6 → 72.9 → 78.0 → 78.9 | – | 197 µJ |
 | **ShuntFormer-4 (CSA-4)** | yes | **73.4** | 50.4 → 62.5 → 67.1 → 71.9 → 73.4 | 0.13 | 17.2 µJ |
@@ -121,18 +246,14 @@ meaningful.
 
 ### 4. Are spiking transformers sample-efficient?
 
-**Not compared with ANNs.** Every spiking model here needed at least 1.9× the
-ANN's training tokens to reach the same enwik8 loss.
+The ANN reached 3.5 bits per byte earlier than the spike-based variants in
+this enwik8 comparison.
 
 **The attention design matters a lot within spiking models:**
 - ShuntFormer-4 reaches 3.5 bpb with 1.6× fewer tokens than Spikformer SSA.
 - WTA and SDSA do not reach 3.5 bpb within the budget.
 - On CIFAR-10, ShuntFormer passes Spikformer's final accuracy after 3 of its
   5 epochs.
-
-The case for spiking networks remains inference energy on neuromorphic
-hardware. These estimates put it at roughly 10× below the ANN, but they leave
-out memory traffic.
 
 ### What these results do not show
 
@@ -142,9 +263,9 @@ out memory traffic.
   can change with scale.
 - **Seeds.** Language and vision use one seed. Small gaps (for example,
   binary CSA vs CSA-4 on CIFAR-10) are within run-to-run noise.
-- **Energy is an estimate.** It uses the field's standard 45 nm
-  operation-count method (4.6 pJ per MAC, 0.9 pJ per AC, Horowitz 2014) and
-  ignores memory traffic.
+- **Energy model.** The estimates multiply synaptic operation counts by
+  assumed 45 nm arithmetic costs of 4.6 pJ per MAC and 0.9 pJ per accumulate
+  (Horowitz 2014). Memory traffic and runtime overhead fall outside this model.
 - **Complexity.** CSA is O(N²) in comparisons, like SSA. Only its inhibition
   term is O(N·d).
 
@@ -180,7 +301,7 @@ snnformer/            the library
   dendritic*.py       spike-addressed memory with fixed delay or learned capture and commit
   transformer_reference.py   full and local Transformer controls
   successor_*.py      verified byte successor memory and spike readout
-  ops.py              synaptic-operation counter and 45 nm energy estimate
+  ops.py              synaptic-operation counter and 45 nm arithmetic cost model
 experiments/
   common.py           the variant registry (every model compared in this README)
   recall.py           multi-query associative recall (MQAR)

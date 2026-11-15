@@ -1,0 +1,108 @@
+{
+ "args": {
+  "variant": "event_correction_code",
+  "data": "/tmp/transformer-snn-data/enwik8",
+  "device": "mps",
+  "threads": 4,
+  "seed": 101,
+  "dim": 96,
+  "hidden": 201,
+  "memory_heads": 4,
+  "memory_slots": 14,
+  "memory_width": 32,
+  "forecast_key_channels": 2,
+  "match_forecast_key": true,
+  "spike_resolution": 16,
+  "depth": 3,
+  "no_carry": true,
+  "heads": 4,
+  "mlp_ratio": 4.4,
+  "local_window": 32,
+  "local_lookback": null,
+  "ctx": 1024,
+  "bs": 2,
+  "steps": 400,
+  "warmup": 32,
+  "lr": 0.003,
+  "wd": 0.05,
+  "eval_every": 100,
+  "eval_bs": 2,
+  "eval_batches": 8,
+  "final_eval_batches": 48,
+  "validation_only": true,
+  "initialize_from": "checkpoints/event_steered_count16_correction_2x_s1.pt",
+  "freeze_router": true,
+  "code_loss_weight": 0.25,
+  "tag": "forecast_key_keyed",
+  "checkpoint": "checkpoints/event_correction_code_forecast_key_keyed_s101.pt",
+  "force": false
+ },
+ "cfg": {
+  "dim": 96,
+  "hidden": 201,
+  "depth": 3,
+  "route": "steered_correction_code",
+  "carry": false,
+  "continuous": false,
+  "memory_heads": 4,
+  "memory_slots": 14,
+  "resolution": 16,
+  "memory_width": 32,
+  "forecast_key_channels": 2,
+  "match_forecast_key": true
+ },
+ "device": "mps",
+ "params": 407616,
+ "trainable_params": 11136,
+ "initialization": {
+  "checkpoint": "checkpoints/event_steered_count16_correction_2x_s1.pt",
+  "sha256": "0f0641ddb4491fbc041687472c212af3af5d20f1be764370922f5ba41f33b4fc",
+  "training_targets": 6553600
+ },
+ "data_sha1": "57b8363b814821dc9d47aa4d41f58733519076b2",
+ "train_target_bytes": 819200,
+ "curve": [
+  {
+   "step": 100,
+   "tokens": 204800,
+   "train_bpb": 2.574861303067755,
+   "val_bpb": 2.3404769186203436,
+   "val_argmax_accuracy": 0.541748046875,
+   "code_loss": 0.23199832439422607
+  },
+  {
+   "step": 200,
+   "tokens": 409600,
+   "train_bpb": 2.325152640991358,
+   "val_bpb": 2.3395003366352505,
+   "val_argmax_accuracy": 0.54296875,
+   "code_loss": 0.22163431346416473
+  },
+  {
+   "step": 300,
+   "tokens": 614400,
+   "train_bpb": 2.3127002371556364,
+   "val_bpb": 2.337428268159824,
+   "val_argmax_accuracy": 0.542724609375,
+   "code_loss": 0.2233722060918808
+  },
+  {
+   "step": 400,
+   "tokens": 819200,
+   "train_bpb": 2.2499463475955603,
+   "val_bpb": 2.3383088838257358,
+   "val_argmax_accuracy": 0.5428466796875,
+   "code_loss": 0.20801469683647156
+  }
+ ],
+ "val_bpb": 2.3698713978860546,
+ "test_bpb": null,
+ "val": {
+  "bpb": 2.3698713978860546,
+  "argmax_accuracy": 0.53558349609375,
+  "target_bytes": 98304
+ },
+ "test": null,
+ "scoring": "normalized exponential of scaled output",
+ "seconds": 13.385262966156006
+}

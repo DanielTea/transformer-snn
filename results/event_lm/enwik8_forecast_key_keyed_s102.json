@@ -1,0 +1,206 @@
+{
+  "dataset": "enwik8",
+  "data_sha1": "57b8363b814821dc9d47aa4d41f58733519076b2",
+  "split": "test",
+  "protocol": "causal_warmed_windows",
+  "device": "mps",
+  "context_bytes": 2048,
+  "window_stride_bytes": 2048,
+  "unscored_history_bytes": 256,
+  "batch_size": 8,
+  "unscored_leading_bytes_per_book": 1,
+  "target_bytes": 4999999,
+  "models": [
+    {
+      "run_name": "event_correction_code_s102_forecast_key_keyed",
+      "checkpoint": "checkpoints/event_correction_code_forecast_key_keyed_s102.pt",
+      "parameters": 407616,
+      "streaming_tensor_bytes": 32696,
+      "scoring": "normalized exponential of scaled output",
+      "temperature": 1.0,
+      "continuous_correction_state": true,
+      "training_context_bytes": 1024,
+      "target_bytes": 4999999,
+      "nll_nats": 8037793.171082124,
+      "bpb": 2.3192173333657378,
+      "raw_bpb": 2.3192173333657378,
+      "argmax_accuracy": 0.5521943104388621,
+      "prefix_age": {
+        "unseen": {
+          "target_bytes": 1919830,
+          "nll_nats": 3525835.451080798,
+          "bpb": 2.6495602841213906
+        },
+        "1-31": {
+          "target_bytes": 85805,
+          "nll_nats": 106055.19958113204,
+          "bpb": 1.7831747624985543
+        },
+        "32-127": {
+          "target_bytes": 335417,
+          "nll_nats": 520471.7411077047,
+          "bpb": 2.2386521846505394
+        },
+        "128-511": {
+          "target_bytes": 322155,
+          "nll_nats": 482946.26621477574,
+          "bpb": 2.162760730964592
+        },
+        "512+": {
+          "target_bytes": 2336792,
+          "nll_nats": 3402484.513097713,
+          "bpb": 2.1006352014845864
+        }
+      },
+      "books": [
+        {
+          "book_id": 0,
+          "excerpt_file": "enwik8 test",
+          "excerpt_sha256": "86f62c0adeb6c27763f308b8913bec743626421a4d2b4010f1e177a40eef7750",
+          "source_start_raw_byte": 95000000,
+          "excerpt_bytes_used": 5000000,
+          "target_bytes": 4999999,
+          "nll_nats": 8037793.171082124,
+          "bpb": 2.3192173333657378,
+          "raw_nll_nats": 8037793.171082124,
+          "correct_bytes": 2760971,
+          "memory_stats": {
+            "address_events": 19999966,
+            "changed_cells": 95917381,
+            "correction_spikes": 879107483,
+            "nonzero_read_cells": 114841601,
+            "age_sum": 5933653993,
+            "key_write_spikes": 232409216,
+            "veto_spikes": 84039237,
+            "muted_payload_spikes": 286454626,
+            "passed_payload_spikes": 643085960
+          },
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 1919830,
+              "nll_nats": 3525835.451080798,
+              "bpb": 2.6495602841213906
+            },
+            "1-31": {
+              "target_bytes": 85805,
+              "nll_nats": 106055.19958113204,
+              "bpb": 1.7831747624985543
+            },
+            "32-127": {
+              "target_bytes": 335417,
+              "nll_nats": 520471.7411077047,
+              "bpb": 2.2386521846505394
+            },
+            "128-511": {
+              "target_bytes": 322155,
+              "nll_nats": 482946.26621477574,
+              "bpb": 2.162760730964592
+            },
+            "512+": {
+              "target_bytes": 2336792,
+              "nll_nats": 3402484.513097713,
+              "bpb": 2.1006352014845864
+            }
+          }
+        }
+      ]
+    },
+    {
+      "run_name": "event_correction_code_s102_forecast_key_keyed",
+      "checkpoint": "checkpoints/event_correction_code_forecast_key_keyed_s102.pt",
+      "parameters": 407616,
+      "streaming_tensor_bytes": 32696,
+      "scoring": "normalized exponential of scaled output",
+      "temperature": 1.0,
+      "continuous_correction_state": true,
+      "training_context_bytes": 1024,
+      "intervention": {
+        "shuffle_keys": true
+      },
+      "target_bytes": 4999999,
+      "nll_nats": 8038360.138725658,
+      "bpb": 2.3193809256799907,
+      "raw_bpb": 2.3193809256799907,
+      "argmax_accuracy": 0.552126510425302,
+      "prefix_age": {
+        "unseen": {
+          "target_bytes": 1919830,
+          "nll_nats": 3526109.245291717,
+          "bpb": 2.6497660323128014
+        },
+        "1-31": {
+          "target_bytes": 85805,
+          "nll_nats": 106163.00862528104,
+          "bpb": 1.7849874257857377
+        },
+        "32-127": {
+          "target_bytes": 335417,
+          "nll_nats": 520488.9612336606,
+          "bpb": 2.238726251827576
+        },
+        "128-511": {
+          "target_bytes": 322155,
+          "nll_nats": 482997.2737042747,
+          "bpb": 2.162989155953024
+        },
+        "512+": {
+          "target_bytes": 2336792,
+          "nll_nats": 3402601.649870725,
+          "bpb": 2.1007075197061185
+        }
+      },
+      "books": [
+        {
+          "book_id": 0,
+          "excerpt_file": "enwik8 test",
+          "excerpt_sha256": "86f62c0adeb6c27763f308b8913bec743626421a4d2b4010f1e177a40eef7750",
+          "source_start_raw_byte": 95000000,
+          "excerpt_bytes_used": 5000000,
+          "target_bytes": 4999999,
+          "nll_nats": 8038360.138725658,
+          "bpb": 2.3193809256799907,
+          "raw_nll_nats": 8038360.138725658,
+          "correct_bytes": 2760632,
+          "memory_stats": {
+            "address_events": 19999966,
+            "changed_cells": 95917381,
+            "correction_spikes": 879107483,
+            "nonzero_read_cells": 114841601,
+            "age_sum": 5933653993,
+            "key_write_spikes": 232409216,
+            "veto_spikes": 97223939,
+            "muted_payload_spikes": 315314237,
+            "passed_payload_spikes": 614226349
+          },
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 1919830,
+              "nll_nats": 3526109.245291717,
+              "bpb": 2.6497660323128014
+            },
+            "1-31": {
+              "target_bytes": 85805,
+              "nll_nats": 106163.00862528104,
+              "bpb": 1.7849874257857377
+            },
+            "32-127": {
+              "target_bytes": 335417,
+              "nll_nats": 520488.9612336606,
+              "bpb": 2.238726251827576
+            },
+            "128-511": {
+              "target_bytes": 322155,
+              "nll_nats": 482997.2737042747,
+              "bpb": 2.162989155953024
+            },
+            "512+": {
+              "target_bytes": 2336792,
+              "nll_nats": 3402601.649870725,
+              "bpb": 2.1007075197061185
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

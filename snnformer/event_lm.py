@@ -1,0 +1,830 @@
+"""Byte decoder with fixed-point synapses and coincidence-routed spike packets."""
+
+from __future__ import annotations
+
+import copy
+import math
+from dataclasses import dataclass
+
+import torch
+from torch import nn
+from torch.nn import functional as F
+
+from .correction_memory import CorrectionState, correction_reads, correction_step, interval_spikes
+
+
+_VOCAB = 256
+_CHARGE_BITS = 6
+_TICKS = 1 << _CHARGE_BITS
+_PACKET_BITS = 2
+_PACKET_UNITS = 1 << _PACKET_BITS
+_PACKET_TICKS = _TICKS // _PACKET_UNITS
+_WEIGHT_LIMIT = 127
+_HIDDEN_CAP = 32
+_OUTPUT_CAP = 128
+_FP32_EXACT = 1 << 24
+_DELAYS = ((1, 2, 4, 8), (1, 3, 9, 27), (1, 4, 16, 64))
+_STEERED_DELAYS = ((1, 1, 2, 3), (1, 2, 4, 8), (1, 3, 9, 27))
+_LONG_DELAY = (16, 64, 128)
+_FEEDBACK_WINDOW = 8
+_DELAY_ROUTES = ("steered_static", "steered_feedback", "steered_margin")
+_PHASE_ROUTES = ("steered_timed", "steered_phase_swap", "steered_phase_delay")
+_CORRECTION_ROUTES = ("steered_correction", "steered_correction_residual", "steered_correction_binding")
+_PREDICTION_ROUTES = ("steered_correction_observed", "steered_correction_error", "steered_correction_code")
+_STEERED_ROUTES = (
+    "steered", "steered_local", "convergent", "steered_balanced",
+    *_CORRECTION_ROUTES, *_PREDICTION_ROUTES, *_PHASE_ROUTES, *_DELAY_ROUTES,
+)
+
+
+@dataclass(frozen=True)
+class EventLMConfig:
+    dim: int = 96
+    hidden: int = 288
+    depth: int = 3
+    route: str = "coincidence"
+    carry: bool = True
+    continuous: bool = False
+    memory_heads: int = 4
+    memory_slots: int = 16
+    resolution: int = 1
+    memory_width: int | None = None
+    forecast_key_channels: int = 0
+    match_forecast_key: bool = False
+    learn_context_keys: bool = False
+    learn_packet_thresholds: bool = False
+
+
+def _weight_ticks(weight, quantized=True):
+    if not weight.is_floating_point():
+        return weight
+    ticks = (weight * _TICKS).clamp(-_WEIGHT_LIMIT, _WEIGHT_LIMIT)
+    return ticks.detach().round() + (ticks - ticks.detach()) if quantized else ticks
+
+
+class _Synapse(nn.Module):
+    def __init__(self, inputs: int, outputs: int, gain: float, *, byte_input: bool = False, continuous: bool = False):
+        super().__init__()
+        self.byte_input = byte_input
+        self.continuous = continuous
+        shape = (inputs, outputs) if byte_input else (outputs, inputs)
+        self.weight = nn.Parameter(torch.empty(shape))
+        nn.init.normal_(self.weight, std=gain if byte_input else gain / math.sqrt(inputs))
+
+    def freeze_integer(self):
+        if self.weight.is_floating_point():
+            self.weight = nn.Parameter(_weight_ticks(self.weight).to(torch.int32), requires_grad=False)
+
+    def forward(self, spikes):
+        weight = _weight_ticks(self.weight, quantized=not self.continuous)
+        if self.byte_input:
+            # A byte addresses the single active afferent of a 256-way input population.
+            return F.embedding(spikes, weight)
+        return F.linear(spikes, weight)
+
+
+class _IntegrateFire(nn.Module):
+    """Separate excitation and inhibition rails with subtractive reset."""
+
+    def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False):
+        super().__init__()
+        self.cap = cap
+        self.bits = charge_bits
+        self.threshold = 1 << charge_bits
+        self.carry = carry
+        self.continuous = continuous
+
+    def _charge(self, bounded):
+        rails = torch.stack((bounded.clamp_min(0), (-bounded).clamp_min(0)), dim=-1)
+        return rails.to(torch.int32)
+
+    @staticmethod
+    def _signed(counts):
+        return counts[..., 0] - counts[..., 1]
+
+    def forward(self, current, quanta=None):
+        bounded = current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
+        if quanta is not None:
+            units = quanta.to(torch.int32)
+            threshold = units * _PACKET_TICKS
+            charge = bounded.to(torch.int32)
+            magnitude = (charge.abs() + threshold // 2) // threshold
+            limit = (self.cap * _PACKET_UNITS) // units
+            counts = magnitude.minimum(limit) * charge.sign()
+            if current.is_floating_point():
+                surrogate = bounded / (quanta * _PACKET_TICKS)
+                return counts.to(current.dtype) + (surrogate - surrogate.detach())
+            return counts
+        if self.continuous:
+            return bounded / self.threshold
+        charge = self._charge(bounded)
+        initial = self.threshold // 2
+        if self.carry:
+            if current.shape[1] * self.threshold * self.cap + initial > torch.iinfo(torch.int32).max:
+                raise ValueError("byte sequence exceeds the int32 charge scan")
+            emissions = (charge.cumsum(1, dtype=torch.int32) + initial) >> self.bits
+            emissions = emissions.diff(dim=1, prepend=torch.zeros_like(emissions[:, :1]))
+        else:
+            emissions = (charge + initial) >> self.bits
+        counts = self._signed(emissions)
+        if current.is_floating_point():
+            surrogate = bounded / self.threshold
+            return counts.to(current.dtype) + (surrogate - surrogate.detach())
+        return counts
+
+    def step(self, current, phase, quanta=None):
+        if quanta is not None:
+            return self(current, quanta), None
+        bounded = current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
+        total = self._charge(bounded) + (phase if self.carry and phase is not None else self.threshold // 2)
+        counts = total >> self.bits
+        phase = (total & (self.threshold - 1)) if self.carry else None
+        return self._signed(counts), phase
+
+
+class _PacketThresholds(nn.Module):
+    """A shared firing threshold for each content and steering group."""
+
+    def __init__(self, widths):
+        super().__init__()
+        self.relative = nn.Parameter(torch.ones(len(widths)))
+        groups = torch.arange(len(widths)).repeat_interleave(torch.tensor(widths))
+        self.register_buffer("groups", groups, persistent=False)
+
+    def quanta(self):
+        if not self.relative.is_floating_point():
+            return self.relative
+        units = self.relative.clamp(0.5, 2.0) * _PACKET_UNITS
+        return units.detach().round() + (units - units.detach())
+
+    def forward(self):
+        return self.quanta().index_select(0, self.groups)
+
+    def freeze_integer(self):
+        if self.relative.is_floating_point():
+            self.relative = nn.Parameter(self.quanta().to(torch.int32), requires_grad=False)
+
+
+def _route_packets(present, delayed, route):
+    if route == "coincidence":
+        # Packets occupy the first count slots on their sign rail. Intersecting
+        # two trains therefore takes min on each rail. Every unmatched pulse
+        # goes to the second synapse, including the opposite-sign case.
+        paired = torch.minimum(present.clamp_min(0), delayed.clamp_min(0))
+        paired = paired - torch.minimum((-present).clamp_min(0), (-delayed).clamp_min(0))
+    else:
+        # Same two destinations and parameters. Every other slot is routed to
+        # the first synapse, with no dependence on the current spike packet.
+        half = delayed.sign() * ((delayed.abs().to(torch.int32) + 1) >> 1)
+        paired = half
+        if delayed.is_floating_point():
+            surrogate = delayed * 0.5
+            paired = half.to(delayed.dtype) + (surrogate - surrogate.detach())
+    return paired, delayed - paired
+
+
+def _steer_packet(packet, steering, start=None):
+    # The same steering spikes open both sign rails. Every pulse that does
+    # not coincide with a steering pulse remains available on the other path.
+    positive = packet.clamp_min(0)
+    negative = (-packet).clamp_min(0)
+    if start is None:
+        selected = torch.minimum(positive, steering) - torch.minimum(negative, steering)
+    else:
+        # Intersect the content interval [0, |packet|) with [start, start + steering).
+        end = start + steering
+        left = start.clamp_min(0)
+        selected = (torch.minimum(positive, end) - left).clamp_min(0)
+        selected = selected - (torch.minimum(negative, end) - left).clamp_min(0)
+    return selected, packet - selected
+
+
+def _phase_swap(packet, steering, start):
+    """Use one timing bit to swap the destinations of intact pulse groups."""
+    matched, rest = _steer_packet(packet, steering)
+    selected = matched + (start + 1) * (rest - matched)
+    return selected, packet - selected
+
+
+def _balanced_steer(packet, steering):
+    """Start at an even split and let either steering rail transfer pulses."""
+    magnitude = packet.abs()
+    half = (magnitude.to(torch.int32) + 1) >> 1
+    if packet.is_floating_point():
+        surrogate = magnitude * 0.5
+        half = half.to(packet.dtype) + (surrogate - surrogate.detach())
+    selected = torch.minimum((half + steering).clamp_min(0), magnitude) * packet.sign()
+    return selected, packet - selected
+
+
+def _steering_start(drive, phase_bits=2, cap=_HIDDEN_CAP):
+    """Start tick from the input charge modulo a firing threshold."""
+    drive = drive.clamp(0, _TICKS * cap)
+    phase = (drive.to(torch.int32) + _TICKS // 2) & (_TICKS - 1)
+    start = (phase >> (_CHARGE_BITS - phase_bits)) - (1 << (phase_bits - 1))
+    if drive.is_floating_point():
+        surrogate = drive / (_TICKS >> phase_bits)
+        start = start.to(drive.dtype) + (surrogate - surrogate.detach())
+    return start
+
+
+def _lag(spikes, delay):
+    padding = min(delay, spikes.shape[1])
+    return F.pad(spikes[:, :spikes.shape[1] - padding], (0, 0, padding, 0))
+
+
+def _agreement(present, delayed):
+    """Matched pulses minus extra pulses, relative to the error of silence."""
+    present = present.to(torch.int32).unsqueeze(-1)
+    return present.abs() - (present - delayed.to(torch.int32)).abs()
+
+
+class _DelaySelector(nn.Module):
+    """Select a per-channel delay using past packet errors and a learned prior."""
+
+    def __init__(self, taps, widths, extra_delay, feedback, margin):
+        super().__init__()
+        self.feedback = feedback
+        self.margin = margin
+        delays = sorted(set((*taps, extra_delay)))
+        self.delays = tuple(delays)
+        self.history_size = delays[-1] + _FEEDBACK_WINDOW
+        self.register_buffer("ages", torch.tensor(delays), persistent=False)
+        prior = torch.zeros(sum(widths), len(delays))
+        first = 0
+        for width, tap in zip(widths, taps, strict=True):
+            prior[first:first + width, delays.index(tap)] = 4 / _TICKS
+            first += width
+        self.prior = nn.Parameter(prior)
+
+    def freeze_integer(self):
+        if self.prior.is_floating_point():
+            self.prior = nn.Parameter(_weight_ticks(self.prior).to(torch.int32), requires_grad=False)
+
+    def _select(self, packets, credit, available):
+        prior = _weight_ticks(self.prior).masked_fill(~available, -4096)
+        if self.margin:
+            anchor = prior.argmax(-1, keepdim=True).expand_as(credit[..., :1])
+            # Require an average gain of one spike per feedback byte before an override.
+            credit = (credit - credit.gather(-1, anchor) - self.margin).clamp_min(0)
+        scores = (prior + credit).masked_fill(~available, -4096)
+        choice = scores.argmax(-1, keepdim=True).expand_as(packets[..., :1])
+        packet = packets.gather(-1, choice).squeeze(-1)
+        if self.training and self.prior.is_floating_point():
+            # Only the hard winner moves spikes. Use soft weights for prior gradients.
+            surrogate = ((scores / 16).softmax(-1) * packets.detach()).sum(-1)
+            packet = packet + (surrogate - surrogate.detach())
+        return packet
+
+    def forward(self, spikes, delay_limit):
+        packets = torch.stack([_lag(spikes, delay) for delay in self.delays], dim=-1)
+        credit = 0
+        if self.feedback:
+            evidence = _agreement(spikes, packets)
+            past = F.pad(evidence[:, :-1].cumsum(1, dtype=torch.int32), (0, 0, 0, 0, 1, 0))
+            trim = min(_FEEDBACK_WINDOW, spikes.shape[1])
+            credit = past - F.pad(past[:, :-trim], (0, 0, 0, 0, trim, 0))
+        age = torch.arange(spikes.shape[1], device=spikes.device).clamp_min(1)
+        if delay_limit is not None:
+            age = age.clamp_max(delay_limit)
+        return self._select(packets, credit, age[:, None, None] >= self.ages)
+
+    def step(self, history, position):
+        read_at = (position - self.ages) % self.history_size
+        packets = history.index_select(1, read_at).transpose(1, 2)
+        credit = 0
+        if self.feedback:
+            times = torch.arange(position - _FEEDBACK_WINDOW, position, device=history.device)
+            recent = history.index_select(1, times % self.history_size)
+            read_at = (times[:, None] - self.ages) % self.history_size
+            past = history.index_select(1, read_at.flatten()).unflatten(1, read_at.shape).transpose(-1, -2)
+            credit = _agreement(recent, past).sum(1, dtype=torch.int32)
+        return self._select(packets, credit, max(1, position) >= self.ages)
+
+
+@dataclass
+class _CorrectionAccess:
+    state: CorrectionState | None
+    prefix: int
+    hide_age: int | tuple[int | None, ...] | None
+    stats: dict | None
+    shuffle_keys: bool = False
+
+
+class _SpikeCorrection(nn.Module):
+    """An address spike probes a bank and enables a bounded correction."""
+
+    def __init__(self, dim, width, heads, slots, resolution, bind_previous, *, observed=False, forecast=False,
+                 key_channels=0, match_key=False):
+        super().__init__()
+        if heads < 1 or slots < 2 or width < heads or width % heads:
+            raise ValueError("memory needs at least two slots and a positive read width divisible by its heads")
+        if forecast and width > dim:
+            raise ValueError("the forecast code must fit in the learned input spike population")
+        if not 0 <= key_channels < width // heads:
+            raise ValueError("each cell needs at least one payload channel")
+        self.heads = heads
+        self.slots = slots
+        self.width = width
+        self.resolution = resolution
+        self.bind_previous = bind_previous
+        self.key_channels = key_channels
+        self.match_key = match_key
+        self.encode = _Synapse(dim, heads * (slots + 1) + (0 if observed else width), gain=1.0)
+        self.code = _Synapse(dim, width, gain=0.25 if forecast else 1.0) if observed else None
+        # A single byte afferent contributes at most two counts per unit
+        # of resolution. Forecast the same code within that range.
+        self.forecast = _IntegrateFire(2 * resolution, _CHARGE_BITS, False) if forecast else None
+        self.address = _IntegrateFire(_HIDDEN_CAP * resolution, _CHARGE_BITS - 2, False)
+        self.value = _IntegrateFire(_HIDDEN_CAP * resolution, _CHARGE_BITS, False)
+        self.register_buffer("slot_ids", torch.arange(slots), persistent=False)
+
+    def _value_code(self, spikes):
+        emit = self.value if self.forecast is None else self.forecast
+        return emit(self.code(spikes)).unflatten(-1, (self.heads, -1))
+
+    def observation_code(self, byte_spikes):
+        if self.forecast is not None:
+            return byte_spikes[..., :self.width].unflatten(-1, (self.heads, -1))
+        return self._value_code(byte_spikes)
+
+    def _events(self, spikes, observed):
+        encoded = self.encode(spikes)
+        if self.code is None:
+            drive, target, tolerance = encoded.split((self.heads * self.slots, self.width, self.heads), dim=-1)
+            target = self.value(target).unflatten(-1, (self.heads, -1))
+        else:
+            drive, tolerance = encoded.split((self.heads * self.slots, self.heads), dim=-1)
+            target = self.observation_code(observed)
+        counts = self.address(drive.clamp_min(0)).unflatten(-1, (self.heads, self.slots))
+        winner = counts.argmax(-1, keepdim=True)
+        active = counts.amax(-1, keepdim=True).clamp(0, 1)
+        address = (winner == self.slot_ids).to(counts.dtype) * active
+        if self.training and counts.is_floating_point():
+            # One address fires in the forward pass. Gradients can also
+            # reach runner-up neurons so the route can change during training.
+            probabilities = (counts / (2 * self.resolution)).softmax(-1)
+            address = address + active.detach() * (probabilities - probabilities.detach())
+        tolerance = self.value(tolerance.clamp_min(0)).unsqueeze(-1)
+        return address, target, tolerance
+
+    def _write_target(self, observed, prediction, tolerance):
+        error = (observed - prediction).clamp(-self.value.cap, self.value.cap)
+        if not self.key_channels:
+            return error, tolerance
+        # The key records the forecast that produced the error. A
+        # zero-width interval preserves that key exactly.
+        key = prediction[..., :self.key_channels]
+        payload = error[..., self.key_channels:]
+        return torch.cat((key, payload), dim=-1), torch.cat((torch.zeros_like(key), tolerance.expand_as(payload)), dim=-1)
+
+    def _read_payload(self, read, prediction, tolerance, address, stats=None, pulse_counts=None):
+        if not self.key_channels:
+            return read
+        key, payload = read[..., :self.key_channels], read[..., self.key_channels:]
+        if not self.match_key:
+            return payload
+        query = prediction[..., :self.key_channels]
+        excess = interval_spikes(key, query - tolerance, query + tolerance).abs()
+        # The inhibitory packets share a rail. Overlapping pulses make
+        # one veto, and coincidence removes the same slots from the read.
+        veto = excess.amax(-1, keepdim=True) * address.amax(-1, keepdim=True)
+        muted, passed = _steer_packet(payload, veto)
+        if pulse_counts is not None:
+            pulse_counts.append(veto.sum())
+        if stats is not None:
+            if read.ndim > prediction.ndim:
+                veto, muted, passed_for_stats = veto[0], muted[0], passed[0]
+            else:
+                passed_for_stats = passed
+            stats["veto_spikes"] = veto.detach().sum(dtype=torch.int64)
+            stats["muted_payload_spikes"] = muted.detach().abs().sum(dtype=torch.int64)
+            stats["passed_payload_spikes"] = passed_for_stats.detach().abs().sum(dtype=torch.int64)
+        return passed
+
+    def forward(self, spikes, access, *, observed=None, prediction_code=None, pulse_counts=None):
+        prefix = access.prefix if access is not None else 0
+        state = None if access is None else access.state
+        observation = None if observed is None else observed[:, prefix:]
+        address, target, tolerance = self._events(spikes[:, prefix:], observation)
+        read_tolerance = tolerance
+        prediction = None
+        if prediction_code is not None:
+            prediction = prediction_code[:, prefix:]
+            previous = None if state is None else state.previous_prediction
+            first = torch.zeros_like(prediction[:, :1]) if previous is None else previous[:, None]
+            previous = torch.cat((first, prediction[:, :-1]), dim=1)
+            target, tolerance = self._write_target(target, previous, tolerance)
+        read, state = correction_reads(
+            address, target, tolerance, self.value.cap, state, bind_previous=self.bind_previous,
+            hide_age=None if access is None else access.hide_age, stats=None if access is None else access.stats,
+            key_channels=self.key_channels, shuffle_keys=access is not None and access.shuffle_keys,
+            pulse_counts=pulse_counts,
+        )
+        if access is not None:
+            if prediction_code is not None:
+                state.previous_prediction = prediction[:, -1].clone()
+            access.state = state
+        read = self._read_payload(read, prediction, read_tolerance, address,
+                                  None if access is None else access.stats, pulse_counts)
+        if pulse_counts is not None:
+            pulse_counts.append(read.abs().sum())
+        return F.pad(read.flatten(-2), (0, 0, prefix, 0)) if prefix else read.flatten(-2)
+
+    def step(self, spikes, state, *, observed=None, prediction_code=None):
+        address, target, tolerance = self._events(spikes, observed)
+        read_tolerance = tolerance
+        if prediction_code is not None and state is not None:
+            target, tolerance = self._write_target(target, state.previous_prediction, tolerance)
+        read, state = correction_step(
+            address, target, tolerance, self.value.cap, state, bind_previous=self.bind_previous,
+        )
+        if prediction_code is not None:
+            state.previous_prediction = prediction_code
+        read = self._read_payload(read, prediction_code, read_tolerance, address)
+        return read.flatten(-2), state
+
+
+@dataclass
+class _DelayState:
+    history: torch.Tensor | None = None
+    relay_phase: torch.Tensor | None = None
+    steering_phase: torch.Tensor | None = None
+    output_phase: torch.Tensor | None = None
+    correction: CorrectionState | None = None
+
+
+class _DelayBlock(nn.Module):
+    def __init__(self, cfg: EventLMConfig, depth: int):
+        super().__init__()
+        self.steered = cfg.route in _STEERED_ROUTES
+        schedule = _STEERED_DELAYS if self.steered else _DELAYS
+        self.delays = schedule[depth % len(schedule)]
+        width, extra = divmod(cfg.hidden, len(self.delays))
+        self.widths = tuple(width + (group < extra) for group in range(len(self.delays)))
+        self.route = cfg.route
+        self.correction = None
+        self.memory_residual = None
+        if cfg.route in _CORRECTION_ROUTES and depth == cfg.depth - 1:
+            self.correction = _SpikeCorrection(
+                cfg.dim, self.widths[-1], cfg.memory_heads, cfg.memory_slots, cfg.resolution,
+                bind_previous=cfg.route == "steered_correction_binding",
+            )
+            if cfg.route != "steered_correction":
+                self.memory_residual = _Synapse(self.widths[-1], cfg.dim, gain=0.15)
+        replace_delay = self.correction is not None and self.memory_residual is None
+        self.local_delays = self.delays[:-1] if replace_delay else self.delays
+        self.local_widths = self.widths[:len(self.local_delays)]
+        self.balanced = cfg.route == "steered_balanced"
+        self.phase_bits = 2 if cfg.route == "steered_timed" else int(cfg.route in _PHASE_ROUTES)
+        self.alternate_delays = ()
+        if cfg.route == "steered_phase_delay":
+            self.alternate_delays = tuple(delay + 1 if delay < self.delays[-1] else delay - 1 for delay in self.delays)
+        self.selector = None
+        if cfg.route in _DELAY_ROUTES:
+            self.selector = _DelaySelector(self.delays, self.widths, _LONG_DELAY[depth % len(_LONG_DELAY)],
+                                           feedback=cfg.route != "steered_static",
+                                           margin=_FEEDBACK_WINDOW if cfg.route == "steered_margin" else 0)
+        self.history_size = self.local_delays[-1] if self.selector is None else self.selector.history_size
+        cap = _HIDDEN_CAP * cfg.resolution
+        self.packet_thresholds = _PacketThresholds(self.widths) if cfg.learn_packet_thresholds else None
+        self.expand = _Synapse(cfg.dim, cfg.hidden * (2 if self.steered else 1), gain=1.0, continuous=cfg.continuous)
+        self.relay = _IntegrateFire(cap, _CHARGE_BITS, cfg.carry, continuous=cfg.continuous)
+        if self.steered:
+            self.steer = _IntegrateFire(cap, _CHARGE_BITS, cfg.carry, continuous=cfg.continuous)
+        self.project = _Synapse((4 if self.steered else 3) * cfg.hidden, cfg.dim, gain=0.65, continuous=cfg.continuous)
+        output_bits = _CHARGE_BITS + _PACKET_BITS if self.packet_thresholds is not None else _CHARGE_BITS
+        self.emit = _IntegrateFire(cap, output_bits, cfg.carry, continuous=cfg.continuous)
+
+    def _current(self, residual, present, delayed, steering, start, alternate=None, recall=None, quanta=None):
+        if alternate is not None:
+            # The last half of the phase interval opens the adjacent delay
+            # only when a steering packet has actually fired.
+            switch = (start + 1) * (steering > 0)
+            delayed = delayed + switch * (alternate - delayed)
+            start = None
+        if not self.steered:
+            routes = (present, *_route_packets(present, delayed, self.route))
+        elif self.balanced:
+            routes = _balanced_steer(present, steering) + _balanced_steer(delayed, steering)
+        else:
+            split = _phase_swap if self.route == "steered_phase_swap" else _steer_packet
+            delay_routes = (_route_packets(present, delayed, "tonic") if self.route == "steered_local"
+                            else split(delayed, steering, start))
+            routes = split(present, steering, start) + delay_routes
+        if quanta is not None:
+            # Route physical pulse counts first. The same synaptic charge
+            # then requires fewer pulses at a higher firing threshold.
+            routes = tuple(packet * quanta for packet in routes)
+        current = residual * self.emit.threshold + self.project(torch.cat(routes, dim=-1))
+        if self.memory_residual is not None:
+            current = current + self.memory_residual(recall)
+        return current
+
+    def forward(self, spikes, *, delay_limit=None, shuffle_phase=False, correction_access=None):
+        drive = self.expand(spikes)
+        quanta = self.packet_thresholds() if self.packet_thresholds is not None else None
+        steering = start = None
+        if self.steered:
+            drive, steer_drive = drive.chunk(2, dim=-1)
+            steering = self.steer(steer_drive if self.balanced else steer_drive.clamp_min(0), quanta)
+            if self.phase_bits:
+                start = _steering_start(steer_drive, self.phase_bits, self.steer.cap)
+                if shuffle_phase:
+                    start = start.roll(1, dims=-1)
+        present = self.relay(drive, quanta)
+        alternate = None
+        recall = None
+        if self.selector is None:
+            groups = present.split(self.widths, dim=-1)
+            delayed_groups = [_lag(group, delay) for group, delay in zip(groups, self.local_delays)]
+            if self.correction is not None:
+                recall = self.correction(spikes, correction_access)
+                if self.memory_residual is None:
+                    delayed_groups.append(recall)
+            delayed = torch.cat(delayed_groups, dim=-1)
+            if self.alternate_delays:
+                alternate = torch.cat([_lag(group, delay) for group, delay in
+                                       zip(groups, self.alternate_delays, strict=True)], dim=-1)
+        else:
+            delayed = self.selector(present, delay_limit)
+        return self.emit(self._current(spikes, present, delayed, steering, start, alternate, recall, quanta))
+
+    def step(self, spikes, state, position):
+        drive = self.expand(spikes)
+        quanta = self.packet_thresholds() if self.packet_thresholds is not None else None
+        steering = start = None
+        if self.steered:
+            drive, steer_drive = drive.chunk(2, dim=-1)
+            steer_charge = steer_drive if self.balanced else steer_drive.clamp_min(0)
+            steering, state.steering_phase = self.steer.step(steer_charge, state.steering_phase, quanta)
+            if self.phase_bits:
+                start = _steering_start(steer_drive, self.phase_bits, self.steer.cap)
+        present, state.relay_phase = self.relay.step(drive, state.relay_phase, quanta)
+        ring_size = self.history_size
+        local_width = sum(self.local_widths)
+        if state.history is None:
+            state.history = present.new_zeros(present.shape[0], ring_size, local_width)
+        alternate = None
+        recall = None
+        if self.selector is None:
+            previous = []
+            neighbors = []
+            first = 0
+            for group, (width, delay) in enumerate(zip(self.local_widths, self.local_delays, strict=True)):
+                previous.append(state.history[:, (position - delay) % ring_size, first:first + width])
+                if self.alternate_delays:
+                    neighbor_at = (position - self.alternate_delays[group]) % ring_size
+                    neighbors.append(state.history[:, neighbor_at, first:first + width])
+                first += width
+            if self.correction is not None:
+                recall, state.correction = self.correction.step(spikes, state.correction)
+                if self.memory_residual is None:
+                    previous.append(recall)
+            delayed = torch.cat(previous, dim=-1)
+            if neighbors:
+                alternate = torch.cat(neighbors, dim=-1)
+        else:
+            delayed = self.selector.step(state.history, position)
+        state.history[:, position % ring_size].copy_(present[:, :local_width])
+        current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta)
+        spikes, state.output_phase = self.emit.step(current, state.output_phase)
+        return spikes
+
+
+@dataclass
+class EventLMState:
+    layers: list[_DelayState]
+    input_phase: torch.Tensor | None = None
+    output_phase: torch.Tensor | None = None
+    previous_bytes: torch.Tensor | None = None
+    position: int = 0
+    prediction_memory: CorrectionState | None = None
+
+
+@dataclass
+class EventChunkState:
+    local_prefix: torch.Tensor
+    correction: CorrectionState
+
+
+class EventLM(nn.Module):
+    """One-hot byte events in, signed output spike counts over 256 bytes out.
+
+    Floating-point master weights use a straight-through training surrogate.
+    The CPU export uses only integer tensors to execute the same circuit.
+    """
+
+    def __init__(self, cfg: EventLMConfig = EventLMConfig()):
+        super().__init__()
+        if min(cfg.dim, cfg.depth) < 1 or cfg.hidden < len(_DELAYS[0]):
+            raise ValueError("invalid decoder dimensions")
+        if cfg.route not in ("coincidence", "tonic", *_STEERED_ROUTES):
+            raise ValueError("invalid spike packet route")
+        if cfg.continuous and (cfg.route != "steered" or cfg.carry):
+            raise ValueError("the continuous control uses the reset-per-byte steered topology")
+        if cfg.route in _PREDICTION_ROUTES and cfg.carry:
+            raise ValueError("prediction memory requires reset-per-byte local neurons (--no-carry)")
+        if (cfg.forecast_key_channels or cfg.match_forecast_key) and cfg.route != "steered_correction_code":
+            raise ValueError("forecast keys need the direct forecast bank")
+        if not isinstance(cfg.forecast_key_channels, int) or (cfg.match_forecast_key and cfg.forecast_key_channels < 1):
+            raise ValueError("matching needs a positive integer number of forecast key channels")
+        if cfg.learn_context_keys and (cfg.route != "steered_correction_code" or cfg.forecast_key_channels < 1):
+            raise ValueError("learned context keys need reserved channels in the direct forecast bank")
+        if cfg.learn_packet_thresholds and (cfg.carry or cfg.continuous or
+                                            cfg.route not in ("steered", "steered_correction_code")):
+            raise ValueError("learned packet thresholds need a reset-per-byte spike router")
+        if not isinstance(cfg.resolution, int) or cfg.resolution < 1:
+            raise ValueError("spike resolution must be a positive integer")
+        projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden
+        cap = _HIDDEN_CAP * cfg.resolution
+        # The additional read projection is bounded by one delay group's width.
+        if cfg.route in _CORRECTION_ROUTES and cfg.route != "steered_correction":
+            projection_width += cfg.hidden // len(_STEERED_DELAYS[0])
+        if cfg.memory_width is not None:
+            if cfg.route not in _PREDICTION_ROUTES:
+                raise ValueError("memory_width requires a prediction bank")
+            projection_width = max(projection_width, cfg.memory_width)
+        unit_drive = (max(projection_width, cfg.dim) * _WEIGHT_LIMIT + _TICKS) * _HIDDEN_CAP
+        if unit_drive >= _FP32_EXACT:
+            raise ValueError("synaptic accumulator would exceed the exact FP32 integer range")
+        packet_units = _PACKET_UNITS if cfg.learn_packet_thresholds else 1
+        max_drive = unit_drive * cfg.resolution * packet_units
+        if max_drive > torch.iinfo(torch.int32).max:
+            raise ValueError("synaptic accumulator would exceed the int32 integer range")
+        self._check_weights = not cfg.continuous and max_drive >= _FP32_EXACT
+        self.cfg = cfg
+        self.input = _Synapse(_VOCAB, cfg.dim, gain=0.9, byte_input=True, continuous=cfg.continuous)
+        taps = 2 if cfg.route == "convergent" else 0
+        self.delayed_input = nn.ModuleList(_Synapse(_VOCAB, cfg.dim, gain=0.5, byte_input=True) for _ in range(taps))
+        self.input_emit = _IntegrateFire(cap, _CHARGE_BITS, cfg.carry, continuous=cfg.continuous)
+        self.blocks = nn.ModuleList(_DelayBlock(cfg, i) for i in range(cfg.depth))
+        self.local_history = len(self.delayed_input) + sum(block.history_size for block in self.blocks)
+        self.output = _Synapse(cfg.dim, _VOCAB, gain=0.8, continuous=cfg.continuous)
+        self.output_emit = _IntegrateFire(
+            _OUTPUT_CAP * cfg.resolution, charge_bits=3, carry=cfg.carry, continuous=cfg.continuous,
+        )
+        self.prediction_memory = None
+        if cfg.route in _PREDICTION_ROUTES:
+            width = self.blocks[-1].widths[-1] if cfg.memory_width is None else cfg.memory_width
+            self.prediction_memory = _SpikeCorrection(
+                cfg.dim, width, cfg.memory_heads, cfg.memory_slots, cfg.resolution, bind_previous=True, observed=True,
+                forecast=cfg.route == "steered_correction_code", key_channels=cfg.forecast_key_channels,
+                match_key=cfg.match_forecast_key,
+            )
+            self.recall_synapse = _Synapse(width - cfg.memory_heads * cfg.forecast_key_channels, cfg.dim, gain=0.15)
+            self.recall_emit = _IntegrateFire(cap, _CHARGE_BITS, False)
+
+    @property
+    def has_correction(self):
+        return self.prediction_memory is not None or self.blocks[-1].correction is not None
+
+    def _prediction_code(self, local_spikes):
+        if self.cfg.route == "steered_correction_code":
+            return self.prediction_memory._value_code(local_spikes)
+        if self.cfg.route != "steered_correction_error":
+            return None
+        # The local winner is encoded by the same input synapses as an
+        # observed byte. A later recall never contributes to the write.
+        guess = self.byte(self.output_emit(self.output(local_spikes)))
+        return self.prediction_memory._value_code(self.input_emit(self.input(guess) * self.cfg.resolution))
+
+    def _apply_recall(self, local_spikes, recall):
+        current = self.recall_synapse(recall)
+        if self.prediction_memory.forecast is not None:
+            # The original spikes and the correction share the output
+            # synapses. Only the correction needs to fire here.
+            cap = self.recall_emit.cap
+            return (local_spikes + self.recall_emit(current)).clamp(-cap, cap)
+        return self.recall_emit(local_spikes * _TICKS + current)
+
+    @torch.no_grad()
+    def _check_accumulator(self):
+        # High-resolution training uses the actual quantized weights to bound
+        # the magnitude of every partial sum. Every input count is at most cap.
+        def row_sums(synapse):
+            return _weight_ticks(synapse.weight).abs().sum(-1)
+
+        bounds = [row_sums(self.output).amax()]
+        for block in self.blocks:
+            bounds.append(row_sums(block.expand).amax())
+            packet_units = _PACKET_UNITS if block.packet_thresholds is not None else 1
+            projected = row_sums(block.project) * packet_units + block.emit.threshold
+            if block.correction is not None:
+                bounds.append(row_sums(block.correction.encode).amax())
+            if block.memory_residual is not None:
+                projected = projected + row_sums(block.memory_residual)
+            bounds.append(projected.amax())
+        if self.prediction_memory is not None:
+            bounds.append(row_sums(self.prediction_memory.encode).amax())
+            bounds.append(row_sums(self.prediction_memory.code).amax())
+            bounds.append(row_sums(self.recall_synapse).amax() + _TICKS)
+        limit = _FP32_EXACT // self.input_emit.cap
+        if not torch.stack(bounds).amax().item() <= limit:
+            raise ValueError("quantized weights exceed the exact FP32 accumulator range at this spike resolution")
+
+    def forward(self, tokens, *, delay_limit=None, shuffle_phase=False, correction_access=None,
+                return_prediction=False, memory_pulses=None):
+        if tokens.ndim != 2 or tokens.shape[1] == 0:
+            raise ValueError("expected a nonempty [batch, bytes] tensor")
+        if delay_limit is not None and (delay_limit < 1 or self.cfg.route not in _DELAY_ROUTES):
+            raise ValueError("delay_limit needs a positive value and a selectable delay line")
+        if shuffle_phase and self.cfg.route not in _PHASE_ROUTES:
+            raise ValueError("shuffle_phase needs timed steering")
+        if return_prediction and self.cfg.route != "steered_correction_code":
+            raise ValueError("return_prediction needs a spike forecast")
+        if self._check_weights and self.input.weight.is_floating_point():
+            self._check_accumulator()
+        drive = self.input(tokens)
+        for delay, synapse in enumerate(self.delayed_input, 1):
+            padding = min(delay, tokens.shape[1])
+            delayed = synapse(tokens[:, :tokens.shape[1] - padding])
+            drive = drive + F.pad(delayed, (0, 0, padding, 0))
+        observed = self.input_emit(drive * self.cfg.resolution)
+        spikes = observed
+        for block in self.blocks:
+            spikes = block(spikes, delay_limit=delay_limit, shuffle_phase=shuffle_phase,
+                           correction_access=correction_access)
+        if self.prediction_memory is not None:
+            prediction = self._prediction_code(spikes)
+            recall = self.prediction_memory(
+                spikes, correction_access, observed=observed, prediction_code=prediction, pulse_counts=memory_pulses,
+            )
+            spikes = self._apply_recall(spikes, recall)
+        counts = self.output_emit(self.output(spikes))
+        if return_prediction:
+            return counts, prediction, self.prediction_memory.observation_code(observed)
+        return counts
+
+    def forward_chunk(self, tokens, state=None, *, hide_age=None, stats=None, shuffle_keys=False):
+        """Carry the bank and recompute local context at a chunk boundary.
+
+        In the post-router bank variants, a tuple of ages adds a leading
+        axis of read conditions. All conditions share one write trajectory.
+        """
+        if not self.has_correction or self.cfg.carry:
+            raise ValueError("chunked correction memory needs reset-per-byte local neurons")
+        if shuffle_keys and not self.cfg.match_forecast_key:
+            raise ValueError("shuffling memory keys requires a bank that matches stored keys")
+        ages = hide_age if isinstance(hide_age, tuple) else (hide_age,)
+        if isinstance(hide_age, tuple) and (self.prediction_memory is None or not ages):
+            raise ValueError("a group of memory ages needs a post-router bank")
+        if tokens.ndim != 2 or tokens.shape[1] == 0 or any(age is not None and age < 1 for age in ages):
+            raise ValueError("expected nonempty [batch, bytes] and a positive age when hiding old state")
+        prefix = 0 if state is None else state.local_prefix.shape[1]
+        if state is not None:
+            tokens = torch.cat((state.local_prefix, tokens), dim=1)
+        access = _CorrectionAccess(None if state is None else state.correction, prefix, hide_age, stats, shuffle_keys)
+        counts = self(tokens, correction_access=access)
+        return counts[..., prefix:, :], EventChunkState(tokens[:, -self.local_history:].clone(), access.state)
+
+    @torch.no_grad()
+    def to_integer(self):
+        """Export an eval-mode CPU decoder with int32 synapses."""
+        if self.cfg.continuous:
+            raise ValueError("the continuous control has no integer export")
+        model = copy.deepcopy(self).cpu().eval()
+        for submodule in model.modules():
+            if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds)):
+                submodule.freeze_integer()
+        return model
+
+    @torch.no_grad()
+    def step(self, tokens, state: EventLMState | None = None):
+        """Apply one byte per stream using bounded integer state."""
+        if self.input.weight.is_floating_point() or self.training:
+            raise ValueError("step requires an eval-mode integer export from to_integer()")
+        if tokens.ndim != 1 or tokens.device.type != "cpu":
+            raise ValueError("step expects a CPU tensor of shape [batch]")
+        if state is None:
+            state = EventLMState([_DelayState() for _ in self.blocks])
+        else:
+            history = state.layers[0].history if len(state.layers) == len(self.blocks) else None
+            if history is None or history.shape[0] != tokens.shape[0]:
+                raise ValueError("streaming state must belong to the same decoder and batch size")
+        drive = self.input(tokens)
+        if self.delayed_input:
+            taps = len(self.delayed_input)
+            if state.previous_bytes is None:
+                state.previous_bytes = tokens.new_zeros((tokens.shape[0], taps))
+            for delay, synapse in enumerate(self.delayed_input, 1):
+                if state.position >= delay:
+                    drive = drive + synapse(state.previous_bytes[:, (state.position - delay) % taps])
+            state.previous_bytes[:, state.position % taps].copy_(tokens)
+        observed, state.input_phase = self.input_emit.step(drive * self.cfg.resolution, state.input_phase)
+        spikes = observed
+        for block, layer in zip(self.blocks, state.layers):
+            spikes = block.step(spikes, layer, state.position)
+        if self.prediction_memory is not None:
+            recall, state.prediction_memory = self.prediction_memory.step(
+                spikes, state.prediction_memory, observed=observed, prediction_code=self._prediction_code(spikes),
+            )
+            spikes = self._apply_recall(spikes, recall)
+        counts, state.output_phase = self.output_emit.step(self.output(spikes), state.output_phase)
+        state.position += 1
+        return counts, state
+
+    @staticmethod
+    def byte(counts):
+        """Decode the winning byte directly from its spike evidence."""
+        return counts.argmax(dim=-1)

@@ -74,6 +74,37 @@ def evaluate_bpb(model, data, ctx, n_batches, bs=32, offset=0, *, device="cpu"):
     return tot / cnt / math.log(2)
 
 
+@torch.no_grad()
+def write_calibration(model, train, args, device, *, collect_drives=False):
+    """A fixed training-only sample for matching each memory cell's write rate."""
+    model.eval()
+    generator = torch.Generator().manual_seed(271828)
+    counts, drives = [], []
+    for _ in range(16):
+        x, _ = random_batch(train, args.bs, args.ctx, generator)
+        stats = {}
+        model(x.to(device), memory_training_stats=stats)
+        counts.append(stats["accepted_write_counts"])
+        if collect_drives:
+            drives.append(stats["write_drive"].flatten(0, 1))
+    rates = torch.stack(counts).sum(0) / (16 * args.bs * args.ctx)
+    return rates, torch.cat(drives) if drives else None
+
+
+@torch.no_grad()
+def calibrate_write_bias(model, drive, target_rates, fraction):
+    """Move each hard gate to its target upper-tail quantile on past examples."""
+    ordered = drive.sort(dim=0, descending=True).values
+    n = drive.shape[0]
+    count = (n * target_rates).round().to(torch.long)
+    low = ordered.gather(0, count.clamp_max(n - 1)[None]).squeeze(0)
+    high = ordered.gather(0, (count - 1).clamp_min(0)[None]).squeeze(0)
+    cutoff = (low + high) * 0.5
+    # Put tied scores on the sparse side of the boundary.
+    cutoff = cutoff + 1e-5 * ((low == high) & (count < n)) - 1e-5 * (count == n)
+    model.blocks[-1].memory.bias[2].sub_(cutoff * fraction)
+
+
 def main():
     p = argparse.ArgumentParser()
     add_common_args(p, bytes_only=True)
@@ -91,10 +122,14 @@ def main():
     p.add_argument("--eval-bs", type=int, default=32)
     p.add_argument("--eval-batches", type=int, default=20)
     p.add_argument("--final-eval-batches", type=int, default=150)
+    p.add_argument("--match-pulse-writes",
+                   help="protected checkpoint whose training write rates set the sparse control")
     args = p.parse_args()
     eval_sizes = (args.eval_every, args.eval_bs, args.eval_batches, args.final_eval_batches)
     if min(args.ctx, args.bs, args.steps, *eval_sizes) < 1 or args.warmup < 0:
         p.error("context, training and evaluation sizes must be positive; warmup may be zero")
+    if (args.variant == "temporal_pulse_sparse") != (args.match_pulse_writes is not None):
+        p.error("--match-pulse-writes is required only for temporal_pulse_sparse")
     setup(args)
     cfg = build_cfg(args)
     name = run_name(args, cfg)
@@ -110,6 +145,31 @@ def main():
         p.error("evaluation windows would overlap; reduce --eval-bs or the number of evaluation batches")
     model_kwargs = dict(vocab=256, dim=args.dim, depth=args.depth, heads=args.heads, ctx=args.ctx)
     model = make_lm(cfg, **model_kwargs).to(device)
+    write_rates = None
+    write_match = None
+    if args.match_pulse_writes is not None:
+        from snnformer import SNNConfig
+
+        reference_path = Path(args.match_pulse_writes).expanduser()
+        reference = torch.load(reference_path, map_location="cpu", weights_only=True)
+        expected = vars(args)
+        fields = ("seed", "steps", "bs", "ctx", "lr", "wd", "warmup")
+        ref_cfg = SNNConfig(**reference["cfg"])
+        ref_options = ref_cfg.to_dict()
+        ref_options["pulse_write_holds"] = ()
+        if (reference["model_kwargs"] != model_kwargs or ref_options != cfg.to_dict()
+                or not any(ref_cfg.pulse_write_holds)
+                or any(reference["args"][field] != expected[field] for field in fields)):
+            p.error("protected checkpoint must match the sparse run's seed, budget and model settings")
+        ref_model = make_lm(ref_cfg, **model_kwargs).to(device)
+        ref_model.load_state_dict(reference["state_dict"])
+        write_rates, _ = write_calibration(ref_model, train, args, device)
+        del ref_model
+        _, drive = write_calibration(model, train, args, device, collect_drives=True)
+        calibrate_write_bias(model, drive, write_rates, 1.)
+        model.train()
+        write_match = {"reference": reference["run_name"], "sampled_training_bytes": 16 * args.bs * args.ctx,
+                       "target_writes_per_byte_by_cell": write_rates.tolist()}
     opt = make_optimizer(model, args.lr, args.wd)
     gen = torch.Generator(device="cpu").manual_seed(args.seed)
     timer, curve = Timer(), []
@@ -119,22 +179,32 @@ def main():
         for g in opt.param_groups:
             g["lr"] = cosine_lr(step, args.steps, args.warmup, args.lr)
         x, y = random_batch(train, args.bs, args.ctx, gen)
-        loss = F.cross_entropy(model(x.to(device)).flatten(0, 1), y.to(device).flatten())
+        stats = {} if write_rates is not None and (step + 1) % 8 == 0 else None
+        inputs = x.to(device)
+        logits = model(inputs, memory_training_stats=stats) if stats is not None else model(inputs)
+        loss = F.cross_entropy(logits.flatten(0, 1), y.to(device).flatten())
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
+        if stats is not None:
+            calibrate_write_bias(model, stats["write_drive"].flatten(0, 1), write_rates, 0.3)
         if (step + 1) % args.eval_every == 0 or step + 1 == args.steps:
             bpb = evaluate_bpb(model, val, args.ctx, args.eval_batches, bs=args.eval_bs, device=device)
             curve.append({"step": step + 1, "tokens": (step + 1) * tokens_per_step,
                           "train_bpb": loss.item() / math.log(2), "val_bpb": bpb})
             print(f"{name} step {step+1} train {loss.item()/math.log(2):.3f} val {bpb:.3f} bpb ({timer():.0f}s)",
                   flush=True)
+    if write_match is not None:
+        _, drive = write_calibration(model, train, args, device, collect_drives=True)
+        calibrate_write_bias(model, drive, write_rates, 1.)
+        actual, _ = write_calibration(model, train, args, device)
+        write_match["fitted_writes_per_byte_by_cell"] = actual.tolist()
     val_bpb = evaluate_bpb(model, val, args.ctx, args.final_eval_batches, bs=args.eval_bs, device=device)
     test_bpb = evaluate_bpb(model, test, args.ctx, args.final_eval_batches, bs=args.eval_bs, device=device)
     model.eval()
     energy = None
-    if cfg.attn not in ("transformer_event", "transformer_successor"):
+    if cfg.attn not in ("transformer_event", "transformer_successor", "temporal_spike"):
         with torch.no_grad(), count_ops(model, cfg.spike_levels, cfg.spike_unit) as c:
             x, _ = random_batch(val, 16, args.ctx, torch.Generator(device="cpu").manual_seed(0))
             model(x.to(device))
@@ -142,10 +212,13 @@ def main():
         energy = c.summary()
     if checkpoint is not None:
         save_checkpoint(checkpoint, model, model_kwargs, args=args, task="lm", name=name)
-    save_result("lm", name, {"args": vars(args), "cfg": cfg.to_dict(), "device": str(device),
-                             "params": count_params(model), "data_sha1": ENWIK8_SHA1,
-                             "val_bpb": val_bpb, "test_bpb": test_bpb, "curve": curve,
-                             "energy_per_token": energy, "seconds": timer()}, overwrite=args.force)
+    result = {"args": vars(args), "cfg": cfg.to_dict(), "device": str(device),
+              "params": count_params(model), "data_sha1": ENWIK8_SHA1,
+              "val_bpb": val_bpb, "test_bpb": test_bpb, "curve": curve,
+              "energy_per_token": energy, "seconds": timer()}
+    if write_match is not None:
+        result["write_rate_matching"] = write_match
+    save_result("lm", name, result, overwrite=args.force)
     print(f"FINAL {name} val_bpb={val_bpb:.4f} test_bpb={test_bpb:.4f} energy/token={energy}")
 
 

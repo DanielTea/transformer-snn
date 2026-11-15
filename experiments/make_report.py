@@ -119,12 +119,36 @@ def build_data():
     return data
 
 
+def spiking_byte_tables():
+    path = RESULTS / "event_lm" / "threshold_scale_leaderboard.json"
+    study = json.loads(path.read_text(encoding="utf-8"))
+    sections = []
+    for scale, rows in study["groups"].items():
+        exposure = rows[0]["training_targets"]
+        sections.append(f"<h3>{scale.capitalize()} comparison · {exposure:,} training targets per seed</h3>")
+        sections.append('<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th>'
+                        '<th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th>'
+                        '<th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th>'
+                        '</tr></thead><tbody>')
+        for row in rows:
+            cells = [f'{row["parameters"]:,}', f'{row["state_bytes"]:,} B']
+            for corpus in ("enwik8", "pg19_full"):
+                result = row["scores"][corpus]
+                score = f'{result["mean"]:.5f}'
+                cells.append(f"<strong>{score}</strong>" if result["rank"] == 1 else score)
+            body = "".join(f'<td class="num">{value}</td>' for value in cells)
+            sections.append(f'<tr><th scope="row">{html.escape(row["model"])}</th>{body}</tr>')
+        sections.append("</tbody></table></div>")
+    return "\n".join(sections)
+
+
 TEMPLATE = (Path(__file__).with_name("report_template.html")).read_text
 
 
 def main(out):
     data = build_data()
     page = TEMPLATE().replace("/*__DATA__*/null", json.dumps(data))
+    page = page.replace("<!-- EVENT_LM_TABLES -->", spiking_byte_tables())
     for key, value in dendrite_summary().items():
         page = page.replace("{{%s}}" % key, html.escape(value))
     # prose written after reading the results: results/report_text.json {"VERDICT": "...", ...}

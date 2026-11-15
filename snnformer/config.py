@@ -19,6 +19,7 @@ class SNNConfig:
              "sdsa" (Spike-driven Transformer V1), "wta" (top-K winner-take-all,
              Zhou et al. 2026), "dendritic" (fixed-delay spike-addressed memory),
              "dendritic_event" (spike-addressed memory with learned capture and commit),
+             "temporal_spike" (token-time integrate-and-fire and local spike coincidence),
              "softmax" (softmax over spike Q/K;
              not spike-driven -- used as reference, and by the ANN model).
     mlp:     "cdglu" (ours, coincidence-gated) or "mlp" (standard 2-layer).
@@ -36,6 +37,14 @@ class SNNConfig:
     memory_delay: int = 1  # odd heads bind current values to addresses this many tokens back
     memory_relay: bool = False  # feed the output neuron one short-range value tap per head
     local_window: int = 32  # token window in the local and hybrid Transformer references
+    temporal_carry: bool = True  # retain integrate-and-fire charge across tokens
+    pulse_memory_cells: int = 0  # optional paired-pulse bank in the last temporal block
+    pulse_preserve_reads: bool = True  # False clears each probed cell after reading it
+    pulse_write_holds: tuple[int, ...] = ()  # minimum accepted-write separation per cell
+    pulse_read_bins: int = 2  # the legacy first-pulse bit, or four timing channels
+    pulse_fixed_cuts: bool = False  # equal-width timing bins for the timing control
+    pulse_global_cuts: bool = False  # learned, query-independent timing cuts for each cell
+    charge_memory: str = "none"  # "conserved" transfers or "independent" writes
     event_width: int | None = None  # optional bottleneck for the hybrid's event branch
     successor_orders: tuple[int, ...] = (2, 3, 4, 5, 7)
     successor_slots: int = 2048  # tagged successor entries per order

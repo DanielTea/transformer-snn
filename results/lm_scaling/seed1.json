@@ -1,0 +1,757 @@
+{
+  "training": {
+    "seed": 1,
+    "steps": 2000,
+    "bs": 4,
+    "ctx": 1024,
+    "lr": 0.002,
+    "wd": 0.05,
+    "warmup": 150
+  },
+  "device": "mps",
+  "chunk": 16384,
+  "data_sha1": "57b8363b814821dc9d47aa4d41f58733519076b2",
+  "cache_orders": [
+    2,
+    3,
+    4,
+    5,
+    7
+  ],
+  "cache_slots": 2048,
+  "remote_min_age": 125,
+  "models": {
+    "local": {
+      "run_name": "transformer_local_ann0_T1_s1_scale3m",
+      "checkpoint": "scale3m-transformer_local-s1.pt",
+      "parameters": 3216896,
+      "model_kwargs": {
+        "vocab": 256,
+        "dim": 256,
+        "depth": 4,
+        "heads": 8,
+        "ctx": 1024
+      },
+      "training": {
+        "seed": 1,
+        "steps": 2000,
+        "bs": 4,
+        "ctx": 1024,
+        "lr": 0.002,
+        "wd": 0.05,
+        "warmup": 150
+      }
+    },
+    "continuous": {
+      "run_name": "transformer_successor_continuous_ann0_T1_s1_scale3m",
+      "checkpoint": "scale3m-transformer_successor_continuous-s1.pt",
+      "parameters": 3217137,
+      "model_kwargs": {
+        "vocab": 256,
+        "dim": 256,
+        "depth": 4,
+        "heads": 8,
+        "ctx": 1024
+      },
+      "training": {
+        "seed": 1,
+        "steps": 2000,
+        "bs": 4,
+        "ctx": 1024,
+        "lr": 0.002,
+        "wd": 0.05,
+        "warmup": 150
+      }
+    },
+    "spike": {
+      "run_name": "transformer_successor_ann0_T1_s1_scale3m",
+      "checkpoint": "scale3m-transformer_successor-s1.pt",
+      "parameters": 3217137,
+      "model_kwargs": {
+        "vocab": 256,
+        "dim": 256,
+        "depth": 4,
+        "heads": 8,
+        "ctx": 1024
+      },
+      "training": {
+        "seed": 1,
+        "steps": 2000,
+        "bs": 4,
+        "ctx": 1024,
+        "lr": 0.002,
+        "wd": 0.05,
+        "warmup": 150
+      }
+    }
+  },
+  "datasets": {
+    "enwik8": {
+      "target_bytes": 4999999,
+      "target_bytes_by_distance": {
+        "miss": 238961,
+        "local_only": 1341092,
+        "remote": 3419946
+      },
+      "models": {
+        "local": {
+          "bpb": 2.0600212197218744,
+          "bpb_by_distance": {
+            "miss": 2.4427274675840005,
+            "local_only": 2.055617181937194,
+            "remote": 2.035007477442128
+          }
+        },
+        "continuous": {
+          "bpb": 1.7671889266371625,
+          "bpb_by_distance": {
+            "miss": 2.3680973298909413,
+            "local_only": 1.559113142522287,
+            "remote": 1.8067963053853242
+          }
+        },
+        "spike": {
+          "bpb": 1.7790107275077418,
+          "bpb_by_distance": {
+            "miss": 2.387072443191263,
+            "local_only": 1.5720926232925183,
+            "remote": 1.8176643140195614
+          }
+        }
+      },
+      "streams": [
+        {
+          "source": "enwik8 test",
+          "target_bytes": 4999999,
+          "target_bytes_by_distance": {
+            "miss": 238961,
+            "local_only": 1341092,
+            "remote": 3419946
+          },
+          "models": {
+            "local": {
+              "bpb": 2.0600212197218744,
+              "bpb_by_distance": {
+                "miss": 2.4427274675840005,
+                "local_only": 2.055617181937194,
+                "remote": 2.035007477442128
+              }
+            },
+            "continuous": {
+              "bpb": 1.7671889266371625,
+              "bpb_by_distance": {
+                "miss": 2.3680973298909413,
+                "local_only": 1.559113142522287,
+                "remote": 1.8067963053853242
+              }
+            },
+            "spike": {
+              "bpb": 1.7790107275077418,
+              "bpb_by_distance": {
+                "miss": 2.387072443191263,
+                "local_only": 1.5720926232925183,
+                "remote": 1.8176643140195614
+              }
+            }
+          }
+        }
+      ]
+    },
+    "raw": {
+      "target_bytes": 2097136,
+      "target_bytes_by_distance": {
+        "miss": 63428,
+        "local_only": 377844,
+        "remote": 1655864
+      },
+      "models": {
+        "local": {
+          "bpb": 3.3079380195745305,
+          "bpb_by_distance": {
+            "miss": 3.665930489718263,
+            "local_only": 3.3584371273431928,
+            "remote": 3.2827019305768714
+          }
+        },
+        "continuous": {
+          "bpb": 2.915446953205882,
+          "bpb_by_distance": {
+            "miss": 3.5321611899069656,
+            "local_only": 3.0207580533376723,
+            "remote": 2.8677932099493875
+          }
+        },
+        "spike": {
+          "bpb": 2.961991649135821,
+          "bpb_by_distance": {
+            "miss": 3.5532484919004723,
+            "local_only": 3.0595676760614,
+            "remote": 2.9170780841688035
+          }
+        }
+      },
+      "streams": [
+        {
+          "source": "10146.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 4280,
+            "local_only": 25068,
+            "remote": 101723
+          },
+          "models": {
+            "local": {
+              "bpb": 2.913210124924513,
+              "bpb_by_distance": {
+                "miss": 3.1266033725511164,
+                "local_only": 3.1136162433959043,
+                "remote": 2.85484472400552
+              }
+            },
+            "continuous": {
+              "bpb": 2.5591905794712035,
+              "bpb_by_distance": {
+                "miss": 2.996229651142891,
+                "local_only": 2.7139715693840407,
+                "remote": 2.5026588503451475
+              }
+            },
+            "spike": {
+              "bpb": 2.59442243639117,
+              "bpb_by_distance": {
+                "miss": 3.037137168878631,
+                "local_only": 2.7616517489595127,
+                "remote": 2.5345842143321518
+              }
+            }
+          }
+        },
+        {
+          "source": "10321.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 4906,
+            "local_only": 22065,
+            "remote": 104100
+          },
+          "models": {
+            "local": {
+              "bpb": 3.781707890227069,
+              "bpb_by_distance": {
+                "miss": 4.039454871695467,
+                "local_only": 3.7734987361785817,
+                "remote": 3.771300861341343
+              }
+            },
+            "continuous": {
+              "bpb": 3.4000564081484295,
+              "bpb_by_distance": {
+                "miss": 3.880276390597998,
+                "local_only": 3.5136613162245305,
+                "remote": 3.353345058190728
+              }
+            },
+            "spike": {
+              "bpb": 3.4448630598110945,
+              "bpb_by_distance": {
+                "miss": 3.8693329219213686,
+                "local_only": 3.5282811068945548,
+                "remote": 3.4071774848599943
+              }
+            }
+          }
+        },
+        {
+          "source": "10356.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 4499,
+            "local_only": 23358,
+            "remote": 103214
+          },
+          "models": {
+            "local": {
+              "bpb": 3.0218387157140163,
+              "bpb_by_distance": {
+                "miss": 3.495796461236338,
+                "local_only": 3.069910127225636,
+                "remote": 2.990300475483105
+              }
+            },
+            "continuous": {
+              "bpb": 2.7573091347618193,
+              "bpb_by_distance": {
+                "miss": 3.3924672132204345,
+                "local_only": 2.8929772092260535,
+                "remote": 2.698920630505411
+              }
+            },
+            "spike": {
+              "bpb": 2.773424725893655,
+              "bpb_by_distance": {
+                "miss": 3.4101876799720605,
+                "local_only": 2.9170650339477864,
+                "remote": 2.7131620982857028
+              }
+            }
+          }
+        },
+        {
+          "source": "10762.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 3768,
+            "local_only": 22500,
+            "remote": 104803
+          },
+          "models": {
+            "local": {
+              "bpb": 2.8532161229653457,
+              "bpb_by_distance": {
+                "miss": 3.2582207335077125,
+                "local_only": 2.969601066908949,
+                "remote": 2.813668413345824
+              }
+            },
+            "continuous": {
+              "bpb": 2.6724255812715176,
+              "bpb_by_distance": {
+                "miss": 3.1791471852372895,
+                "local_only": 2.830585932166354,
+                "remote": 2.6202521234613703
+              }
+            },
+            "spike": {
+              "bpb": 2.6862581230482125,
+              "bpb_by_distance": {
+                "miss": 3.175497916971062,
+                "local_only": 2.853998206869642,
+                "remote": 2.6326565331177383
+              }
+            }
+          }
+        },
+        {
+          "source": "5396.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 4111,
+            "local_only": 22996,
+            "remote": 103964
+          },
+          "models": {
+            "local": {
+              "bpb": 3.442197445609056,
+              "bpb_by_distance": {
+                "miss": 3.9545910054506077,
+                "local_only": 3.4566022025349965,
+                "remote": 3.4187498895821857
+              }
+            },
+            "continuous": {
+              "bpb": 3.0500102876735307,
+              "bpb_by_distance": {
+                "miss": 3.7975635746798537,
+                "local_only": 3.154504786022837,
+                "remote": 2.9973367944746965
+              }
+            },
+            "spike": {
+              "bpb": 3.1018059872733916,
+              "bpb_by_distance": {
+                "miss": 3.8407028492904596,
+                "local_only": 3.1865045424101917,
+                "remote": 3.0538534943558617
+              }
+            }
+          }
+        },
+        {
+          "source": "5734.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 4114,
+            "local_only": 22596,
+            "remote": 104361
+          },
+          "models": {
+            "local": {
+              "bpb": 3.0621209383677117,
+              "bpb_by_distance": {
+                "miss": 3.4544561997232015,
+                "local_only": 3.1776671710235758,
+                "remote": 3.0216369458963057
+              }
+            },
+            "continuous": {
+              "bpb": 2.764804241263682,
+              "bpb_by_distance": {
+                "miss": 3.317671531868955,
+                "local_only": 2.959571978742262,
+                "remote": 2.700839083497696
+              }
+            },
+            "spike": {
+              "bpb": 2.7848693991179165,
+              "bpb_by_distance": {
+                "miss": 3.381608080476506,
+                "local_only": 2.99002661968154,
+                "remote": 2.7169252869403318
+              }
+            }
+          }
+        },
+        {
+          "source": "5770.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 3979,
+            "local_only": 22123,
+            "remote": 104969
+          },
+          "models": {
+            "local": {
+              "bpb": 3.9351037373246087,
+              "bpb_by_distance": {
+                "miss": 4.258638484423355,
+                "local_only": 4.006120987283583,
+                "remote": 3.9078722748971466
+              }
+            },
+            "continuous": {
+              "bpb": 3.2928252892543024,
+              "bpb_by_distance": {
+                "miss": 4.0483249465737945,
+                "local_only": 3.465593425055427,
+                "remote": 3.2277748209750725
+              }
+            },
+            "spike": {
+              "bpb": 3.378082694048481,
+              "bpb_by_distance": {
+                "miss": 4.063982960118123,
+                "local_only": 3.496930056958146,
+                "remote": 3.32703469541706
+              }
+            }
+          }
+        },
+        {
+          "source": "5956.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 3198,
+            "local_only": 23998,
+            "remote": 103875
+          },
+          "models": {
+            "local": {
+              "bpb": 3.134431559640137,
+              "bpb_by_distance": {
+                "miss": 3.459306303343204,
+                "local_only": 3.0960085550272445,
+                "remote": 3.13330641725109
+              }
+            },
+            "continuous": {
+              "bpb": 2.810539431537647,
+              "bpb_by_distance": {
+                "miss": 3.3333155656342797,
+                "local_only": 2.8773526389827806,
+                "remote": 2.779009020667761
+              }
+            },
+            "spike": {
+              "bpb": 2.8321782314186645,
+              "bpb_by_distance": {
+                "miss": 3.3476864940548263,
+                "local_only": 2.8946068740696242,
+                "remote": 2.8018845323549035
+              }
+            }
+          }
+        },
+        {
+          "source": "5962.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 4010,
+            "local_only": 23073,
+            "remote": 103988
+          },
+          "models": {
+            "local": {
+              "bpb": 3.756450331073719,
+              "bpb_by_distance": {
+                "miss": 4.022308352296812,
+                "local_only": 3.827197491530957,
+                "remote": 3.7305007994130044
+              }
+            },
+            "continuous": {
+              "bpb": 3.1488618441261336,
+              "bpb_by_distance": {
+                "miss": 3.823261349158576,
+                "local_only": 3.2784119064099158,
+                "remote": 3.094110809369683
+              }
+            },
+            "spike": {
+              "bpb": 3.1960584941776355,
+              "bpb_by_distance": {
+                "miss": 3.848874569429587,
+                "local_only": 3.317255068480959,
+                "remote": 3.143993246065729
+              }
+            }
+          }
+        },
+        {
+          "source": "6412.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 3861,
+            "local_only": 22566,
+            "remote": 104644
+          },
+          "models": {
+            "local": {
+              "bpb": 3.0935926173622006,
+              "bpb_by_distance": {
+                "miss": 3.457650719179398,
+                "local_only": 3.1314056166924797,
+                "remote": 3.072005938011227
+              }
+            },
+            "continuous": {
+              "bpb": 2.8507230062522275,
+              "bpb_by_distance": {
+                "miss": 3.35309655231494,
+                "local_only": 2.9987841437678187,
+                "remote": 2.8002584608361025
+              }
+            },
+            "spike": {
+              "bpb": 2.8688663409284576,
+              "bpb_by_distance": {
+                "miss": 3.3606700312903985,
+                "local_only": 3.016611398445833,
+                "remote": 2.818859947667262
+              }
+            }
+          }
+        },
+        {
+          "source": "6941.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 4081,
+            "local_only": 24051,
+            "remote": 102939
+          },
+          "models": {
+            "local": {
+              "bpb": 3.1769059512840174,
+              "bpb_by_distance": {
+                "miss": 3.662354015383008,
+                "local_only": 3.140977457726204,
+                "remote": 3.166054890451592
+              }
+            },
+            "continuous": {
+              "bpb": 2.8717851182877663,
+              "bpb_by_distance": {
+                "miss": 3.5297803631716946,
+                "local_only": 2.906114665820848,
+                "remote": 2.8376781370455797
+              }
+            },
+            "spike": {
+              "bpb": 2.901476164470003,
+              "bpb_by_distance": {
+                "miss": 3.5862070395583148,
+                "local_only": 2.9256630545692976,
+                "remote": 2.868679016693033
+              }
+            }
+          }
+        },
+        {
+          "source": "7412.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 3757,
+            "local_only": 23784,
+            "remote": 103530
+          },
+          "models": {
+            "local": {
+              "bpb": 3.0176788198502185,
+              "bpb_by_distance": {
+                "miss": 2.953664535550369,
+                "local_only": 3.0661671592911492,
+                "remote": 3.008862583018879
+              }
+            },
+            "continuous": {
+              "bpb": 2.6779150593441727,
+              "bpb_by_distance": {
+                "miss": 2.859049036282234,
+                "local_only": 2.7610394403567344,
+                "remote": 2.652245682068416
+              }
+            },
+            "spike": {
+              "bpb": 2.7302055466346244,
+              "bpb_by_distance": {
+                "miss": 2.8824359910192574,
+                "local_only": 2.8267626991914407,
+                "remote": 2.702499132107778
+              }
+            }
+          }
+        },
+        {
+          "source": "7987.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 3786,
+            "local_only": 22957,
+            "remote": 104328
+          },
+          "models": {
+            "local": {
+              "bpb": 3.400570292329557,
+              "bpb_by_distance": {
+                "miss": 3.7487326315625147,
+                "local_only": 3.356519483309128,
+                "remote": 3.3976289132783535
+              }
+            },
+            "continuous": {
+              "bpb": 3.032037499571316,
+              "bpb_by_distance": {
+                "miss": 3.608238127480932,
+                "local_only": 3.1221995745294215,
+                "remote": 2.991287688091378
+              }
+            },
+            "spike": {
+              "bpb": 3.0680346741841342,
+              "bpb_by_distance": {
+                "miss": 3.6322756541490437,
+                "local_only": 3.1471240203587505,
+                "remote": 3.030155385112382
+              }
+            }
+          }
+        },
+        {
+          "source": "8197.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 2928,
+            "local_only": 28783,
+            "remote": 99360
+          },
+          "models": {
+            "local": {
+              "bpb": 3.8832698544040367,
+              "bpb_by_distance": {
+                "miss": 4.926430241360055,
+                "local_only": 3.8982824021127604,
+                "remote": 3.8481804847008623
+              }
+            },
+            "continuous": {
+              "bpb": 3.090580842236211,
+              "bpb_by_distance": {
+                "miss": 4.7580139690760745,
+                "local_only": 3.096649779303932,
+                "remote": 3.039685850176958
+              }
+            },
+            "spike": {
+              "bpb": 3.2686123465345953,
+              "bpb_by_distance": {
+                "miss": 4.742950741465756,
+                "local_only": 3.217068913341372,
+                "remote": 3.240096966273344
+              }
+            }
+          }
+        },
+        {
+          "source": "8559.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 4424,
+            "local_only": 25055,
+            "remote": 101592
+          },
+          "models": {
+            "local": {
+              "bpb": 2.9189954420551536,
+              "bpb_by_distance": {
+                "miss": 3.3265951345179494,
+                "local_only": 3.039364325056145,
+                "remote": 2.8715599805715213
+              }
+            },
+            "continuous": {
+              "bpb": 2.5938482210171285,
+              "bpb_by_distance": {
+                "miss": 3.2691635428623163,
+                "local_only": 2.6712709775988204,
+                "remote": 2.5453461524487633
+              }
+            },
+            "spike": {
+              "bpb": 2.6196428691495544,
+              "bpb_by_distance": {
+                "miss": 3.298287277333186,
+                "local_only": 2.7163960439858905,
+                "remote": 2.566228489500283
+              }
+            }
+          }
+        },
+        {
+          "source": "9931.txt",
+          "target_bytes": 131071,
+          "target_bytes_by_distance": {
+            "miss": 3726,
+            "local_only": 22871,
+            "remote": 104474
+          },
+          "models": {
+            "local": {
+              "bpb": 3.5357184700611195,
+              "bpb_by_distance": {
+                "miss": 3.753389658063643,
+                "local_only": 3.5880889899406228,
+                "remote": 3.516490633406435
+              }
+            },
+            "continuous": {
+              "bpb": 3.074238707077035,
+              "bpb_by_distance": {
+                "miss": 3.603777013772728,
+                "local_only": 3.1831526699720882,
+                "remote": 3.031510076258641
+              }
+            },
+            "spike": {
+              "bpb": 3.1430652930915404,
+              "bpb_by_distance": {
+                "miss": 3.5972491913313496,
+                "local_only": 3.2279571297507608,
+                "remote": 3.108282951063146
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

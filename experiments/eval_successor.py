@@ -91,14 +91,16 @@ class ChunkSuccessorMemory:
 def local_log_probs(model, data, start, end, overlap, device):
     first = max(0, start - overlap)
     tokens = torch.tensor(data[first:end], dtype=torch.long, device=device)[None, :]
-    return model.local_log_probs(tokens, position_offset=first)[:, start - first :]
+    if model.cfg.attn == "transformer_local":
+        log_probs = model(tokens, position_offset=first).log_softmax(dim=-1, dtype=torch.float32)
+    else:
+        log_probs = model.local_log_probs(tokens, position_offset=first)
+    return log_probs[:, start - first :]
 
 
-def stream_evidence(model, data, chunk, device):
-    """Yield the model evidence without resetting between scoring chunks."""
-    orders = model.successors.orders
-    store = ChunkSuccessorMemory(orders, model.successors.slots)
-    overlap = len(model.blocks) * (model.cfg.local_window - 1)
+def stream_cache(data, chunk, orders, slots):
+    """Yield verified successors and their causal statistics for one stream."""
+    store = ChunkSuccessorMemory(orders, slots)
     last_prediction = np.full((1, len(orders)), -1, dtype=np.int64)
     observed = np.zeros(len(orders), dtype=np.int64)
     correct = np.zeros_like(observed)
@@ -111,9 +113,15 @@ def stream_evidence(model, data, chunk, device):
         running_correct = np.cumsum(previous == tokens[:, None], axis=0) + correct
         last_prediction = successors[-1:].copy()
         observed, correct = running_observed[-1].copy(), running_correct[-1].copy()
+        yield start, end, (successors, ages, running_observed, running_correct)
+
+
+def stream_evidence(model, data, chunk, device):
+    """Yield the model evidence without resetting between scoring chunks."""
+    overlap = len(model.blocks) * (model.cfg.local_window - 1)
+    for start, end, evidence in stream_cache(data, chunk, model.successors.orders, model.successors.slots):
         log_probs = local_log_probs(model, data, start, end, overlap, device)
-        yield (log_probs, *(torch.as_tensor(array, device=device)[None, :] for array in
-                            (successors, ages, running_observed, running_correct)),
+        yield (log_probs, *(torch.as_tensor(array, device=device)[None, :] for array in evidence),
                torch.tensor(data[start + 1 : end + 1], dtype=torch.long, device=device)[None, :])
 
 

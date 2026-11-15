@@ -1,0 +1,108 @@
+{
+ "args": {
+  "variant": "event_correction_code",
+  "data": "/tmp/transformer-snn-data/enwik8",
+  "device": "mps",
+  "threads": 4,
+  "seed": 100,
+  "dim": 96,
+  "hidden": 201,
+  "memory_heads": 4,
+  "memory_slots": 14,
+  "memory_width": 32,
+  "spike_resolution": 16,
+  "depth": 3,
+  "no_carry": true,
+  "heads": 4,
+  "mlp_ratio": 4.703125,
+  "local_window": 32,
+  "local_lookback": null,
+  "ctx": 1024,
+  "bs": 2,
+  "steps": 400,
+  "warmup": 32,
+  "lr": 0.003,
+  "wd": 0.05,
+  "eval_every": 100,
+  "eval_bs": 2,
+  "eval_batches": 8,
+  "final_eval_batches": 48,
+  "validation_only": false,
+  "initialize_from": "checkpoints/event_steered_count16_correction_2x_s0.pt",
+  "freeze_router": true,
+  "code_loss_weight": 0.25,
+  "tag": "forecast_pilot",
+  "checkpoint": "checkpoints/event_correction_code_forecast_pilot_s100.pt",
+  "force": false
+ },
+ "cfg": {
+  "dim": 96,
+  "hidden": 201,
+  "depth": 3,
+  "route": "steered_correction_code",
+  "carry": false,
+  "continuous": false,
+  "memory_heads": 4,
+  "memory_slots": 14,
+  "resolution": 16,
+  "memory_width": 32
+ },
+ "device": "mps",
+ "params": 408384,
+ "trainable_params": 11904,
+ "initialization": {
+  "checkpoint": "checkpoints/event_steered_count16_correction_2x_s0.pt",
+  "sha256": "fb7ec0b4212904a53b69f5518f84c21df7e3c0163607c541cbcc680462f385a1",
+  "training_targets": 6553600
+ },
+ "data_sha1": "57b8363b814821dc9d47aa4d41f58733519076b2",
+ "train_target_bytes": 819200,
+ "curve": [
+  {
+   "step": 100,
+   "tokens": 204800,
+   "train_bpb": 2.1451215460334714,
+   "val_bpb": 2.352006076590571,
+   "val_argmax_accuracy": 0.541259765625,
+   "code_loss": 0.2137763798236847
+  },
+  {
+   "step": 200,
+   "tokens": 409600,
+   "train_bpb": 2.6465183904976968,
+   "val_bpb": 2.349316783879029,
+   "val_argmax_accuracy": 0.54254150390625,
+   "code_loss": 0.23200534284114838
+  },
+  {
+   "step": 300,
+   "tokens": 614400,
+   "train_bpb": 2.449335293786612,
+   "val_bpb": 2.3452458900396125,
+   "val_argmax_accuracy": 0.54345703125,
+   "code_loss": 0.221363827586174
+  },
+  {
+   "step": 400,
+   "tokens": 819200,
+   "train_bpb": 2.348201067929388,
+   "val_bpb": 2.3455916396613405,
+   "val_argmax_accuracy": 0.543212890625,
+   "code_loss": 0.20862269401550293
+  }
+ ],
+ "val_bpb": 2.3635099889408404,
+ "test_bpb": 2.2869391278655473,
+ "val": {
+  "bpb": 2.3635099889408404,
+  "argmax_accuracy": 0.538177490234375,
+  "target_bytes": 98304
+ },
+ "test": {
+  "bpb": 2.2869391278655473,
+  "argmax_accuracy": 0.5598042805989584,
+  "target_bytes": 98304
+ },
+ "scoring": "normalized exponential of scaled output",
+ "seconds": 17.06203317642212
+}
