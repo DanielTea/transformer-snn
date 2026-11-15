@@ -247,7 +247,8 @@ class WTAAttention(SpikingAttentionBase):
         idx = masked.topk(kk, dim=-1).indices
         hard = torch.zeros_like(scores).scatter_(-1, idx, 1.0) * visible  # early causal rows: < K keys
         hard = hard / hard.sum(-1, keepdim=True).clamp_min(1.0)
-        soft = (masked * self.log_temp.exp()).softmax(-1)
+        # temperature before masking: (-inf * t) would make d/dt NaN
+        soft = (scores * self.log_temp.exp()).masked_fill(~visible, float("-inf")).softmax(-1)
         a = hard + soft - soft.detach()  # forward: binary top-K mask; backward: softmax gradient
         if (c := OpCounter.active) is not None:
             c.spike_matmul(q, k.transpose(-2, -1), self.qk_unit)

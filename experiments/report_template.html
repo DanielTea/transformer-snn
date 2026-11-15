@@ -1,0 +1,390 @@
+<title>ShuntFormer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (68ch) with figure bands that may run wider; a spike-raster strip opens the page. */
+:root {
+  --bg: #fcfcfb; --fg: #0b0b0b; --fg2: #52514e; --muted: #77756f; --rule: #e1e0d9; --wash: #f2f1ed;
+  --ours: #2a78d6; --prior: #eb6834; --ref: #1baf7a;
+  --f-display: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --step-0: 1rem; --step-1: 1.2rem; --step-2: 1.5rem; --step-3: 2.4rem;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1a1a19; --fg: #f0efec; --fg2: #c3c2b7; --muted: #9a988f; --rule: #2f2f2c; --wash: #232321;
+  --ours: #3987e5; --prior: #d95926; --ref: #199e70; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #1a1a19; --fg: #f0efec; --fg2: #c3c2b7; --muted: #9a988f; --rule: #2f2f2c; --wash: #232321;
+  --ours: #3987e5; --prior: #d95926; --ref: #199e70; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font: 400 var(--step-0)/1.6 var(--f-body); }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 0 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.col { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2.2rem, 6vw, 3.4rem); font-weight: 600; letter-spacing: -0.02em; }
+h2 { font-size: var(--step-2); font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: var(--step-1); font-weight: 500; }
+p { margin: 0; }
+section { display: grid; gap: 18px; padding-block: 44px 0; }
+section + section { border-top: 1px solid var(--rule); margin-top: 44px; }
+.eyebrow { font: 500 0.75rem/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.deck { font-size: var(--step-1); color: var(--fg2); max-width: 60ch; }
+canvas#raster { display: block; width: 100%; height: 88px; margin-block: 28px 18px; }
+header { display: grid; gap: 14px; padding-top: 36px; }
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0; border-block: 1px solid var(--rule); }
+.strip > div { padding: 16px 18px 16px 0; display: grid; gap: 4px; min-width: 0; }
+.strip > div + div { padding-left: 18px; border-left: 1px solid var(--rule); }
+.big { font: 600 2rem/1.1 var(--f-body); letter-spacing: -0.01em; }
+.big small { font-size: 0.95rem; color: var(--fg2); font-weight: 500; }
+.cap { font-size: 0.88rem; color: var(--fg2); }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+code { background: var(--wash); padding: 0.1em 0.35em; border-radius: 4px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 500 0.72rem/1.3 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+td.num, th.num { text-align: right; padding-right: 0; padding-left: 10px; white-space: nowrap; }
+tr.hl td { font-weight: 600; }
+.tag { display: inline-block; font: 500 0.68rem/1 var(--f-mono); letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 3px 6px; border-radius: 3px; border: 1px solid var(--rule); color: var(--fg2); white-space: nowrap; }
+.tag.new { border-color: var(--ours); color: var(--ours); }
+figure { margin: 0; display: grid; gap: 10px; }
+figcaption { font-size: 0.88rem; color: var(--fg2); max-width: 75ch; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { fill: var(--fg2); font: 400 12px var(--f-body); }
+.chart .val { fill: var(--fg); font: 500 12px var(--f-mono); }
+.chart .axis { stroke: var(--rule); }
+.chart .grid { stroke: var(--rule); stroke-width: 1; }
+.chart .bar { transition: opacity .12s; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:focus { outline: none; }
+.chart g.row:hover .bar, .chart g.row:focus-within .bar { opacity: 0.78; }
+.chart g.row:focus-within .lbl { fill: var(--fg); }
+.tip { position: absolute; pointer-events: none; background: var(--bg); color: var(--fg); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 8px 10px; font-size: 0.8rem; line-height: 1.35; box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+  min-width: 150px; z-index: 5; }
+.tip .row { display: flex; align-items: center; gap: 8px; }
+.tip .key { width: 14px; height: 2px; flex: none; }
+.tip strong { font: 600 0.85rem var(--f-mono); }
+.tip .name { color: var(--fg2); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.82rem; color: var(--fg2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+.legend i.ln { height: 2px; width: 16px; border-radius: 0; }
+details { font-size: 0.88rem; }
+details summary { cursor: pointer; color: var(--fg2); font: 500 0.78rem var(--f-mono); letter-spacing: 0.04em; }
+details summary:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
+details[open] summary { margin-bottom: 8px; }
+.callout { border-left: 3px solid var(--ours); padding: 4px 0 4px 16px; display: grid; gap: 8px; }
+.steps { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+.steps > div { display: grid; grid-template-columns: minmax(130px, 0.9fr) minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px;
+  padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.steps b { font-family: var(--f-display); font-weight: 500; }
+.steps .f { font-family: var(--f-mono); font-size: 0.84rem; overflow-wrap: anywhere; }
+.steps .c { font-size: 0.84rem; color: var(--fg2); }
+@media (max-width: 640px) { .steps > div { grid-template-columns: 1fr; gap: 4px; } .strip > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); } }
+a { color: var(--ours); }
+a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Spiking transformer research · November 2026</div>
+  <h1>ShuntFormer</h1>
+  <p class="deck">A spike-driven transformer whose attention is built from lateral and shunting inhibition instead of softmax. It is the only spike-driven attention in our tests that learns associative recall, and it trains causally from scratch.</p>
+  <canvas id="raster" aria-hidden="true"></canvas>
+  <div class="strip" id="strip"></div>
+</header>
+
+<section>
+  <div class="eyebrow">Short answer</div>
+  <h2>Did we surpass the state of the art?</h2>
+  <div class="col" style="display:grid;gap:12px">
+    <p>{{VERDICT}}</p>
+    <p>What we could not do on a 4-core CPU with no GPU is train at ImageNet scale, so we make no ImageNet claim. Every comparison below is on the same backbone, with the same neurons, parameter count, data and steps, and only the attention or MLP swapped.</p>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Where the field stands</div>
+  <h2>Best published spiking transformers</h2>
+  <p class="col">Numbers verified against the papers by a literature survey. Several headline results need a caveat before they can serve as a target.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>model</th><th>venue</th><th class="num">ImageNet top-1</th><th>setting</th><th>caveat</th></tr></thead>
+    <tbody>
+      <tr><td>TDFormer</td><td>arXiv 2025</td><td class="num">86.83</td><td>69M, T=4, 384² test</td><td>fine-tuned from the QKFormer checkpoint</td></tr>
+      <tr><td>SpiLiFormer</td><td>ICCV 2025</td><td class="num">86.66</td><td>69M, T=4, 384² test</td><td>code has QKFormer's LIF-across-batch bug, which its authors say inflates ImageNet</td></tr>
+      <tr><td>E-SpikeFormer (SDT-V3)</td><td>TPAMI 2025</td><td class="num">86.2</td><td>173M, 1×8 integer spikes, 384²</td><td>measured in integer mode; a 2026 preprint finds a 28-point drop under true spike-by-spike attention</td></tr>
+      <tr><td>QKFormer</td><td>NeurIPS 2024</td><td class="num">85.65</td><td>65M, T=4, 384²</td><td>the bug above</td></tr>
+      <tr><td>Max-Former</td><td>NeurIPS 2025</td><td class="num">82.39</td><td>64M, T=4, 224²</td><td>best result with code stated bug-free and fully binary</td></tr>
+      <tr><td>Meta-SpikeFormer (SDT-V2)</td><td>ICLR 2024</td><td class="num">80.0</td><td>55M, T=4</td><td>the backbone family ShuntFormer builds on</td></tr>
+      <tr><td>Spikformer</td><td>ICLR 2023</td><td class="num">74.81</td><td>66M, T=4</td><td>origin of softmax-free spiking self-attention (SSA)</td></tr>
+    </tbody>
+  </table></div>
+  <p class="col cap">Language is further behind. SpikeGPT (RWKV-based, 46M) reaches 1.283 bits per character on enwik8 against 1.137 for a matched transformer. The large spiking LLMs (SpikingBrain, SDLLM) are converted from pretrained ANNs. The closest from-scratch causal spiking transformer, WTA-Spikingformer (2026), uses fixed-count winner-take-all attention. It is reimplemented here as a baseline.</p>
+</section>
+
+<section>
+  <div class="eyebrow">The design</div>
+  <h2>Competitive Shunting Attention</h2>
+  <p class="col">Per head, Q, K and V are integer spike tensors. Every step uses accumulates and comparisons only. K and V live in the cache as spike counts, and Q spikes stream in.</p>
+  <div class="steps">
+    <div><b>Coincidence</b><span class="f">S<sub>ij</sub> = q<sub>i</sub>·k<sub>j</sub> / √d</span><span class="c">each q-spike adds a stored k-count</span></div>
+    <div><b>Lateral inhibition</b><span class="f">θ<sub>i</sub> = γ<sub>h</sub>·q<sub>i</sub>·k̄ / √d + b<sub>h</sub></span><span class="c">O(N·d): the mean score equals q<sub>i</sub>·k̄; prefix mean when causal</span></div>
+    <div><b>Competition</b><span class="f">a<sub>ij</sub> = H(S<sub>ij</sub> − θ<sub>i</sub>)</span><span class="c">binary attention map, surrogate gradient; winner count adapts per query</span></div>
+    <div><b>Shunting</b><span class="f">y<sub>i</sub> = Σ<sub>j</sub> a<sub>ij</sub> v<sub>j</sub> / max(1, n<sub>i</sub>)</span><span class="c">division done by scaling the output neuron's threshold by n<sub>i</sub></span></div>
+  </div>
+  <p class="col">The output is the fraction of winning keys whose value neuron fired, so it stays bounded for every query, position and sequence length. That is what lets one block serve bidirectional vision and causal language. The MLP is a coincidence-gated unit (binary gate × integer value spikes, adopted from OST and SGSAFormer). Neurons are integer LIF with up to 4 spikes per step.</p>
+</section>
+
+<section>
+  <div class="eyebrow">What broke first</div>
+  <h2>Saturation erases what the residual stream carries</h2>
+  <div class="col" style="display:grid;gap:12px">
+    <p>Our first spiking models, softmax included, could not learn associative recall at all, while the identical ANN solved it in 500 steps. We changed one thing at a time. Rounding activations to 4 levels was harmless. Clamping them at a ceiling, as every spiking neuron does, was fatal. A site-by-site test located the damage:</p>
+  </div>
+  <div class="tablewrap" style="max-width:560px"><table>
+    <thead><tr><th>neurons left saturating (rest unbounded)</th><th class="num">recall accuracy</th></tr></thead>
+    <tbody>
+      <tr><td>block-input neurons reading the residual</td><td class="num">21.8%</td></tr>
+      <tr><td>Q and K neurons</td><td class="num">21.0%</td></tr>
+      <tr><td>V and attention-output neurons</td><td class="num">100%</td></tr>
+      <tr><td>MLP neurons</td><td class="num">100%</td></tr>
+    </tbody>
+  </table></div>
+  <p class="col">Features in the residual stream are superposed by addition. A neuron that saturates clips the sum and zeroes its straight-through gradient. The fix costs nothing at inference. Batch-normalise the residual right before each block-input neuron, an affine map that folds into the neuron's threshold and bias, and give integer neurons a range of 4 spike units (the I-LIF 1×4 setting).</p>
+</section>
+
+<section>
+  <div class="eyebrow">Results</div>
+  <h2>Can the attention select one token among many?</h2>
+  <figure>
+    <div class="legend" id="lg-recall"></div>
+    <div class="chart" id="ch-recall"></div>
+    <figcaption>Multi-query associative recall: 8 key–value pairs, 2-layer causal model (≈112k parameters), 2,000 steps, bars show the mean of 3 seeds, dots show each seed. Chance is about 3%; guessing any value present in the context gives 15–20%.</figcaption>
+    <details><summary>Table view</summary><div class="tablewrap" id="tb-recall"></div></details>
+  </figure>
+  <p class="col">{{RECALL_TEXT}}</p>
+</section>
+
+<section>
+  <h2>Language modelling from scratch</h2>
+  <figure>
+    <div class="legend" id="lg-lm"></div>
+    <div class="chart" id="ch-lm"></div>
+    <figcaption>enwik8 byte-level LM: 4 layers, d=128, ≈0.88M parameters, context 128, 1,500 steps (6.1M tokens), one seed. Validation bits per byte; lower is better.</figcaption>
+    <details><summary>Table view</summary><div class="tablewrap" id="tb-lm"></div></details>
+  </figure>
+  <p class="col">{{LM_TEXT}}</p>
+</section>
+
+<section>
+  <h2>Vision</h2>
+  <figure>
+    <div class="legend" id="lg-vision"></div>
+    <div class="chart" id="ch-vision"></div>
+    <figcaption>CIFAR-10 with a small spiking ViT (d=96, 4 blocks, ≈0.59M parameters, 64 tokens), 5 epochs, one seed. Absolute accuracy is far below the literature's 300-epoch, 9M-parameter runs. Only the comparison between rows is meaningful.</figcaption>
+    <details><summary>Table view</summary><div class="tablewrap" id="tb-vision"></div></details>
+  </figure>
+  <p class="col">{{VISION_TEXT}}</p>
+</section>
+
+<section>
+  <div class="eyebrow">Your first question</div>
+  <h2>Are spiking transformers sample-efficient?</h2>
+  <p class="col">{{SAMPLE_TEXT}}</p>
+</section>
+
+<section>
+  <div class="eyebrow">Novelty</div>
+  <h2>What is new and what is adopted</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>component</th><th>status</th><th>closest prior work</th></tr></thead>
+    <tbody>
+      <tr><td>Per-query threshold referenced to the mean score, O(N·d), with a causal prefix-mean form</td><td><span class="tag new">new</span></td><td>WTA-Spikingformer 2026 (fixed K); Spike2Max, SpikedAttention (row max); Shen et al. 2024 (attention shift)</td></tr>
+      <tr><td>Normalising by the number of binary winners as the fix for causal spiking attention</td><td><span class="tag new">new use</span></td><td>threshold-scaling-as-division: SpikedAttention (NeurIPS 2024)</td></tr>
+      <tr><td>Diagnosis of residual saturation; pre-neuron BN folded into thresholds</td><td><span class="tag new">finding</span></td><td>BN before a spiking neuron itself is standard (tdBN)</td></tr>
+      <tr><td>All of the above in a causal LM trained from scratch</td><td><span class="tag new">new</span></td><td>none found</td></tr>
+      <tr><td>Coincidence-gated MLP (binary gate × spikes)</td><td><span class="tag">adopted</span></td><td>OST SGFF (IJCAI 2024), SGSAFormer SGLU (2025)</td></tr>
+      <tr><td>Integer training, spike-driven inference (D=4)</td><td><span class="tag">adopted</span></td><td>SpikeYOLO, E-SpikeFormer</td></tr>
+      <tr><td>Membrane-shortcut residual, BN instead of LayerNorm</td><td><span class="tag">adopted</span></td><td>Meta-SpikeFormer</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="eyebrow">Limits</div>
+  <h2>What these results do not show</h2>
+  <ul class="col">
+    <li>No ImageNet or large-LM training. The models are 0.1–0.9M parameters, trained for minutes on a CPU. Scale can change rankings.</li>
+    <li>Language and vision runs use one seed; recall uses three. Small differences on CIFAR-10 and enwik8 are within run-to-run noise.</li>
+    <li>Energy figures are the field's standard 45 nm operation-count estimate (4.6 pJ per MAC, 0.9 pJ per accumulate). They ignore memory traffic, which dominates on real hardware.</li>
+    <li>CSA is O(N²) in comparisons, like Spikformer's SSA. Only its inhibition term is linear.</li>
+  </ul>
+  <p class="col">The next step is the ImageNet recipe of Meta-SpikeFormer/E-SpikeFormer (≈55M parameters, 200 epochs) with CSA in the attention stages, plus a WikiText-103 causal LM against WTA-Spikingformer. Both need GPUs. The code is ready for them.</p>
+</section>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const ROLE_VAR = { ours: "--ours", prior: "--prior", ref: "--ref" };
+const ROLE_NAME = { ours: "this work (spike-driven)", prior: "prior spike-driven attention", ref: "reference (not spike-driven)" };
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function h(tag, text, parent, cls) { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; }
+
+function legend(id, roles, line) {
+  const box = document.getElementById(id); box.textContent = "";
+  roles.forEach(r => { const s = h("span", null, box); const i = h("i", null, s, line ? "ln" : ""); i.style.background = `var(${ROLE_VAR[r]})`; s.appendChild(document.createTextNode(ROLE_NAME[r])); });
+}
+function tipFor(chart) { let t = chart.querySelector(".tip"); if (!t) { t = h("div", null, chart, "tip"); t.hidden = true; } return t; }
+function placeTip(chart, tip, x, y) {
+  const w = chart.clientWidth, tw = tip.offsetWidth, th = tip.offsetHeight;
+  let left = x + 14; if (left + tw > w) left = Math.max(0, x - tw - 14);
+  tip.style.left = left + "px"; tip.style.top = Math.max(0, y - th / 2) + "px";
+}
+
+function barChart(id, rows, opt) {
+  const chart = document.getElementById(id); chart.textContent = "";
+  rows = rows.slice().sort((a, b) => b.mean - a.mean);
+  const W = 900, rowH = 30, top = 24, labelW = 230, right = 80, H = top + rows.length * rowH + 28;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opt.aria }, chart);
+  el("text", { x: W - 4, y: 12, "text-anchor": "end" }, svg).textContent = opt.valHead || "mean";
+  const max = opt.max ?? Math.max(...rows.map(r => r.mean + (r.sd || 0))) * 1.05;
+  const x = (v) => labelW + (v / max) * (W - labelW - right);
+  for (let t = 0; t <= max + 1e-9; t += opt.tick) {
+    el("line", { x1: x(t), x2: x(t), y1: top - 4, y2: H - 24, class: "grid" }, svg);
+    el("text", { x: x(t), y: H - 8, "text-anchor": "middle" }, svg).textContent = opt.fmtTick ? opt.fmtTick(t) : t;
+  }
+  const tip = tipFor(chart);
+  rows.forEach((r, i) => {
+    const y = top + i * rowH, g = el("g", { class: "row" }, svg);
+    const lbl = el("text", { x: labelW - 10, y: y + rowH / 2 + 4, "text-anchor": "end", class: "lbl" }, g); lbl.textContent = r.label;
+    const w = Math.max(2, x(r.mean) - labelW);
+    el("rect", { x: labelW, y: y + 6, width: w, height: rowH - 12, rx: 3, fill: css(ROLE_VAR[r.role]), class: "bar" }, g);
+    // one dot per seed (outcomes are often bimodal: solved / not solved), ringed with the surface colour
+    if (r.all && r.all.length > 1) r.all.forEach(v => el("circle", { cx: x(Math.min(v, max)), cy: y + rowH / 2, r: 4, fill: css("--fg"), stroke: css("--bg"), "stroke-width": 2 }, g));
+    el("text", { x: W - 4, y: y + rowH / 2 + 4, class: "val", "text-anchor": "end" }, g).textContent = opt.fmt(r.mean);
+    const hit = el("rect", { x: 0, y, width: W, height: rowH, class: "hit", tabindex: 0, "aria-label": `${r.label}: ${opt.fmt(r.mean)}` }, g);
+    const show = (ev) => {
+      tip.textContent = ""; const a = h("div", null, tip, "row"); const k = h("span", null, a, "key"); k.style.background = css(ROLE_VAR[r.role]);
+      h("strong", opt.fmt(r.mean) + (r.n > 1 ? " mean" : ""), a); h("div", r.label, tip, "name");
+      if (opt.extra) opt.extra(r).forEach(line => h("div", line, tip, "name"));
+      tip.hidden = false; const rect = chart.getBoundingClientRect();
+      const px = ev && ev.clientX ? ev.clientX - rect.left : (x(r.mean) / W) * chart.clientWidth;
+      placeTip(chart, tip, px, ((y + rowH / 2) / H) * chart.clientHeight);
+    };
+    hit.addEventListener("pointermove", show); hit.addEventListener("focus", () => show()); hit.addEventListener("pointerleave", () => tip.hidden = true); hit.addEventListener("blur", () => tip.hidden = true);
+  });
+}
+
+function lineChart(id, series, opt) {
+  const chart = document.getElementById(id); chart.textContent = "";
+  const W = 900, H = 380, L = 56, R = 150, T = 10, B = 40;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opt.aria }, chart);
+  const xs = series[0].curve.map(p => p[0]);
+  const xmax = Math.max(...xs), ally = series.flatMap(s => s.curve.map(p => p[1]));
+  const ymin = Math.floor(Math.min(...ally) * 4) / 4, ymax = Math.min(opt.ymax, Math.ceil(Math.max(...ally) * 4) / 4);
+  const x = (v) => L + (v / xmax) * (W - L - R), y = (v) => T + (1 - (Math.min(v, ymax) - ymin) / (ymax - ymin)) * (H - T - B);
+  for (let t = ymin; t <= ymax + 1e-9; t += 0.25) { el("line", { x1: L, x2: W - R, y1: y(t), y2: y(t), class: "grid" }, svg); el("text", { x: L - 8, y: y(t) + 4, "text-anchor": "end" }, svg).textContent = t.toFixed(2); }
+  for (let t = 0; t <= xmax + 1e-9; t += 1) { el("text", { x: x(t), y: H - 18, "text-anchor": "middle" }, svg).textContent = t; }
+  el("text", { x: L + (W - L - R) / 2, y: H - 2, "text-anchor": "middle" }, svg).textContent = opt.xLabel;
+  const labels = [];
+  series.forEach(s => {
+    const d = s.curve.map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" ");
+    const path = el("path", { d, fill: "none", stroke: css(ROLE_VAR[s.role]), "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    if (s.dash) path.setAttribute("stroke-dasharray", s.dash);
+    const last = s.curve[s.curve.length - 1]; labels.push({ s, y: y(last[1]), v: last[1] });
+  });
+  labels.sort((a, b) => a.y - b.y); for (let i = 1; i < labels.length; i++) labels[i].y = Math.max(labels[i].y, labels[i - 1].y + 15);
+  labels.forEach(o => { const t = el("text", { x: W - R + 8, y: o.y + 4 }, svg); t.textContent = `${o.v.toFixed(2)} ${o.s.label}`; t.setAttribute("fill", css("--fg2")); });
+  const cross = el("line", { y1: T, y2: H - B, stroke: css("--muted"), "stroke-width": 1, visibility: "hidden" }, svg);
+  const tip = tipFor(chart);
+  const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent", tabindex: 0, "aria-label": "learning curves, use arrow keys" }, svg);
+  let idx = xs.length - 1;
+  const show = (i) => {
+    idx = Math.max(0, Math.min(xs.length - 1, i)); cross.setAttribute("x1", x(xs[idx])); cross.setAttribute("x2", x(xs[idx])); cross.setAttribute("visibility", "visible");
+    tip.textContent = ""; h("div", `${xs[idx].toFixed(1)}M tokens`, tip, "name");
+    series.map(s => ({ s, v: s.curve[idx][1] })).sort((a, b) => a.v - b.v).forEach(o => { const r = h("div", null, tip, "row"); const k = h("span", null, r, "key"); k.style.background = css(ROLE_VAR[o.s.role]); h("strong", o.v.toFixed(3), r); h("span", o.s.label, r, "name"); });
+    tip.hidden = false; placeTip(chart, tip, (x(xs[idx]) / W) * chart.clientWidth, chart.clientHeight * 0.35);
+  };
+  hit.addEventListener("pointermove", (ev) => { const r = chart.getBoundingClientRect(); const vx = ((ev.clientX - r.left) / r.width) * W; let best = 0; xs.forEach((v, i) => { if (Math.abs(x(v) - vx) < Math.abs(x(xs[best]) - vx)) best = i; }); show(best); });
+  hit.addEventListener("pointerleave", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); });
+  hit.addEventListener("focus", () => show(idx)); hit.addEventListener("blur", () => { tip.hidden = true; cross.setAttribute("visibility", "hidden"); });
+  hit.addEventListener("keydown", (e) => { if (e.key === "ArrowLeft") show(idx - 1); if (e.key === "ArrowRight") show(idx + 1); });
+}
+
+function table(id, head, rows, hlKey) {
+  const box = document.getElementById(id); box.textContent = ""; const t = h("table", null, box);
+  const tr = h("tr", null, h("thead", null, t)); head.forEach(c => { const th = h("th", c.t, tr); if (c.num) th.className = "num"; });
+  const tb = h("tbody", null, t); rows.forEach(r => { const row = h("tr", null, tb); if (r._hl) row.className = "hl"; head.forEach(c => { const td = h("td", c.f(r), row); if (c.num) td.className = "num"; }); });
+}
+
+function rolesOf(rows) { return ["ours", "prior", "ref"].filter(r => rows.some(x => x.role === r)); }
+
+function renderAll() {
+  const rec = DATA.recall;
+  if (rec.length) {
+    legend("lg-recall", rolesOf(rec));
+    barChart("ch-recall", rec, { max: 105, tick: 25, fmt: v => v.toFixed(1), fmtTick: t => t + "%", aria: "associative recall accuracy by variant",
+      extra: r => [`${r.n} seed${r.n > 1 ? "s" : ""}: ${r.all.map(v => v.toFixed(1)).join(", ")}`] });
+    table("tb-recall", [{ t: "variant", f: r => r.label }, { t: "accuracy %", num: 1, f: r => r.mean.toFixed(1) + (r.sd ? " ± " + r.sd.toFixed(1) : "") }, { t: "seeds", num: 1, f: r => r.all.map(v => v.toFixed(1)).join(" / ") }],
+      rec.slice().sort((a, b) => b.mean - a.mean).map(r => ({ ...r, _hl: r.v === "ours" })));
+  }
+  const lm = DATA.lm;
+  if (lm.length) {
+    const order = ["ann", "spk_softmax", "ours", "wta", "spikformer", "sdt"];
+    const dash = { spk_softmax: "5 3", wta: "5 3", sdt: "1.5 3" };
+    const ser = order.map(v => lm.find(s => s.v === v)).filter(Boolean).map(s => ({ ...s, dash: dash[s.v] }));
+    legend("lg-lm", rolesOf(ser), true);
+    lineChart("ch-lm", ser, { xLabel: "training tokens (millions)", ymax: 4.25, aria: "validation bits per byte against training tokens" });
+    table("tb-lm", [{ t: "variant", f: r => r.label }, { t: "val bpb", num: 1, f: r => r.val.mean.toFixed(3) }, { t: "test bpb", num: 1, f: r => r.test.mean.toFixed(3) },
+      { t: "firing rate", num: 1, f: r => r.role === "ref" && r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "est. energy / token", num: 1, f: r => r.energy_uJ.toFixed(2) + " µJ" },
+      { t: "exp/div ops", num: 1, f: r => r.nonlin ? Math.round(r.nonlin).toLocaleString() : "0" }],
+      lm.slice().sort((a, b) => a.val.mean - b.val.mean).map(r => ({ ...r, _hl: r.v === "ours" })));
+  }
+  const vis = DATA.vision;
+  if (vis.length) {
+    legend("lg-vision", rolesOf(vis));
+    const lo = Math.floor(Math.min(...vis.map(r => r.mean)) / 10) * 10;
+    barChart("ch-vision", vis, { max: Math.ceil(Math.max(...vis.map(r => r.mean)) / 10) * 10 + 5, tick: 10, fmt: v => v.toFixed(1), fmtTick: t => t + "%", aria: "CIFAR-10 accuracy by variant",
+      extra: r => [`est. energy ${r.energy_uJ.toFixed(0)} µJ / image`, `firing rate ${r.fr.toFixed(3)}`] });
+    table("tb-vision", [{ t: "variant", f: r => r.label }, { t: "test acc %", num: 1, f: r => r.mean.toFixed(2) }, { t: "params", num: 1, f: r => r.params.toLocaleString() },
+      { t: "firing rate", num: 1, f: r => r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "est. energy / image", num: 1, f: r => r.energy_uJ.toFixed(0) + " µJ" }, { t: "acc. by epoch", num: 1, f: r => r.curve.map(v => v.toFixed(1)).join(" → ") }],
+      vis.slice().sort((a, b) => b.mean - a.mean).map(r => ({ ...r, _hl: r.v === "ours" })));
+  }
+  const strip = document.getElementById("strip"); strip.textContent = "";
+  const item = (big, small, cap) => { const d = h("div", null, strip); const b = h("div", big, d, "big"); if (small) h("small", " " + small, b); h("div", cap, d, "cap"); };
+  const bestPrior = (rows, key, lower) => rows.filter(r => r.role === "prior").sort((a, b) => lower ? key(a) - key(b) : key(b) - key(a))[0];
+  const ours = (rows) => rows.find(r => r.v === "ours");
+  if (ours(rec)) { const p = bestPrior(rec, r => r.mean); item(ours(rec).mean.toFixed(1) + "%", `vs ${p.mean.toFixed(1)}%`, `associative recall: ShuntFormer vs best prior spike-driven attention (${p.label})`); }
+  if (ours(lm)) { const p = bestPrior(lm, r => r.val.mean, true); item(ours(lm).val.mean.toFixed(2), `vs ${p.val.mean.toFixed(2)} bpb`, `enwik8 validation bits per byte vs best prior spike-driven attention (${p.label}); lower is better`); }
+  if (ours(vis)) { const p = bestPrior(vis, r => r.mean); item(ours(vis).mean.toFixed(1) + "%", `vs ${p.mean.toFixed(1)}%`, `CIFAR-10 (small, 5 epochs) vs best prior spike-driven attention (${p.label})`); }
+}
+
+function raster() {
+  const c = document.getElementById("raster"), dpr = window.devicePixelRatio || 1, w = c.clientWidth, hgt = c.clientHeight;
+  c.width = w * dpr; c.height = hgt * dpr; const g = c.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, w, hgt);
+  let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const rows = 11, dy = hgt / rows, ink = css("--muted"), win = css("--ours");
+  for (let r = 0; r < rows; r++) {
+    const rate = 0.012 + 0.03 * rnd();
+    for (let px = 0; px < w; px += 3) {
+      if (rnd() < rate) { const burst = Math.abs(Math.sin(px / 97 + r)) > 0.93; g.fillStyle = burst ? win : ink; g.globalAlpha = burst ? 1 : 0.55; g.fillRect(px, r * dy + 2, 1.4, dy - 4); }
+    }
+  }
+  g.globalAlpha = 1;
+}
+function boot() { renderAll(); raster(); }
+boot();
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(raster, 120); });
+const mq = window.matchMedia("(prefers-color-scheme: dark)"); mq.addEventListener && mq.addEventListener("change", boot);
+new MutationObserver(boot).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>

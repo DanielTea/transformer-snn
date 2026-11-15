@@ -118,3 +118,13 @@ def test_ann_reference_and_op_counter():
 
 def test_all_attention_registered():
     assert set(SPIKE_ATTN) == set(ATTENTION)
+
+
+@pytest.mark.parametrize("attn", SPIKE_ATTN)
+def test_causal_gradients_are_finite(attn):
+    cfg = SNNConfig(attn=attn, v_th=4.0)
+    m = SpikingLM(cfg, vocab=40, dim=32, depth=2, heads=2, ctx=16)
+    idx = torch.randint(0, 40, (4, 16))
+    nn.functional.cross_entropy(m(idx).flatten(0, 1), idx.flatten()).backward()
+    for name, p in m.named_parameters():
+        assert p.grad is None or torch.isfinite(p.grad).all(), name
