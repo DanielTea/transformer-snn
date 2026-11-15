@@ -28,7 +28,8 @@ and the parent checkpoints for the paired router test.
 [Per-seed results and interventions](docs/SPIKE_CODE_FORECAST.md#learned-context-keys-and-firing-thresholds) ·
 [Browser report](docs/report.html#spiking-byte-lm)
 
-[Follow-up experiments on this branch](docs/SPIKE_ROUTER_FOLLOWUP.md)
+[Spike activity and compact delay experiments](docs/SPIKE_ROUTER_FOLLOWUP.md) ·
+[Short-context routing and scaling experiments](docs/LOCAL_SPIKE_ROUTING.md)
 
 ## Current benchmark
 

@@ -27,6 +27,7 @@ from common import (
     setup,
 )
 from snnformer import count_params
+from snnformer.event_lm import EventLM, EventLMConfig
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
 
@@ -93,8 +94,6 @@ def evaluate(model, data, *, context, batches, batch_size, device, event, pulse_
 def build_model(args):
     model_kwargs = dict(vocab=256, dim=args.dim, heads=args.heads, depth=args.depth, ctx=args.ctx)
     if args.variant in EVENT_ROUTES:
-        from snnformer.event_lm import EventLM, EventLMConfig
-
         cfg = EventLMConfig(dim=args.dim, hidden=args.hidden, depth=args.depth, route=EVENT_ROUTES[args.variant],
                             carry=not args.no_carry, continuous=args.variant == "event_continuous",
                             memory_heads=args.memory_heads, memory_slots=args.memory_slots,
@@ -102,7 +101,9 @@ def build_model(args):
                             forecast_key_channels=args.forecast_key_channels, match_forecast_key=args.match_forecast_key,
                             learn_context_keys=args.learn_context_keys, learn_packet_thresholds=args.learn_packet_thresholds,
                             output_reference=args.output_reference, compact_delays=args.compact_delays,
-                            departure_coincidence=args.departure_coincidence)
+                            departure_coincidence=args.departure_coincidence, delay_window=args.delay_window,
+                            delay_residual=args.delay_residual,
+                            router_charge_bits=args.router_charge_bits)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
     if args.local_lookback is not None:
@@ -112,6 +113,7 @@ def build_model(args):
 
 
 _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
+_OPTIONAL_ROUTER_PARAMETERS = (".packet_thresholds.", ".delay_correction.")
 
 
 def initialize_router(model, source, source_cfg):
@@ -127,7 +129,7 @@ def initialize_router(model, source, source_cfg):
     local_names = {
         name for name in model.state_dict()
         if not name.startswith(_BANK_PARAMETERS)
-        and (".packet_thresholds." not in name or name in weights)
+        and (name in weights or all(part not in name for part in _OPTIONAL_ROUTER_PARAMETERS))
     }
     if set(weights) != local_names:
         raise ValueError("the checkpoint does not cover exactly the local router weights")
@@ -136,19 +138,27 @@ def initialize_router(model, source, source_cfg):
 
 def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
     from snnformer import SNNConfig
-    from snnformer.event_lm import EventLM, EventLMConfig
 
     source = torch.load(path, map_location="cpu", weights_only=True)
     if source.get("task") != "event_lm" or source.get("model_type") != type(model).__name__:
         raise ValueError("--initialize-from needs a checkpoint of the same decoder family")
     if isinstance(model, EventLM):
         source_cfg = EventLMConfig(**source["cfg"])
-        # These switches leave the synaptic weight layout and tick units intact.
+        # Training checkpoints store weights in physical units. These switches can
+        # reuse the matrices even when the forward pass uses a finer charge grid.
         source_geometry = replace(source_cfg, resolution=model.cfg.resolution,
                                   output_reference=model.cfg.output_reference, compact_delays=model.cfg.compact_delays,
-                                  departure_coincidence=model.cfg.departure_coincidence)
+                                  departure_coincidence=model.cfg.departure_coincidence,
+                                  delay_window=model.cfg.delay_window, router_charge_bits=model.cfg.router_charge_bits,
+                                  delay_residual=source_cfg.delay_residual or model.cfg.delay_residual)
         if source_geometry == model.cfg:
-            model.load_state_dict(source["state_dict"])
+            if model.cfg.delay_residual and not source_cfg.delay_residual:
+                missing, unexpected = model.load_state_dict(source["state_dict"], strict=False)
+                expected = {f"blocks.{index}.delay_correction.gain" for index in range(model.cfg.depth)}
+                if set(missing) != expected or unexpected:
+                    raise ValueError("the checkpoint must supply every weight except the new delay gains")
+            else:
+                model.load_state_dict(source["state_dict"])
         else:
             initialize_router(model, source, source_cfg)
         if freeze_router:
@@ -197,6 +207,12 @@ def main():
                         help="allocate a history ring of its own length to each fixed axon group")
     parser.add_argument("--departure-coincidence", action="store_true",
                         help="route delayed pulses by coincidence with both departure and arrival steering")
+    parser.add_argument("--delay-window", type=int, default=1,
+                        help="number of adjacent delay taps per group available for spike matching")
+    parser.add_argument("--delay-residual", action="store_true",
+                        help="emit learned correction pulses from matching delays into the fixed split")
+    parser.add_argument("--router-charge-bits", type=int, default=EventLMConfig.router_charge_bits,
+                        help="fractional charge bits for local synapses and firing thresholds")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
     parser.add_argument("--spike-resolution", type=int, default=1, help="number of finer spikes per original unit")
     parser.add_argument("--depth", type=int, default=3)
@@ -243,7 +259,8 @@ def main():
     if (args.forecast_key_channels or args.match_forecast_key or args.learn_context_keys) and args.variant != "event_correction_code":
         parser.error("forecast keys need --variant event_correction_code")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
-            or args.departure_coincidence) and args.variant not in (
+            or args.departure_coincidence or args.delay_window != 1 or args.delay_residual
+            or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"
     ):
         parser.error("packet thresholds, pulse budgets and delay or output options need a steered spike router")

@@ -15,7 +15,7 @@ from torch.utils._pytree import tree_leaves
 from benchmark_decode import state_bytes
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
-from snnformer.event_lm import _IntegrateFire, _PACKET_TICKS
+from snnformer.event_lm import EventLMConfig, _IntegrateFire, _PACKET_TICKS
 from train_lm import ENWIK8_SHA1, load_splits
 
 
@@ -119,6 +119,12 @@ def _audit(path, device, tokens, frequencies, parent):
         row["firing_threshold_ticks"] = [
             (block.packet_thresholds.quanta() * _PACKET_TICKS).tolist() for block in integer.blocks
         ]
+    if integer.cfg.delay_window > 1:
+        row["delay_window"] = integer.cfg.delay_window
+    if integer.cfg.delay_residual:
+        row["delay_correction_gain_ticks"] = [block.delay_correction.gains().tolist() for block in integer.blocks]
+    if integer.cfg.router_charge_bits != EventLMConfig.router_charge_bits:
+        row["router_charge_bits"] = integer.cfg.router_charge_bits
     return row, (seed, checkpoint["state_dict"], counts)
 
 

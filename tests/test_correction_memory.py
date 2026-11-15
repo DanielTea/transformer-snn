@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from snnformer.correction_memory import correction_reads, correction_step
-from snnformer.event_lm import EventLM, EventLMConfig, _SpikeCorrection
+from snnformer.event_lm import EventLM, EventLMConfig, _DelayCorrection, _SpikeCorrection
 
 
 def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
@@ -248,3 +248,107 @@ def test_packed_delay_rings_keep_only_live_packets(marked):
         counts = sum(width * delay for width, delay in zip(block.widths, block.delays, strict=True))
         assert layer.history.shape == (2, counts * (1 + marked))
         assert layer.history.untyped_storage().nbytes() == 2 * counts * (1 + marked) * 4
+
+
+def test_delay_choice_uses_signed_coincidence_and_skips_unavailable_taps():
+    cfg = EventLMConfig(dim=8, hidden=16, route="steered", carry=False, compact_delays=True, delay_window=4)
+    block = EventLM(cfg).to_integer().blocks[2]
+    history = torch.tensor([[[50, -2, 3], [-1, -3, -4]]], dtype=torch.int32)
+    query = torch.tensor([[2, -3]], dtype=torch.int32)
+    aperture = query.abs()
+    chosen = block._match_delay(history, query, aperture, torch.tensor([True, True, True]))
+    torch.testing.assert_close(chosen, history[..., 2], rtol=0, atol=0)
+    chosen = block._match_delay(history, query, aperture, torch.tensor([True, True, False]))
+    torch.testing.assert_close(chosen, history[..., 0], rtol=0, atol=0)
+    chosen = block._match_delay(history, torch.zeros_like(query), torch.zeros_like(aperture),
+                                torch.tensor([False, True, True]))
+    torch.testing.assert_close(chosen, history[..., 1], rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_delay_matching_preserves_native_batch_chunk_and_stream_parity():
+    torch.manual_seed(91)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False,
+                        memory_heads=2, memory_slots=4, memory_width=8, resolution=16, output_reference=True,
+                        compact_delays=True, delay_window=4)
+    model = EventLM(cfg).eval()
+    tokens = torch.randint(256, (2, 99))
+    native = model.to_integer()
+    expected = native(tokens)
+    torch.testing.assert_close(model(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for i, token in enumerate(tokens.unbind(1)):
+        output, state = native.step(token, state)
+        torch.testing.assert_close(output, expected[:, i], rtol=0, atol=0)
+    chunk_state = None
+    outputs = []
+    for chunk in tokens.split((1, 13, 2, 20, 63), dim=1):
+        counts, chunk_state = native.forward_chunk(chunk, chunk_state)
+        outputs.append(counts)
+    torch.testing.assert_close(torch.cat(outputs, dim=1), expected, rtol=0, atol=0)
+    for block, layer in zip(native.blocks, state.layers, strict=True):
+        assert layer.history.shape[-1] == sum(width * delay for width, delay in zip(block.widths, block.delays))
+
+
+@torch.no_grad()
+def test_finer_charge_keeps_firing_when_weights_lie_on_the_original_grid():
+    torch.manual_seed(89)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True, delay_window=4)
+    original = EventLM(cfg).eval()
+    for block in original.blocks:
+        for synapse in (block.expand, block.project):
+            synapse.weight.copy_(synapse.weight_ticks() / block.relay.threshold)
+    fine = EventLM(replace(cfg, router_charge_bits=8)).eval()
+    fine.load_state_dict(original.state_dict())
+    tokens = torch.randint(256, (2, 41))
+    old_native = original.to_integer()
+    fine_native = fine.to_integer()
+    torch.testing.assert_close(old_native(tokens), fine_native(tokens), rtol=0, atol=0)
+    torch.testing.assert_close(fine_native.blocks[0].project.weight, old_native.blocks[0].project.weight * 4)
+
+    fine.blocks[0].project.weight.add_(1 / 256)
+    fine_native = fine.to_integer()
+    target = fine_native(tokens)
+    assert not torch.equal(old_native(tokens), target)
+    torch.testing.assert_close(fine(tokens), target.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for position, token in enumerate(tokens.unbind(1)):
+        counts, state = fine_native.step(token, state)
+        torch.testing.assert_close(counts, target[:, position], rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_delay_correction_is_neutral_at_zero_and_matches_streaming_after_learning():
+    torch.manual_seed(43)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True)
+    fixed = EventLM(cfg).eval()
+    corrected = EventLM(replace(cfg, delay_window=4, delay_residual=True)).eval()
+    missing, unexpected = corrected.load_state_dict(fixed.state_dict(), strict=False)
+    assert missing == [f"blocks.{i}.delay_correction.gain" for i in range(cfg.depth)]
+    assert not unexpected
+    tokens = torch.randint(256, (2, 65))
+    before = fixed.to_integer()(tokens)
+    torch.testing.assert_close(corrected.to_integer()(tokens), before, rtol=0, atol=0)
+
+    for block in corrected.blocks:
+        block.delay_correction.gain.copy_(torch.tensor([0., .25, .5, 1.]))
+    native = corrected.to_integer()
+    after = native(tokens)
+    assert not torch.equal(after, before)
+    torch.testing.assert_close(corrected(tokens), after.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for position, token in enumerate(tokens.unbind(1)):
+        counts, state = native.step(token, state)
+        torch.testing.assert_close(counts, after[:, position], rtol=0, atol=0)
+
+
+def test_zero_delay_correction_gains_still_receive_emission_gradients():
+    correction = _DelayCorrection((2, 1), cap=32)
+    before = torch.tensor([[-3., 0., 2.]])
+    after = torch.tensor([[-1., 3., 0.]])
+    spikes = correction(before, after)
+    torch.testing.assert_close(spikes, torch.zeros_like(spikes), rtol=0, atol=0)
+    gradient, = torch.autograd.grad(spikes.sum(), correction.gain)
+    torch.testing.assert_close(gradient, torch.tensor([5., -2.]), rtol=0, atol=0)

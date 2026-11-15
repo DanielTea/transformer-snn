@@ -56,30 +56,40 @@ class EventLMConfig:
     output_reference: bool = False
     compact_delays: bool = False
     departure_coincidence: bool = False
+    delay_window: int = 1
+    delay_residual: bool = False
+    router_charge_bits: int = _CHARGE_BITS
 
 
-def _weight_ticks(weight, quantized=True):
+def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
     if not weight.is_floating_point():
         return weight
-    ticks = (weight * _TICKS).clamp(-_WEIGHT_LIMIT, _WEIGHT_LIMIT)
+    limit = _WEIGHT_LIMIT << (charge_bits - _CHARGE_BITS)
+    ticks = (weight * (1 << charge_bits)).clamp(-limit, limit)
     return ticks.detach().round() + (ticks - ticks.detach()) if quantized else ticks
 
 
 class _Synapse(nn.Module):
-    def __init__(self, inputs: int, outputs: int, gain: float, *, byte_input: bool = False, continuous: bool = False):
+    def __init__(self, inputs: int, outputs: int, gain: float, *, byte_input: bool = False,
+                 continuous: bool = False, charge_bits: int = _CHARGE_BITS):
         super().__init__()
         self.byte_input = byte_input
         self.continuous = continuous
+        self.charge_bits = charge_bits
         shape = (inputs, outputs) if byte_input else (outputs, inputs)
         self.weight = nn.Parameter(torch.empty(shape))
         nn.init.normal_(self.weight, std=gain if byte_input else gain / math.sqrt(inputs))
 
     def freeze_integer(self):
         if self.weight.is_floating_point():
-            self.weight = nn.Parameter(_weight_ticks(self.weight).to(torch.int32), requires_grad=False)
+            ticks = _weight_ticks(self.weight, charge_bits=self.charge_bits)
+            self.weight = nn.Parameter(ticks.to(torch.int32), requires_grad=False)
+
+    def weight_ticks(self):
+        return _weight_ticks(self.weight, quantized=not self.continuous, charge_bits=self.charge_bits)
 
     def forward(self, spikes):
-        weight = _weight_ticks(self.weight, quantized=not self.continuous)
+        weight = self.weight_ticks()
         if self.byte_input:
             # A byte addresses the single active afferent of a 256-way input population.
             return F.embedding(spikes, weight)
@@ -177,6 +187,32 @@ class _PacketThresholds(nn.Module):
     def freeze_integer(self):
         if self.relative.is_floating_point():
             self.relative = nn.Parameter(self.quanta().to(torch.int32), requires_grad=False)
+
+
+class _DelayCorrection(nn.Module):
+    """Emit the difference between the anchor and matching packet on one path."""
+
+    def __init__(self, widths, cap):
+        super().__init__()
+        self.gain = nn.Parameter(torch.zeros(len(widths)))
+        groups = torch.arange(len(widths)).repeat_interleave(torch.tensor(widths))
+        self.register_buffer("groups", groups, persistent=False)
+        self.emit = _IntegrateFire(2 * cap, _CHARGE_BITS, False)
+
+    def gains(self):
+        if not self.gain.is_floating_point():
+            return self.gain
+        ticks = _weight_ticks(self.gain)
+        bounded = ticks.detach().clamp(0, _TICKS)
+        # Silence at initialization still needs a gradient to open the synapse.
+        return bounded + (ticks - ticks.detach())
+
+    def freeze_integer(self):
+        if self.gain.is_floating_point():
+            self.gain = nn.Parameter(self.gains().to(torch.int32), requires_grad=False)
+
+    def forward(self, anchor, chosen):
+        return self.emit((chosen - anchor) * self.gains().index_select(0, self.groups))
 
 
 def _route_packets(present, delayed, route):
@@ -502,17 +538,26 @@ class _DelayBlock(nn.Module):
         self.history_size = self.local_delays[-1] if self.selector is None else self.selector.history_size
         self.compact_delays = cfg.compact_delays
         self.departure_coincidence = cfg.departure_coincidence
+        self.delay_window = cfg.delay_window
+        self.resolution = cfg.resolution
+        if self.delay_window > 1:
+            offsets = torch.arange(min(self.delay_window, self.history_size))
+            self.register_buffer("delay_offsets", offsets, persistent=False)
         counts_per_channel = 2 if self.departure_coincidence else 1
         self.delay_widths = tuple(counts_per_channel * width for width in self.widths)
         self.delay_sizes = tuple(delay * width for delay, width in zip(self.local_delays, self.delay_widths))
         cap = _HIDDEN_CAP * cfg.resolution
+        self.delay_correction = _DelayCorrection(self.widths, cap) if cfg.delay_residual else None
         self.packet_thresholds = _PacketThresholds(self.widths) if cfg.learn_packet_thresholds else None
-        self.expand = _Synapse(cfg.dim, cfg.hidden * (2 if self.steered else 1), gain=1.0, continuous=cfg.continuous)
-        self.relay = _IntegrateFire(cap, _CHARGE_BITS, cfg.carry, continuous=cfg.continuous)
+        bits = cfg.router_charge_bits
+        self.expand = _Synapse(cfg.dim, cfg.hidden * (2 if self.steered else 1), gain=1.0,
+                               continuous=cfg.continuous, charge_bits=bits)
+        self.relay = _IntegrateFire(cap, bits, cfg.carry, continuous=cfg.continuous)
         if self.steered:
-            self.steer = _IntegrateFire(cap, _CHARGE_BITS, cfg.carry, continuous=cfg.continuous)
-        self.project = _Synapse((4 if self.steered else 3) * cfg.hidden, cfg.dim, gain=0.65, continuous=cfg.continuous)
-        output_bits = _CHARGE_BITS + _PACKET_BITS if self.packet_thresholds is not None else _CHARGE_BITS
+            self.steer = _IntegrateFire(cap, bits, cfg.carry, continuous=cfg.continuous)
+        self.project = _Synapse((4 if self.steered else 3) * cfg.hidden, cfg.dim, gain=0.65,
+                                continuous=cfg.continuous, charge_bits=bits)
+        output_bits = bits + (_PACKET_BITS if self.packet_thresholds is not None else 0)
         self.emit = _IntegrateFire(cap, output_bits, cfg.carry, continuous=cfg.continuous)
 
     def _departure_packets(self, present, steering):
@@ -523,8 +568,47 @@ class _DelayBlock(nn.Module):
         packets = torch.stack((present, paired), dim=-1).flatten(-2)
         return packets, (paired, rest)
 
+    def _match_delay(self, candidates, query, steering, available):
+        # A steering train exposes the same slots of the present packet and of each delayed packet.
+        aperture = steering.unsqueeze(-1)
+        keys = candidates.clamp(-aperture, aperture)
+        mismatches = (keys - query.unsqueeze(-1)).abs().sum(-2, dtype=keys.dtype)
+        limit = 2 * self.relay.cap * query.shape[-1] + 1
+        mismatches = mismatches.masked_fill(~available, limit)
+        index = mismatches.argmin(-1, keepdim=True)
+        winner = candidates.gather(-1, index.unsqueeze(-2).expand_as(candidates[..., :1])).squeeze(-1)
+        if self.training and candidates.is_floating_point():
+            scale = self.resolution * math.isqrt(query.shape[-1])
+            weights = (-mismatches / scale).softmax(-1)
+            surrogate = (candidates.detach() * weights.unsqueeze(-2)).sum(-1)
+            winner = winner + (surrogate - surrogate.detach())
+        return winner
+
+    def _delayed_groups(self, groups, steering, pulse_counts):
+        if self.delay_window == 1:
+            return [_lag(group, delay) for group, delay in zip(groups, self.local_delays)], None
+        positions = torch.arange(groups[0].shape[1], device=groups[0].device)
+        result, anchors = [], []
+        for group, aperture, delay in zip(groups, steering.split(self.widths, dim=-1), self.local_delays, strict=True):
+            choices = min(self.delay_window, delay)
+            if choices == 1:
+                winner = anchor = _lag(group, delay)
+            else:
+                # Each window starts at the anchor lag and looks toward the present.
+                candidates = F.pad(group, (0, 0, delay, 0)).unfold(1, choices, 1)[:, :group.shape[1]]
+                available = positions[:, None] >= delay - self.delay_offsets[:choices]
+                query = group.clamp(-aperture, aperture)
+                winner = self._match_delay(candidates, query, aperture, available)
+                anchor = candidates[..., 0]
+                if pulse_counts is not None:
+                    pulse_counts.append(available.any(-1).sum(dtype=torch.int32) * group.shape[0])
+            result.append(winner)
+            if self.delay_correction is not None:
+                anchors.append(anchor)
+        return result, torch.cat(anchors, dim=-1) if anchors else None
+
     def _current(self, residual, present, delayed, steering, start, alternate=None, recall=None, quanta=None, *,
-                 departure=None):
+                 departure=None, anchor=None):
         if alternate is not None:
             # The last half of the phase interval opens the adjacent delay
             # only when a steering packet has actually fired.
@@ -537,6 +621,11 @@ class _DelayBlock(nn.Module):
             delayed, marked = delayed.unflatten(-1, (-1, 2)).unbind(-1)
             paired, _ = _steer_packet(marked, steering)
             routes = departure + (paired, delayed - paired)
+        elif anchor is not None:
+            selected, bypass = _steer_packet(anchor, steering)
+            replacement, _ = _steer_packet(delayed, steering)
+            correction = self.delay_correction(selected, replacement)
+            routes = _steer_packet(present, steering) + (selected + correction, bypass)
         elif self.balanced:
             routes = _balanced_steer(present, steering) + _balanced_steer(delayed, steering)
         else:
@@ -553,7 +642,7 @@ class _DelayBlock(nn.Module):
             current = current + self.memory_residual(recall)
         return current
 
-    def forward(self, spikes, *, delay_limit=None, shuffle_phase=False, correction_access=None):
+    def forward(self, spikes, *, delay_limit=None, shuffle_phase=False, correction_access=None, pulse_counts=None):
         drive = self.expand(spikes)
         quanta = self.packet_thresholds() if self.packet_thresholds is not None else None
         steering = start = None
@@ -566,11 +655,10 @@ class _DelayBlock(nn.Module):
                     start = start.roll(1, dims=-1)
         present = self.relay(drive, quanta)
         packets, departure = self._departure_packets(present, steering)
-        alternate = None
-        recall = None
+        alternate = recall = anchor = None
         if self.selector is None:
             groups = packets.split(self.delay_widths, dim=-1)
-            delayed_groups = [_lag(group, delay) for group, delay in zip(groups, self.local_delays)]
+            delayed_groups, anchor = self._delayed_groups(groups, steering, pulse_counts)
             if self.correction is not None:
                 recall = self.correction(spikes, correction_access)
                 if self.memory_residual is None:
@@ -582,23 +670,34 @@ class _DelayBlock(nn.Module):
         else:
             delayed = self.selector(present, delay_limit)
         return self.emit(self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
-                                       departure=departure))
+                                       departure=departure, anchor=anchor))
 
-    def _step_compact(self, packets, state, position):
+    def _step_compact(self, packets, steering, state, position):
         # Recycle a packet's slot as soon as its fixed delay has elapsed.
         batch = packets.shape[0]
         if state.history is None:
             state.history = packets.new_zeros(batch, sum(self.delay_sizes))
         groups = packets.split(self.delay_widths, dim=-1)
-        previous = []
-        for storage, packet, delay in zip(state.history.split(self.delay_sizes, dim=-1),
-                                          groups, self.local_delays, strict=True):
-            slot = storage.reshape(batch, delay, packet.shape[-1])[:, position % delay]
-            previous.append(slot)
+        history = state.history.split(self.delay_sizes, dim=-1)
+        apertures = steering.split(self.widths, dim=-1)
+        previous, slots = [], []
+        for storage, packet, aperture, delay in zip(history, groups, apertures, self.local_delays, strict=True):
+            ring = storage.reshape(batch, delay, packet.shape[-1])
+            slot = ring[:, position % delay]
+            slots.append(slot)
+            choices = min(self.delay_window, delay)
+            if choices == 1:
+                previous.append(slot)
+            else:
+                ages = delay - self.delay_offsets[:choices]
+                candidates = ring.index_select(1, (position - ages) % delay).transpose(1, 2)
+                query = packet.clamp(-aperture, aperture)
+                previous.append(self._match_delay(candidates, query, aperture, position >= ages))
         delayed = torch.cat(previous, dim=-1)
-        for slot, packet in zip(previous, groups, strict=True):
+        anchor = torch.cat(slots, dim=-1) if self.delay_correction is not None else None
+        for slot, packet in zip(slots, groups, strict=True):
             slot.copy_(packet)
-        return delayed
+        return delayed, anchor
 
     def step(self, spikes, state, position):
         drive = self.expand(spikes)
@@ -612,9 +711,9 @@ class _DelayBlock(nn.Module):
                 start = _steering_start(steer_drive, self.phase_bits, self.steer.cap)
         present, state.relay_phase = self.relay.step(drive, state.relay_phase, quanta)
         packets, departure = self._departure_packets(present, steering)
-        alternate = recall = None
+        alternate = recall = anchor = None
         if self.compact_delays:
-            delayed = self._step_compact(packets, state, position)
+            delayed, anchor = self._step_compact(packets, steering, state, position)
         else:
             ring_size = self.history_size
             local_width = sum(self.local_widths)
@@ -640,7 +739,8 @@ class _DelayBlock(nn.Module):
             else:
                 delayed = self.selector.step(state.history, position)
             state.history[:, position % ring_size].copy_(present[:, :local_width])
-        current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta, departure=departure)
+        current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
+                                departure=departure, anchor=anchor)
         spikes, state.output_phase = self.emit.step(current, state.output_phase)
         return spikes
 
@@ -691,6 +791,18 @@ class EventLM(nn.Module):
             raise ValueError("compact delays need a fixed steered delay schedule")
         if cfg.departure_coincidence and (not cfg.compact_delays or cfg.carry or cfg.continuous):
             raise ValueError("departure coincidence needs compact delays and reset-per-byte spike neurons")
+        if not isinstance(cfg.delay_window, int) or cfg.delay_window < 1:
+            raise ValueError("delay_window must be a positive integer")
+        if cfg.delay_window > 1 and (not cfg.compact_delays or cfg.carry or cfg.continuous or cfg.departure_coincidence):
+            raise ValueError("delay matching needs compact delays and reset-per-byte spike neurons")
+        if cfg.delay_residual and cfg.delay_window == 1:
+            raise ValueError("delay corrections need at least two candidate taps")
+        if not isinstance(cfg.router_charge_bits, int) or not _CHARGE_BITS <= cfg.router_charge_bits < 31:
+            raise ValueError("router_charge_bits must be an integer from 6 to 30")
+        extra_charge_bits = cfg.router_charge_bits - _CHARGE_BITS
+        if extra_charge_bits and (cfg.carry or cfg.continuous or cfg.learn_packet_thresholds
+                                  or cfg.route not in ("steered", "steered_correction_code")):
+            raise ValueError("finer router charge needs reset-per-byte neurons with fixed firing thresholds")
         if not isinstance(cfg.resolution, int) or cfg.resolution < 1:
             raise ValueError("spike resolution must be a positive integer")
         output_bits = 3
@@ -713,7 +825,7 @@ class EventLM(nn.Module):
         if unit_drive >= _FP32_EXACT:
             raise ValueError("synaptic accumulator would exceed the exact FP32 integer range")
         packet_units = _PACKET_UNITS if cfg.learn_packet_thresholds else 1
-        max_drive = unit_drive * cfg.resolution * packet_units
+        max_drive = (unit_drive * cfg.resolution * packet_units) << extra_charge_bits
         if max_drive > torch.iinfo(torch.int32).max:
             raise ValueError("synaptic accumulator would exceed the int32 integer range")
         self._check_weights = not cfg.continuous and max_drive >= _FP32_EXACT
@@ -775,7 +887,7 @@ class EventLM(nn.Module):
         # High-resolution training uses the actual quantized weights to bound
         # the magnitude of every partial sum. Every input count is at most cap.
         def row_sums(synapse):
-            return _weight_ticks(synapse.weight).abs().sum(-1)
+            return synapse.weight_ticks().abs().sum(-1)
 
         bounds = [row_sums(self.output).amax()]
         for block in self.blocks:
@@ -816,7 +928,7 @@ class EventLM(nn.Module):
         spikes = observed
         for block in self.blocks:
             spikes = block(spikes, delay_limit=delay_limit, shuffle_phase=shuffle_phase,
-                           correction_access=correction_access)
+                           correction_access=correction_access, pulse_counts=memory_pulses)
         if self.prediction_memory is not None:
             prediction = self._prediction_code(spikes)
             recall = self.prediction_memory(
@@ -858,7 +970,7 @@ class EventLM(nn.Module):
             raise ValueError("the continuous control has no integer export")
         model = copy.deepcopy(self).cpu().eval()
         for submodule in model.modules():
-            if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds)):
+            if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection)):
                 submodule.freeze_integer()
         return model
 
