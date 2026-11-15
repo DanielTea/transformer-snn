@@ -1,0 +1,117 @@
+{
+ "args": {
+  "variant": "dendrite",
+  "neuron": null,
+  "v_th": null,
+  "sel_alpha": null,
+  "qk_levels": null,
+  "softmax_temp_init": null,
+  "pre_bn": null,
+  "levels": null,
+  "T": null,
+  "seed": 0,
+  "threads": 1,
+  "lr": 0.003,
+  "wd": 0.05,
+  "tag": "gap_pilot",
+  "device": "cpu",
+  "causal_norm": true,
+  "position_embeddings": false,
+  "address_bits": 6,
+  "memory_block": null,
+  "memory_delay": null,
+  "local_window": null,
+  "mlp_ratio": null,
+  "checkpoint": null,
+  "force": false,
+  "keys": 32,
+  "distractors": 16,
+  "pairs": 4,
+  "queries": 4,
+  "train_min_gap": 0,
+  "train_max_gap": 4,
+  "eval_gaps": [
+   0,
+   4,
+   16,
+   64
+  ],
+  "eval_context_length": 268,
+  "dim": 64,
+  "depth": 2,
+  "heads": 4,
+  "steps": 1200,
+  "bs": 48,
+  "warmup": 100,
+  "eval_every": 300,
+  "eval_bs": 32,
+  "val_samples": 256,
+  "eval_samples": 512,
+  "val_seed": 12345,
+  "eval_seed": 1234
+ },
+ "cfg": {
+  "neuron": "ilif",
+  "levels": 4,
+  "T": 1,
+  "tau": 2.0,
+  "v_th": 4.0,
+  "attn": "dendritic",
+  "position_embeddings": false,
+  "address_bits": 6,
+  "memory_block": 32,
+  "memory_delay": 1,
+  "memory_relay": false,
+  "local_window": 32,
+  "mlp": "cdglu",
+  "mlp_ratio": 4.0,
+  "qk_levels": null,
+  "softmax_temp_init": 1.0,
+  "wta_k": 1,
+  "sel_alpha": 4.0,
+  "csa_compete": true,
+  "csa_normalize": true,
+  "csa_levels": 1,
+  "pre_bn": true,
+  "causal_norm": true
+ },
+ "device": "cpu",
+ "params": 99782,
+ "train_context_length": 28,
+ "eval_context_length_by_gap": {
+  "0": 268,
+  "4": 268,
+  "16": 268,
+  "64": 268
+ },
+ "final_acc": 0.06640625,
+ "final_acc_by_gap": {
+  "0": 0.09033203125,
+  "4": 0.03662109375,
+  "16": 0.03857421875,
+  "64": 0.03369140625
+ },
+ "curve": [
+  {
+   "step": 300,
+   "loss": 3.46429181098938,
+   "acc": 0.0341796875
+  },
+  {
+   "step": 600,
+   "loss": 3.403287887573242,
+   "acc": 0.03515625
+  },
+  {
+   "step": 900,
+   "loss": 3.422811508178711,
+   "acc": 0.0849609375
+  },
+  {
+   "step": 1200,
+   "loss": 3.3076231479644775,
+   "acc": 0.076171875
+  }
+ ],
+ "seconds": 35.289239168167114
+}

@@ -69,9 +69,11 @@ def table(task):
         for key in sorted(groups, key=lambda k: ORDER.index(k[0]) if k[0] in ORDER else 99):
             rs = groups[key]
             e = rs[0]["energy_per_token"]
+            firing = f"{e['firing_rate']:.3f}" if e else "—"
+            cost = f"{e['energy_mJ_per_sample']*1e3:.2f}" if e else "—"
             rows.append(f"| {LABELS.get(key[0], key[0])} | {key[1]}/T{key[2]} | {rs[0]['params']:,} | "
                         f"{fmt([r['val_bpb'] for r in rs], 1, 3)} | {fmt([r['test_bpb'] for r in rs], 1, 3)} | "
-                        f"{e['firing_rate']:.3f} | {e['energy_mJ_per_sample']*1e3:.2f} | {len(rs)} |")
+                        f"{firing} | {cost} | {len(rs)} |")
     elif task == "vision":
         rows.append("| variant | neuron/T | train frac | params | test acc (%) | firing rate | est. energy / image (µJ) | seeds |")
         rows.append("|---|---|---|---|---|---|---|---|")

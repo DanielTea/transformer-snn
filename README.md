@@ -1,5 +1,21 @@
 # ShuntFormer — a spike-driven transformer with competitive, shunting-normalised attention
 
+**Dendrite** extends ShuntFormer with two bounded memory experiments.
+The [event memory](docs/DENDRITE.md#event-memory-for-variable-delays)
+averaged **99.95%** accuracy on typed recall with 128 distractors
+between key and value after training with at most four. The
+[verified successor model](docs/DENDRITE.md#predicting-bytes-from-verified-successor-memory)
+uses exact byte suffixes and a learned spike readout. It reached
+**2.025 bits per byte** on the continuous enwik8 test stream, versus
+**2.457** for the local Transformer trained on the same byte budget.
+
+[Benchmarks and charts](docs/BENCHMARKS.md) ·
+[Architecture and prior work](docs/DENDRITE.md) ·
+[Source map and reproduction](docs/REPRODUCE_DENDRITE.md) ·
+[Browser report](docs/report.html)
+
+![Continuous successor model loss on enwik8 and eight PG-19 excerpts](results/figures/dendrite_successor_loss.png)
+
 ShuntFormer is a spiking transformer in the Spikformer / Meta-SpikeFormer
 lineage. Its attention replaces softmax with two cortical inhibition motifs,
 using only accumulates and comparisons:
@@ -20,7 +36,7 @@ Design notes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 How the residual-saturation failure was found:
 [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
 
-## Results
+## Historical ShuntFormer results
 
 Everything was trained from scratch on a 4-core CPU with no GPU, so the
 models are small (0.1–0.9M parameters) and the budgets short. **Every variant
@@ -161,21 +177,30 @@ snnformer/            the library
   mlp.py              coincidence-gated spiking MLP (CD-GLU) and the standard spiking MLP
   config.py           SNNConfig, neuron factory, residual-reading InputNeuron (pre-BN)
   models.py           SpikingViT (32x32 images) and SpikingLM (causal, byte level)
+  dendritic*.py       spike-addressed memory with fixed delay or learned capture and commit
+  transformer_reference.py   full and local Transformer controls
+  successor_*.py      verified byte successor memory and spike readout
   ops.py              synaptic-operation counter and 45 nm energy estimate
 experiments/
   common.py           the variant registry (every model compared in this README)
   recall.py           multi-query associative recall (MQAR)
+  recall_distance.py  variable-gap recall with matched controls
   train_lm.py         enwik8 byte-level LM (90M/5M/5M split), bits per byte, learning curves
   train_vision.py     CIFAR-10
   summarize.py        results/*.json -> markdown tables;  plots.py -> results/figures
-  make_report.py      results -> docs/report.html (interactive report)
-  run_all.sh          every run reported here
-tests/                52 tests: causality, spike-driven inputs to every weight layer, CSA properties,
-                      finite gradients
-results/              JSON for every run reported here (args, config, curves, energy)
+  train_successor.py  readout calibration on a frozen Transformer
+  eval_successor.py   continuous next-byte evaluation, including raw transfer streams
+  prepare_pg19.py     recreate the eight held-out PG-19 excerpts
+  plot_dendrite.py    Dendrite benchmark charts from saved JSON
+  make_report.py      generate the browser report
+  run_all.sh          historical ShuntFormer runs
+tests/                causality, streaming parity, gradients, and attention behavior
+results/              experiment JSON, data manifests and generated figures
 ```
 
-## Reproduce
+## Reproduce the historical ShuntFormer runs
+
+For Dendrite, use the [separate reproduction guide](docs/REPRODUCE_DENDRITE.md).
 
 ```bash
 pip install -r requirements.txt

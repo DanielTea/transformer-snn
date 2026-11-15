@@ -30,7 +30,7 @@ def test_neuron_gradients_nonzero():
         assert x.grad.abs().sum() > 0
 
 
-SPIKE_ATTN = ["csa", "ssa", "ssa_norm", "sdsa", "softmax", "wta"]
+SPIKE_ATTN = ["csa", "ssa", "ssa_norm", "sdsa", "softmax", "wta", "dendritic", "dendritic_event"]
 
 
 @pytest.mark.parametrize("attn", SPIKE_ATTN)
@@ -47,7 +47,7 @@ def test_lm_is_causal(attn, neuron):
     assert not torch.allclose(out1[:, 15:], out2[:, 15:])
 
 
-@pytest.mark.parametrize("attn", ["csa", "ssa", "ssa_norm", "sdsa", "wta"])
+@pytest.mark.parametrize("attn", ["csa", "ssa", "ssa_norm", "sdsa", "wta", "dendritic"])
 @pytest.mark.parametrize("mlp", ["cdglu", "mlp"])
 @pytest.mark.parametrize("v_th", [1.0, 4.0])
 def test_weight_layers_only_receive_spikes(attn, mlp, v_th):

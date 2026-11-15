@@ -1,4 +1,4 @@
-<title>ShuntFormer</title>
+<title>ShuntFormer and Dendrite</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -53,6 +53,7 @@ tr.hl td { font-weight: 600; }
   padding: 3px 6px; border-radius: 3px; border: 1px solid var(--rule); color: var(--fg2); white-space: nowrap; }
 .tag.new { border-color: var(--ours); color: var(--ours); }
 figure { margin: 0; display: grid; gap: 10px; }
+figure img { display: block; width: 100%; height: auto; }
 figcaption { font-size: 0.88rem; color: var(--fg2); max-width: 75ch; }
 .chart { position: relative; width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
@@ -97,17 +98,37 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 <header>
   <div class="eyebrow">Spiking transformer research · November 2026</div>
   <h1>ShuntFormer</h1>
-  <p class="deck">A spike-driven transformer whose attention is built from lateral and shunting inhibition instead of softmax. It is the only spike-driven attention in our tests that learns associative recall, and it trains causally from scratch.</p>
+  <p class="deck">A spike-driven transformer that uses lateral and shunting inhibition for attention. The Dendrite follow-up tests address memory for variable-distance recall and a spike readout for next-byte prediction.</p>
   <canvas id="raster" aria-hidden="true"></canvas>
   <div class="strip" id="strip"></div>
 </header>
 
+<section id="dendrite">
+  <h2>Dendrite benchmark update</h2>
+  <p class="col">On a controlled task with one pending binding at a time, Dendrite averaged <strong>{{DENDRITE_EVENT}}</strong> accuracy with {{DENDRITE_TEST_GAP}} intervening distractors after training with up to {{DENDRITE_TRAIN_GAP}}. The matched RoPE Transformer averaged {{DENDRITE_CONTROL}} over the same {{DENDRITE_SEEDS}} seeds. A separate single-seed probe held value and query positions fixed and answered {{DENDRITE_ANCHORED_CORRECT}} of {{DENDRITE_ANCHORED_TOTAL}} queries correctly at a gap of {{DENDRITE_ANCHORED_GAP}}.</p>
+  <figure>
+    <a href="../results/figures/dendrite_recall_distance.png"><img src="../results/figures/dendrite_recall_distance.png" alt="Recall accuracy by distractor gap, with a separate fixed-position probe" loading="lazy"></a>
+  </figure>
+  <p class="col">The successor model uses an exact byte-suffix cache and a learned spike readout. The continuous evaluation compares the local Transformer, the same checkpoint with a calibrated readout, and a successor model trained from scratch at the local control’s byte budget. Each language model comparison uses one seed. Scores are bits per byte, with lower values indicating better next-byte predictions.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th scope="col">Test stream</th><th scope="col" class="num">Target bytes</th><th scope="col" class="num">Local control</th><th scope="col" class="num">Calibrated readout</th><th scope="col" class="num">Successor, from scratch</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">enwik8 test</th><td class="num">{{DENDRITE_ENWIK8_COUNT}}</td><td class="num">{{DENDRITE_ENWIK8_BASE}}</td><td class="num">{{DENDRITE_ENWIK8_CALIBRATED}}</td><td class="num">{{DENDRITE_ENWIK8_TRAINED}}</td></tr>
+      <tr><th scope="row">{{DENDRITE_PG19_BOOKS}} PG-19 excerpts</th><td class="num">{{DENDRITE_PG19_COUNT}}</td><td class="num">{{DENDRITE_PG19_BASE}}</td><td class="num">{{DENDRITE_PG19_CALIBRATED}}</td><td class="num">{{DENDRITE_PG19_TRAINED}}</td></tr>
+    </tbody>
+  </table></div>
+  <figure>
+    <a href="../results/figures/dendrite_successor_loss.png"><img src="../results/figures/dendrite_successor_loss.png" alt="Next-byte loss for the local control and successor models on enwik8 and PG-19 excerpts" loading="lazy"></a>
+  </figure>
+  <p class="col">The language models have about 0.36 million parameters. The PG-19 comparison uses excerpts from eight books without fitting on those books. See the <a href="BENCHMARKS.md">benchmark report</a> for protocols, result files, and reproduction commands.</p>
+</section>
+
 <section>
-  <div class="eyebrow">Short answer</div>
+  <div class="eyebrow">Original ShuntFormer experiments</div>
   <h2>Did we surpass the state of the art?</h2>
   <div class="col" style="display:grid;gap:12px">
     <p>{{VERDICT}}</p>
-    <p>What we could not do on a 4-core CPU with no GPU is train at ImageNet scale, so we make no ImageNet claim. Every comparison below is on the same backbone, with the same neurons, parameter count, data and steps, and only the attention or MLP swapped.</p>
+    <p>The original ShuntFormer experiments used a four-core CPU and small-scale datasets. Their comparisons matched neurons, parameter count, data, and training steps while varying the attention or MLP.</p>
   </div>
 </section>
 
@@ -360,8 +381,8 @@ function renderAll() {
     legend("lg-lm", rolesOf(ser), true);
     lineChart("ch-lm", ser, { xLabel: "training tokens (millions)", ymax: 4.25, aria: "validation bits per byte against training tokens" });
     table("tb-lm", [{ t: "variant", f: r => r.label }, { t: "val bpb", num: 1, f: r => r.val.mean.toFixed(3) }, { t: "test bpb", num: 1, f: r => r.test.mean.toFixed(3) },
-      { t: "firing rate", num: 1, f: r => r.role === "ref" && r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "est. energy / token", num: 1, f: r => r.energy_uJ.toFixed(2) + " µJ" },
-      { t: "exp/div ops", num: 1, f: r => r.nonlin ? Math.round(r.nonlin).toLocaleString() : "0" }],
+      { t: "firing rate", num: 1, f: r => r.fr == null || r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "est. energy / token", num: 1, f: r => r.energy_uJ == null ? "—" : r.energy_uJ.toFixed(2) + " µJ" },
+      { t: "exp/div ops", num: 1, f: r => r.nonlin == null ? "—" : Math.round(r.nonlin).toLocaleString() }],
       lm.slice().sort((a, b) => a.val.mean - b.val.mean).map(r => ({ ...r, _hl: r.v === "ours" || r.v === "ours_k4" })));
   }
   const vis = DATA.vision;

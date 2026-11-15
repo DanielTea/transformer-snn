@@ -88,7 +88,7 @@ def evaluate(model, x, y, bs=500):
 
 def main():
     p = argparse.ArgumentParser()
-    add_common_args(p)
+    add_common_args(p, vision=True)
     p.add_argument("--dim", type=int, default=128)
     p.add_argument("--depth", type=int, default=4)
     p.add_argument("--heads", type=int, default=4)
