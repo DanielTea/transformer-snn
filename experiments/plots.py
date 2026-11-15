@@ -58,32 +58,38 @@ def bar_chart(task, metric, xlabel, fname, scale=100.0, order=None, title=""):
         if frac != 1.0 or (order and v not in order):
             continue
         xs = [r[metric] * scale for r in rs]
-        rows.append((v, st.mean(xs), st.stdev(xs) if len(xs) > 1 else 0.0, len(xs)))
+        rows.append((v, st.mean(xs), xs, len(xs)))
     if not rows:
         return
     rows.sort(key=lambda r: r[1])
-    fig, ax = plt.subplots(figsize=(7.2, 0.42 * len(rows) + 1.2), dpi=150)
+    fig, ax = plt.subplots(figsize=(7.6, 0.42 * len(rows) + 1.5), dpi=150)
     fig.patch.set_facecolor(SURFACE)
     _style(ax)
     ys = range(len(rows))
-    for y, (v, m, s, n) in zip(ys, rows):
-        ax.barh(y, m, height=0.62, color=CATEGORY.get(v, INK2), xerr=s if s else None,
-                error_kw=dict(ecolor=INK2, lw=1, capsize=2))
-        ax.text(m + (s or 0) + 0.8, y, f"{m:.1f}", va="center", fontsize=8.5, color=INK)
+    top = max(max(r[2]) for r in rows) * 1.04
+    for y, (v, m, xs, n) in zip(ys, rows):
+        ax.barh(y, m, height=0.62, color=CATEGORY.get(v, INK2))
+        if n > 1:  # one dot per seed: outcomes are often bimodal (solved / not solved)
+            ax.scatter(xs, [y] * n, s=16, color=INK, edgecolors=SURFACE, linewidths=1.2, zorder=3)
+        ax.text(top * 1.02, y, f"{m:.1f}", va="center", fontsize=8.5, color=INK, family="monospace")
     ax.set_yticks(list(ys), [LABELS.get(r[0], r[0]).replace("**", "") for r in rows], fontsize=8.5, color=INK)
     ax.set_xlabel(xlabel, color=INK2, fontsize=9)
-    ax.set_xlim(0, max(r[1] + r[2] for r in rows) * 1.12)
-    handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c, _ in LEGEND]
-    ax.legend(handles, [l for _, l in LEGEND], loc="lower right", fontsize=7.5, frameon=False, labelcolor=INK2)
+    ax.set_xlim(0, top * 1.12)
+    present = {CATEGORY.get(r[0], INK2) for r in rows}
+    legend = [(c, l) for c, l in LEGEND if c in present]
+    handles = [plt.Rectangle((0, 0), 1, 1, color=c) for c, _ in legend]
+    head = 0.75 / fig.get_figheight()  # inches reserved for title + legend
+    fig.legend(handles, [l for _, l in legend], loc="upper left", bbox_to_anchor=(0.01, 1 - 0.36 / fig.get_figheight()),
+               ncol=3, fontsize=7.5, frameon=False, labelcolor=INK2, handlelength=1.2)
     if title:
-        ax.set_title(title, loc="left", fontsize=10, color=INK)
-    fig.tight_layout()
+        fig.suptitle(title, x=0.01, y=1 - 0.08 / fig.get_figheight(), ha="left", va="top", fontsize=10, color=INK)
+    fig.tight_layout(rect=(0, 0, 1, 1 - head))
     FIG.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIG / fname, facecolor=SURFACE)
     plt.close(fig)
 
 
-def lm_curves(fname="lm_curves.png", show=("ann", "spk_softmax", "ours", "spikformer", "wta", "sdt")):
+def lm_curves(fname="lm_curves.png", show=("ann", "spk_softmax", "ours_k4", "ours", "spikformer", "wta", "sdt")):
     g = _load("lm")
     if not g:
         return
@@ -91,7 +97,7 @@ def lm_curves(fname="lm_curves.png", show=("ann", "spk_softmax", "ours", "spikfo
     fig.patch.set_facecolor(SURFACE)
     _style(ax)
     ax.grid(axis="y", color=GRID, linewidth=0.8)
-    dashes = {"ann": (None, None), "spk_softmax": (4, 2), "ours": (None, None), "csa": (4, 2),
+    dashes = {"ann": (None, None), "spk_softmax": (4, 2), "ours_k4": (None, None), "ours": (4, 2), "csa": (4, 2),
               "spikformer": (None, None), "wta": (4, 2), "sdt": (1, 2), "ssa_norm": (6, 2)}
     for v in show:
         rs = g.get((v, 1.0))
@@ -116,8 +122,8 @@ def lm_curves(fname="lm_curves.png", show=("ann", "spk_softmax", "ours", "spikfo
 
 
 if __name__ == "__main__":
-    bar_chart("recall", "final_acc", "associative-recall accuracy (%), mean ± sd over 3 seeds", "recall.png",
-              title="Multi-query associative recall (8 pairs) — can the attention select?")
+    bar_chart("recall", "final_acc", "accuracy (%) — bar: mean of 3 seeds, dots: each seed", "recall.png",
+              title="Multi-query associative recall (8 pairs, 2,000 steps)")
     lm_curves()
     bar_chart("vision", "test_acc", "CIFAR-10 test accuracy (%)", "cifar10.png",
               title="CIFAR-10, small spiking ViT (same backbone, same budget)")

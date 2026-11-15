@@ -238,6 +238,10 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 <script>
 const DATA = /*__DATA__*/null;
 const ROLE_VAR = { ours: "--ours", prior: "--prior", ref: "--ref" };
+// compact names for narrow screens (the table view keeps the full names)
+const SHORT2 = { ours_k4: "ShuntFormer-4", ours: "ShuntFormer", csa: "CSA + MLP", ours_nocomp: "− competition", ours_nonorm: "− shunting",
+  ours_binqk: "binary Q/K", ours_nopbn: "− pre-BN", spikformer: "Spikformer", ssa_norm: "SSA ÷ #keys", sdt: "SDSA", wta: "WTA hard",
+  wta3: "WTA top-3", spikformer_cdglu: "SSA + CD-GLU", spikformer_nopbn: "SSA orig.", ann: "ANN", spk_softmax: "softmax/spikes" };
 const ROLE_NAME = { ours: "this work (spike-driven)", prior: "prior spike-driven attention", ref: "reference (not spike-driven)" };
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const NS = "http://www.w3.org/2000/svg";
@@ -258,19 +262,21 @@ function placeTip(chart, tip, x, y) {
 function barChart(id, rows, opt) {
   const chart = document.getElementById(id); chart.textContent = "";
   rows = rows.slice().sort((a, b) => b.mean - a.mean);
-  const W = 900, rowH = 30, top = 24, labelW = 230, right = 80, H = top + rows.length * rowH + 28;
+  const W = Math.max(340, Math.min(980, chart.clientWidth || 900)), narrow = W < 620;
+  const rowH = 30, top = 24, labelW = narrow ? Math.round(W * 0.42) : 230, right = narrow ? 52 : 80, H = top + rows.length * rowH + 28;
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opt.aria }, chart);
   el("text", { x: W - 4, y: 12, "text-anchor": "end" }, svg).textContent = opt.valHead || "mean";
   const max = opt.max ?? Math.max(...rows.map(r => r.mean + (r.sd || 0))) * 1.05;
   const x = (v) => labelW + (v / max) * (W - labelW - right);
-  for (let t = 0; t <= max + 1e-9; t += opt.tick) {
+  const tick = narrow ? opt.tick * 2 : opt.tick;
+  for (let t = 0; t <= max + 1e-9; t += tick) {
     el("line", { x1: x(t), x2: x(t), y1: top - 4, y2: H - 24, class: "grid" }, svg);
     el("text", { x: x(t), y: H - 8, "text-anchor": "middle" }, svg).textContent = opt.fmtTick ? opt.fmtTick(t) : t;
   }
   const tip = tipFor(chart);
   rows.forEach((r, i) => {
     const y = top + i * rowH, g = el("g", { class: "row" }, svg);
-    const lbl = el("text", { x: labelW - 10, y: y + rowH / 2 + 4, "text-anchor": "end", class: "lbl" }, g); lbl.textContent = r.label;
+    const lbl = el("text", { x: labelW - 10, y: y + rowH / 2 + 4, "text-anchor": "end", class: "lbl" }, g); lbl.textContent = narrow ? (SHORT2[r.v] || r.label) : r.label;
     const w = Math.max(2, x(r.mean) - labelW);
     el("rect", { x: labelW, y: y + 6, width: w, height: rowH - 12, rx: 3, fill: css(ROLE_VAR[r.role]), class: "bar" }, g);
     // one dot per seed (outcomes are often bimodal: solved / not solved), ringed with the surface colour
@@ -291,7 +297,8 @@ function barChart(id, rows, opt) {
 
 function lineChart(id, series, opt) {
   const chart = document.getElementById(id); chart.textContent = "";
-  const W = 900, H = 380, L = 56, R = 150, T = 10, B = 40;
+  const W = Math.max(340, Math.min(980, chart.clientWidth || 900)), narrow = W < 620;
+  const H = narrow ? 320 : 380, L = 44, R = narrow ? 96 : 250, T = 10, B = 40;
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opt.aria }, chart);
   const xs = series[0].curve.map(p => p[0]);
   const xmax = Math.max(...xs), ally = series.flatMap(s => s.curve.map(p => p[1]));
@@ -308,7 +315,7 @@ function lineChart(id, series, opt) {
     const last = s.curve[s.curve.length - 1]; labels.push({ s, y: y(last[1]), v: last[1] });
   });
   labels.sort((a, b) => a.y - b.y); for (let i = 1; i < labels.length; i++) labels[i].y = Math.max(labels[i].y, labels[i - 1].y + 15);
-  labels.forEach(o => { const t = el("text", { x: W - R + 8, y: o.y + 4 }, svg); t.textContent = `${o.v.toFixed(2)} ${o.s.label}`; t.setAttribute("fill", css("--fg2")); });
+  labels.forEach(o => { const t = el("text", { x: W - R + 8, y: o.y + 4 }, svg); t.textContent = `${o.v.toFixed(2)} ${narrow ? (SHORT2[o.s.v] || o.s.label) : o.s.label}`; t.setAttribute("fill", css("--fg2")); });
   const cross = el("line", { y1: T, y2: H - B, stroke: css("--muted"), "stroke-width": 1, visibility: "hidden" }, svg);
   const tip = tipFor(chart);
   const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent", tabindex: 0, "aria-label": "learning curves, use arrow keys" }, svg);
@@ -391,7 +398,8 @@ function raster() {
 }
 function boot() { renderAll(); raster(); }
 boot();
-let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(raster, 120); });
+let rz, lastW = window.innerWidth;
+window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { raster(); if (window.innerWidth !== lastW) { lastW = window.innerWidth; renderAll(); } }, 150); });
 const mq = window.matchMedia("(prefers-color-scheme: dark)"); mq.addEventListener && mq.addEventListener("change", boot);
 new MutationObserver(boot).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 </script>
