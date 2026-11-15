@@ -10,15 +10,16 @@ from .ops import OpCounter
 class SpikingMLP(nn.Module):
     """Standard spiking MLP (Meta-SpikeFormer ordering): SN -> fc1 -> BN -> SN -> fc2 -> BN."""
 
-    def __init__(self, dim: int, cfg: SNNConfig) -> None:
+    def __init__(self, dim: int, cfg: SNNConfig, *, causal: bool = False) -> None:
         super().__init__()
         hidden = int(dim * cfg.mlp_ratio)
-        self.sn1 = InputNeuron(dim, cfg)
+        causal_norm = causal and cfg.causal_norm
+        self.sn1 = InputNeuron(dim, cfg, causal=causal)
         self.fc1 = nn.Linear(dim, hidden)
-        self.bn1 = SeqBN(hidden)
+        self.bn1 = SeqBN(hidden, causal=causal_norm)
         self.sn2 = make_neuron(cfg)
         self.fc2 = nn.Linear(hidden, dim)
-        self.bn2 = SeqBN(dim)
+        self.bn2 = SeqBN(dim, causal=causal_norm)
 
     def forward(self, x):
         return self.bn2(self.fc2(self.sn2(self.bn1(self.fc1(self.sn1(x))))))
@@ -36,18 +37,20 @@ class CoincidenceGLU(nn.Module):
     two rates.  Hidden width is 2/3 of the plain MLP's so parameters match.
     """
 
-    def __init__(self, dim: int, cfg: SNNConfig) -> None:
+    def __init__(self, dim: int, cfg: SNNConfig, *, causal: bool = False) -> None:
         super().__init__()
         hidden = int(round(dim * cfg.mlp_ratio * 2 / 3))
         self.hidden = hidden
-        self.sn_in = InputNeuron(dim, cfg)
+        causal_norm = causal and cfg.causal_norm
+        self.sn_in = InputNeuron(dim, cfg, causal=causal)
         self.fc_gu = nn.Linear(dim, 2 * hidden)
-        self.bn_g, self.bn_u = SeqBN(hidden), SeqBN(hidden)
+        self.bn_g = SeqBN(hidden, causal=causal_norm)
+        self.bn_u = SeqBN(hidden, causal=causal_norm)
         # gate: binary spikes (threshold 0 -> ~50% open at init); ANN uses a sigmoid gate
         self.sn_g = make_neuron(cfg, levels=1, v_th=0.0) if cfg.neuron in ("ilif", "lif") else nn.Sigmoid()
         self.sn_u = make_neuron(cfg)
         self.fc_o = nn.Linear(hidden, dim)
-        self.bn_o = SeqBN(dim)
+        self.bn_o = SeqBN(dim, causal=causal_norm)
 
     def forward(self, x):
         g, u = self.fc_gu(self.sn_in(x)).chunk(2, dim=-1)
@@ -61,5 +64,5 @@ class CoincidenceGLU(nn.Module):
 MLPS = {"mlp": SpikingMLP, "cdglu": CoincidenceGLU}
 
 
-def make_mlp(dim: int, cfg: SNNConfig) -> nn.Module:
-    return MLPS[cfg.mlp](dim, cfg)
+def make_mlp(dim: int, cfg: SNNConfig, *, causal: bool = False) -> nn.Module:
+    return MLPS[cfg.mlp](dim, cfg, causal=causal)

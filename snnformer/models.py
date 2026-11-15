@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 
 from .attention import make_attention
 from .config import InputNeuron, SNNConfig, make_neuron
+from .dendritic import DendriticState
 from .mlp import make_mlp
 
 
@@ -17,7 +20,7 @@ class Block(nn.Module):
     def __init__(self, dim: int, heads: int, cfg: SNNConfig, causal: bool) -> None:
         super().__init__()
         self.attn = make_attention(dim, heads, cfg, causal)
-        self.mlp = make_mlp(dim, cfg)
+        self.mlp = make_mlp(dim, cfg, causal=causal)
 
     def forward(self, x):
         x = x + self.attn(x)
@@ -73,6 +76,12 @@ class SpikingViT(nn.Module):
         return self.head(self.head_sn(x)).mean((0, 2))
 
 
+@dataclass
+class DendriticLMState:
+    layers: list[DendriticState | None]
+    length: int = 0
+
+
 class SpikingLM(nn.Module):
     """Causal spiking transformer language model (byte/char level)."""
 
@@ -82,18 +91,44 @@ class SpikingLM(nn.Module):
         self.tok = nn.Embedding(vocab, dim)  # N(0, 1) init
         # Same scale as the token embedding: with the usual 0.02 init the position
         # signal is far below the first neuron's quantisation step and is erased.
-        self.pos = nn.Parameter(torch.randn(ctx, dim))
+        self.pos = nn.Parameter(torch.randn(ctx, dim)) if cfg.position_embeddings else None
         self.blocks = nn.ModuleList(Block(dim, heads, cfg, causal=True) for _ in range(depth))
-        self.head_sn = InputNeuron(dim, cfg)
+        self.head_sn = InputNeuron(dim, cfg, causal=True)
         self.head = nn.Linear(dim, vocab)
 
     def forward(self, idx: torch.Tensor) -> torch.Tensor:
         B, N = idx.shape
-        x = self.tok(idx) + self.pos[:N]
+        x = self.tok(idx)
+        if self.pos is not None:
+            x = x + self.pos[:N]
         x = x.unsqueeze(0).expand(self.cfg.T, B, N, x.shape[-1])
         for blk in self.blocks:
             x = blk(x)
         return self.head(self.head_sn(x)).mean(0)
+
+    @torch.no_grad()
+    def step(self, idx: torch.Tensor, state: DendriticLMState | None = None):
+        """Stream one token per batch item through an eval-mode Dendrite model.
+
+        Pass the returned state back on the next call and start each new sequence
+        with `None`. The state is updated in place, and assumes a fixed batch.
+        """
+        if self.training or self.cfg.attn not in ("dendritic", "dendritic_event") or idx.ndim != 1:
+            raise ValueError("step requires an eval-mode Dendrite LM and input of shape [batch]")
+        if state is None:
+            state = DendriticLMState([None] * len(self.blocks))
+        x = self.tok(idx)
+        if self.pos is not None:
+            if state.length >= self.pos.shape[0]:
+                raise ValueError("sequence exceeds the learned position table")
+            x = x + self.pos[state.length]
+        x = x.unsqueeze(0).unsqueeze(2).expand(self.cfg.T, -1, -1, -1)
+        for i, block in enumerate(self.blocks):
+            attn, state.layers[i] = block.attn.step(x, state.layers[i])
+            x = x + attn
+            x = x + block.mlp(x)
+        state.length += 1
+        return self.head(self.head_sn(x)).mean(0).squeeze(1), state
 
 
 def count_params(model: nn.Module) -> int:

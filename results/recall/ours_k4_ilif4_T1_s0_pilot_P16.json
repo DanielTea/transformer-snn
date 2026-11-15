@@ -1,0 +1,105 @@
+{
+ "args": {
+  "variant": "ours_k4",
+  "neuron": null,
+  "v_th": null,
+  "sel_alpha": null,
+  "qk_levels": null,
+  "softmax_temp_init": null,
+  "pre_bn": null,
+  "levels": null,
+  "T": null,
+  "seed": 0,
+  "threads": 2,
+  "lr": 0.003,
+  "wd": 0.05,
+  "tag": "pilot",
+  "device": "cpu",
+  "causal_norm": true,
+  "position_embeddings": false,
+  "force": false,
+  "keys": 64,
+  "pairs": 16,
+  "queries": 16,
+  "dim": 64,
+  "depth": 2,
+  "heads": 2,
+  "steps": 600,
+  "bs": 64,
+  "warmup": 75,
+  "eval_every": 100,
+  "eval_bs": 128,
+  "val_samples": 256,
+  "eval_samples": 2048,
+  "val_seed": 12345,
+  "eval_seed": 1234,
+  "eval_pairs": [
+   32,
+   64
+  ]
+ },
+ "cfg": {
+  "neuron": "ilif",
+  "levels": 4,
+  "T": 1,
+  "tau": 2.0,
+  "v_th": 4.0,
+  "attn": "csa",
+  "position_embeddings": false,
+  "address_bits": 4,
+  "memory_block": 32,
+  "memory_delay": 1,
+  "mlp": "cdglu",
+  "mlp_ratio": 4.0,
+  "qk_levels": null,
+  "softmax_temp_init": 1.0,
+  "wta_k": 1,
+  "sel_alpha": 4.0,
+  "csa_compete": true,
+  "csa_normalize": true,
+  "csa_levels": 4,
+  "pre_bn": true,
+  "causal_norm": true
+ },
+ "device": "cpu",
+ "params": 119186,
+ "final_acc": 0.016021728515625,
+ "final_acc_by_pairs": {
+  "16": 0.016021728515625,
+  "32": 0.015350341796875,
+  "64": 0.016265869140625
+ },
+ "curve": [
+  {
+   "step": 100,
+   "loss": 4.442326545715332,
+   "acc": 0.01708984375
+  },
+  {
+   "step": 200,
+   "loss": 4.285703182220459,
+   "acc": 0.016357421875
+  },
+  {
+   "step": 300,
+   "loss": 4.232945919036865,
+   "acc": 0.0126953125
+  },
+  {
+   "step": 400,
+   "loss": 4.219586372375488,
+   "acc": 0.012939453125
+  },
+  {
+   "step": 500,
+   "loss": 4.178844451904297,
+   "acc": 0.020263671875
+  },
+  {
+   "step": 600,
+   "loss": 4.183368682861328,
+   "acc": 0.02197265625
+  }
+ ],
+ "seconds": 31.007431983947754
+}

@@ -1,4 +1,4 @@
-"""Build the self-contained HTML research report from results/*.json.
+"""Build the HTML research report from results/*.json.
 
 usage: python make_report.py <out.html>
 """
@@ -36,17 +36,60 @@ def load(task, tag=""):
     g = defaultdict(list)
     for f in sorted((RESULTS / task).glob("*.json")):
         r = json.loads(f.read_text())
-        if r["args"].get("tag", "") != tag:
+        args = r.get("args")
+        if args is None or args.get("tag", "") != tag:
             continue
-        if r["args"].get("train_frac", 1.0) != 1.0:
+        if args.get("train_frac", 1.0) != 1.0:
             continue
-        g[r["args"]["variant"]].append(r)
+        g[args["variant"]].append(r)
     return g
 
 
 def agg(rs, key, scale=1.0):
     xs = [r[key] * scale for r in rs]
     return {"mean": st.mean(xs), "sd": st.stdev(xs) if len(xs) > 1 else 0.0, "n": len(xs), "all": xs}
+
+
+def dendrite_summary():
+    recall = load("recall_distance", "gap_v1")
+    event, control = recall["dendrite_event"], recall["transformer"]
+    max_gap = str(max(map(int, event[0]["final_acc_by_gap"])))
+    anchored = json.loads((RESULTS / "recall_distance/dendrite_event_s0_anchored_extrapolation.json").read_text())
+    anchored_gap = max(map(int, anchored["accuracy_by_gap"]))
+    anchored_total = anchored["samples_per_gap"] * anchored["queries"]
+
+    successor = RESULTS / "lm_successor"
+    calibrated = json.loads((successor / "scaled_v2_continuous.json").read_text())["results"]
+    trained = json.loads((successor / "end_to_end_continuous.json").read_text())["results"]
+    enwik8, trained_enwik8 = (
+        next(row for row in rows if row["source"] == "enwik8 test")
+        for rows in (calibrated, trained)
+    )
+    books = [row for row in calibrated if row["source"] != "enwik8 test"]
+    trained_books = [row for row in trained if row["source"] != "enwik8 test"]
+
+    def byte_weighted(rows, key):
+        return sum(row[key] * row["target_bytes"] for row in rows) / sum(row["target_bytes"] for row in rows)
+
+    return {
+        "DENDRITE_TRAIN_GAP": str(event[0]["args"]["train_max_gap"]),
+        "DENDRITE_TEST_GAP": max_gap,
+        "DENDRITE_EVENT": f'{100 * st.mean(r["final_acc_by_gap"][max_gap] for r in event):.2f}%',
+        "DENDRITE_CONTROL": f'{100 * st.mean(r["final_acc_by_gap"][max_gap] for r in control):.2f}%',
+        "DENDRITE_SEEDS": str(len(event)),
+        "DENDRITE_ANCHORED_GAP": f"{anchored_gap:,}",
+        "DENDRITE_ANCHORED_CORRECT": f'{anchored_total * anchored["accuracy_by_gap"][str(anchored_gap)]:.0f}',
+        "DENDRITE_ANCHORED_TOTAL": str(anchored_total),
+        "DENDRITE_ENWIK8_COUNT": f'{enwik8["target_bytes"]:,}',
+        "DENDRITE_ENWIK8_BASE": f'{enwik8["base_bpb"]:.3f}',
+        "DENDRITE_ENWIK8_CALIBRATED": f'{enwik8["spike_bpb"]:.3f}',
+        "DENDRITE_ENWIK8_TRAINED": f'{trained_enwik8["spike_bpb"]:.3f}',
+        "DENDRITE_PG19_BOOKS": str(len(books)),
+        "DENDRITE_PG19_COUNT": f'{sum(row["target_bytes"] for row in books):,}',
+        "DENDRITE_PG19_BASE": f'{byte_weighted(books, "base_bpb"):.3f}',
+        "DENDRITE_PG19_CALIBRATED": f'{byte_weighted(books, "spike_bpb"):.3f}',
+        "DENDRITE_PG19_TRAINED": f'{byte_weighted(trained_books, "spike_bpb"):.3f}',
+    }
 
 
 def build_data():
@@ -64,8 +107,9 @@ def build_data():
         e = rs[0]["energy_per_token"]
         data["lm"].append({"v": v, "label": SHORT.get(v, v), "role": ROLE.get(v, "ref"),
                            "val": agg(rs, "val_bpb"), "test": agg(rs, "test_bpb"), "curve": curve,
-                           "energy_uJ": e["energy_mJ_per_sample"] * 1e3, "fr": e["firing_rate"],
-                           "nonlin": e["nonlinear_per_sample"], "params": rs[0]["params"]})
+                           "energy_uJ": e["energy_mJ_per_sample"] * 1e3 if e else None,
+                           "fr": e["firing_rate"] if e else None,
+                           "nonlin": e["nonlinear_per_sample"] if e else None, "params": rs[0]["params"]})
     for v, rs in load("vision").items():
         e = rs[0]["energy_per_image"]
         data["vision"].append({"v": v, "label": SHORT.get(v, v), "role": ROLE.get(v, "ref"),
@@ -81,6 +125,8 @@ TEMPLATE = (Path(__file__).with_name("report_template.html")).read_text
 def main(out):
     data = build_data()
     page = TEMPLATE().replace("/*__DATA__*/null", json.dumps(data))
+    for key, value in dendrite_summary().items():
+        page = page.replace("{{%s}}" % key, html.escape(value))
     # prose written after reading the results: results/report_text.json {"VERDICT": "...", ...}
     tf = RESULTS / "report_text.json"
     texts = json.loads(tf.read_text()) if tf.exists() else {}

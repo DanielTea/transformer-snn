@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .neurons import AnalogNeuron, SpikingNeuron
 
@@ -15,7 +17,9 @@ class SNNConfig:
              "lif"  binary LIF (Spikformer style), "ann" non-spiking GELU reference.
     attn:    "csa" (ours), "ssa" (Spikformer), "ssa_norm" (SSA / #visible keys),
              "sdsa" (Spike-driven Transformer V1), "wta" (top-K winner-take-all,
-             Zhou et al. 2026), "softmax" (softmax over spike Q/K;
+             Zhou et al. 2026), "dendritic" (fixed-delay spike-addressed memory),
+             "dendritic_event" (spike-addressed memory with learned capture and commit),
+             "softmax" (softmax over spike Q/K;
              not spike-driven -- used as reference, and by the ANN model).
     mlp:     "cdglu" (ours, coincidence-gated) or "mlp" (standard 2-layer).
     """
@@ -26,6 +30,17 @@ class SNNConfig:
     tau: float = 2.0
     v_th: float = 1.0  # range of integer neurons: they saturate (emit D spikes) at h = v_th
     attn: str = "csa"
+    position_embeddings: bool = True
+    address_bits: int = 4  # complementary binary detectors per dendritic memory head
+    memory_block: int = 32  # block size for the parallel prefix implementation
+    memory_delay: int = 1  # odd heads bind current values to addresses this many tokens back
+    memory_relay: bool = False  # feed the output neuron one short-range value tap per head
+    local_window: int = 32  # token window in the local and hybrid Transformer references
+    event_width: int | None = None  # optional bottleneck for the hybrid's event branch
+    successor_orders: tuple[int, ...] = (2, 3, 4, 5, 7)
+    successor_slots: int = 2048  # tagged successor entries per order
+    successor_spikes: bool = True  # quantize the cache's predictive mass
+    successor_scaled_votes: bool = False  # smaller spike weights for shorter suffix matches
     mlp: str = "cdglu"
     mlp_ratio: float = 4.0
     qk_levels: int | None = None  # spike levels of Q/K neurons (None -> same as levels; 1 -> binary)
@@ -36,6 +51,7 @@ class SNNConfig:
     csa_normalize: bool = True  # ablation: False -> no divisive normalisation
     csa_levels: int = 1  # spikes per key on the attention map (1 = binary selection; K>1 = graded)
     pre_bn: bool = True  # BN on the residual stream before each block's input neuron (see InputNeuron)
+    causal_norm: bool = False  # in causal models, normalize with running stats from prior batches
 
     @property
     def spike_levels(self) -> int:
@@ -74,15 +90,38 @@ class SeqBN(nn.Module):
     """BatchNorm over the channel (last) dim of a [T, B, N, C] tensor.
 
     BN is used instead of LayerNorm because it folds into the preceding
-    linear layer at inference (keeps the network multiply-free)."""
+    linear layer at inference (keeps the network multiply-free).
 
-    def __init__(self, dim: int) -> None:
+    In causal training, using current batch statistics would let a token
+    depend on future tokens. Normalize with statistics from completed
+    batches, then update them for the next training forward.
+    """
+
+    def __init__(self, dim: int, *, causal: bool = False) -> None:
         super().__init__()
         self.bn = nn.BatchNorm1d(dim)
+        self.causal = causal
 
     def forward(self, x):
-        shp = x.shape
-        return self.bn(x.reshape(-1, shp[-1])).reshape(shp)
+        flat = x.reshape(-1, x.shape[-1])
+        if not (self.causal and self.bn.training):
+            return self.bn(flat).reshape_as(x)
+
+        bn = self.bn
+        # Backpropagation needs the original statistics even after the running
+        # buffers have been updated.
+        normalized = F.batch_norm(
+            flat, bn.running_mean.clone(), bn.running_var.clone(),
+            bn.weight, bn.bias, training=False, eps=bn.eps,
+        )
+        if flat.shape[0] > 1:
+            with torch.no_grad():
+                var, mean = torch.var_mean(flat.detach().to(bn.running_mean.dtype), dim=0, correction=1)
+                bn.num_batches_tracked.add_(1)
+                momentum = bn.momentum if bn.momentum is not None else 1.0 / bn.num_batches_tracked.item()
+                bn.running_mean.lerp_(mean, momentum)
+                bn.running_var.lerp_(var, momentum)
+        return normalized.reshape_as(x)
 
 
 class InputNeuron(nn.Module):
@@ -97,9 +136,9 @@ class InputNeuron(nn.Module):
     At inference this per-channel affine map folds into the neuron's firing
     threshold and bias, so it adds no multiplications."""
 
-    def __init__(self, dim: int, cfg: SNNConfig) -> None:
+    def __init__(self, dim: int, cfg: SNNConfig, *, causal: bool = False) -> None:
         super().__init__()
-        self.bn = SeqBN(dim) if cfg.pre_bn else nn.Identity()
+        self.bn = SeqBN(dim, causal=causal and cfg.causal_norm) if cfg.pre_bn else nn.Identity()
         self.sn = make_neuron(cfg)
 
     def forward(self, x):

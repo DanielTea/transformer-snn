@@ -35,6 +35,8 @@ import torch
 import torch.nn as nn
 
 from .config import InputNeuron, SeqBN, SNNConfig, make_neuron
+from .dendritic import DendriticDelayAttention
+from .dendritic_event import DendriticEventAttention
 from .neurons import heaviside, integer_spike
 from .ops import OpCounter
 
@@ -58,9 +60,12 @@ class SpikingAttentionBase(nn.Module):
         assert dim % heads == 0
         self.dim, self.heads, self.dh = dim, heads, dim // heads
         self.cfg, self.causal = cfg, causal
-        self.in_sn = InputNeuron(dim, cfg)
+        self.in_sn = InputNeuron(dim, cfg, causal=causal)
         self.qkv = nn.Linear(dim, 3 * dim, bias=False)
-        self.q_bn, self.k_bn, self.v_bn = SeqBN(dim), SeqBN(dim), SeqBN(dim)
+        causal_norm = causal and cfg.causal_norm
+        self.q_bn = SeqBN(dim, causal=causal_norm)
+        self.k_bn = SeqBN(dim, causal=causal_norm)
+        self.v_bn = SeqBN(dim, causal=causal_norm)
         qk_lv = cfg.qk_levels if cfg.neuron in ("ilif", "lif") else None
         self.q_sn, self.k_sn = make_neuron(cfg, levels=qk_lv), make_neuron(cfg, levels=qk_lv)
         self.v_sn = make_neuron(cfg)
@@ -69,7 +74,7 @@ class SpikingAttentionBase(nn.Module):
         self.gain = nn.Parameter(torch.tensor(float(self.gain_init)))
         self.out_sn = make_neuron(cfg)
         self.proj = nn.Linear(dim, dim)
-        self.proj_bn = SeqBN(dim)
+        self.proj_bn = SeqBN(dim, causal=causal_norm)
 
     @property
     def qk_unit(self) -> float | None:
@@ -270,6 +275,8 @@ class WTAAttention(SpikingAttentionBase):
 
 ATTENTION = {
     "csa": CompetitiveShuntingAttention,
+    "dendritic": DendriticDelayAttention,
+    "dendritic_event": DendriticEventAttention,
     "ssa": SSA,
     "ssa_norm": SSANorm,
     "sdsa": SDSA,
