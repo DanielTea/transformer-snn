@@ -197,3 +197,54 @@ def test_shared_thresholds_preserve_neutral_outputs_and_export_unequal_groups():
     first, state = integer.forward_chunk(tokens[:, :19])
     last, _ = integer.forward_chunk(tokens[:, 19:], state)
     torch.testing.assert_close(torch.cat((first, last), dim=1), counts, rtol=0, atol=0)
+
+
+def test_shared_output_reference_preserves_every_vocabulary_margin():
+    torch.manual_seed(81)
+    cfg = EventLMConfig(dim=16, hidden=20, route="steered_correction_code", carry=False,
+                        memory_heads=2, memory_slots=4, memory_width=8, resolution=26)
+    plain = EventLM(cfg).eval()
+    referenced = EventLM(replace(cfg, output_reference=True)).eval()
+    referenced.load_state_dict(plain.state_dict())
+    tokens = torch.randint(256, (2, 41))
+    native = referenced.to_integer()
+    with torch.no_grad():
+        before = plain.to_integer()(tokens)
+        after = native(tokens)
+        difference = before - after
+        assert torch.equal(difference, difference[..., :1].expand_as(difference))
+        assert difference.abs().amax().item() > 0
+        torch.testing.assert_close(referenced(tokens), after.to(torch.float32), rtol=0, atol=0)
+    state = None
+    streamed = []
+    for token in tokens.unbind(1):
+        output, state = native.step(token, state)
+        streamed.append(output)
+    torch.testing.assert_close(torch.stack(streamed, dim=1), after, rtol=0, atol=0)
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("marked", (False, True))
+def test_packed_delay_rings_keep_only_live_packets(marked):
+    torch.manual_seed(52)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False,
+                        memory_heads=2, memory_slots=4, memory_width=8, resolution=16, output_reference=True)
+    saved = EventLM(cfg).eval()
+    compact = EventLM(replace(cfg, compact_delays=True, departure_coincidence=marked)).eval()
+    compact.load_state_dict(saved.state_dict())
+    tokens = torch.randint(256, (2, 113))
+    native = compact.to_integer()
+    expected = native(tokens)
+    torch.testing.assert_close(compact(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    if marked:
+        assert not torch.equal(expected, saved.to_integer()(tokens))
+    else:
+        torch.testing.assert_close(expected, saved.to_integer()(tokens), rtol=0, atol=0)
+    state = None
+    for offset, token in enumerate(tokens.unbind(1)):
+        output, state = native.step(token, state)
+        torch.testing.assert_close(output, expected[:, offset], rtol=0, atol=0)
+    for block, layer in zip(compact.blocks, state.layers, strict=True):
+        counts = sum(width * delay for width, delay in zip(block.widths, block.delays, strict=True))
+        assert layer.history.shape == (2, counts * (1 + marked))
+        assert layer.history.untyped_storage().nbytes() == 2 * counts * (1 + marked) * 4

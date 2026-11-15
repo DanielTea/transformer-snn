@@ -100,7 +100,9 @@ def build_model(args):
                             memory_heads=args.memory_heads, memory_slots=args.memory_slots,
                             resolution=args.spike_resolution, memory_width=getattr(args, "memory_width", None),
                             forecast_key_channels=args.forecast_key_channels, match_forecast_key=args.match_forecast_key,
-                            learn_context_keys=args.learn_context_keys, learn_packet_thresholds=args.learn_packet_thresholds)
+                            learn_context_keys=args.learn_context_keys, learn_packet_thresholds=args.learn_packet_thresholds,
+                            output_reference=args.output_reference, compact_delays=args.compact_delays,
+                            departure_coincidence=args.departure_coincidence)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
     if args.local_lookback is not None:
@@ -141,7 +143,11 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
         raise ValueError("--initialize-from needs a checkpoint of the same decoder family")
     if isinstance(model, EventLM):
         source_cfg = EventLMConfig(**source["cfg"])
-        if source_cfg == model.cfg:
+        # These switches leave the synaptic weight layout and tick units intact.
+        source_geometry = replace(source_cfg, resolution=model.cfg.resolution,
+                                  output_reference=model.cfg.output_reference, compact_delays=model.cfg.compact_delays,
+                                  departure_coincidence=model.cfg.departure_coincidence)
+        if source_geometry == model.cfg:
             model.load_state_dict(source["state_dict"])
         else:
             initialize_router(model, source, source_cfg)
@@ -185,6 +191,12 @@ def main():
                         help="learn reserved answers to memory queries through next-byte loss")
     parser.add_argument("--learn-packet-thresholds", action="store_true",
                         help="learn shared integer thresholds for content and steering groups")
+    parser.add_argument("--output-reference", action="store_true",
+                        help="subtract a shared spike reference before vocabulary neurons fire")
+    parser.add_argument("--compact-delays", action="store_true",
+                        help="allocate a history ring of its own length to each fixed axon group")
+    parser.add_argument("--departure-coincidence", action="store_true",
+                        help="route delayed pulses by coincidence with both departure and arrival steering")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
     parser.add_argument("--spike-resolution", type=int, default=1, help="number of finer spikes per original unit")
     parser.add_argument("--depth", type=int, default=3)
@@ -230,10 +242,11 @@ def main():
         parser.error("spike code loss needs the forecast bank and at least two input bytes")
     if (args.forecast_key_channels or args.match_forecast_key or args.learn_context_keys) and args.variant != "event_correction_code":
         parser.error("forecast keys need --variant event_correction_code")
-    if (args.learn_packet_thresholds or args.pulse_budget is not None) and args.variant not in (
+    if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
+            or args.departure_coincidence) and args.variant not in (
         "event_steered", "event_correction_code"
     ):
-        parser.error("packet thresholds and pulse budgets need a steered spike router")
+        parser.error("packet thresholds, pulse budgets and delay or output options need a steered spike router")
     if args.pulse_budget is not None and (not math.isfinite(args.pulse_budget) or args.pulse_budget <= 0):
         parser.error("pulse budget must be positive and finite")
     event = args.variant in EVENT_ROUTES

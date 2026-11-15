@@ -53,6 +53,9 @@ class EventLMConfig:
     match_forecast_key: bool = False
     learn_context_keys: bool = False
     learn_packet_thresholds: bool = False
+    output_reference: bool = False
+    compact_delays: bool = False
+    departure_coincidence: bool = False
 
 
 def _weight_ticks(weight, quantized=True):
@@ -102,8 +105,17 @@ class _IntegrateFire(nn.Module):
     def _signed(counts):
         return counts[..., 0] - counts[..., 1]
 
-    def forward(self, current, quanta=None):
+    def forward(self, current, quanta=None, *, reference=None):
         bounded = current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
+        if reference is not None:
+            charge = bounded.to(torch.int32)
+            # Keep the original signed rounding at half-threshold ties.
+            phase = self.threshold // 2 - (charge < 0).to(torch.int32)
+            emitted = (charge + phase - reference.to(torch.int32) * self.threshold) >> self.bits
+            if current.is_floating_point():
+                surrogate = bounded / self.threshold - reference
+                return emitted.to(current.dtype) + (surrogate - surrogate.detach())
+            return emitted
         if quanta is not None:
             units = quanta.to(torch.int32)
             threshold = units * _PACKET_TICKS
@@ -132,7 +144,9 @@ class _IntegrateFire(nn.Module):
             return counts.to(current.dtype) + (surrogate - surrogate.detach())
         return counts
 
-    def step(self, current, phase, quanta=None):
+    def step(self, current, phase, quanta=None, *, reference=None):
+        if reference is not None:
+            return self(current, reference=reference), None
         if quanta is not None:
             return self(current, quanta), None
         bounded = current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
@@ -486,6 +500,11 @@ class _DelayBlock(nn.Module):
                                            feedback=cfg.route != "steered_static",
                                            margin=_FEEDBACK_WINDOW if cfg.route == "steered_margin" else 0)
         self.history_size = self.local_delays[-1] if self.selector is None else self.selector.history_size
+        self.compact_delays = cfg.compact_delays
+        self.departure_coincidence = cfg.departure_coincidence
+        counts_per_channel = 2 if self.departure_coincidence else 1
+        self.delay_widths = tuple(counts_per_channel * width for width in self.widths)
+        self.delay_sizes = tuple(delay * width for delay, width in zip(self.local_delays, self.delay_widths))
         cap = _HIDDEN_CAP * cfg.resolution
         self.packet_thresholds = _PacketThresholds(self.widths) if cfg.learn_packet_thresholds else None
         self.expand = _Synapse(cfg.dim, cfg.hidden * (2 if self.steered else 1), gain=1.0, continuous=cfg.continuous)
@@ -496,7 +515,16 @@ class _DelayBlock(nn.Module):
         output_bits = _CHARGE_BITS + _PACKET_BITS if self.packet_thresholds is not None else _CHARGE_BITS
         self.emit = _IntegrateFire(cap, output_bits, cfg.carry, continuous=cfg.continuous)
 
-    def _current(self, residual, present, delayed, steering, start, alternate=None, recall=None, quanta=None):
+    def _departure_packets(self, present, steering):
+        if not self.departure_coincidence:
+            return present, None
+        # A marked pulse occupies the same slot on the same sign rail when it arrives.
+        paired, rest = _steer_packet(present, steering)
+        packets = torch.stack((present, paired), dim=-1).flatten(-2)
+        return packets, (paired, rest)
+
+    def _current(self, residual, present, delayed, steering, start, alternate=None, recall=None, quanta=None, *,
+                 departure=None):
         if alternate is not None:
             # The last half of the phase interval opens the adjacent delay
             # only when a steering packet has actually fired.
@@ -505,6 +533,10 @@ class _DelayBlock(nn.Module):
             start = None
         if not self.steered:
             routes = (present, *_route_packets(present, delayed, self.route))
+        elif departure is not None:
+            delayed, marked = delayed.unflatten(-1, (-1, 2)).unbind(-1)
+            paired, _ = _steer_packet(marked, steering)
+            routes = departure + (paired, delayed - paired)
         elif self.balanced:
             routes = _balanced_steer(present, steering) + _balanced_steer(delayed, steering)
         else:
@@ -533,10 +565,11 @@ class _DelayBlock(nn.Module):
                 if shuffle_phase:
                     start = start.roll(1, dims=-1)
         present = self.relay(drive, quanta)
+        packets, departure = self._departure_packets(present, steering)
         alternate = None
         recall = None
         if self.selector is None:
-            groups = present.split(self.widths, dim=-1)
+            groups = packets.split(self.delay_widths, dim=-1)
             delayed_groups = [_lag(group, delay) for group, delay in zip(groups, self.local_delays)]
             if self.correction is not None:
                 recall = self.correction(spikes, correction_access)
@@ -548,7 +581,24 @@ class _DelayBlock(nn.Module):
                                        zip(groups, self.alternate_delays, strict=True)], dim=-1)
         else:
             delayed = self.selector(present, delay_limit)
-        return self.emit(self._current(spikes, present, delayed, steering, start, alternate, recall, quanta))
+        return self.emit(self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
+                                       departure=departure))
+
+    def _step_compact(self, packets, state, position):
+        # Recycle a packet's slot as soon as its fixed delay has elapsed.
+        batch = packets.shape[0]
+        if state.history is None:
+            state.history = packets.new_zeros(batch, sum(self.delay_sizes))
+        groups = packets.split(self.delay_widths, dim=-1)
+        previous = []
+        for storage, packet, delay in zip(state.history.split(self.delay_sizes, dim=-1),
+                                          groups, self.local_delays, strict=True):
+            slot = storage.reshape(batch, delay, packet.shape[-1])[:, position % delay]
+            previous.append(slot)
+        delayed = torch.cat(previous, dim=-1)
+        for slot, packet in zip(previous, groups, strict=True):
+            slot.copy_(packet)
+        return delayed
 
     def step(self, spikes, state, position):
         drive = self.expand(spikes)
@@ -561,33 +611,36 @@ class _DelayBlock(nn.Module):
             if self.phase_bits:
                 start = _steering_start(steer_drive, self.phase_bits, self.steer.cap)
         present, state.relay_phase = self.relay.step(drive, state.relay_phase, quanta)
-        ring_size = self.history_size
-        local_width = sum(self.local_widths)
-        if state.history is None:
-            state.history = present.new_zeros(present.shape[0], ring_size, local_width)
-        alternate = None
-        recall = None
-        if self.selector is None:
-            previous = []
-            neighbors = []
-            first = 0
-            for group, (width, delay) in enumerate(zip(self.local_widths, self.local_delays, strict=True)):
-                previous.append(state.history[:, (position - delay) % ring_size, first:first + width])
-                if self.alternate_delays:
-                    neighbor_at = (position - self.alternate_delays[group]) % ring_size
-                    neighbors.append(state.history[:, neighbor_at, first:first + width])
-                first += width
-            if self.correction is not None:
-                recall, state.correction = self.correction.step(spikes, state.correction)
-                if self.memory_residual is None:
-                    previous.append(recall)
-            delayed = torch.cat(previous, dim=-1)
-            if neighbors:
-                alternate = torch.cat(neighbors, dim=-1)
+        packets, departure = self._departure_packets(present, steering)
+        alternate = recall = None
+        if self.compact_delays:
+            delayed = self._step_compact(packets, state, position)
         else:
-            delayed = self.selector.step(state.history, position)
-        state.history[:, position % ring_size].copy_(present[:, :local_width])
-        current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta)
+            ring_size = self.history_size
+            local_width = sum(self.local_widths)
+            if state.history is None:
+                state.history = present.new_zeros(present.shape[0], ring_size, local_width)
+            if self.selector is None:
+                previous = []
+                neighbors = []
+                first = 0
+                for group, (width, delay) in enumerate(zip(self.local_widths, self.local_delays, strict=True)):
+                    previous.append(state.history[:, (position - delay) % ring_size, first:first + width])
+                    if self.alternate_delays:
+                        neighbor_at = (position - self.alternate_delays[group]) % ring_size
+                        neighbors.append(state.history[:, neighbor_at, first:first + width])
+                    first += width
+                if self.correction is not None:
+                    recall, state.correction = self.correction.step(spikes, state.correction)
+                    if self.memory_residual is None:
+                        previous.append(recall)
+                delayed = torch.cat(previous, dim=-1)
+                if neighbors:
+                    alternate = torch.cat(neighbors, dim=-1)
+            else:
+                delayed = self.selector.step(state.history, position)
+            state.history[:, position % ring_size].copy_(present[:, :local_width])
+        current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta, departure=departure)
         spikes, state.output_phase = self.emit.step(current, state.output_phase)
         return spikes
 
@@ -634,8 +687,19 @@ class EventLM(nn.Module):
         if cfg.learn_packet_thresholds and (cfg.carry or cfg.continuous or
                                             cfg.route not in ("steered", "steered_correction_code")):
             raise ValueError("learned packet thresholds need a reset-per-byte spike router")
+        if cfg.compact_delays and cfg.route not in ("steered", "steered_correction_code"):
+            raise ValueError("compact delays need a fixed steered delay schedule")
+        if cfg.departure_coincidence and (not cfg.compact_delays or cfg.carry or cfg.continuous):
+            raise ValueError("departure coincidence needs compact delays and reset-per-byte spike neurons")
         if not isinstance(cfg.resolution, int) or cfg.resolution < 1:
             raise ValueError("spike resolution must be a positive integer")
+        output_bits = 3
+        output_cap = _OUTPUT_CAP * cfg.resolution
+        if cfg.output_reference:
+            if cfg.carry or cfg.continuous or cfg.route not in ("steered", "steered_correction_code"):
+                raise ValueError("output reference needs a reset-per-byte spike router")
+            if _VOCAB * output_cap * (1 << output_bits) > _FP32_EXACT:
+                raise ValueError("pooled output charge would exceed the exact FP32 integer range")
         projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden
         cap = _HIDDEN_CAP * cfg.resolution
         # The additional read projection is bounded by one delay group's width.
@@ -661,9 +725,10 @@ class EventLM(nn.Module):
         self.blocks = nn.ModuleList(_DelayBlock(cfg, i) for i in range(cfg.depth))
         self.local_history = len(self.delayed_input) + sum(block.history_size for block in self.blocks)
         self.output = _Synapse(cfg.dim, _VOCAB, gain=0.8, continuous=cfg.continuous)
-        self.output_emit = _IntegrateFire(
-            _OUTPUT_CAP * cfg.resolution, charge_bits=3, carry=cfg.carry, continuous=cfg.continuous,
-        )
+        self.output_emit = _IntegrateFire(output_cap, output_bits, cfg.carry, continuous=cfg.continuous)
+        self.output_reference = None
+        if cfg.output_reference:
+            self.output_reference = _IntegrateFire(output_cap, output_bits + _VOCAB.bit_length() - 1, False)
         self.prediction_memory = None
         if cfg.route in _PREDICTION_ROUTES:
             width = self.blocks[-1].widths[-1] if cfg.memory_width is None else cfg.memory_width
@@ -697,6 +762,13 @@ class EventLM(nn.Module):
             cap = self.recall_emit.cap
             return (local_spikes + self.recall_emit(current)).clamp(-cap, cap)
         return self.recall_emit(local_spikes * _TICKS + current)
+
+    def _reference_counts(self, current):
+        if self.output_reference is None:
+            return None
+        limit = self.output_emit.threshold * self.output_emit.cap
+        pooled = current.clamp(-limit, limit).sum(-1, keepdim=True, dtype=current.dtype)
+        return self.output_reference(pooled)
 
     @torch.no_grad()
     def _check_accumulator(self):
@@ -751,7 +823,8 @@ class EventLM(nn.Module):
                 spikes, correction_access, observed=observed, prediction_code=prediction, pulse_counts=memory_pulses,
             )
             spikes = self._apply_recall(spikes, recall)
-        counts = self.output_emit(self.output(spikes))
+        current = self.output(spikes)
+        counts = self.output_emit(current, reference=self._reference_counts(current))
         if return_prediction:
             return counts, prediction, self.prediction_memory.observation_code(observed)
         return counts
@@ -820,7 +893,10 @@ class EventLM(nn.Module):
                 spikes, state.prediction_memory, observed=observed, prediction_code=self._prediction_code(spikes),
             )
             spikes = self._apply_recall(spikes, recall)
-        counts, state.output_phase = self.output_emit.step(self.output(spikes), state.output_phase)
+        current = self.output(spikes)
+        counts, state.output_phase = self.output_emit.step(
+            current, state.output_phase, reference=self._reference_counts(current),
+        )
         state.position += 1
         return counts, state
 

@@ -28,6 +28,8 @@ and the parent checkpoints for the paired router test.
 [Per-seed results and interventions](docs/SPIKE_CODE_FORECAST.md#learned-context-keys-and-firing-thresholds) ·
 [Browser report](docs/report.html#spiking-byte-lm)
 
+[Follow-up experiments on this branch](docs/SPIKE_ROUTER_FOLLOWUP.md)
+
 ## Current benchmark
 
 Three-seed means in bits per byte. Each model in this comparison has about
