@@ -33,6 +33,7 @@ VARIANTS: dict[str, SNNConfig] = {
     # this work
     "csa": SNNConfig(**_B, attn="csa", mlp="mlp"),  # attention only
     "ours": SNNConfig(**_B, attn="csa", mlp="cdglu"),  # full model
+    "ours_k4": SNNConfig(**_B, attn="csa", mlp="cdglu", csa_levels=4),  # graded attention spikes (CSA-4)
     # ablations
     "ours_nocomp": SNNConfig(**_B, attn="csa", mlp="cdglu", csa_compete=False),
     "ours_nonorm": SNNConfig(**_B, attn="csa", mlp="cdglu", csa_normalize=False),

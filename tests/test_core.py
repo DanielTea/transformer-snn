@@ -128,3 +128,19 @@ def test_causal_gradients_are_finite(attn):
     nn.functional.cross_entropy(m(idx).flatten(0, 1), idx.flatten()).backward()
     for name, p in m.named_parameters():
         assert p.grad is None or torch.isfinite(p.grad).all(), name
+
+
+def test_graded_csa_counts_and_bounds():
+    cfg = SNNConfig(attn="csa", csa_levels=4)
+    attn = CompetitiveShuntingAttention(32, 2, cfg, causal=True)
+    q, k, v = (torch.randint(0, 5, (1, 2, 2, 20, 16)).float() / 4 for _ in range(3))
+    y = attn.mix(q, k, v)
+    assert y.min() >= 0 and y.max() <= 1 + 1e-6  # still a weighted average of values in [0, 1]
+    # attention counts are integers in [0, K]
+    n = q.shape[-2]
+    scores = (q @ k.transpose(-2, -1)) / 4.0
+    kbar = k.cumsum(-2) / torch.arange(1, n + 1).float().unsqueeze(-1)
+    theta = attn.gamma * (q * kbar).sum(-1, keepdim=True) / 4.0 + attn.bias
+    from snnformer.neurons import integer_spike
+    a = integer_spike(((scores - theta) + 0.5) / 4, 4) * 4
+    assert torch.allclose(a, a.round()) and a.min() >= 0 and a.max() <= 4

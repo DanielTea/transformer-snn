@@ -17,14 +17,14 @@ from summarize import LABELS
 RESULTS = Path(__file__).resolve().parents[1] / "results"
 
 ROLE = {
-    "ours": "ours", "csa": "ours", "ours_nocomp": "ours", "ours_nonorm": "ours", "ours_binqk": "ours",
+    "ours": "ours", "ours_k4": "ours", "csa": "ours", "ours_nocomp": "ours", "ours_nonorm": "ours", "ours_binqk": "ours",
     "ours_nopbn": "ours",
     "spikformer": "prior", "ssa_norm": "prior", "sdt": "prior", "wta": "prior", "wta3": "prior",
     "spikformer_cdglu": "prior", "spikformer_nopbn": "prior",
     "ann": "ref", "spk_softmax": "ref",
 }
 SHORT = {
-    "ours": "ShuntFormer (CSA + CD-GLU)", "csa": "CSA + plain MLP", "ours_nocomp": "− competition",
+    "ours": "ShuntFormer (CSA + CD-GLU)", "ours_k4": "ShuntFormer-4 (graded CSA)", "csa": "CSA + plain MLP", "ours_nocomp": "− competition",
     "ours_nonorm": "− shunting normalisation", "ours_binqk": "binary Q/K", "ours_nopbn": "− residual pre-BN",
     "spikformer": "Spikformer SSA", "ssa_norm": "SSA ÷ #keys", "sdt": "Spike-driven SDSA",
     "wta": "WTA (hard, 2026)", "wta3": "WTA (top-3, 2026)", "spikformer_cdglu": "SSA + CD-GLU",
@@ -32,11 +32,11 @@ SHORT = {
 }
 
 
-def load(task):
+def load(task, tag=""):
     g = defaultdict(list)
     for f in sorted((RESULTS / task).glob("*.json")):
         r = json.loads(f.read_text())
-        if r["args"].get("tag"):
+        if r["args"].get("tag", "") != tag:
             continue
         if r["args"].get("train_frac", 1.0) != 1.0:
             continue
@@ -50,7 +50,11 @@ def agg(rs, key, scale=1.0):
 
 
 def build_data():
-    data = {"recall": [], "lm": [], "vision": []}
+    data = {"recall": [], "recall_long": [], "lm": [], "vision": []}
+    for v, rs in load("recall", "long").items():
+        a = agg(rs, "final_acc", 100)
+        data["recall_long"].append({"v": v, "label": SHORT.get(v, v), "role": ROLE.get(v, "ref"), **a,
+                                    "solved": sum(x > 90 for x in a["all"])})
     for v, rs in load("recall").items():
         a = agg(rs, "final_acc", 100)
         data["recall"].append({"v": v, "label": SHORT.get(v, v), "role": ROLE.get(v, "ref"), **a})

@@ -20,7 +20,7 @@ FIG = RESULTS / "figures"
 SURFACE, INK, INK2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"  # categorical slots 1-3
 CATEGORY = {  # colour follows the role of the variant, not its rank
-    "ours": BLUE, "csa": BLUE, "ours_nocomp": BLUE, "ours_nonorm": BLUE, "ours_binqk": BLUE, "ours_nopbn": BLUE,
+    "ours": BLUE, "ours_k4": BLUE, "csa": BLUE, "ours_nocomp": BLUE, "ours_nonorm": BLUE, "ours_binqk": BLUE, "ours_nopbn": BLUE,
     "spikformer": ORANGE, "ssa_norm": ORANGE, "sdt": ORANGE, "wta": ORANGE, "wta3": ORANGE,
     "spikformer_cdglu": ORANGE, "spikformer_nopbn": ORANGE,
     "ann": AQUA, "spk_softmax": AQUA,

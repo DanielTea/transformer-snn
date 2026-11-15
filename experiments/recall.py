@@ -15,6 +15,7 @@ import torch
 import torch.nn.functional as F
 
 from common import (
+    RESULTS,
     Timer,
     add_common_args,
     build_cfg,
@@ -65,9 +66,14 @@ def main():
     p.add_argument("--heads", type=int, default=2)
     p.add_argument("--steps", type=int, default=3000)
     p.add_argument("--bs", type=int, default=64)
+    p.add_argument("--force", action="store_true", help="re-run even if the result file exists")
     args = p.parse_args()
     setup(args)
     cfg = build_cfg(args)
+    out = RESULTS / "recall" / (run_name(args, cfg) + f"_P{args.pairs}.json")
+    if out.exists() and not args.force:
+        print(f"skip {out.name} (exists)")
+        return
     ctx = 2 * args.pairs + args.queries
     model = SpikingLM(cfg, vocab=2 * args.keys, dim=args.dim, depth=args.depth, heads=args.heads, ctx=ctx)
     opt = make_optimizer(model, args.lr, args.wd)

@@ -138,6 +138,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
     <div><b>Coincidence</b><span class="f">S<sub>ij</sub> = q<sub>i</sub>·k<sub>j</sub> / √d</span><span class="c">each q-spike adds a stored k-count</span></div>
     <div><b>Lateral inhibition</b><span class="f">θ<sub>i</sub> = γ<sub>h</sub>·q<sub>i</sub>·k̄ / √d + b<sub>h</sub></span><span class="c">O(N·d): the mean score equals q<sub>i</sub>·k̄; prefix mean when causal</span></div>
     <div><b>Competition</b><span class="f">a<sub>ij</sub> = H(S<sub>ij</sub> − θ<sub>i</sub>)</span><span class="c">binary attention map, surrogate gradient; winner count adapts per query</span></div>
+    <div><b>Graded variant (CSA-4)</b><span class="f">a<sub>ij</sub> = clamp(⌊(S<sub>ij</sub> − θ<sub>i</sub>)/δ<sub>h</sub>⌋ + 1, 0, 4)</span><span class="c">a key fires once more per δ it clears the threshold; values are weighted by spike count, still adds only</span></div>
     <div><b>Shunting</b><span class="f">y<sub>i</sub> = Σ<sub>j</sub> a<sub>ij</sub> v<sub>j</sub> / max(1, n<sub>i</sub>)</span><span class="c">division done by scaling the output neuron's threshold by n<sub>i</sub></span></div>
   </div>
   <p class="col">The output is the fraction of winning keys whose value neuron fired, so it stays bounded for every query, position and sequence length. That is what lets one block serve bidirectional vision and causal language. The MLP is a coincidence-gated unit (binary gate × integer value spikes, adopted from OST and SGSAFormer). Neurons are integer LIF with up to 4 spikes per step.</p>
@@ -171,6 +172,9 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
     <details><summary>Table view</summary><div class="tablewrap" id="tb-recall"></div></details>
   </figure>
   <p class="col">{{RECALL_TEXT}}</p>
+  <h3>With twice the training budget</h3>
+  <p class="col cap">The same task at 4,000 steps. Retrieval appears as a sudden phase transition at a random step, so a longer run shows which variants eventually get there.</p>
+  <div class="tablewrap" style="max-width:640px" id="tb-long"></div>
 </section>
 
 <section>
@@ -336,19 +340,22 @@ function renderAll() {
     barChart("ch-recall", rec, { max: 105, tick: 25, fmt: v => v.toFixed(1), fmtTick: t => t + "%", aria: "associative recall accuracy by variant",
       extra: r => [`${r.n} seed${r.n > 1 ? "s" : ""}: ${r.all.map(v => v.toFixed(1)).join(", ")}`] });
     table("tb-recall", [{ t: "variant", f: r => r.label }, { t: "accuracy %", num: 1, f: r => r.mean.toFixed(1) + (r.sd ? " ± " + r.sd.toFixed(1) : "") }, { t: "seeds", num: 1, f: r => r.all.map(v => v.toFixed(1)).join(" / ") }],
-      rec.slice().sort((a, b) => b.mean - a.mean).map(r => ({ ...r, _hl: r.v === "ours" })));
+      rec.slice().sort((a, b) => b.mean - a.mean).map(r => ({ ...r, _hl: r.v === "ours" || r.v === "ours_k4" })));
   }
+  const lg = DATA.recall_long;
+  if (lg.length) table("tb-long", [{ t: "variant", f: r => r.label }, { t: "seeds solved (>90%)", num: 1, f: r => `${r.solved} / ${r.n}` }, { t: "per seed %", num: 1, f: r => r.all.map(v => v.toFixed(1)).join(" / ") }],
+    lg.slice().sort((a, b) => b.solved - a.solved || b.mean - a.mean).map(r => ({ ...r, _hl: r.v === "ours" || r.v === "ours_k4" })));
   const lm = DATA.lm;
   if (lm.length) {
-    const order = ["ann", "spk_softmax", "ours", "wta", "spikformer", "sdt"];
-    const dash = { spk_softmax: "5 3", wta: "5 3", sdt: "1.5 3" };
+    const order = ["ann", "spk_softmax", "ours_k4", "ours", "wta", "spikformer", "sdt"];
+    const dash = { spk_softmax: "5 3", ours: "5 3", wta: "5 3", sdt: "1.5 3" };
     const ser = order.map(v => lm.find(s => s.v === v)).filter(Boolean).map(s => ({ ...s, dash: dash[s.v] }));
     legend("lg-lm", rolesOf(ser), true);
     lineChart("ch-lm", ser, { xLabel: "training tokens (millions)", ymax: 4.25, aria: "validation bits per byte against training tokens" });
     table("tb-lm", [{ t: "variant", f: r => r.label }, { t: "val bpb", num: 1, f: r => r.val.mean.toFixed(3) }, { t: "test bpb", num: 1, f: r => r.test.mean.toFixed(3) },
       { t: "firing rate", num: 1, f: r => r.role === "ref" && r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "est. energy / token", num: 1, f: r => r.energy_uJ.toFixed(2) + " µJ" },
       { t: "exp/div ops", num: 1, f: r => r.nonlin ? Math.round(r.nonlin).toLocaleString() : "0" }],
-      lm.slice().sort((a, b) => a.val.mean - b.val.mean).map(r => ({ ...r, _hl: r.v === "ours" })));
+      lm.slice().sort((a, b) => a.val.mean - b.val.mean).map(r => ({ ...r, _hl: r.v === "ours" || r.v === "ours_k4" })));
   }
   const vis = DATA.vision;
   if (vis.length) {
@@ -358,13 +365,13 @@ function renderAll() {
       extra: r => [`est. energy ${r.energy_uJ.toFixed(0)} µJ / image`, `firing rate ${r.fr.toFixed(3)}`] });
     table("tb-vision", [{ t: "variant", f: r => r.label }, { t: "test acc %", num: 1, f: r => r.mean.toFixed(2) }, { t: "params", num: 1, f: r => r.params.toLocaleString() },
       { t: "firing rate", num: 1, f: r => r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "est. energy / image", num: 1, f: r => r.energy_uJ.toFixed(0) + " µJ" }, { t: "acc. by epoch", num: 1, f: r => r.curve.map(v => v.toFixed(1)).join(" → ") }],
-      vis.slice().sort((a, b) => b.mean - a.mean).map(r => ({ ...r, _hl: r.v === "ours" })));
+      vis.slice().sort((a, b) => b.mean - a.mean).map(r => ({ ...r, _hl: r.v === "ours" || r.v === "ours_k4" })));
   }
   const strip = document.getElementById("strip"); strip.textContent = "";
   const item = (big, small, cap) => { const d = h("div", null, strip); const b = h("div", big, d, "big"); if (small) h("small", " " + small, b); h("div", cap, d, "cap"); };
   const bestPrior = (rows, key, lower) => rows.filter(r => r.role === "prior").sort((a, b) => lower ? key(a) - key(b) : key(b) - key(a))[0];
-  const ours = (rows) => rows.find(r => r.v === "ours");
-  if (ours(rec)) { const p = bestPrior(rec, r => r.mean); item(ours(rec).mean.toFixed(1) + "%", `vs ${p.mean.toFixed(1)}%`, `associative recall: ShuntFormer vs best prior spike-driven attention (${p.label})`); }
+  const ours = (rows) => rows.find(r => r.v === "ours_k4") || rows.find(r => r.v === "ours");
+  if (ours(rec)) { const p = bestPrior(rec, r => r.mean); item(ours(rec).mean.toFixed(1) + "%", `vs ${p.mean.toFixed(1)}%`, `associative recall, 3 seeds: ${ours(rec).label} vs best prior spike-driven attention (${p.label})`); }
   if (ours(lm)) { const p = bestPrior(lm, r => r.val.mean, true); item(ours(lm).val.mean.toFixed(2), `vs ${p.val.mean.toFixed(2)} bpb`, `enwik8 validation bits per byte vs best prior spike-driven attention (${p.label}); lower is better`); }
   if (ours(vis)) { const p = bestPrior(vis, r => r.mean); item(ours(vis).mean.toFixed(1) + "%", `vs ${p.mean.toFixed(1)}%`, `CIFAR-10 (small, 5 epochs) vs best prior spike-driven attention (${p.label})`); }
 }

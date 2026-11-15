@@ -20,6 +20,7 @@ LABELS = {
     "wta3": "WTA Spiking Transformer, top-3 (Zhou+ 2026)",
     "csa": "CSA attention + standard MLP (ours)",
     "ours": "**CSA + CD-GLU (ours, full)**",
+    "ours_k4": "**CSA-4 (graded attention spikes) + CD-GLU (ours)**",
     "ours_nocomp": "ours − competition (soft scores)",
     "ours_nonorm": "ours − shunting normalisation",
     "spikformer_cdglu": "Spikformer SSA + CD-GLU",
@@ -54,12 +55,14 @@ def table(task):
         return ""
     rows = []
     if task == "recall":
-        rows.append("| variant | neuron/T | pairs | params | accuracy (%) | seeds |")
+        rows.append("| variant | steps | params | accuracy (%) | per seed | seeds solved (>90%) |")
         rows.append("|---|---|---|---|---|---|")
-        for key in sorted(groups, key=lambda k: (k[4] or 0, ORDER.index(k[0]) if k[0] in ORDER else 99)):
+        for key in sorted(groups, key=lambda k: (k[3], ORDER.index(k[0]) if k[0] in ORDER else 99)):
             rs = groups[key]
-            rows.append(f"| {LABELS.get(key[0], key[0])} | {key[1]}/T{key[2]} | {key[4]} | {rs[0]['params']:,} | "
-                        f"{fmt([r['final_acc'] for r in rs], 100, 1)} | {len(rs)} |")
+            accs = [r["final_acc"] * 100 for r in rs]
+            rows.append(f"| {LABELS.get(key[0], key[0])} | {rs[0]['args']['steps']} | {rs[0]['params']:,} | "
+                        f"{fmt([a / 100 for a in accs], 100, 1)} | {' / '.join(f'{a:.1f}' for a in accs)} | "
+                        f"{sum(a > 90 for a in accs)}/{len(accs)} |")
     elif task == "lm":
         rows.append("| variant | neuron/T | params | val bpb | test bpb | firing rate | est. energy / token (µJ) | seeds |")
         rows.append("|---|---|---|---|---|---|---|---|")

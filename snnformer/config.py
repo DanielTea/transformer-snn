@@ -34,6 +34,7 @@ class SNNConfig:
     sel_alpha: float = 4.0  # surrogate sharpness of the attention-selection spikes
     csa_compete: bool = True  # ablation: False -> soft (score-weighted) selection
     csa_normalize: bool = True  # ablation: False -> no divisive normalisation
+    csa_levels: int = 1  # spikes per key on the attention map (1 = binary selection; K>1 = graded)
     pre_bn: bool = True  # BN on the residual stream before each block's input neuron (see InputNeuron)
 
     @property

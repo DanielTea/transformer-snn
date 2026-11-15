@@ -35,7 +35,7 @@ import torch
 import torch.nn as nn
 
 from .config import InputNeuron, SeqBN, SNNConfig, make_neuron
-from .neurons import heaviside
+from .neurons import heaviside, integer_spike
 from .ops import OpCounter
 
 
@@ -180,7 +180,10 @@ class CompetitiveShuntingAttention(SpikingAttentionBase):
        :math:`\bar k` is the mean key (prefix mean when causal).  Because
        :math:`\operatorname{mean}_j S_{ij} = q_i\cdot\bar k/\sqrt d`, this
        costs O(N d), not O(N^2).
-    3. *Competitive selection*: the attention map is itself a spike train,
+    3. *Competitive selection*: the attention map is itself a spike train
+       (binary by default; with ``csa_levels = K > 1`` each key emits up to K
+       spikes, one more per ``delta`` its score clears the threshold, so values
+       are weighted by spike count -- still accumulate-only),
        :math:`a_{ij} = H(S_{ij} - \theta_i)` (surrogate gradient) -- a key is
        attended iff its coincidence exceeds the inhibition: a k-WTA without
        softmax.
@@ -199,6 +202,8 @@ class CompetitiveShuntingAttention(SpikingAttentionBase):
         super().__init__(dim, heads, cfg, causal)
         self.gamma = nn.Parameter(torch.ones(heads, 1, 1))
         self.bias = nn.Parameter(torch.zeros(heads, 1, 1))
+        # graded selection (csa_levels K > 1): spacing of the K thresholds, per head
+        self.log_delta = nn.Parameter(torch.zeros(heads, 1, 1))
 
     def mix(self, q, k, v):
         cfg = self.cfg
@@ -212,7 +217,12 @@ class CompetitiveShuntingAttention(SpikingAttentionBase):
         mean_exc = (q * kbar).sum(-1, keepdim=True) * r  # [T,B,H,N,1]
         if cfg.csa_compete:
             theta = self.gamma * mean_exc + self.bias
-            a = heaviside(scores - theta, cfg.sel_alpha)
+            if cfg.csa_levels == 1:
+                a = heaviside(scores - theta, cfg.sel_alpha)
+            else:  # integer attention spikes: a key fires once more per delta above threshold, up to K
+                K = cfg.csa_levels
+                u = (scores - theta) / self.log_delta.exp()
+                a = integer_spike((u + 0.5) / K, K) * K
         else:  # ablation: soft, score-weighted selection (normalised linear attention)
             a = scores
         if self.causal:
@@ -226,7 +236,8 @@ class CompetitiveShuntingAttention(SpikingAttentionBase):
             c.spike_matmul(q, k.transpose(-2, -1), self.qk_unit)  # coincidence scores
             c.elementwise(float(c.spike_count(q, self.qk_unit)))  # q . kbar (accumulate kbar where q spikes)
             c.elementwise(float(a.numel()))  # threshold comparisons
-            c.spike_matmul(v.transpose(-2, -1), a.transpose(-2, -1))  # masked value accumulation
+            # value accumulation: every v-spike of key j is added a_ij times (a_ij in {0..K})
+            c.ac += float(((v / c.unit).sum(-1) * a.detach().sum(-2)).sum())
         return y
 
 
