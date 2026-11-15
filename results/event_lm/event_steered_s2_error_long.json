@@ -1,0 +1,93 @@
+{
+ "args": {
+  "variant": "event_steered",
+  "data": "/tmp/transformer-snn-data/enwik8",
+  "device": "mps",
+  "threads": 4,
+  "seed": 2,
+  "dim": 96,
+  "hidden": 201,
+  "memory_heads": 4,
+  "memory_slots": 16,
+  "spike_resolution": 16,
+  "depth": 3,
+  "no_carry": true,
+  "heads": 4,
+  "mlp_ratio": 4.703125,
+  "local_window": 32,
+  "local_lookback": null,
+  "ctx": 2048,
+  "bs": 2,
+  "steps": 1600,
+  "warmup": 80,
+  "lr": 0.003,
+  "wd": 0.05,
+  "eval_every": 400,
+  "eval_bs": 2,
+  "eval_batches": 16,
+  "final_eval_batches": 48,
+  "validation_only": false,
+  "tag": "error_long",
+  "checkpoint": "checkpoints/event_steered_error_long_s2.pt",
+  "force": false
+ },
+ "cfg": {
+  "dim": 96,
+  "hidden": 201,
+  "depth": 3,
+  "route": "steered",
+  "carry": false,
+  "continuous": false,
+  "memory_heads": 4,
+  "memory_slots": 16,
+  "resolution": 16
+ },
+ "device": "mps",
+ "params": 396480,
+ "data_sha1": "57b8363b814821dc9d47aa4d41f58733519076b2",
+ "train_target_bytes": 6553600,
+ "curve": [
+  {
+   "step": 400,
+   "tokens": 1638400,
+   "train_bpb": 2.7976342143486703,
+   "val_bpb": 2.8036849079713253,
+   "val_argmax_accuracy": 0.4628753662109375
+  },
+  {
+   "step": 800,
+   "tokens": 3276800,
+   "train_bpb": 2.945201520164391,
+   "val_bpb": 2.608013065809035,
+   "val_argmax_accuracy": 0.4977264404296875
+  },
+  {
+   "step": 1200,
+   "tokens": 4915200,
+   "train_bpb": 2.403182889514323,
+   "val_bpb": 2.4332161660899168,
+   "val_argmax_accuracy": 0.5257415771484375
+  },
+  {
+   "step": 1600,
+   "tokens": 6553600,
+   "train_bpb": 2.165098706792394,
+   "val_bpb": 2.3666039102512277,
+   "val_argmax_accuracy": 0.534881591796875
+  }
+ ],
+ "val_bpb": 2.40459877251727,
+ "test_bpb": 2.371366518312415,
+ "val": {
+  "bpb": 2.40459877251727,
+  "argmax_accuracy": 0.5301767985026041,
+  "target_bytes": 196608
+ },
+ "test": {
+  "bpb": 2.371366518312415,
+  "argmax_accuracy": 0.5476837158203125,
+  "target_bytes": 196608
+ },
+ "scoring": "normalized exponential of scaled output",
+ "seconds": 39.42412710189819
+}

@@ -1,0 +1,262 @@
+{
+  "system": "macOS-26.6.2-arm64-arm-64bit",
+  "dtype": "float32",
+  "threads": 1,
+  "interop_threads": 1,
+  "batch_size": 1,
+  "decode_steps": 128,
+  "warmups": 2,
+  "repeats": 5,
+  "prompt_file": "enwik8",
+  "prompt_offset": 95000000,
+  "prompt_seed": null,
+  "prompt_sha256": "84f55c2d15819e4ea54b4663de1417020ba4de6ed6214caa207e21a4e193d252",
+  "timing": "wall clock with device synchronization at phase boundaries, greedy argmax included in decode",
+  "rss_scope": "peak CPU resident bytes per checkpoint process, including imports, weights and all contexts",
+  "state_scope": "allocated tensor storage reachable from decoder state, excluding weights and temporary tensors",
+  "models": [
+    {
+      "checkpoint": "checkpoints/scale3m-transformer_local-s0.pt",
+      "run_name": "transformer_local_ann0_T1_s0_scale3m",
+      "variant": "local",
+      "parameters": 3216896,
+      "local_window": 32,
+      "successor_slots_per_order": null,
+      "successor_orders": null,
+      "device": "cpu",
+      "torch_version": "2.15.0",
+      "process_peak_rss_bytes": 243482624,
+      "contexts": [
+        {
+          "context_bytes": 32,
+          "sequential_prompt_ms": [
+            11.434833984822035,
+            11.333458998706192,
+            11.507583025377244,
+            11.275624972768128,
+            12.415291974321008
+          ],
+          "median_sequential_prompt_ms": 11.434833984822035,
+          "decode_ms_per_byte": [
+            0.3631572267295269,
+            0.3591923828025756,
+            0.3682509764075803,
+            0.3724163439073891,
+            0.3804772109106125
+          ],
+          "median_decode_ms_per_byte": 0.3682509764075803,
+          "state_bytes_after_prompt": 262144,
+          "state_bytes_after_decode": 262144
+        },
+        {
+          "context_bytes": 512,
+          "sequential_prompt_ms": [
+            182.17141699278727,
+            191.64258299861103,
+            182.72912496468052,
+            182.66816600225866,
+            180.8562080259435
+          ],
+          "median_sequential_prompt_ms": 182.66816600225866,
+          "decode_ms_per_byte": [
+            0.36047656249138527,
+            0.3861432342091575,
+            0.36207064067639294,
+            0.3556249998837302,
+            0.3529033206177701
+          ],
+          "median_decode_ms_per_byte": 0.36047656249138527,
+          "state_bytes_after_prompt": 262144,
+          "state_bytes_after_decode": 262144
+        },
+        {
+          "context_bytes": 1024,
+          "sequential_prompt_ms": [
+            362.19429201446474,
+            366.2195839569904,
+            363.60445799073204,
+            360.7068749843165,
+            375.90058404020965
+          ],
+          "median_sequential_prompt_ms": 363.60445799073204,
+          "decode_ms_per_byte": [
+            0.3645637966656068,
+            0.358918617166637,
+            0.36106347670283867,
+            0.3555631483322941,
+            0.38418359372371924
+          ],
+          "median_decode_ms_per_byte": 0.36106347670283867,
+          "state_bytes_after_prompt": 262144,
+          "state_bytes_after_decode": 262144
+        }
+      ]
+    },
+    {
+      "checkpoint": "checkpoints/scale3m-transformer_successor_continuous-s0.pt",
+      "run_name": "transformer_successor_continuous_ann0_T1_s0_scale3m",
+      "variant": "continuous",
+      "parameters": 3217137,
+      "local_window": 32,
+      "successor_slots_per_order": 2048,
+      "successor_orders": [
+        2,
+        3,
+        4,
+        5,
+        7
+      ],
+      "device": "cpu",
+      "torch_version": "2.15.0",
+      "process_peak_rss_bytes": 246956032,
+      "contexts": [
+        {
+          "context_bytes": 32,
+          "sequential_prompt_ms": [
+            16.494749987032264,
+            16.225332976318896,
+            15.759167028591037,
+            16.0853749839589,
+            15.387332998216152
+          ],
+          "median_sequential_prompt_ms": 16.0853749839589,
+          "decode_ms_per_byte": [
+            0.500534828461241,
+            0.4875979843745881,
+            0.496398765790218,
+            0.49193228915100917,
+            0.5207037734180631
+          ],
+          "median_decode_ms_per_byte": 0.496398765790218,
+          "state_bytes_after_prompt": 508032,
+          "state_bytes_after_decode": 508032
+        },
+        {
+          "context_bytes": 512,
+          "sequential_prompt_ms": [
+            251.0228749597445,
+            254.72366699250415,
+            251.65012496290728,
+            250.54375000763685,
+            256.39058399247006
+          ],
+          "median_sequential_prompt_ms": 251.65012496290728,
+          "decode_ms_per_byte": [
+            0.5171002576389583,
+            0.49538509347257786,
+            0.49696158566803206,
+            0.49964615664066514,
+            0.48575456230537384
+          ],
+          "median_decode_ms_per_byte": 0.49696158566803206,
+          "state_bytes_after_prompt": 508032,
+          "state_bytes_after_decode": 508032
+        },
+        {
+          "context_bytes": 1024,
+          "sequential_prompt_ms": [
+            537.5695000402629,
+            512.5207079690881,
+            513.6356250150129,
+            534.8619159776717,
+            512.211124994792
+          ],
+          "median_sequential_prompt_ms": 513.6356250150129,
+          "decode_ms_per_byte": [
+            0.5173841091163922,
+            0.5003821565878752,
+            0.49526496877660975,
+            0.5323531872818421,
+            0.4962041016369767
+          ],
+          "median_decode_ms_per_byte": 0.5003821565878752,
+          "state_bytes_after_prompt": 508032,
+          "state_bytes_after_decode": 508032
+        }
+      ]
+    },
+    {
+      "checkpoint": "checkpoints/scale3m-transformer_successor-s0.pt",
+      "run_name": "transformer_successor_ann0_T1_s0_scale3m",
+      "variant": "spike",
+      "parameters": 3217137,
+      "local_window": 32,
+      "successor_slots_per_order": 2048,
+      "successor_orders": [
+        2,
+        3,
+        4,
+        5,
+        7
+      ],
+      "device": "cpu",
+      "torch_version": "2.15.0",
+      "process_peak_rss_bytes": 245972992,
+      "contexts": [
+        {
+          "context_bytes": 32,
+          "sequential_prompt_ms": [
+            15.61979198595509,
+            16.60012500360608,
+            16.317958012223244,
+            15.746832999866456,
+            16.30729204043746
+          ],
+          "median_sequential_prompt_ms": 16.30729204043746,
+          "decode_ms_per_byte": [
+            0.4997441405976133,
+            0.508195312704629,
+            0.5153382185199007,
+            0.4980885469194618,
+            0.5045878906457801
+          ],
+          "median_decode_ms_per_byte": 0.5045878906457801,
+          "state_bytes_after_prompt": 508032,
+          "state_bytes_after_decode": 508032
+        },
+        {
+          "context_bytes": 512,
+          "sequential_prompt_ms": [
+            273.3201250084676,
+            282.6467079576105,
+            256.2077499460429,
+            256.1899580177851,
+            259.2032090178691
+          ],
+          "median_sequential_prompt_ms": 259.2032090178691,
+          "decode_ms_per_byte": [
+            0.5268414683996525,
+            0.5300240859469341,
+            0.4951445312144642,
+            0.5110078127472661,
+            0.5313489532454696
+          ],
+          "median_decode_ms_per_byte": 0.5268414683996525,
+          "state_bytes_after_prompt": 508032,
+          "state_bytes_after_decode": 508032
+        },
+        {
+          "context_bytes": 1024,
+          "sequential_prompt_ms": [
+            522.264291997999,
+            515.5631660018116,
+            515.4248329927213,
+            521.262708993163,
+            526.8470830051228
+          ],
+          "median_sequential_prompt_ms": 521.262708993163,
+          "decode_ms_per_byte": [
+            0.4958391955369734,
+            0.510810546529683,
+            0.4995927733943972,
+            0.4957571563863894,
+            0.5590810546891589
+          ],
+          "median_decode_ms_per_byte": 0.4995927733943972,
+          "state_bytes_after_prompt": 508032,
+          "state_bytes_after_decode": 508032
+        }
+      ]
+    }
+  ]
+}

@@ -16,7 +16,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from snnformer import SNNConfig, SpikingLM  # noqa: E402
+from snnformer import SNNConfig, SpikingLM, TemporalSpikingLM  # noqa: E402
 from snnformer.successor_lm import SuccessorDendriteLM  # noqa: E402
 from snnformer.transformer_reference import TransformerLM  # noqa: E402
 
@@ -25,13 +25,21 @@ RESULTS = Path(__file__).resolve().parents[1] / "results"
 # integer LIF, T=1 x D=4 (the "1x4" regime of E-SpikeFormer), saturating at 4 (spike unit 1)
 _B = dict(neuron="ilif", levels=4, T=1, v_th=4.0)
 _DENDRITE = dict(**_B, attn="dendritic", mlp="cdglu", causal_norm=True, position_embeddings=False)
+_SUCCESSOR = SNNConfig(neuron="ann", attn="transformer_successor", successor_scaled_votes=True)
+_TEMPORAL = SNNConfig(neuron="ilif", levels=8, v_th=8., attn="temporal_spike", mlp="mlp",
+                      causal_norm=True, position_embeddings=False)
+_PULSE = replace(_TEMPORAL, levels=32, v_th=32., temporal_carry=False, pulse_memory_cells=16)
+_PULSE_HOLD = replace(_PULSE, pulse_write_holds=(0,) * 12 + (128,) * 2 + (512,) * 2)
+_PULSE_TIMING = replace(_PULSE_HOLD, pulse_read_bins=4)
+_CHARGE = replace(_PULSE_TIMING, pulse_write_holds=(), charge_memory="conserved")
 VARIANTS: dict[str, SNNConfig] = {
     # references
     "ann": SNNConfig(neuron="ann", attn="softmax", mlp="mlp"),
     "transformer": SNNConfig(neuron="ann", attn="transformer"),
     "transformer_local": SNNConfig(neuron="ann", attn="transformer_local"),
     "transformer_event": SNNConfig(neuron="ann", attn="transformer_event"),
-    "transformer_successor": SNNConfig(neuron="ann", attn="transformer_successor", successor_scaled_votes=True),
+    "transformer_successor": _SUCCESSOR,
+    "transformer_successor_continuous": replace(_SUCCESSOR, successor_spikes=False),
     "spk_softmax": SNNConfig(**_B, attn="softmax", mlp="mlp"),  # spiking, but softmax (not spike-driven)
     # spike-driven baselines (same backbone, same neurons)
     "spikformer": SNNConfig(**_B, attn="ssa", mlp="mlp"),  # SSA == SDSA-3 of Meta-SpikeFormer
@@ -47,6 +55,17 @@ VARIANTS: dict[str, SNNConfig] = {
     "dendrite_relay": SNNConfig(**_DENDRITE, memory_relay=True),
     "dendrite_nodelay": SNNConfig(**_DENDRITE, memory_delay=0),
     "dendrite_event": replace(SNNConfig(**_DENDRITE), attn="dendritic_event", memory_delay=0),
+    "temporal_spike": _TEMPORAL,
+    "temporal_spike_reset": replace(_TEMPORAL, temporal_carry=False),
+    "temporal_pulse": _PULSE,
+    "temporal_pulse_erase": replace(_PULSE, pulse_preserve_reads=False),
+    "temporal_pulse_hold": _PULSE_HOLD,
+    "temporal_pulse_sparse": _PULSE,
+    "temporal_pulse_timing": _PULSE_TIMING,
+    "temporal_pulse_timing_fixed": replace(_PULSE_TIMING, pulse_fixed_cuts=True),
+    "temporal_pulse_timing_global": replace(_PULSE_TIMING, pulse_global_cuts=True),
+    "temporal_charge": _CHARGE,
+    "temporal_charge_independent": replace(_CHARGE, charge_memory="independent"),
     # ablations
     "ours_nocomp": SNNConfig(**_B, attn="csa", mlp="cdglu", csa_compete=False),
     "ours_nonorm": SNNConfig(**_B, attn="csa", mlp="cdglu", csa_normalize=False),
@@ -62,7 +81,7 @@ TRANSFORMER_MIXERS = {"transformer", "transformer_local", "transformer_event", "
 
 def add_common_args(p: argparse.ArgumentParser, *, vision: bool = False, bytes_only: bool = False) -> None:
     variants = [name for name, cfg in VARIANTS.items()
-                if (not vision or cfg.attn not in TRANSFORMER_MIXERS | {"dendritic_event"})
+                if (not vision or cfg.attn not in TRANSFORMER_MIXERS | {"dendritic_event", "temporal_spike"})
                 and (bytes_only or cfg.attn != "transformer_successor")]
     p.add_argument("--variant", default="ours", choices=sorted(variants))
     p.add_argument("--neuron", default=None, choices=["ilif", "lif", "ann", "relu", "relu1", "qrelu"])
@@ -91,6 +110,8 @@ def add_sequence_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--memory-delay", type=int, help="Dendrite lag on odd heads (unless set by the variant: 1)")
     p.add_argument("--local-window", type=int, help="local Transformer attention window")
     p.add_argument("--event-width", type=int, help="spike memory width inside the hybrid Transformer")
+    p.add_argument("--pulse-memory-cells", type=int, help="paired-pulse memory width in temporal_pulse")
+    p.add_argument("--pulse-write-holds", type=int, nargs="+", help="minimum write spacing per memory cell")
     p.add_argument("--mlp-ratio", type=float, help="feed-forward expansion for parameter-matched comparisons")
     p.add_argument("--checkpoint", help="path to save the trained model weights and configuration")
     p.add_argument("--force", action="store_true", help="overwrite existing result or checkpoint files")
@@ -100,14 +121,18 @@ def build_cfg(args) -> SNNConfig:
     cfg = VARIANTS[args.variant]
     overrides = ("neuron", "levels", "T", "v_th", "sel_alpha", "qk_levels", "softmax_temp_init",
                  "pre_bn", "causal_norm", "position_embeddings", "address_bits", "memory_block",
-                 "memory_delay", "local_window", "event_width", "mlp_ratio")
+                 "memory_delay", "local_window", "event_width", "mlp_ratio", "pulse_memory_cells")
     over = {k: getattr(args, k) for k in overrides if getattr(args, k, None) is not None}
     if cfg.neuron == "ann":
         over.pop("neuron", None)
+    if getattr(args, "pulse_write_holds", None) is not None:
+        over["pulse_write_holds"] = tuple(args.pulse_write_holds)
     return replace(cfg, **over)
 
 
 def make_lm(cfg: SNNConfig, **kwargs):
+    if cfg.attn == "temporal_spike":
+        return TemporalSpikingLM(cfg, **kwargs)
     if cfg.attn == "transformer_successor":
         return SuccessorDendriteLM(cfg, **kwargs)
     cls = TransformerLM if cfg.attn in TRANSFORMER_MIXERS else SpikingLM
@@ -170,8 +195,9 @@ def _atomic_output(path: Path, mode: str, overwrite: bool):
             os.link(staged, path)
 
 
-def save_result(task: str, name: str, payload: dict, *, overwrite: bool = True) -> Path:
-    path = RESULTS / task / f"{name}.json"
+def save_result(task: str, name: str, payload: dict, *, overwrite: bool = True,
+                directory: Path | None = None) -> Path:
+    path = (RESULTS / task if directory is None else directory) / f"{name}.json"
     with _atomic_output(path, "w", overwrite) as f:
         json.dump(payload, f, indent=1)
     return path
@@ -192,8 +218,8 @@ def save_checkpoint(path: Path, model, model_kwargs: dict, *, args, task: str, n
         torch.save(checkpoint, f)
 
 
-def result_exists(task: str, name: str, force: bool) -> bool:
-    path = RESULTS / task / f"{name}.json"
+def result_exists(task: str, name: str, force: bool, *, directory: Path | None = None) -> bool:
+    path = (RESULTS / task if directory is None else directory) / f"{name}.json"
     if path.exists() and not force:
         print(f"skip {path.name} (exists; use --tag for a new result or --force to overwrite)")
         return True

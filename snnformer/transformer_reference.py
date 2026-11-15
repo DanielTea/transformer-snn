@@ -186,7 +186,7 @@ class TransformerLM(nn.Module):
     variant adds a spiking memory to the same attention residual in each block.
     """
 
-    def __init__(self, cfg: SNNConfig, vocab=256, dim=128, depth=4, heads=4, ctx=128) -> None:
+    def __init__(self, cfg: SNNConfig, vocab=256, dim=128, depth=4, heads=4, ctx=128, *, local_windows=None) -> None:
         super().__init__()
         if heads < 1 or dim < 1 or dim % heads:
             raise ValueError("dim must be positive and divisible by the number of heads")
@@ -201,13 +201,18 @@ class TransformerLM(nn.Module):
         window = cfg.local_window if cfg.attn in ("transformer_local", "transformer_event", "transformer_successor") else None
         if window is not None and window < 1:
             raise ValueError("local_window must be positive")
+        if local_windows is not None and (
+            cfg.attn != "transformer_local" or len(local_windows) != depth or min(local_windows) < 1
+        ):
+            raise ValueError("local_windows needs one positive width per local Transformer layer")
+        windows = (window,) * depth if local_windows is None else local_windows
         if cfg.attn == "transformer_event":
             memory_cfg = replace(cfg, neuron="ilif", levels=4, v_th=4.0, T=1, causal_norm=True)
             self.blocks = nn.ModuleList(
                 _EventTransformerBlock(dim, heads, hidden, window, memory_cfg) for _ in range(depth)
             )
         else:
-            self.blocks = nn.ModuleList(_TransformerBlock(dim, heads, hidden, window) for _ in range(depth))
+            self.blocks = nn.ModuleList(_TransformerBlock(dim, heads, hidden, width) for width in windows)
         self.norm = nn.LayerNorm(dim)
         self.head = nn.Linear(dim, vocab, bias=False)
         self._init_weights(self.tok)

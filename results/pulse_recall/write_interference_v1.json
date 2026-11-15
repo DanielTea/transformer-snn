@@ -1,0 +1,4495 @@
+{
+  "args": {
+    "keys": 16,
+    "classes": 4,
+    "dim": 48,
+    "cells": 96,
+    "spike_cap": 32,
+    "holds": [
+      0,
+      4,
+      16,
+      64
+    ],
+    "train_max_gap": 16,
+    "eval_gaps": [
+      8,
+      32,
+      128,
+      512
+    ],
+    "steps": 800,
+    "bs": 32,
+    "eval_bs": 32,
+    "eval_samples": 512,
+    "warmup": 25,
+    "lr": 0.003,
+    "wd": 0.01,
+    "log_every": 200,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "eval_seed": 20261115,
+    "calibration_seed": 20261116,
+    "threads": 4,
+    "device": "cpu",
+    "no_rate_match": false
+  },
+  "device": "cpu",
+  "chance_accuracy": 0.25,
+  "write_holds": [
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64,
+    0,
+    4,
+    16,
+    64
+  ],
+  "gap_definition": "tokens between immediate and final focal queries; each complete pair writes and queries a rival",
+  "runs": [
+    {
+      "seed": 0,
+      "arms": {
+        "unrestricted": {
+          "params": 20452,
+          "training": {
+            "tokens": 307086,
+            "scored_targets": 147524,
+            "curve": [
+              {
+                "step": 200,
+                "train_loss": 0.39271172881126404
+              },
+              {
+                "step": 400,
+                "train_loss": 0.35434240102767944
+              },
+              {
+                "step": 600,
+                "train_loss": 0.2655307650566101
+              },
+              {
+                "step": 800,
+                "train_loss": 0.24312761425971985
+              }
+            ],
+            "seconds": 3.3667280673980713
+          },
+          "evaluation": [
+            {
+              "gap": 8,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 238,
+                  "samples": 274,
+                  "accuracy": 0.8686131386861314
+                },
+                "final_after_overwrite": {
+                  "correct": 105,
+                  "samples": 238,
+                  "accuracy": 0.4411764705882353
+                },
+                "final_without_overwrite": {
+                  "correct": 142,
+                  "samples": 274,
+                  "accuracy": 0.5182481751824818
+                },
+                "final": {
+                  "correct": 247,
+                  "samples": 512,
+                  "accuracy": 0.482421875
+                },
+                "rival_read": {
+                  "correct": 2048,
+                  "samples": 2048,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 3072,
+                "probe_events": 191459,
+                "write_events": 111754,
+                "read_spikes": 84771
+              }
+            },
+            {
+              "gap": 8,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 238,
+                  "samples": 274,
+                  "accuracy": 0.8686131386861314
+                },
+                "final_after_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 238,
+                  "samples": 274,
+                  "accuracy": 0.8686131386861314
+                },
+                "final": {
+                  "correct": 476,
+                  "samples": 512,
+                  "accuracy": 0.9296875
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 63872,
+                "write_events": 37150,
+                "read_spikes": 24144
+              }
+            },
+            {
+              "gap": 32,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 237,
+                  "samples": 266,
+                  "accuracy": 0.8909774436090225
+                },
+                "final_after_overwrite": {
+                  "correct": 62,
+                  "samples": 246,
+                  "accuracy": 0.25203252032520324
+                },
+                "final_without_overwrite": {
+                  "correct": 86,
+                  "samples": 266,
+                  "accuracy": 0.3233082706766917
+                },
+                "final": {
+                  "correct": 148,
+                  "samples": 512,
+                  "accuracy": 0.2890625
+                },
+                "rival_read": {
+                  "correct": 8191,
+                  "samples": 8192,
+                  "accuracy": 0.9998779296875
+                }
+              },
+              "events": {
+                "write_tokens": 9216,
+                "probe_events": 574167,
+                "write_events": 335340,
+                "read_spikes": 291762
+              }
+            },
+            {
+              "gap": 32,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 237,
+                  "samples": 266,
+                  "accuracy": 0.8909774436090225
+                },
+                "final_after_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 237,
+                  "samples": 266,
+                  "accuracy": 0.8909774436090225
+                },
+                "final": {
+                  "correct": 483,
+                  "samples": 512,
+                  "accuracy": 0.943359375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 63828,
+                "write_events": 37306,
+                "read_spikes": 24314
+              }
+            },
+            {
+              "gap": 128,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 230,
+                  "samples": 264,
+                  "accuracy": 0.8712121212121212
+                },
+                "final_after_overwrite": {
+                  "correct": 71,
+                  "samples": 248,
+                  "accuracy": 0.2862903225806452
+                },
+                "final_without_overwrite": {
+                  "correct": 54,
+                  "samples": 264,
+                  "accuracy": 0.20454545454545456
+                },
+                "final": {
+                  "correct": 125,
+                  "samples": 512,
+                  "accuracy": 0.244140625
+                },
+                "rival_read": {
+                  "correct": 32768,
+                  "samples": 32768,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 33792,
+                "probe_events": 2105669,
+                "write_events": 1229597,
+                "read_spikes": 1146474
+              }
+            },
+            {
+              "gap": 128,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 230,
+                  "samples": 264,
+                  "accuracy": 0.8712121212121212
+                },
+                "final_after_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 230,
+                  "samples": 264,
+                  "accuracy": 0.8712121212121212
+                },
+                "final": {
+                  "correct": 478,
+                  "samples": 512,
+                  "accuracy": 0.93359375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 63944,
+                "write_events": 37228,
+                "read_spikes": 24580
+              }
+            },
+            {
+              "gap": 512,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 218,
+                  "samples": 253,
+                  "accuracy": 0.8616600790513834
+                },
+                "final_after_overwrite": {
+                  "correct": 58,
+                  "samples": 259,
+                  "accuracy": 0.22393822393822393
+                },
+                "final_without_overwrite": {
+                  "correct": 47,
+                  "samples": 253,
+                  "accuracy": 0.1857707509881423
+                },
+                "final": {
+                  "correct": 105,
+                  "samples": 512,
+                  "accuracy": 0.205078125
+                },
+                "rival_read": {
+                  "correct": 131070,
+                  "samples": 131072,
+                  "accuracy": 0.9999847412109375
+                }
+              },
+              "events": {
+                "write_tokens": 132096,
+                "probe_events": 8230619,
+                "write_events": 4803767,
+                "read_spikes": 4599847
+              }
+            },
+            {
+              "gap": 512,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 218,
+                  "samples": 253,
+                  "accuracy": 0.8616600790513834
+                },
+                "final_after_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 218,
+                  "samples": 253,
+                  "accuracy": 0.8616600790513834
+                },
+                "final": {
+                  "correct": 477,
+                  "samples": 512,
+                  "accuracy": 0.931640625
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 63828,
+                "write_events": 37471,
+                "read_spikes": 24614
+              }
+            }
+          ]
+        },
+        "protected": {
+          "params": 20452,
+          "training": {
+            "tokens": 307086,
+            "scored_targets": 147524,
+            "curve": [
+              {
+                "step": 200,
+                "train_loss": 0.5366916656494141
+              },
+              {
+                "step": 400,
+                "train_loss": 0.34401291608810425
+              },
+              {
+                "step": 600,
+                "train_loss": 0.27908822894096375
+              },
+              {
+                "step": 800,
+                "train_loss": 0.23173396289348602
+              }
+            ],
+            "seconds": 3.980537176132202
+          },
+          "evaluation": [
+            {
+              "gap": 8,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 250,
+                  "samples": 274,
+                  "accuracy": 0.9124087591240876
+                },
+                "final_after_overwrite": {
+                  "correct": 85,
+                  "samples": 238,
+                  "accuracy": 0.35714285714285715
+                },
+                "final_without_overwrite": {
+                  "correct": 158,
+                  "samples": 274,
+                  "accuracy": 0.5766423357664233
+                },
+                "final": {
+                  "correct": 243,
+                  "samples": 512,
+                  "accuracy": 0.474609375
+                },
+                "rival_read": {
+                  "correct": 2046,
+                  "samples": 2048,
+                  "accuracy": 0.9990234375
+                }
+              },
+              "events": {
+                "write_tokens": 3072,
+                "probe_events": 169736,
+                "write_events": 75332,
+                "read_spikes": 77521,
+                "proposed_write_events": 116664,
+                "rejected_write_events": 41332,
+                "accepted_write_events": 75332
+              }
+            },
+            {
+              "gap": 8,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 250,
+                  "samples": 274,
+                  "accuracy": 0.9124087591240876
+                },
+                "final_after_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 250,
+                  "samples": 274,
+                  "accuracy": 0.9124087591240876
+                },
+                "final": {
+                  "correct": 488,
+                  "samples": 512,
+                  "accuracy": 0.953125
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56496,
+                "write_events": 31327,
+                "read_spikes": 23164,
+                "proposed_write_events": 38793,
+                "rejected_write_events": 7466,
+                "accepted_write_events": 31327
+              }
+            },
+            {
+              "gap": 32,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 235,
+                  "samples": 266,
+                  "accuracy": 0.8834586466165414
+                },
+                "final_after_overwrite": {
+                  "correct": 66,
+                  "samples": 246,
+                  "accuracy": 0.2682926829268293
+                },
+                "final_without_overwrite": {
+                  "correct": 110,
+                  "samples": 266,
+                  "accuracy": 0.41353383458646614
+                },
+                "final": {
+                  "correct": 176,
+                  "samples": 512,
+                  "accuracy": 0.34375
+                },
+                "rival_read": {
+                  "correct": 8184,
+                  "samples": 8192,
+                  "accuracy": 0.9990234375
+                }
+              },
+              "events": {
+                "write_tokens": 9216,
+                "probe_events": 508810,
+                "write_events": 204275,
+                "read_spikes": 258469,
+                "proposed_write_events": 349151,
+                "rejected_write_events": 144876,
+                "accepted_write_events": 204275
+              }
+            },
+            {
+              "gap": 32,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 235,
+                  "samples": 266,
+                  "accuracy": 0.8834586466165414
+                },
+                "final_after_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 235,
+                  "samples": 266,
+                  "accuracy": 0.8834586466165414
+                },
+                "final": {
+                  "correct": 481,
+                  "samples": 512,
+                  "accuracy": 0.939453125
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56438,
+                "write_events": 31284,
+                "read_spikes": 23204,
+                "proposed_write_events": 38712,
+                "rejected_write_events": 7428,
+                "accepted_write_events": 31284
+              }
+            },
+            {
+              "gap": 128,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 237,
+                  "samples": 264,
+                  "accuracy": 0.8977272727272727
+                },
+                "final_after_overwrite": {
+                  "correct": 69,
+                  "samples": 248,
+                  "accuracy": 0.2782258064516129
+                },
+                "final_without_overwrite": {
+                  "correct": 66,
+                  "samples": 264,
+                  "accuracy": 0.25
+                },
+                "final": {
+                  "correct": 135,
+                  "samples": 512,
+                  "accuracy": 0.263671875
+                },
+                "rival_read": {
+                  "correct": 32705,
+                  "samples": 32768,
+                  "accuracy": 0.998077392578125
+                }
+              },
+              "events": {
+                "write_tokens": 33792,
+                "probe_events": 1866399,
+                "write_events": 732669,
+                "read_spikes": 1005907,
+                "proposed_write_events": 1280678,
+                "rejected_write_events": 548009,
+                "accepted_write_events": 732669
+              }
+            },
+            {
+              "gap": 128,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 237,
+                  "samples": 264,
+                  "accuracy": 0.8977272727272727
+                },
+                "final_after_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 237,
+                  "samples": 264,
+                  "accuracy": 0.8977272727272727
+                },
+                "final": {
+                  "correct": 485,
+                  "samples": 512,
+                  "accuracy": 0.947265625
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56576,
+                "write_events": 31219,
+                "read_spikes": 23264,
+                "proposed_write_events": 38716,
+                "rejected_write_events": 7497,
+                "accepted_write_events": 31219
+              }
+            },
+            {
+              "gap": 512,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 219,
+                  "samples": 253,
+                  "accuracy": 0.8656126482213439
+                },
+                "final_after_overwrite": {
+                  "correct": 56,
+                  "samples": 259,
+                  "accuracy": 0.21621621621621623
+                },
+                "final_without_overwrite": {
+                  "correct": 59,
+                  "samples": 253,
+                  "accuracy": 0.233201581027668
+                },
+                "final": {
+                  "correct": 115,
+                  "samples": 512,
+                  "accuracy": 0.224609375
+                },
+                "rival_read": {
+                  "correct": 130773,
+                  "samples": 131072,
+                  "accuracy": 0.9977188110351562
+                }
+              },
+              "events": {
+                "write_tokens": 132096,
+                "probe_events": 7296913,
+                "write_events": 2848462,
+                "read_spikes": 4018959,
+                "proposed_write_events": 5005560,
+                "rejected_write_events": 2157098,
+                "accepted_write_events": 2848462
+              }
+            },
+            {
+              "gap": 512,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 219,
+                  "samples": 253,
+                  "accuracy": 0.8656126482213439
+                },
+                "final_after_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 219,
+                  "samples": 253,
+                  "accuracy": 0.8656126482213439
+                },
+                "final": {
+                  "correct": 478,
+                  "samples": 512,
+                  "accuracy": 0.93359375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56624,
+                "write_events": 31628,
+                "read_spikes": 23478,
+                "proposed_write_events": 39002,
+                "rejected_write_events": 7374,
+                "accepted_write_events": 31628
+              }
+            }
+          ]
+        },
+        "rate_matched": {
+          "calibration": {
+            "bias_shift": -2.3515625,
+            "matched_writes": 29613,
+            "target_writes": 29624,
+            "episodes": 128,
+            "gap": 16
+          },
+          "evaluation": [
+            {
+              "gap": 8,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 231,
+                  "samples": 238,
+                  "accuracy": 0.9705882352941176
+                },
+                "early_after_rival_write": {
+                  "correct": 201,
+                  "samples": 274,
+                  "accuracy": 0.7335766423357665
+                },
+                "final_after_overwrite": {
+                  "correct": 77,
+                  "samples": 238,
+                  "accuracy": 0.3235294117647059
+                },
+                "final_without_overwrite": {
+                  "correct": 93,
+                  "samples": 274,
+                  "accuracy": 0.33941605839416056
+                },
+                "final": {
+                  "correct": 170,
+                  "samples": 512,
+                  "accuracy": 0.33203125
+                },
+                "rival_read": {
+                  "correct": 2016,
+                  "samples": 2048,
+                  "accuracy": 0.984375
+                }
+              },
+              "events": {
+                "write_tokens": 3072,
+                "probe_events": 191459,
+                "write_events": 70800,
+                "read_spikes": 62974
+              }
+            },
+            {
+              "gap": 8,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 231,
+                  "samples": 238,
+                  "accuracy": 0.9705882352941176
+                },
+                "early_after_rival_write": {
+                  "correct": 201,
+                  "samples": 274,
+                  "accuracy": 0.7335766423357665
+                },
+                "final_after_overwrite": {
+                  "correct": 231,
+                  "samples": 238,
+                  "accuracy": 0.9705882352941176
+                },
+                "final_without_overwrite": {
+                  "correct": 201,
+                  "samples": 274,
+                  "accuracy": 0.7335766423357665
+                },
+                "final": {
+                  "correct": 432,
+                  "samples": 512,
+                  "accuracy": 0.84375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 63872,
+                "write_events": 23501,
+                "read_spikes": 16544
+              }
+            },
+            {
+              "gap": 32,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 240,
+                  "samples": 246,
+                  "accuracy": 0.975609756097561
+                },
+                "early_after_rival_write": {
+                  "correct": 188,
+                  "samples": 266,
+                  "accuracy": 0.706766917293233
+                },
+                "final_after_overwrite": {
+                  "correct": 55,
+                  "samples": 246,
+                  "accuracy": 0.22357723577235772
+                },
+                "final_without_overwrite": {
+                  "correct": 72,
+                  "samples": 266,
+                  "accuracy": 0.2706766917293233
+                },
+                "final": {
+                  "correct": 127,
+                  "samples": 512,
+                  "accuracy": 0.248046875
+                },
+                "rival_read": {
+                  "correct": 8004,
+                  "samples": 8192,
+                  "accuracy": 0.97705078125
+                }
+              },
+              "events": {
+                "write_tokens": 9216,
+                "probe_events": 574167,
+                "write_events": 212435,
+                "read_spikes": 227314
+              }
+            },
+            {
+              "gap": 32,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 240,
+                  "samples": 246,
+                  "accuracy": 0.975609756097561
+                },
+                "early_after_rival_write": {
+                  "correct": 188,
+                  "samples": 266,
+                  "accuracy": 0.706766917293233
+                },
+                "final_after_overwrite": {
+                  "correct": 240,
+                  "samples": 246,
+                  "accuracy": 0.975609756097561
+                },
+                "final_without_overwrite": {
+                  "correct": 188,
+                  "samples": 266,
+                  "accuracy": 0.706766917293233
+                },
+                "final": {
+                  "correct": 428,
+                  "samples": 512,
+                  "accuracy": 0.8359375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 63828,
+                "write_events": 23429,
+                "read_spikes": 16360
+              }
+            },
+            {
+              "gap": 128,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 240,
+                  "samples": 248,
+                  "accuracy": 0.967741935483871
+                },
+                "early_after_rival_write": {
+                  "correct": 187,
+                  "samples": 264,
+                  "accuracy": 0.7083333333333334
+                },
+                "final_after_overwrite": {
+                  "correct": 61,
+                  "samples": 248,
+                  "accuracy": 0.24596774193548387
+                },
+                "final_without_overwrite": {
+                  "correct": 51,
+                  "samples": 264,
+                  "accuracy": 0.19318181818181818
+                },
+                "final": {
+                  "correct": 112,
+                  "samples": 512,
+                  "accuracy": 0.21875
+                },
+                "rival_read": {
+                  "correct": 31852,
+                  "samples": 32768,
+                  "accuracy": 0.9720458984375
+                }
+              },
+              "events": {
+                "write_tokens": 33792,
+                "probe_events": 2105669,
+                "write_events": 779211,
+                "read_spikes": 953587
+              }
+            },
+            {
+              "gap": 128,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 240,
+                  "samples": 248,
+                  "accuracy": 0.967741935483871
+                },
+                "early_after_rival_write": {
+                  "correct": 187,
+                  "samples": 264,
+                  "accuracy": 0.7083333333333334
+                },
+                "final_after_overwrite": {
+                  "correct": 240,
+                  "samples": 248,
+                  "accuracy": 0.967741935483871
+                },
+                "final_without_overwrite": {
+                  "correct": 187,
+                  "samples": 264,
+                  "accuracy": 0.7083333333333334
+                },
+                "final": {
+                  "correct": 427,
+                  "samples": 512,
+                  "accuracy": 0.833984375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 63944,
+                "write_events": 23380,
+                "read_spikes": 16468
+              }
+            },
+            {
+              "gap": 512,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 252,
+                  "samples": 259,
+                  "accuracy": 0.972972972972973
+                },
+                "early_after_rival_write": {
+                  "correct": 178,
+                  "samples": 253,
+                  "accuracy": 0.7035573122529645
+                },
+                "final_after_overwrite": {
+                  "correct": 72,
+                  "samples": 259,
+                  "accuracy": 0.277992277992278
+                },
+                "final_without_overwrite": {
+                  "correct": 57,
+                  "samples": 253,
+                  "accuracy": 0.22529644268774704
+                },
+                "final": {
+                  "correct": 129,
+                  "samples": 512,
+                  "accuracy": 0.251953125
+                },
+                "rival_read": {
+                  "correct": 127102,
+                  "samples": 131072,
+                  "accuracy": 0.9697113037109375
+                }
+              },
+              "events": {
+                "write_tokens": 132096,
+                "probe_events": 8230619,
+                "write_events": 3042580,
+                "read_spikes": 3976073
+              }
+            },
+            {
+              "gap": 512,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 252,
+                  "samples": 259,
+                  "accuracy": 0.972972972972973
+                },
+                "early_after_rival_write": {
+                  "correct": 178,
+                  "samples": 253,
+                  "accuracy": 0.7035573122529645
+                },
+                "final_after_overwrite": {
+                  "correct": 252,
+                  "samples": 259,
+                  "accuracy": 0.972972972972973
+                },
+                "final_without_overwrite": {
+                  "correct": 178,
+                  "samples": 253,
+                  "accuracy": 0.7035573122529645
+                },
+                "final": {
+                  "correct": 430,
+                  "samples": 512,
+                  "accuracy": 0.83984375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 63828,
+                "write_events": 23584,
+                "read_spikes": 16512
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seed": 1,
+      "arms": {
+        "unrestricted": {
+          "params": 20452,
+          "training": {
+            "tokens": 308102,
+            "scored_targets": 148021,
+            "curve": [
+              {
+                "step": 200,
+                "train_loss": 0.44587332010269165
+              },
+              {
+                "step": 400,
+                "train_loss": 0.3142995238304138
+              },
+              {
+                "step": 600,
+                "train_loss": 0.2565227150917053
+              },
+              {
+                "step": 800,
+                "train_loss": 0.26810958981513977
+              }
+            ],
+            "seconds": 3.9049899578094482
+          },
+          "evaluation": [
+            {
+              "gap": 8,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 236,
+                  "samples": 274,
+                  "accuracy": 0.8613138686131386
+                },
+                "final_after_overwrite": {
+                  "correct": 87,
+                  "samples": 238,
+                  "accuracy": 0.36554621848739494
+                },
+                "final_without_overwrite": {
+                  "correct": 105,
+                  "samples": 274,
+                  "accuracy": 0.38321167883211676
+                },
+                "final": {
+                  "correct": 192,
+                  "samples": 512,
+                  "accuracy": 0.375
+                },
+                "rival_read": {
+                  "correct": 2048,
+                  "samples": 2048,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 3072,
+                "probe_events": 176855,
+                "write_events": 123273,
+                "read_spikes": 73290
+              }
+            },
+            {
+              "gap": 8,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 236,
+                  "samples": 274,
+                  "accuracy": 0.8613138686131386
+                },
+                "final_after_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 236,
+                  "samples": 274,
+                  "accuracy": 0.8613138686131386
+                },
+                "final": {
+                  "correct": 474,
+                  "samples": 512,
+                  "accuracy": 0.92578125
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 58984,
+                "write_events": 41106,
+                "read_spikes": 21228
+              }
+            },
+            {
+              "gap": 32,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 220,
+                  "samples": 266,
+                  "accuracy": 0.8270676691729323
+                },
+                "final_after_overwrite": {
+                  "correct": 75,
+                  "samples": 246,
+                  "accuracy": 0.3048780487804878
+                },
+                "final_without_overwrite": {
+                  "correct": 82,
+                  "samples": 266,
+                  "accuracy": 0.3082706766917293
+                },
+                "final": {
+                  "correct": 157,
+                  "samples": 512,
+                  "accuracy": 0.306640625
+                },
+                "rival_read": {
+                  "correct": 8192,
+                  "samples": 8192,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 9216,
+                "probe_events": 530281,
+                "write_events": 370807,
+                "read_spikes": 247817
+              }
+            },
+            {
+              "gap": 32,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 220,
+                  "samples": 266,
+                  "accuracy": 0.8270676691729323
+                },
+                "final_after_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 220,
+                  "samples": 266,
+                  "accuracy": 0.8270676691729323
+                },
+                "final": {
+                  "correct": 466,
+                  "samples": 512,
+                  "accuracy": 0.91015625
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 58962,
+                "write_events": 41211,
+                "read_spikes": 21030
+              }
+            },
+            {
+              "gap": 128,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 225,
+                  "samples": 264,
+                  "accuracy": 0.8522727272727273
+                },
+                "final_after_overwrite": {
+                  "correct": 73,
+                  "samples": 248,
+                  "accuracy": 0.29435483870967744
+                },
+                "final_without_overwrite": {
+                  "correct": 59,
+                  "samples": 264,
+                  "accuracy": 0.22348484848484848
+                },
+                "final": {
+                  "correct": 132,
+                  "samples": 512,
+                  "accuracy": 0.2578125
+                },
+                "rival_read": {
+                  "correct": 32768,
+                  "samples": 32768,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 33792,
+                "probe_events": 1942441,
+                "write_events": 1357734,
+                "read_spikes": 974867
+              }
+            },
+            {
+              "gap": 128,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 225,
+                  "samples": 264,
+                  "accuracy": 0.8522727272727273
+                },
+                "final_after_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 225,
+                  "samples": 264,
+                  "accuracy": 0.8522727272727273
+                },
+                "final": {
+                  "correct": 473,
+                  "samples": 512,
+                  "accuracy": 0.923828125
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 58898,
+                "write_events": 41023,
+                "read_spikes": 21284
+              }
+            },
+            {
+              "gap": 512,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 212,
+                  "samples": 253,
+                  "accuracy": 0.8379446640316206
+                },
+                "final_after_overwrite": {
+                  "correct": 47,
+                  "samples": 259,
+                  "accuracy": 0.18146718146718147
+                },
+                "final_without_overwrite": {
+                  "correct": 52,
+                  "samples": 253,
+                  "accuracy": 0.20553359683794467
+                },
+                "final": {
+                  "correct": 99,
+                  "samples": 512,
+                  "accuracy": 0.193359375
+                },
+                "rival_read": {
+                  "correct": 131072,
+                  "samples": 131072,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 132096,
+                "probe_events": 7593512,
+                "write_events": 5305251,
+                "read_spikes": 3912315
+              }
+            },
+            {
+              "gap": 512,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 212,
+                  "samples": 253,
+                  "accuracy": 0.8379446640316206
+                },
+                "final_after_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 212,
+                  "samples": 253,
+                  "accuracy": 0.8379446640316206
+                },
+                "final": {
+                  "correct": 471,
+                  "samples": 512,
+                  "accuracy": 0.919921875
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 58868,
+                "write_events": 40896,
+                "read_spikes": 21260
+              }
+            }
+          ]
+        },
+        "protected": {
+          "params": 20452,
+          "training": {
+            "tokens": 308102,
+            "scored_targets": 148021,
+            "curve": [
+              {
+                "step": 200,
+                "train_loss": 0.5342701077461243
+              },
+              {
+                "step": 400,
+                "train_loss": 0.3432474732398987
+              },
+              {
+                "step": 600,
+                "train_loss": 0.2536817789077759
+              },
+              {
+                "step": 800,
+                "train_loss": 0.3302302360534668
+              }
+            ],
+            "seconds": 4.7118120193481445
+          },
+          "evaluation": [
+            {
+              "gap": 8,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 231,
+                  "samples": 274,
+                  "accuracy": 0.843065693430657
+                },
+                "final_after_overwrite": {
+                  "correct": 70,
+                  "samples": 238,
+                  "accuracy": 0.29411764705882354
+                },
+                "final_without_overwrite": {
+                  "correct": 154,
+                  "samples": 274,
+                  "accuracy": 0.5620437956204379
+                },
+                "final": {
+                  "correct": 224,
+                  "samples": 512,
+                  "accuracy": 0.4375
+                },
+                "rival_read": {
+                  "correct": 2048,
+                  "samples": 2048,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 3072,
+                "probe_events": 167062,
+                "write_events": 90080,
+                "read_spikes": 72962,
+                "proposed_write_events": 140990,
+                "rejected_write_events": 50910,
+                "accepted_write_events": 90080
+              }
+            },
+            {
+              "gap": 8,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 231,
+                  "samples": 274,
+                  "accuracy": 0.843065693430657
+                },
+                "final_after_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 231,
+                  "samples": 274,
+                  "accuracy": 0.843065693430657
+                },
+                "final": {
+                  "correct": 469,
+                  "samples": 512,
+                  "accuracy": 0.916015625
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 55734,
+                "write_events": 36880,
+                "read_spikes": 22322,
+                "proposed_write_events": 46981,
+                "rejected_write_events": 10101,
+                "accepted_write_events": 36880
+              }
+            },
+            {
+              "gap": 32,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 213,
+                  "samples": 266,
+                  "accuracy": 0.8007518796992481
+                },
+                "final_after_overwrite": {
+                  "correct": 66,
+                  "samples": 246,
+                  "accuracy": 0.2682926829268293
+                },
+                "final_without_overwrite": {
+                  "correct": 103,
+                  "samples": 266,
+                  "accuracy": 0.38721804511278196
+                },
+                "final": {
+                  "correct": 169,
+                  "samples": 512,
+                  "accuracy": 0.330078125
+                },
+                "rival_read": {
+                  "correct": 8192,
+                  "samples": 8192,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 9216,
+                "probe_events": 500896,
+                "write_events": 247228,
+                "read_spikes": 237436,
+                "proposed_write_events": 424478,
+                "rejected_write_events": 177250,
+                "accepted_write_events": 247228
+              }
+            },
+            {
+              "gap": 32,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 213,
+                  "samples": 266,
+                  "accuracy": 0.8007518796992481
+                },
+                "final_after_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 213,
+                  "samples": 266,
+                  "accuracy": 0.8007518796992481
+                },
+                "final": {
+                  "correct": 459,
+                  "samples": 512,
+                  "accuracy": 0.896484375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 55674,
+                "write_events": 36886,
+                "read_spikes": 22276,
+                "proposed_write_events": 47217,
+                "rejected_write_events": 10331,
+                "accepted_write_events": 36886
+              }
+            },
+            {
+              "gap": 128,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 215,
+                  "samples": 264,
+                  "accuracy": 0.8143939393939394
+                },
+                "final_after_overwrite": {
+                  "correct": 67,
+                  "samples": 248,
+                  "accuracy": 0.2701612903225806
+                },
+                "final_without_overwrite": {
+                  "correct": 69,
+                  "samples": 264,
+                  "accuracy": 0.26136363636363635
+                },
+                "final": {
+                  "correct": 136,
+                  "samples": 512,
+                  "accuracy": 0.265625
+                },
+                "rival_read": {
+                  "correct": 32758,
+                  "samples": 32768,
+                  "accuracy": 0.99969482421875
+                }
+              },
+              "events": {
+                "write_tokens": 33792,
+                "probe_events": 1835346,
+                "write_events": 883474,
+                "read_spikes": 922275,
+                "proposed_write_events": 1554275,
+                "rejected_write_events": 670801,
+                "accepted_write_events": 883474
+              }
+            },
+            {
+              "gap": 128,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 215,
+                  "samples": 264,
+                  "accuracy": 0.8143939393939394
+                },
+                "final_after_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 215,
+                  "samples": 264,
+                  "accuracy": 0.8143939393939394
+                },
+                "final": {
+                  "correct": 463,
+                  "samples": 512,
+                  "accuracy": 0.904296875
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 55622,
+                "write_events": 37027,
+                "read_spikes": 22270,
+                "proposed_write_events": 47186,
+                "rejected_write_events": 10159,
+                "accepted_write_events": 37027
+              }
+            },
+            {
+              "gap": 512,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 195,
+                  "samples": 253,
+                  "accuracy": 0.7707509881422925
+                },
+                "final_after_overwrite": {
+                  "correct": 54,
+                  "samples": 259,
+                  "accuracy": 0.2084942084942085
+                },
+                "final_without_overwrite": {
+                  "correct": 55,
+                  "samples": 253,
+                  "accuracy": 0.21739130434782608
+                },
+                "final": {
+                  "correct": 109,
+                  "samples": 512,
+                  "accuracy": 0.212890625
+                },
+                "rival_read": {
+                  "correct": 131031,
+                  "samples": 131072,
+                  "accuracy": 0.9996871948242188
+                }
+              },
+              "events": {
+                "write_tokens": 132096,
+                "probe_events": 7173540,
+                "write_events": 3437578,
+                "read_spikes": 3682397,
+                "proposed_write_events": 6076777,
+                "rejected_write_events": 2639199,
+                "accepted_write_events": 3437578
+              }
+            },
+            {
+              "gap": 512,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 195,
+                  "samples": 253,
+                  "accuracy": 0.7707509881422925
+                },
+                "final_after_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 195,
+                  "samples": 253,
+                  "accuracy": 0.7707509881422925
+                },
+                "final": {
+                  "correct": 454,
+                  "samples": 512,
+                  "accuracy": 0.88671875
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 55578,
+                "write_events": 36848,
+                "read_spikes": 22194,
+                "proposed_write_events": 46944,
+                "rejected_write_events": 10096,
+                "accepted_write_events": 36848
+              }
+            }
+          ]
+        },
+        "rate_matched": {
+          "calibration": {
+            "bias_shift": -1.74609375,
+            "matched_writes": 35626,
+            "target_writes": 35645,
+            "episodes": 128,
+            "gap": 16
+          },
+          "evaluation": [
+            {
+              "gap": 8,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 229,
+                  "samples": 238,
+                  "accuracy": 0.9621848739495799
+                },
+                "early_after_rival_write": {
+                  "correct": 209,
+                  "samples": 274,
+                  "accuracy": 0.7627737226277372
+                },
+                "final_after_overwrite": {
+                  "correct": 86,
+                  "samples": 238,
+                  "accuracy": 0.36134453781512604
+                },
+                "final_without_overwrite": {
+                  "correct": 104,
+                  "samples": 274,
+                  "accuracy": 0.3795620437956204
+                },
+                "final": {
+                  "correct": 190,
+                  "samples": 512,
+                  "accuracy": 0.37109375
+                },
+                "rival_read": {
+                  "correct": 2039,
+                  "samples": 2048,
+                  "accuracy": 0.99560546875
+                }
+              },
+              "events": {
+                "write_tokens": 3072,
+                "probe_events": 176855,
+                "write_events": 84969,
+                "read_spikes": 62139
+              }
+            },
+            {
+              "gap": 8,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 229,
+                  "samples": 238,
+                  "accuracy": 0.9621848739495799
+                },
+                "early_after_rival_write": {
+                  "correct": 209,
+                  "samples": 274,
+                  "accuracy": 0.7627737226277372
+                },
+                "final_after_overwrite": {
+                  "correct": 229,
+                  "samples": 238,
+                  "accuracy": 0.9621848739495799
+                },
+                "final_without_overwrite": {
+                  "correct": 209,
+                  "samples": 274,
+                  "accuracy": 0.7627737226277372
+                },
+                "final": {
+                  "correct": 438,
+                  "samples": 512,
+                  "accuracy": 0.85546875
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 58984,
+                "write_events": 28272,
+                "read_spikes": 16906
+              }
+            },
+            {
+              "gap": 32,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 236,
+                  "samples": 246,
+                  "accuracy": 0.959349593495935
+                },
+                "early_after_rival_write": {
+                  "correct": 183,
+                  "samples": 266,
+                  "accuracy": 0.6879699248120301
+                },
+                "final_after_overwrite": {
+                  "correct": 62,
+                  "samples": 246,
+                  "accuracy": 0.25203252032520324
+                },
+                "final_without_overwrite": {
+                  "correct": 82,
+                  "samples": 266,
+                  "accuracy": 0.3082706766917293
+                },
+                "final": {
+                  "correct": 144,
+                  "samples": 512,
+                  "accuracy": 0.28125
+                },
+                "rival_read": {
+                  "correct": 8143,
+                  "samples": 8192,
+                  "accuracy": 0.9940185546875
+                }
+              },
+              "events": {
+                "write_tokens": 9216,
+                "probe_events": 530281,
+                "write_events": 256034,
+                "read_spikes": 219847
+              }
+            },
+            {
+              "gap": 32,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 236,
+                  "samples": 246,
+                  "accuracy": 0.959349593495935
+                },
+                "early_after_rival_write": {
+                  "correct": 183,
+                  "samples": 266,
+                  "accuracy": 0.6879699248120301
+                },
+                "final_after_overwrite": {
+                  "correct": 236,
+                  "samples": 246,
+                  "accuracy": 0.959349593495935
+                },
+                "final_without_overwrite": {
+                  "correct": 183,
+                  "samples": 266,
+                  "accuracy": 0.6879699248120301
+                },
+                "final": {
+                  "correct": 419,
+                  "samples": 512,
+                  "accuracy": 0.818359375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 58962,
+                "write_events": 28444,
+                "read_spikes": 16736
+              }
+            },
+            {
+              "gap": 128,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 248,
+                  "accuracy": 0.9596774193548387
+                },
+                "early_after_rival_write": {
+                  "correct": 191,
+                  "samples": 264,
+                  "accuracy": 0.7234848484848485
+                },
+                "final_after_overwrite": {
+                  "correct": 73,
+                  "samples": 248,
+                  "accuracy": 0.29435483870967744
+                },
+                "final_without_overwrite": {
+                  "correct": 78,
+                  "samples": 264,
+                  "accuracy": 0.29545454545454547
+                },
+                "final": {
+                  "correct": 151,
+                  "samples": 512,
+                  "accuracy": 0.294921875
+                },
+                "rival_read": {
+                  "correct": 32569,
+                  "samples": 32768,
+                  "accuracy": 0.993927001953125
+                }
+              },
+              "events": {
+                "write_tokens": 33792,
+                "probe_events": 1942441,
+                "write_events": 937884,
+                "read_spikes": 899400
+              }
+            },
+            {
+              "gap": 128,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 248,
+                  "accuracy": 0.9596774193548387
+                },
+                "early_after_rival_write": {
+                  "correct": 191,
+                  "samples": 264,
+                  "accuracy": 0.7234848484848485
+                },
+                "final_after_overwrite": {
+                  "correct": 238,
+                  "samples": 248,
+                  "accuracy": 0.9596774193548387
+                },
+                "final_without_overwrite": {
+                  "correct": 191,
+                  "samples": 264,
+                  "accuracy": 0.7234848484848485
+                },
+                "final": {
+                  "correct": 429,
+                  "samples": 512,
+                  "accuracy": 0.837890625
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 58898,
+                "write_events": 28244,
+                "read_spikes": 16886
+              }
+            },
+            {
+              "gap": 512,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 259,
+                  "accuracy": 0.9575289575289575
+                },
+                "early_after_rival_write": {
+                  "correct": 171,
+                  "samples": 253,
+                  "accuracy": 0.6758893280632411
+                },
+                "final_after_overwrite": {
+                  "correct": 45,
+                  "samples": 259,
+                  "accuracy": 0.17374517374517376
+                },
+                "final_without_overwrite": {
+                  "correct": 64,
+                  "samples": 253,
+                  "accuracy": 0.25296442687747034
+                },
+                "final": {
+                  "correct": 109,
+                  "samples": 512,
+                  "accuracy": 0.212890625
+                },
+                "rival_read": {
+                  "correct": 130199,
+                  "samples": 131072,
+                  "accuracy": 0.9933395385742188
+                }
+              },
+              "events": {
+                "write_tokens": 132096,
+                "probe_events": 7593512,
+                "write_events": 3661925,
+                "read_spikes": 3738616
+              }
+            },
+            {
+              "gap": 512,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 259,
+                  "accuracy": 0.9575289575289575
+                },
+                "early_after_rival_write": {
+                  "correct": 171,
+                  "samples": 253,
+                  "accuracy": 0.6758893280632411
+                },
+                "final_after_overwrite": {
+                  "correct": 248,
+                  "samples": 259,
+                  "accuracy": 0.9575289575289575
+                },
+                "final_without_overwrite": {
+                  "correct": 171,
+                  "samples": 253,
+                  "accuracy": 0.6758893280632411
+                },
+                "final": {
+                  "correct": 419,
+                  "samples": 512,
+                  "accuracy": 0.818359375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 58868,
+                "write_events": 28203,
+                "read_spikes": 16896
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seed": 2,
+      "arms": {
+        "unrestricted": {
+          "params": 20452,
+          "training": {
+            "tokens": 307447,
+            "scored_targets": 147696,
+            "curve": [
+              {
+                "step": 200,
+                "train_loss": 0.39728686213493347
+              },
+              {
+                "step": 400,
+                "train_loss": 0.24611051380634308
+              },
+              {
+                "step": 600,
+                "train_loss": 0.2678048014640808
+              },
+              {
+                "step": 800,
+                "train_loss": 0.2098436951637268
+              }
+            ],
+            "seconds": 3.884049892425537
+          },
+          "evaluation": [
+            {
+              "gap": 8,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 248,
+                  "samples": 274,
+                  "accuracy": 0.9051094890510949
+                },
+                "final_after_overwrite": {
+                  "correct": 103,
+                  "samples": 238,
+                  "accuracy": 0.4327731092436975
+                },
+                "final_without_overwrite": {
+                  "correct": 134,
+                  "samples": 274,
+                  "accuracy": 0.48905109489051096
+                },
+                "final": {
+                  "correct": 237,
+                  "samples": 512,
+                  "accuracy": 0.462890625
+                },
+                "rival_read": {
+                  "correct": 2048,
+                  "samples": 2048,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 3072,
+                "probe_events": 168988,
+                "write_events": 117856,
+                "read_spikes": 72154
+              }
+            },
+            {
+              "gap": 8,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 248,
+                  "samples": 274,
+                  "accuracy": 0.9051094890510949
+                },
+                "final_after_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 248,
+                  "samples": 274,
+                  "accuracy": 0.9051094890510949
+                },
+                "final": {
+                  "correct": 486,
+                  "samples": 512,
+                  "accuracy": 0.94921875
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56480,
+                "write_events": 39328,
+                "read_spikes": 20460
+              }
+            },
+            {
+              "gap": 32,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 253,
+                  "samples": 266,
+                  "accuracy": 0.9511278195488722
+                },
+                "final_after_overwrite": {
+                  "correct": 63,
+                  "samples": 246,
+                  "accuracy": 0.25609756097560976
+                },
+                "final_without_overwrite": {
+                  "correct": 79,
+                  "samples": 266,
+                  "accuracy": 0.29699248120300753
+                },
+                "final": {
+                  "correct": 142,
+                  "samples": 512,
+                  "accuracy": 0.27734375
+                },
+                "rival_read": {
+                  "correct": 8192,
+                  "samples": 8192,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 9216,
+                "probe_events": 506843,
+                "write_events": 353078,
+                "read_spikes": 246472
+              }
+            },
+            {
+              "gap": 32,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 253,
+                  "samples": 266,
+                  "accuracy": 0.9511278195488722
+                },
+                "final_after_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 253,
+                  "samples": 266,
+                  "accuracy": 0.9511278195488722
+                },
+                "final": {
+                  "correct": 499,
+                  "samples": 512,
+                  "accuracy": 0.974609375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56402,
+                "write_events": 39444,
+                "read_spikes": 20506
+              }
+            },
+            {
+              "gap": 128,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 244,
+                  "samples": 264,
+                  "accuracy": 0.9242424242424242
+                },
+                "final_after_overwrite": {
+                  "correct": 70,
+                  "samples": 248,
+                  "accuracy": 0.28225806451612906
+                },
+                "final_without_overwrite": {
+                  "correct": 68,
+                  "samples": 264,
+                  "accuracy": 0.25757575757575757
+                },
+                "final": {
+                  "correct": 138,
+                  "samples": 512,
+                  "accuracy": 0.26953125
+                },
+                "rival_read": {
+                  "correct": 32768,
+                  "samples": 32768,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 33792,
+                "probe_events": 1858559,
+                "write_events": 1295469,
+                "read_spikes": 977242
+              }
+            },
+            {
+              "gap": 128,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 244,
+                  "samples": 264,
+                  "accuracy": 0.9242424242424242
+                },
+                "final_after_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 244,
+                  "samples": 264,
+                  "accuracy": 0.9242424242424242
+                },
+                "final": {
+                  "correct": 492,
+                  "samples": 512,
+                  "accuracy": 0.9609375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56438,
+                "write_events": 39106,
+                "read_spikes": 20506
+              }
+            },
+            {
+              "gap": 512,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 232,
+                  "samples": 253,
+                  "accuracy": 0.9169960474308301
+                },
+                "final_after_overwrite": {
+                  "correct": 52,
+                  "samples": 259,
+                  "accuracy": 0.20077220077220076
+                },
+                "final_without_overwrite": {
+                  "correct": 48,
+                  "samples": 253,
+                  "accuracy": 0.18972332015810275
+                },
+                "final": {
+                  "correct": 100,
+                  "samples": 512,
+                  "accuracy": 0.1953125
+                },
+                "rival_read": {
+                  "correct": 131072,
+                  "samples": 131072,
+                  "accuracy": 1.0
+                }
+              },
+              "events": {
+                "write_tokens": 132096,
+                "probe_events": 7266129,
+                "write_events": 5065489,
+                "read_spikes": 3949394
+              }
+            },
+            {
+              "gap": 512,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 232,
+                  "samples": 253,
+                  "accuracy": 0.9169960474308301
+                },
+                "final_after_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 232,
+                  "samples": 253,
+                  "accuracy": 0.9169960474308301
+                },
+                "final": {
+                  "correct": 491,
+                  "samples": 512,
+                  "accuracy": 0.958984375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56182,
+                "write_events": 39359,
+                "read_spikes": 20700
+              }
+            }
+          ]
+        },
+        "protected": {
+          "params": 20452,
+          "training": {
+            "tokens": 307447,
+            "scored_targets": 147696,
+            "curve": [
+              {
+                "step": 200,
+                "train_loss": 0.4245413839817047
+              },
+              {
+                "step": 400,
+                "train_loss": 0.3448442220687866
+              },
+              {
+                "step": 600,
+                "train_loss": 0.29106059670448303
+              },
+              {
+                "step": 800,
+                "train_loss": 0.2873993217945099
+              }
+            ],
+            "seconds": 4.854679107666016
+          },
+          "evaluation": [
+            {
+              "gap": 8,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 251,
+                  "samples": 274,
+                  "accuracy": 0.916058394160584
+                },
+                "final_after_overwrite": {
+                  "correct": 78,
+                  "samples": 238,
+                  "accuracy": 0.3277310924369748
+                },
+                "final_without_overwrite": {
+                  "correct": 154,
+                  "samples": 274,
+                  "accuracy": 0.5620437956204379
+                },
+                "final": {
+                  "correct": 232,
+                  "samples": 512,
+                  "accuracy": 0.453125
+                },
+                "rival_read": {
+                  "correct": 2047,
+                  "samples": 2048,
+                  "accuracy": 0.99951171875
+                }
+              },
+              "events": {
+                "write_tokens": 3072,
+                "probe_events": 153535,
+                "write_events": 87370,
+                "read_spikes": 65043,
+                "proposed_write_events": 129415,
+                "rejected_write_events": 42045,
+                "accepted_write_events": 87370
+              }
+            },
+            {
+              "gap": 8,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 251,
+                  "samples": 274,
+                  "accuracy": 0.916058394160584
+                },
+                "final_after_overwrite": {
+                  "correct": 238,
+                  "samples": 238,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 251,
+                  "samples": 274,
+                  "accuracy": 0.916058394160584
+                },
+                "final": {
+                  "correct": 489,
+                  "samples": 512,
+                  "accuracy": 0.955078125
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 51318,
+                "write_events": 35133,
+                "read_spikes": 20394,
+                "proposed_write_events": 43133,
+                "rejected_write_events": 8000,
+                "accepted_write_events": 35133
+              }
+            },
+            {
+              "gap": 32,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 248,
+                  "samples": 266,
+                  "accuracy": 0.9323308270676691
+                },
+                "final_after_overwrite": {
+                  "correct": 69,
+                  "samples": 246,
+                  "accuracy": 0.2804878048780488
+                },
+                "final_without_overwrite": {
+                  "correct": 105,
+                  "samples": 266,
+                  "accuracy": 0.39473684210526316
+                },
+                "final": {
+                  "correct": 174,
+                  "samples": 512,
+                  "accuracy": 0.33984375
+                },
+                "rival_read": {
+                  "correct": 8187,
+                  "samples": 8192,
+                  "accuracy": 0.9993896484375
+                }
+              },
+              "events": {
+                "write_tokens": 9216,
+                "probe_events": 459838,
+                "write_events": 239307,
+                "read_spikes": 211766,
+                "proposed_write_events": 388199,
+                "rejected_write_events": 148892,
+                "accepted_write_events": 239307
+              }
+            },
+            {
+              "gap": 32,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 248,
+                  "samples": 266,
+                  "accuracy": 0.9323308270676691
+                },
+                "final_after_overwrite": {
+                  "correct": 246,
+                  "samples": 246,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 248,
+                  "samples": 266,
+                  "accuracy": 0.9323308270676691
+                },
+                "final": {
+                  "correct": 494,
+                  "samples": 512,
+                  "accuracy": 0.96484375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 51108,
+                "write_events": 35287,
+                "read_spikes": 20506,
+                "proposed_write_events": 43237,
+                "rejected_write_events": 7950,
+                "accepted_write_events": 35287
+              }
+            },
+            {
+              "gap": 128,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 246,
+                  "samples": 264,
+                  "accuracy": 0.9318181818181818
+                },
+                "final_after_overwrite": {
+                  "correct": 61,
+                  "samples": 248,
+                  "accuracy": 0.24596774193548387
+                },
+                "final_without_overwrite": {
+                  "correct": 61,
+                  "samples": 264,
+                  "accuracy": 0.23106060606060605
+                },
+                "final": {
+                  "correct": 122,
+                  "samples": 512,
+                  "accuracy": 0.23828125
+                },
+                "rival_read": {
+                  "correct": 32738,
+                  "samples": 32768,
+                  "accuracy": 0.99908447265625
+                }
+              },
+              "events": {
+                "write_tokens": 33792,
+                "probe_events": 1685544,
+                "write_events": 856360,
+                "read_spikes": 821471,
+                "proposed_write_events": 1423015,
+                "rejected_write_events": 566655,
+                "accepted_write_events": 856360
+              }
+            },
+            {
+              "gap": 128,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 246,
+                  "samples": 264,
+                  "accuracy": 0.9318181818181818
+                },
+                "final_after_overwrite": {
+                  "correct": 248,
+                  "samples": 248,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 246,
+                  "samples": 264,
+                  "accuracy": 0.9318181818181818
+                },
+                "final": {
+                  "correct": 494,
+                  "samples": 512,
+                  "accuracy": 0.96484375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 51056,
+                "write_events": 34949,
+                "read_spikes": 20236,
+                "proposed_write_events": 42887,
+                "rejected_write_events": 7938,
+                "accepted_write_events": 34949
+              }
+            },
+            {
+              "gap": 512,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 228,
+                  "samples": 253,
+                  "accuracy": 0.9011857707509882
+                },
+                "final_after_overwrite": {
+                  "correct": 46,
+                  "samples": 259,
+                  "accuracy": 0.1776061776061776
+                },
+                "final_without_overwrite": {
+                  "correct": 50,
+                  "samples": 253,
+                  "accuracy": 0.1976284584980237
+                },
+                "final": {
+                  "correct": 96,
+                  "samples": 512,
+                  "accuracy": 0.1875
+                },
+                "rival_read": {
+                  "correct": 130929,
+                  "samples": 131072,
+                  "accuracy": 0.9989089965820312
+                }
+              },
+              "events": {
+                "write_tokens": 132096,
+                "probe_events": 6587098,
+                "write_events": 3334061,
+                "read_spikes": 3274901,
+                "proposed_write_events": 5566212,
+                "rejected_write_events": 2232151,
+                "accepted_write_events": 3334061
+              }
+            },
+            {
+              "gap": 512,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "early_after_rival_write": {
+                  "correct": 228,
+                  "samples": 253,
+                  "accuracy": 0.9011857707509882
+                },
+                "final_after_overwrite": {
+                  "correct": 259,
+                  "samples": 259,
+                  "accuracy": 1.0
+                },
+                "final_without_overwrite": {
+                  "correct": 228,
+                  "samples": 253,
+                  "accuracy": 0.9011857707509882
+                },
+                "final": {
+                  "correct": 487,
+                  "samples": 512,
+                  "accuracy": 0.951171875
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 51112,
+                "write_events": 35102,
+                "read_spikes": 20526,
+                "proposed_write_events": 42963,
+                "rejected_write_events": 7861,
+                "accepted_write_events": 35102
+              }
+            }
+          ]
+        },
+        "rate_matched": {
+          "calibration": {
+            "bias_shift": -1.65234375,
+            "matched_writes": 34678,
+            "target_writes": 34704,
+            "episodes": 128,
+            "gap": 16
+          },
+          "evaluation": [
+            {
+              "gap": 8,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 226,
+                  "samples": 238,
+                  "accuracy": 0.9495798319327731
+                },
+                "early_after_rival_write": {
+                  "correct": 217,
+                  "samples": 274,
+                  "accuracy": 0.791970802919708
+                },
+                "final_after_overwrite": {
+                  "correct": 80,
+                  "samples": 238,
+                  "accuracy": 0.33613445378151263
+                },
+                "final_without_overwrite": {
+                  "correct": 122,
+                  "samples": 274,
+                  "accuracy": 0.44525547445255476
+                },
+                "final": {
+                  "correct": 202,
+                  "samples": 512,
+                  "accuracy": 0.39453125
+                },
+                "rival_read": {
+                  "correct": 2022,
+                  "samples": 2048,
+                  "accuracy": 0.9873046875
+                }
+              },
+              "events": {
+                "write_tokens": 3072,
+                "probe_events": 168988,
+                "write_events": 83473,
+                "read_spikes": 61000
+              }
+            },
+            {
+              "gap": 8,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 226,
+                  "samples": 238,
+                  "accuracy": 0.9495798319327731
+                },
+                "early_after_rival_write": {
+                  "correct": 217,
+                  "samples": 274,
+                  "accuracy": 0.791970802919708
+                },
+                "final_after_overwrite": {
+                  "correct": 226,
+                  "samples": 238,
+                  "accuracy": 0.9495798319327731
+                },
+                "final_without_overwrite": {
+                  "correct": 217,
+                  "samples": 274,
+                  "accuracy": 0.791970802919708
+                },
+                "final": {
+                  "correct": 443,
+                  "samples": 512,
+                  "accuracy": 0.865234375
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56480,
+                "write_events": 27825,
+                "read_spikes": 16294
+              }
+            },
+            {
+              "gap": 32,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 230,
+                  "samples": 246,
+                  "accuracy": 0.9349593495934959
+                },
+                "early_after_rival_write": {
+                  "correct": 234,
+                  "samples": 266,
+                  "accuracy": 0.8796992481203008
+                },
+                "final_after_overwrite": {
+                  "correct": 60,
+                  "samples": 246,
+                  "accuracy": 0.24390243902439024
+                },
+                "final_without_overwrite": {
+                  "correct": 90,
+                  "samples": 266,
+                  "accuracy": 0.3383458646616541
+                },
+                "final": {
+                  "correct": 150,
+                  "samples": 512,
+                  "accuracy": 0.29296875
+                },
+                "rival_read": {
+                  "correct": 8094,
+                  "samples": 8192,
+                  "accuracy": 0.988037109375
+                }
+              },
+              "events": {
+                "write_tokens": 9216,
+                "probe_events": 506843,
+                "write_events": 250254,
+                "read_spikes": 220381
+              }
+            },
+            {
+              "gap": 32,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 230,
+                  "samples": 246,
+                  "accuracy": 0.9349593495934959
+                },
+                "early_after_rival_write": {
+                  "correct": 234,
+                  "samples": 266,
+                  "accuracy": 0.8796992481203008
+                },
+                "final_after_overwrite": {
+                  "correct": 230,
+                  "samples": 246,
+                  "accuracy": 0.9349593495934959
+                },
+                "final_without_overwrite": {
+                  "correct": 234,
+                  "samples": 266,
+                  "accuracy": 0.8796992481203008
+                },
+                "final": {
+                  "correct": 464,
+                  "samples": 512,
+                  "accuracy": 0.90625
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56402,
+                "write_events": 27944,
+                "read_spikes": 16406
+              }
+            },
+            {
+              "gap": 128,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 243,
+                  "samples": 248,
+                  "accuracy": 0.9798387096774194
+                },
+                "early_after_rival_write": {
+                  "correct": 207,
+                  "samples": 264,
+                  "accuracy": 0.7840909090909091
+                },
+                "final_after_overwrite": {
+                  "correct": 78,
+                  "samples": 248,
+                  "accuracy": 0.31451612903225806
+                },
+                "final_without_overwrite": {
+                  "correct": 72,
+                  "samples": 264,
+                  "accuracy": 0.2727272727272727
+                },
+                "final": {
+                  "correct": 150,
+                  "samples": 512,
+                  "accuracy": 0.29296875
+                },
+                "rival_read": {
+                  "correct": 32421,
+                  "samples": 32768,
+                  "accuracy": 0.989410400390625
+                }
+              },
+              "events": {
+                "write_tokens": 33792,
+                "probe_events": 1858559,
+                "write_events": 917476,
+                "read_spikes": 930619
+              }
+            },
+            {
+              "gap": 128,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 243,
+                  "samples": 248,
+                  "accuracy": 0.9798387096774194
+                },
+                "early_after_rival_write": {
+                  "correct": 207,
+                  "samples": 264,
+                  "accuracy": 0.7840909090909091
+                },
+                "final_after_overwrite": {
+                  "correct": 243,
+                  "samples": 248,
+                  "accuracy": 0.9798387096774194
+                },
+                "final_without_overwrite": {
+                  "correct": 207,
+                  "samples": 264,
+                  "accuracy": 0.7840909090909091
+                },
+                "final": {
+                  "correct": 450,
+                  "samples": 512,
+                  "accuracy": 0.87890625
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56438,
+                "write_events": 27762,
+                "read_spikes": 16372
+              }
+            },
+            {
+              "gap": 512,
+              "competing": true,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 250,
+                  "samples": 259,
+                  "accuracy": 0.9652509652509652
+                },
+                "early_after_rival_write": {
+                  "correct": 204,
+                  "samples": 253,
+                  "accuracy": 0.8063241106719368
+                },
+                "final_after_overwrite": {
+                  "correct": 50,
+                  "samples": 259,
+                  "accuracy": 0.19305019305019305
+                },
+                "final_without_overwrite": {
+                  "correct": 58,
+                  "samples": 253,
+                  "accuracy": 0.22924901185770752
+                },
+                "final": {
+                  "correct": 108,
+                  "samples": 512,
+                  "accuracy": 0.2109375
+                },
+                "rival_read": {
+                  "correct": 129663,
+                  "samples": 131072,
+                  "accuracy": 0.9892501831054688
+                }
+              },
+              "events": {
+                "write_tokens": 132096,
+                "probe_events": 7266129,
+                "write_events": 3587739,
+                "read_spikes": 3899126
+              }
+            },
+            {
+              "gap": 512,
+              "competing": false,
+              "scores": {
+                "rapid_overwrite": {
+                  "correct": 250,
+                  "samples": 259,
+                  "accuracy": 0.9652509652509652
+                },
+                "early_after_rival_write": {
+                  "correct": 204,
+                  "samples": 253,
+                  "accuracy": 0.8063241106719368
+                },
+                "final_after_overwrite": {
+                  "correct": 250,
+                  "samples": 259,
+                  "accuracy": 0.9652509652509652
+                },
+                "final_without_overwrite": {
+                  "correct": 204,
+                  "samples": 253,
+                  "accuracy": 0.8063241106719368
+                },
+                "final": {
+                  "correct": 454,
+                  "samples": 512,
+                  "accuracy": 0.88671875
+                },
+                "rival_read": {
+                  "correct": 0,
+                  "samples": 0,
+                  "accuracy": null
+                }
+              },
+              "events": {
+                "write_tokens": 1024,
+                "probe_events": 56182,
+                "write_events": 27793,
+                "read_spikes": 16340
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "unrestricted": [
+      {
+        "gap": 8,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 714,
+            "samples": 714,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 722,
+            "samples": 822,
+            "accuracy": 0.878345498783455
+          },
+          "final_after_overwrite": {
+            "correct": 295,
+            "samples": 714,
+            "accuracy": 0.41316526610644255
+          },
+          "final_without_overwrite": {
+            "correct": 381,
+            "samples": 822,
+            "accuracy": 0.4635036496350365
+          },
+          "final": {
+            "correct": 676,
+            "samples": 1536,
+            "accuracy": 0.4401041666666667
+          },
+          "rival_read": {
+            "correct": 6144,
+            "samples": 6144,
+            "accuracy": 1.0
+          }
+        },
+        "events": {
+          "write_tokens": 9216,
+          "probe_events": 537302,
+          "write_events": 352883,
+          "read_spikes": 230215
+        },
+        "competing": true
+      },
+      {
+        "gap": 8,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 714,
+            "samples": 714,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 722,
+            "samples": 822,
+            "accuracy": 0.878345498783455
+          },
+          "final_after_overwrite": {
+            "correct": 714,
+            "samples": 714,
+            "accuracy": 1.0
+          },
+          "final_without_overwrite": {
+            "correct": 722,
+            "samples": 822,
+            "accuracy": 0.878345498783455
+          },
+          "final": {
+            "correct": 1436,
+            "samples": 1536,
+            "accuracy": 0.9348958333333334
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 179336,
+          "write_events": 117584,
+          "read_spikes": 65832
+        },
+        "competing": false
+      },
+      {
+        "gap": 32,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 738,
+            "samples": 738,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 710,
+            "samples": 798,
+            "accuracy": 0.8897243107769424
+          },
+          "final_after_overwrite": {
+            "correct": 200,
+            "samples": 738,
+            "accuracy": 0.27100271002710025
+          },
+          "final_without_overwrite": {
+            "correct": 247,
+            "samples": 798,
+            "accuracy": 0.30952380952380953
+          },
+          "final": {
+            "correct": 447,
+            "samples": 1536,
+            "accuracy": 0.291015625
+          },
+          "rival_read": {
+            "correct": 24575,
+            "samples": 24576,
+            "accuracy": 0.9999593098958334
+          }
+        },
+        "events": {
+          "write_tokens": 27648,
+          "probe_events": 1611291,
+          "write_events": 1059225,
+          "read_spikes": 786051
+        },
+        "competing": true
+      },
+      {
+        "gap": 32,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 738,
+            "samples": 738,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 710,
+            "samples": 798,
+            "accuracy": 0.8897243107769424
+          },
+          "final_after_overwrite": {
+            "correct": 738,
+            "samples": 738,
+            "accuracy": 1.0
+          },
+          "final_without_overwrite": {
+            "correct": 710,
+            "samples": 798,
+            "accuracy": 0.8897243107769424
+          },
+          "final": {
+            "correct": 1448,
+            "samples": 1536,
+            "accuracy": 0.9427083333333334
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 179192,
+          "write_events": 117961,
+          "read_spikes": 65850
+        },
+        "competing": false
+      },
+      {
+        "gap": 128,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 744,
+            "samples": 744,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 699,
+            "samples": 792,
+            "accuracy": 0.8825757575757576
+          },
+          "final_after_overwrite": {
+            "correct": 214,
+            "samples": 744,
+            "accuracy": 0.28763440860215056
+          },
+          "final_without_overwrite": {
+            "correct": 181,
+            "samples": 792,
+            "accuracy": 0.22853535353535354
+          },
+          "final": {
+            "correct": 395,
+            "samples": 1536,
+            "accuracy": 0.2571614583333333
+          },
+          "rival_read": {
+            "correct": 98304,
+            "samples": 98304,
+            "accuracy": 1.0
+          }
+        },
+        "events": {
+          "write_tokens": 101376,
+          "probe_events": 5906669,
+          "write_events": 3882800,
+          "read_spikes": 3098583
+        },
+        "competing": true
+      },
+      {
+        "gap": 128,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 744,
+            "samples": 744,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 699,
+            "samples": 792,
+            "accuracy": 0.8825757575757576
+          },
+          "final_after_overwrite": {
+            "correct": 744,
+            "samples": 744,
+            "accuracy": 1.0
+          },
+          "final_without_overwrite": {
+            "correct": 699,
+            "samples": 792,
+            "accuracy": 0.8825757575757576
+          },
+          "final": {
+            "correct": 1443,
+            "samples": 1536,
+            "accuracy": 0.939453125
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 179280,
+          "write_events": 117357,
+          "read_spikes": 66370
+        },
+        "competing": false
+      },
+      {
+        "gap": 512,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 777,
+            "samples": 777,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 662,
+            "samples": 759,
+            "accuracy": 0.8722002635046113
+          },
+          "final_after_overwrite": {
+            "correct": 157,
+            "samples": 777,
+            "accuracy": 0.20205920205920205
+          },
+          "final_without_overwrite": {
+            "correct": 147,
+            "samples": 759,
+            "accuracy": 0.19367588932806323
+          },
+          "final": {
+            "correct": 304,
+            "samples": 1536,
+            "accuracy": 0.19791666666666666
+          },
+          "rival_read": {
+            "correct": 393214,
+            "samples": 393216,
+            "accuracy": 0.9999949137369791
+          }
+        },
+        "events": {
+          "write_tokens": 396288,
+          "probe_events": 23090260,
+          "write_events": 15174507,
+          "read_spikes": 12461556
+        },
+        "competing": true
+      },
+      {
+        "gap": 512,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 777,
+            "samples": 777,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 662,
+            "samples": 759,
+            "accuracy": 0.8722002635046113
+          },
+          "final_after_overwrite": {
+            "correct": 777,
+            "samples": 777,
+            "accuracy": 1.0
+          },
+          "final_without_overwrite": {
+            "correct": 662,
+            "samples": 759,
+            "accuracy": 0.8722002635046113
+          },
+          "final": {
+            "correct": 1439,
+            "samples": 1536,
+            "accuracy": 0.9368489583333334
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 178878,
+          "write_events": 117726,
+          "read_spikes": 66574
+        },
+        "competing": false
+      }
+    ],
+    "protected": [
+      {
+        "gap": 8,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 714,
+            "samples": 714,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 732,
+            "samples": 822,
+            "accuracy": 0.8905109489051095
+          },
+          "final_after_overwrite": {
+            "correct": 233,
+            "samples": 714,
+            "accuracy": 0.32633053221288516
+          },
+          "final_without_overwrite": {
+            "correct": 466,
+            "samples": 822,
+            "accuracy": 0.5669099756690997
+          },
+          "final": {
+            "correct": 699,
+            "samples": 1536,
+            "accuracy": 0.455078125
+          },
+          "rival_read": {
+            "correct": 6141,
+            "samples": 6144,
+            "accuracy": 0.99951171875
+          }
+        },
+        "events": {
+          "write_tokens": 9216,
+          "probe_events": 490333,
+          "write_events": 252782,
+          "read_spikes": 215526,
+          "proposed_write_events": 387069,
+          "rejected_write_events": 134287,
+          "accepted_write_events": 252782
+        },
+        "competing": true
+      },
+      {
+        "gap": 8,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 714,
+            "samples": 714,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 732,
+            "samples": 822,
+            "accuracy": 0.8905109489051095
+          },
+          "final_after_overwrite": {
+            "correct": 714,
+            "samples": 714,
+            "accuracy": 1.0
+          },
+          "final_without_overwrite": {
+            "correct": 732,
+            "samples": 822,
+            "accuracy": 0.8905109489051095
+          },
+          "final": {
+            "correct": 1446,
+            "samples": 1536,
+            "accuracy": 0.94140625
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 163548,
+          "write_events": 103340,
+          "read_spikes": 65880,
+          "proposed_write_events": 128907,
+          "rejected_write_events": 25567,
+          "accepted_write_events": 103340
+        },
+        "competing": false
+      },
+      {
+        "gap": 32,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 738,
+            "samples": 738,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 696,
+            "samples": 798,
+            "accuracy": 0.8721804511278195
+          },
+          "final_after_overwrite": {
+            "correct": 201,
+            "samples": 738,
+            "accuracy": 0.27235772357723576
+          },
+          "final_without_overwrite": {
+            "correct": 318,
+            "samples": 798,
+            "accuracy": 0.39849624060150374
+          },
+          "final": {
+            "correct": 519,
+            "samples": 1536,
+            "accuracy": 0.337890625
+          },
+          "rival_read": {
+            "correct": 24563,
+            "samples": 24576,
+            "accuracy": 0.9994710286458334
+          }
+        },
+        "events": {
+          "write_tokens": 27648,
+          "probe_events": 1469544,
+          "write_events": 690810,
+          "read_spikes": 707671,
+          "proposed_write_events": 1161828,
+          "rejected_write_events": 471018,
+          "accepted_write_events": 690810
+        },
+        "competing": true
+      },
+      {
+        "gap": 32,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 738,
+            "samples": 738,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 696,
+            "samples": 798,
+            "accuracy": 0.8721804511278195
+          },
+          "final_after_overwrite": {
+            "correct": 738,
+            "samples": 738,
+            "accuracy": 1.0
+          },
+          "final_without_overwrite": {
+            "correct": 696,
+            "samples": 798,
+            "accuracy": 0.8721804511278195
+          },
+          "final": {
+            "correct": 1434,
+            "samples": 1536,
+            "accuracy": 0.93359375
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 163220,
+          "write_events": 103457,
+          "read_spikes": 65986,
+          "proposed_write_events": 129166,
+          "rejected_write_events": 25709,
+          "accepted_write_events": 103457
+        },
+        "competing": false
+      },
+      {
+        "gap": 128,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 744,
+            "samples": 744,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 698,
+            "samples": 792,
+            "accuracy": 0.8813131313131313
+          },
+          "final_after_overwrite": {
+            "correct": 197,
+            "samples": 744,
+            "accuracy": 0.2647849462365591
+          },
+          "final_without_overwrite": {
+            "correct": 196,
+            "samples": 792,
+            "accuracy": 0.2474747474747475
+          },
+          "final": {
+            "correct": 393,
+            "samples": 1536,
+            "accuracy": 0.255859375
+          },
+          "rival_read": {
+            "correct": 98201,
+            "samples": 98304,
+            "accuracy": 0.9989522298177084
+          }
+        },
+        "events": {
+          "write_tokens": 101376,
+          "probe_events": 5387289,
+          "write_events": 2472503,
+          "read_spikes": 2749653,
+          "proposed_write_events": 4257968,
+          "rejected_write_events": 1785465,
+          "accepted_write_events": 2472503
+        },
+        "competing": true
+      },
+      {
+        "gap": 128,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 744,
+            "samples": 744,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 698,
+            "samples": 792,
+            "accuracy": 0.8813131313131313
+          },
+          "final_after_overwrite": {
+            "correct": 744,
+            "samples": 744,
+            "accuracy": 1.0
+          },
+          "final_without_overwrite": {
+            "correct": 698,
+            "samples": 792,
+            "accuracy": 0.8813131313131313
+          },
+          "final": {
+            "correct": 1442,
+            "samples": 1536,
+            "accuracy": 0.9388020833333334
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 163254,
+          "write_events": 103195,
+          "read_spikes": 65770,
+          "proposed_write_events": 128789,
+          "rejected_write_events": 25594,
+          "accepted_write_events": 103195
+        },
+        "competing": false
+      },
+      {
+        "gap": 512,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 777,
+            "samples": 777,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 642,
+            "samples": 759,
+            "accuracy": 0.8458498023715415
+          },
+          "final_after_overwrite": {
+            "correct": 156,
+            "samples": 777,
+            "accuracy": 0.20077220077220076
+          },
+          "final_without_overwrite": {
+            "correct": 164,
+            "samples": 759,
+            "accuracy": 0.2160737812911726
+          },
+          "final": {
+            "correct": 320,
+            "samples": 1536,
+            "accuracy": 0.20833333333333334
+          },
+          "rival_read": {
+            "correct": 392733,
+            "samples": 393216,
+            "accuracy": 0.9987716674804688
+          }
+        },
+        "events": {
+          "write_tokens": 396288,
+          "probe_events": 21057551,
+          "write_events": 9620101,
+          "read_spikes": 10976257,
+          "proposed_write_events": 16648549,
+          "rejected_write_events": 7028448,
+          "accepted_write_events": 9620101
+        },
+        "competing": true
+      },
+      {
+        "gap": 512,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 777,
+            "samples": 777,
+            "accuracy": 1.0
+          },
+          "early_after_rival_write": {
+            "correct": 642,
+            "samples": 759,
+            "accuracy": 0.8458498023715415
+          },
+          "final_after_overwrite": {
+            "correct": 777,
+            "samples": 777,
+            "accuracy": 1.0
+          },
+          "final_without_overwrite": {
+            "correct": 642,
+            "samples": 759,
+            "accuracy": 0.8458498023715415
+          },
+          "final": {
+            "correct": 1419,
+            "samples": 1536,
+            "accuracy": 0.923828125
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 163314,
+          "write_events": 103578,
+          "read_spikes": 66198,
+          "proposed_write_events": 128909,
+          "rejected_write_events": 25331,
+          "accepted_write_events": 103578
+        },
+        "competing": false
+      }
+    ],
+    "rate_matched": [
+      {
+        "gap": 8,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 686,
+            "samples": 714,
+            "accuracy": 0.9607843137254902
+          },
+          "early_after_rival_write": {
+            "correct": 627,
+            "samples": 822,
+            "accuracy": 0.7627737226277372
+          },
+          "final_after_overwrite": {
+            "correct": 243,
+            "samples": 714,
+            "accuracy": 0.3403361344537815
+          },
+          "final_without_overwrite": {
+            "correct": 319,
+            "samples": 822,
+            "accuracy": 0.3880778588807786
+          },
+          "final": {
+            "correct": 562,
+            "samples": 1536,
+            "accuracy": 0.3658854166666667
+          },
+          "rival_read": {
+            "correct": 6077,
+            "samples": 6144,
+            "accuracy": 0.9890950520833334
+          }
+        },
+        "events": {
+          "write_tokens": 9216,
+          "probe_events": 537302,
+          "write_events": 239242,
+          "read_spikes": 186113
+        },
+        "competing": true
+      },
+      {
+        "gap": 8,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 686,
+            "samples": 714,
+            "accuracy": 0.9607843137254902
+          },
+          "early_after_rival_write": {
+            "correct": 627,
+            "samples": 822,
+            "accuracy": 0.7627737226277372
+          },
+          "final_after_overwrite": {
+            "correct": 686,
+            "samples": 714,
+            "accuracy": 0.9607843137254902
+          },
+          "final_without_overwrite": {
+            "correct": 627,
+            "samples": 822,
+            "accuracy": 0.7627737226277372
+          },
+          "final": {
+            "correct": 1313,
+            "samples": 1536,
+            "accuracy": 0.8548177083333334
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 179336,
+          "write_events": 79598,
+          "read_spikes": 49744
+        },
+        "competing": false
+      },
+      {
+        "gap": 32,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 706,
+            "samples": 738,
+            "accuracy": 0.9566395663956639
+          },
+          "early_after_rival_write": {
+            "correct": 605,
+            "samples": 798,
+            "accuracy": 0.7581453634085213
+          },
+          "final_after_overwrite": {
+            "correct": 177,
+            "samples": 738,
+            "accuracy": 0.23983739837398374
+          },
+          "final_without_overwrite": {
+            "correct": 244,
+            "samples": 798,
+            "accuracy": 0.3057644110275689
+          },
+          "final": {
+            "correct": 421,
+            "samples": 1536,
+            "accuracy": 0.2740885416666667
+          },
+          "rival_read": {
+            "correct": 24241,
+            "samples": 24576,
+            "accuracy": 0.9863688151041666
+          }
+        },
+        "events": {
+          "write_tokens": 27648,
+          "probe_events": 1611291,
+          "write_events": 718723,
+          "read_spikes": 667542
+        },
+        "competing": true
+      },
+      {
+        "gap": 32,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 706,
+            "samples": 738,
+            "accuracy": 0.9566395663956639
+          },
+          "early_after_rival_write": {
+            "correct": 605,
+            "samples": 798,
+            "accuracy": 0.7581453634085213
+          },
+          "final_after_overwrite": {
+            "correct": 706,
+            "samples": 738,
+            "accuracy": 0.9566395663956639
+          },
+          "final_without_overwrite": {
+            "correct": 605,
+            "samples": 798,
+            "accuracy": 0.7581453634085213
+          },
+          "final": {
+            "correct": 1311,
+            "samples": 1536,
+            "accuracy": 0.853515625
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 179192,
+          "write_events": 79817,
+          "read_spikes": 49502
+        },
+        "competing": false
+      },
+      {
+        "gap": 128,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 721,
+            "samples": 744,
+            "accuracy": 0.9690860215053764
+          },
+          "early_after_rival_write": {
+            "correct": 585,
+            "samples": 792,
+            "accuracy": 0.7386363636363636
+          },
+          "final_after_overwrite": {
+            "correct": 212,
+            "samples": 744,
+            "accuracy": 0.2849462365591398
+          },
+          "final_without_overwrite": {
+            "correct": 201,
+            "samples": 792,
+            "accuracy": 0.2537878787878788
+          },
+          "final": {
+            "correct": 413,
+            "samples": 1536,
+            "accuracy": 0.2688802083333333
+          },
+          "rival_read": {
+            "correct": 96842,
+            "samples": 98304,
+            "accuracy": 0.9851277669270834
+          }
+        },
+        "events": {
+          "write_tokens": 101376,
+          "probe_events": 5906669,
+          "write_events": 2634571,
+          "read_spikes": 2783606
+        },
+        "competing": true
+      },
+      {
+        "gap": 128,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 721,
+            "samples": 744,
+            "accuracy": 0.9690860215053764
+          },
+          "early_after_rival_write": {
+            "correct": 585,
+            "samples": 792,
+            "accuracy": 0.7386363636363636
+          },
+          "final_after_overwrite": {
+            "correct": 721,
+            "samples": 744,
+            "accuracy": 0.9690860215053764
+          },
+          "final_without_overwrite": {
+            "correct": 585,
+            "samples": 792,
+            "accuracy": 0.7386363636363636
+          },
+          "final": {
+            "correct": 1306,
+            "samples": 1536,
+            "accuracy": 0.8502604166666666
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 179280,
+          "write_events": 79386,
+          "read_spikes": 49726
+        },
+        "competing": false
+      },
+      {
+        "gap": 512,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 750,
+            "samples": 777,
+            "accuracy": 0.9652509652509652
+          },
+          "early_after_rival_write": {
+            "correct": 553,
+            "samples": 759,
+            "accuracy": 0.7285902503293807
+          },
+          "final_after_overwrite": {
+            "correct": 167,
+            "samples": 777,
+            "accuracy": 0.21492921492921493
+          },
+          "final_without_overwrite": {
+            "correct": 179,
+            "samples": 759,
+            "accuracy": 0.23583662714097497
+          },
+          "final": {
+            "correct": 346,
+            "samples": 1536,
+            "accuracy": 0.22526041666666666
+          },
+          "rival_read": {
+            "correct": 386964,
+            "samples": 393216,
+            "accuracy": 0.984100341796875
+          }
+        },
+        "events": {
+          "write_tokens": 396288,
+          "probe_events": 23090260,
+          "write_events": 10292244,
+          "read_spikes": 11613815
+        },
+        "competing": true
+      },
+      {
+        "gap": 512,
+        "scores": {
+          "rapid_overwrite": {
+            "correct": 750,
+            "samples": 777,
+            "accuracy": 0.9652509652509652
+          },
+          "early_after_rival_write": {
+            "correct": 553,
+            "samples": 759,
+            "accuracy": 0.7285902503293807
+          },
+          "final_after_overwrite": {
+            "correct": 750,
+            "samples": 777,
+            "accuracy": 0.9652509652509652
+          },
+          "final_without_overwrite": {
+            "correct": 553,
+            "samples": 759,
+            "accuracy": 0.7285902503293807
+          },
+          "final": {
+            "correct": 1303,
+            "samples": 1536,
+            "accuracy": 0.8483072916666666
+          },
+          "rival_read": {
+            "correct": 0,
+            "samples": 0,
+            "accuracy": null
+          }
+        },
+        "events": {
+          "write_tokens": 3072,
+          "probe_events": 178878,
+          "write_events": 79580,
+          "read_spikes": 49748
+        },
+        "competing": false
+      }
+    ]
+  }
+}

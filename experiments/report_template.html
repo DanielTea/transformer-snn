@@ -99,9 +99,23 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <div class="eyebrow">Spiking transformer research · November 2026</div>
   <h1>ShuntFormer</h1>
   <p class="deck">A spike-driven transformer that uses lateral and shunting inhibition for attention. The Dendrite follow-up tests address memory for variable-distance recall and a spike readout for next-byte prediction.</p>
+  <p class="col callout"><strong>Benchmark scope</strong> Next-byte prediction uses held-out real text from enwik8 and PG-19. Associative recall uses generated sequences. PyTorch runs the models on CPUs and Apple GPUs (Metal/MPS), including the simulation of spike dynamics. Energy estimates come from operation counts and assumed costs.</p>
   <canvas id="raster" aria-hidden="true"></canvas>
   <div class="strip" id="strip"></div>
 </header>
+
+<section id="spiking-byte-lm">
+  <h2>Spiking byte language models</h2>
+  <p class="col">Integer spike decoders and matched Transformer references were trained on enwik8 at two sizes. The tables show three-seed mean bits per byte on the complete enwik8 test split and 16 complete PG-19 books. Full attention uses up to 512 bytes per evaluation window. State is persistent tensor storage per stream, including the FP32 keys and values for the full-attention reference.</p>
+  <!-- EVENT_LM_TABLES -->
+  <figure>
+    <a href="../results/figures/event_lm_loss.png"><img src="../results/figures/event_lm_loss.png" alt="Next-byte loss by model, size, and test corpus across three seeds" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
+  </figure>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm/README.md">Model, architecture and training handoff</a> · <a href="SPIKE_CODE_FORECAST.md#learned-context-keys-and-firing-thresholds">Interventions and per-seed records</a></p>
+</section>
 
 <section id="dendrite">
   <h2>Dendrite benchmark update</h2>
@@ -109,7 +123,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/dendrite_recall_distance.png"><img src="../results/figures/dendrite_recall_distance.png" alt="Recall accuracy by distractor gap, with a separate fixed-position probe" loading="lazy"></a>
   </figure>
-  <p class="col">The successor model uses an exact byte-suffix cache and a learned spike readout. The continuous evaluation compares the local Transformer, the same checkpoint with a calibrated readout, and a successor model trained from scratch at the local control’s byte budget. Each language model comparison uses one seed. Scores are bits per byte, with lower values indicating better next-byte predictions.</p>
+  <p class="col">The successor model uses a conventional local Transformer backbone with an exact byte-suffix cache and a learned spike readout. The continuous evaluation compares that backbone alone, the same checkpoint with a calibrated readout, and a successor model trained from scratch at the local control’s byte budget. Each language model comparison uses one seed. Scores are bits per byte, with lower values indicating better next-byte predictions. The separate <a href="TEMPORAL_SNN.md">Temporal Spiking LM</a> evaluates a spiking hidden backbone.</p>
   <div class="tablewrap"><table>
     <thead><tr><th scope="col">Test stream</th><th scope="col" class="num">Target bytes</th><th scope="col" class="num">Local control</th><th scope="col" class="num">Calibrated readout</th><th scope="col" class="num">Successor, from scratch</th></tr></thead>
     <tbody>
@@ -125,7 +139,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section>
   <div class="eyebrow">Original ShuntFormer experiments</div>
-  <h2>Did we surpass the state of the art?</h2>
+  <h2>Results in the original benchmark suite</h2>
   <div class="col" style="display:grid;gap:12px">
     <p>{{VERDICT}}</p>
     <p>The original ShuntFormer experiments used a four-core CPU and small-scale datasets. Their comparisons matched neurons, parameter count, data, and training steps while varying the attention or MLP.</p>
@@ -134,7 +148,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section>
   <div class="eyebrow">Where the field stands</div>
-  <h2>Best published spiking transformers</h2>
+  <h2>Published spiking-transformer reference points</h2>
   <p class="col">Numbers verified against the papers by a literature survey. Several headline results need a caveat before they can serve as a target.</p>
   <div class="tablewrap"><table>
     <thead><tr><th>model</th><th>venue</th><th class="num">ImageNet top-1</th><th>setting</th><th>caveat</th></tr></thead>
@@ -154,15 +168,15 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 <section>
   <div class="eyebrow">The design</div>
   <h2>Competitive Shunting Attention</h2>
-  <p class="col">Per head, Q, K and V are integer spike tensors. Every step uses accumulates and comparisons only. K and V live in the cache as spike counts, and Q spikes stream in.</p>
+  <p class="col">Per head, Q, K and V represent integer spike counts. PyTorch computes the scores and weighted sums with dense tensor operations.</p>
   <div class="steps">
     <div><b>Coincidence</b><span class="f">S<sub>ij</sub> = q<sub>i</sub>·k<sub>j</sub> / √d</span><span class="c">each q-spike adds a stored k-count</span></div>
     <div><b>Lateral inhibition</b><span class="f">θ<sub>i</sub> = γ<sub>h</sub>·q<sub>i</sub>·k̄ / √d + b<sub>h</sub></span><span class="c">O(N·d): the mean score equals q<sub>i</sub>·k̄; prefix mean when causal</span></div>
     <div><b>Competition</b><span class="f">a<sub>ij</sub> = H(S<sub>ij</sub> − θ<sub>i</sub>)</span><span class="c">binary attention map, surrogate gradient; winner count adapts per query</span></div>
-    <div><b>Graded variant (CSA-4)</b><span class="f">a<sub>ij</sub> = clamp(⌊(S<sub>ij</sub> − θ<sub>i</sub>)/δ<sub>h</sub>⌋ + 1, 0, 4)</span><span class="c">a key fires once more per δ it clears the threshold; values are weighted by spike count, still adds only</span></div>
-    <div><b>Shunting</b><span class="f">y<sub>i</sub> = Σ<sub>j</sub> a<sub>ij</sub> v<sub>j</sub> / max(1, n<sub>i</sub>)</span><span class="c">division done by scaling the output neuron's threshold by n<sub>i</sub></span></div>
+    <div><b>Graded variant (CSA-4)</b><span class="f">a<sub>ij</sub> = clamp(⌊(S<sub>ij</sub> − θ<sub>i</sub>)/δ<sub>h</sub>⌋ + 1, 0, 4)</span><span class="c">each additional threshold crossing adds one unit to a key's value weight</span></div>
+    <div><b>Shunting</b><span class="f">y<sub>i</sub> = Σ<sub>j</sub> a<sub>ij</sub> v<sub>j</sub> / max(1, n<sub>i</sub>)</span><span class="c">PyTorch divides the pooled values by the sum n<sub>i</sub> of their spike weights</span></div>
   </div>
-  <p class="col">The output is the fraction of winning keys whose value neuron fired, so it stays bounded for every query, position and sequence length. That is what lets one block serve bidirectional vision and causal language. The MLP is a coincidence-gated unit (binary gate × integer value spikes, adopted from OST and SGSAFormer). Neurons are integer LIF with up to 4 spikes per step.</p>
+  <p class="col">The output is a weighted average of value spike counts, so it stays bounded for every query. The block supports bidirectional vision and causal language. The MLP is a coincidence-gated unit (binary gate × integer value spikes, adopted from OST and SGSAFormer). Neurons are integer LIF with up to 4 spikes per step.</p>
 </section>
 
 <section>
@@ -180,7 +194,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
       <tr><td>MLP neurons</td><td class="num">100%</td></tr>
     </tbody>
   </table></div>
-  <p class="col">Features in the residual stream are superposed by addition. A neuron that saturates clips the sum and zeroes its straight-through gradient. The fix costs nothing at inference. Batch-normalise the residual right before each block-input neuron, an affine map that folds into the neuron's threshold and bias, and give integer neurons a range of 4 spike units (the I-LIF 1×4 setting).</p>
+  <p class="col">Features in the residual stream are superposed by addition. A neuron that saturates clips the sum and zeroes its straight-through gradient. The tested fix batch-normalises the residual just before each block-input neuron and gives integer neurons a range of 4 spike units (the I-LIF 1×4 setting).</p>
 </section>
 
 <section>
@@ -221,8 +235,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 </section>
 
 <section>
-  <div class="eyebrow">Your first question</div>
-  <h2>Are spiking transformers sample-efficient?</h2>
+  <h2>Training samples in the original benchmarks</h2>
   <p class="col">{{SAMPLE_TEXT}}</p>
 </section>
 
@@ -247,12 +260,11 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <div class="eyebrow">Limits</div>
   <h2>What these results do not show</h2>
   <ul class="col">
-    <li>No ImageNet or large-LM training. The models are 0.1–0.9M parameters, trained for minutes on a CPU. Scale can change rankings.</li>
-    <li>Language and vision runs use one seed; recall uses three. Small differences on CIFAR-10 and enwik8 are within run-to-run noise.</li>
-    <li>Energy figures are the field's standard 45 nm operation-count estimate (4.6 pJ per MAC, 0.9 pJ per accumulate). They ignore memory traffic, which dominates on real hardware.</li>
+    <li>The original ShuntFormer suite uses models of 0.1–0.9M parameters trained on a CPU. Scale can change rankings.</li>
+    <li>The original language and vision runs use one seed. Recall uses three, so only recall estimates variation across seeds.</li>
+    <li>The energy model multiplies operation counts by assumed 45 nm arithmetic costs of 4.6 pJ per MAC and 0.9 pJ per accumulate. Memory traffic and runtime overhead fall outside that model.</li>
     <li>CSA is O(N²) in comparisons, like Spikformer's SSA. Only its inhibition term is linear.</li>
   </ul>
-  <p class="col">The next step is the ImageNet recipe of Meta-SpikeFormer/E-SpikeFormer (≈55M parameters, 200 epochs) with CSA in the attention stages, plus a WikiText-103 causal LM against WTA-Spikingformer. Both need GPUs. The code is ready for them.</p>
 </section>
 </div>
 
@@ -381,7 +393,7 @@ function renderAll() {
     legend("lg-lm", rolesOf(ser), true);
     lineChart("ch-lm", ser, { xLabel: "training tokens (millions)", ymax: 4.25, aria: "validation bits per byte against training tokens" });
     table("tb-lm", [{ t: "variant", f: r => r.label }, { t: "val bpb", num: 1, f: r => r.val.mean.toFixed(3) }, { t: "test bpb", num: 1, f: r => r.test.mean.toFixed(3) },
-      { t: "firing rate", num: 1, f: r => r.fr == null || r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "est. energy / token", num: 1, f: r => r.energy_uJ == null ? "—" : r.energy_uJ.toFixed(2) + " µJ" },
+      { t: "firing rate", num: 1, f: r => r.fr == null || r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "op-count energy estimate / token", num: 1, f: r => r.energy_uJ == null ? "—" : r.energy_uJ.toFixed(2) + " µJ" },
       { t: "exp/div ops", num: 1, f: r => r.nonlin == null ? "—" : Math.round(r.nonlin).toLocaleString() }],
       lm.slice().sort((a, b) => a.val.mean - b.val.mean).map(r => ({ ...r, _hl: r.v === "ours" || r.v === "ours_k4" })));
   }
@@ -390,9 +402,9 @@ function renderAll() {
     legend("lg-vision", rolesOf(vis));
     const lo = Math.floor(Math.min(...vis.map(r => r.mean)) / 10) * 10;
     barChart("ch-vision", vis, { max: Math.ceil(Math.max(...vis.map(r => r.mean)) / 10) * 10 + 5, tick: 10, fmt: v => v.toFixed(1), fmtTick: t => t + "%", aria: "CIFAR-10 accuracy by variant",
-      extra: r => [`est. energy ${r.energy_uJ.toFixed(0)} µJ / image`, `firing rate ${r.fr.toFixed(3)}`] });
+      extra: r => [`op-count energy estimate ${r.energy_uJ.toFixed(0)} µJ / image`, `firing rate ${r.fr.toFixed(3)}`] });
     table("tb-vision", [{ t: "variant", f: r => r.label }, { t: "test acc %", num: 1, f: r => r.mean.toFixed(2) }, { t: "params", num: 1, f: r => r.params.toLocaleString() },
-      { t: "firing rate", num: 1, f: r => r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "est. energy / image", num: 1, f: r => r.energy_uJ.toFixed(0) + " µJ" }, { t: "acc. by epoch", num: 1, f: r => r.curve.map(v => v.toFixed(1)).join(" → ") }],
+      { t: "firing rate", num: 1, f: r => r.v === "ann" ? "—" : r.fr.toFixed(3) }, { t: "op-count energy estimate / image", num: 1, f: r => r.energy_uJ.toFixed(0) + " µJ" }, { t: "acc. by epoch", num: 1, f: r => r.curve.map(v => v.toFixed(1)).join(" → ") }],
       vis.slice().sort((a, b) => b.mean - a.mean).map(r => ({ ...r, _hl: r.v === "ours" || r.v === "ours_k4" })));
   }
   const strip = document.getElementById("strip"); strip.textContent = "";
