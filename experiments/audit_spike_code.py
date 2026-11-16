@@ -55,7 +55,7 @@ def _forecast_errors(model, tokens, frequencies):
 
 
 @torch.inference_mode()
-def _audit(path, device, tokens, frequencies, parent):
+def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
     model, checkpoint = load_checkpoint(path, torch.device("cpu"))
     parent_seed, parent_weights, parent_counts = parent if parent is not None else (None, None, None)
     if parent_weights is not None and any(
@@ -72,6 +72,20 @@ def _audit(path, device, tokens, frequencies, parent):
     handles = [module.register_forward_hook(count_emissions)
                for module in integer.modules() if isinstance(module, _IntegrateFire)]
     handles.append(integer.output.register_forward_hook(lambda *_: vocabulary_calls.append(1)))
+    activity = {}
+    if activity_profile:
+        populations = {"input": integer.input_emit}
+        for index, block in enumerate(integer.blocks):
+            populations[f"block_{index}_content"] = block.relay
+            populations[f"block_{index}_residual"] = block.emit
+            if block.steered:
+                populations[f"block_{index}_steering"] = block.steer
+            if block.activity_inhibition is not None:
+                populations[f"block_{index}_inhibition"] = block.activity_inhibition
+        for name, module in populations.items():
+            handles.append(module.register_forward_hook(
+                lambda _module, _inputs, spikes, label=name: activity.__setitem__(label, spikes),
+            ))
     memory_stats = {}
     memory_pulses = []
     with _IntegerExecution() as guard:
@@ -89,6 +103,13 @@ def _audit(path, device, tokens, frequencies, parent):
         if integer.cfg.forecast_key_channels:
             measured, _ = integer.forward_chunk(tokens, stats=memory_stats)
             torch.testing.assert_close(measured, counts, rtol=0, atol=0)
+        if integer.cfg.local_trace:
+            chunk_state = None
+            chunks = []
+            for chunk in tokens.split(137, dim=1):
+                emitted, chunk_state = integer.forward_chunk(chunk, chunk_state)
+                chunks.append(emitted)
+            torch.testing.assert_close(torch.cat(chunks, dim=1), counts, rtol=0, atol=0)
     torch.testing.assert_close(torch.stack(step_counts, dim=1), counts[:, :513], rtol=0, atol=0)
     accelerated = model.to(device)(tokens.to(device)).cpu()
     torch.testing.assert_close(accelerated, counts, rtol=0, atol=0, check_dtype=False)
@@ -125,6 +146,17 @@ def _audit(path, device, tokens, frequencies, parent):
         row["delay_correction_gain_ticks"] = [block.delay_correction.gains().tolist() for block in integer.blocks]
     if integer.cfg.router_charge_bits != EventLMConfig.router_charge_bits:
         row["router_charge_bits"] = integer.cfg.router_charge_bits
+    if integer.cfg.local_trace:
+        row["native_batch_matches_chunk_on_prefix"] = tokens.numel()
+    if activity:
+        row["activity_profile"] = {}
+        quantiles = torch.tensor([0.05, 0.5, 0.95])
+        for name, packets in activity.items():
+            per_byte = packets.abs().float().mean(-1).flatten()
+            row["activity_profile"][name] = {
+                "mean": per_byte.mean().item(),
+                "p05_p50_p95": per_byte.quantile(quantiles).tolist(),
+            }
     return row, (seed, checkpoint["state_dict"], counts)
 
 
@@ -136,6 +168,8 @@ def main():
                         metavar=("ROUTER", "CONTROL", "CANDIDATE"))
     models.add_argument("--checkpoint", type=Path, nargs="+")
     parser.add_argument("--split", choices=("validation", "test"), default="validation")
+    parser.add_argument("--activity-profile", action="store_true",
+                        help="record the distribution of absolute pulse counts per channel by population")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu")
     parser.add_argument("--json", type=Path, required=True)
     parser.add_argument("--force", action="store_true")
@@ -148,13 +182,13 @@ def main():
     frequencies = torch.from_numpy(np.bincount(train[:1_048_576], minlength=256))
     rows = []
     for parent, control, candidate in args.model_triplet or ():
-        row, reference = _audit(parent, device, tokens, frequencies, None)
+        row, reference = _audit(parent, device, tokens, frequencies, None, args.activity_profile)
         rows.append(row)
         for path in (control, candidate):
-            row, _ = _audit(path, device, tokens, frequencies, reference)
+            row, _ = _audit(path, device, tokens, frequencies, reference, args.activity_profile)
             rows.append(row)
     for path in args.checkpoint or ():
-        row, _ = _audit(path, device, tokens, frequencies, None)
+        row, _ = _audit(path, device, tokens, frequencies, None, args.activity_profile)
         rows.append(row)
     record = {
         "dataset": "enwik8", "data_sha1": ENWIK8_SHA1, "split": args.split,

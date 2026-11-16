@@ -103,7 +103,8 @@ def build_model(args):
                             output_reference=args.output_reference, compact_delays=args.compact_delays,
                             departure_coincidence=args.departure_coincidence, delay_window=args.delay_window,
                             delay_residual=args.delay_residual,
-                            router_charge_bits=args.router_charge_bits)
+                            router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
+                            local_trace=args.local_trace)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
     if args.local_lookback is not None:
@@ -150,7 +151,8 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
                                   output_reference=model.cfg.output_reference, compact_delays=model.cfg.compact_delays,
                                   departure_coincidence=model.cfg.departure_coincidence,
                                   delay_window=model.cfg.delay_window, router_charge_bits=model.cfg.router_charge_bits,
-                                  delay_residual=source_cfg.delay_residual or model.cfg.delay_residual)
+                                  delay_residual=source_cfg.delay_residual or model.cfg.delay_residual,
+                                  activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace)
         if source_geometry == model.cfg:
             if model.cfg.delay_residual and not source_cfg.delay_residual:
                 missing, unexpected = model.load_state_dict(source["state_dict"], strict=False)
@@ -213,6 +215,10 @@ def main():
                         help="emit learned correction pulses from matching delays into the fixed split")
     parser.add_argument("--router-charge-bits", type=int, default=EventLMConfig.router_charge_bits,
                         help="fractional charge bits for local synapses and firing thresholds")
+    parser.add_argument("--activity-inhibition", action="store_true",
+                        help="raise content and steering thresholds with pooled incoming spike activity")
+    parser.add_argument("--local-trace", action="store_true",
+                        help="hold each channel's charge within its steering interval across bytes")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
     parser.add_argument("--spike-resolution", type=int, default=1, help="number of finer spikes per original unit")
     parser.add_argument("--depth", type=int, default=3)
@@ -259,7 +265,8 @@ def main():
     if (args.forecast_key_channels or args.match_forecast_key or args.learn_context_keys) and args.variant != "event_correction_code":
         parser.error("forecast keys need --variant event_correction_code")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
-            or args.departure_coincidence or args.delay_window != 1 or args.delay_residual
+            or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
+            or args.local_trace
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"
     ):

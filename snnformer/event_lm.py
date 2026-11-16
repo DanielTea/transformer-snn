@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from .correction_memory import CorrectionState, correction_reads, correction_step, interval_spikes
+from .correction_memory import CorrectionState, _interval_scan, correction_reads, correction_step, interval_spikes
 
 
 _VOCAB = 256
@@ -59,6 +59,8 @@ class EventLMConfig:
     delay_window: int = 1
     delay_residual: bool = False
     router_charge_bits: int = _CHARGE_BITS
+    activity_inhibition: bool = False
+    local_trace: bool = False
 
 
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
@@ -128,13 +130,14 @@ class _IntegrateFire(nn.Module):
             return emitted
         if quanta is not None:
             units = quanta.to(torch.int32)
-            threshold = units * _PACKET_TICKS
+            quantum = self.threshold // _PACKET_UNITS
+            threshold = units * quantum
             charge = bounded.to(torch.int32)
             magnitude = (charge.abs() + threshold // 2) // threshold
             limit = (self.cap * _PACKET_UNITS) // units
             counts = magnitude.minimum(limit) * charge.sign()
             if current.is_floating_point():
-                surrogate = bounded / (quanta * _PACKET_TICKS)
+                surrogate = bounded / (quanta * quantum)
                 return counts.to(current.dtype) + (surrogate - surrogate.detach())
             return counts
         if self.continuous:
@@ -359,6 +362,7 @@ class _CorrectionAccess:
     hide_age: int | tuple[int | None, ...] | None
     stats: dict | None
     shuffle_keys: bool = False
+    local_layers: list[_DelayState] | None = None
 
 
 class _SpikeCorrection(nn.Module):
@@ -502,6 +506,36 @@ class _DelayState:
     steering_phase: torch.Tensor | None = None
     output_phase: torch.Tensor | None = None
     correction: CorrectionState | None = None
+    trace_charge: torch.Tensor | None = None
+
+
+class _SpikeTrace(nn.Module):
+    """A causal charge trace that moves only when an interval excludes it."""
+
+    def __init__(self, cap):
+        super().__init__()
+        self.cap = cap
+
+    def _bounds(self, present, steering):
+        return (present - steering).clamp_min(-self.cap), (present + steering).clamp_max(self.cap)
+
+    def forward(self, present, steering, initial, pulse_counts):
+        if initial is None:
+            initial = torch.zeros_like(present[:, 0])
+        lower, upper = self._bounds(present, steering)
+        after = _interval_scan(lower, upper, initial)
+        before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
+        read, _ = _steer_packet(before, steering)
+        if pulse_counts is not None:
+            pulse_counts.extend(((after - before).abs().sum(), read.abs().sum()))
+        return read, after[:, -1].clone()
+
+    def step(self, present, steering, before):
+        if before is None:
+            before = torch.zeros_like(present)
+        lower, upper = self._bounds(present, steering)
+        read, _ = _steer_packet(before, steering)
+        return read, before + interval_spikes(before, lower, upper)
 
 
 class _DelayBlock(nn.Module):
@@ -547,8 +581,14 @@ class _DelayBlock(nn.Module):
         self.delay_widths = tuple(counts_per_channel * width for width in self.widths)
         self.delay_sizes = tuple(delay * width for delay, width in zip(self.local_delays, self.delay_widths))
         cap = _HIDDEN_CAP * cfg.resolution
+        self.trace = _SpikeTrace(cap) if cfg.local_trace else None
         self.delay_correction = _DelayCorrection(self.widths, cap) if cfg.delay_residual else None
         self.packet_thresholds = _PacketThresholds(self.widths) if cfg.learn_packet_thresholds else None
+        self.activity_inhibition = None
+        if cfg.activity_inhibition:
+            # One pool receives one unit of charge per spike on either input rail.
+            pool_bits = ((cfg.dim * cfg.resolution - 1) // _PACKET_UNITS).bit_length()
+            self.activity_inhibition = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, pool_bits, False)
         bits = cfg.router_charge_bits
         self.expand = _Synapse(cfg.dim, cfg.hidden * (2 if self.steered else 1), gain=1.0,
                                continuous=cfg.continuous, charge_bits=bits)
@@ -559,6 +599,12 @@ class _DelayBlock(nn.Module):
                                 continuous=cfg.continuous, charge_bits=bits)
         output_bits = bits + (_PACKET_BITS if self.packet_thresholds is not None else 0)
         self.emit = _IntegrateFire(cap, output_bits, cfg.carry, continuous=cfg.continuous)
+
+    def _firing_quanta(self, spikes, quanta):
+        if self.activity_inhibition is None:
+            return quanta
+        activity = spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)
+        return _PACKET_UNITS + self.activity_inhibition(activity)
 
     def _departure_packets(self, present, steering):
         if not self.departure_coincidence:
@@ -607,8 +653,22 @@ class _DelayBlock(nn.Module):
                 anchors.append(anchor)
         return result, torch.cat(anchors, dim=-1) if anchors else None
 
+    def _chunk_delays(self, groups, state):
+        # Chunk histories are chronological and cover the full span of each tap.
+        batch, steps = groups[0].shape[:2]
+        if state.history is None:
+            state.history = groups[0].new_zeros(batch, sum(self.delay_sizes))
+        delayed, tails = [], []
+        history = state.history.split(self.delay_sizes, dim=-1)
+        for storage, group, delay in zip(history, groups, self.local_delays, strict=True):
+            joined = torch.cat((storage.reshape(batch, delay, group.shape[-1]), group), dim=1)
+            delayed.append(joined[:, :steps])
+            tails.append(joined[:, -delay:].flatten(1))
+        state.history = torch.cat(tails, dim=-1)
+        return delayed
+
     def _current(self, residual, present, delayed, steering, start, alternate=None, recall=None, quanta=None, *,
-                 departure=None, anchor=None):
+                 departure=None, anchor=None, trace_read=None):
         if alternate is not None:
             # The last half of the phase interval opens the adjacent delay
             # only when a steering packet has actually fired.
@@ -626,6 +686,9 @@ class _DelayBlock(nn.Module):
             replacement, _ = _steer_packet(delayed, steering)
             correction = self.delay_correction(selected, replacement)
             routes = _steer_packet(present, steering) + (selected + correction, bypass)
+        elif trace_read is not None:
+            _, bypass = _steer_packet(delayed, steering)
+            routes = _steer_packet(present, steering) + (trace_read, bypass)
         elif self.balanced:
             routes = _balanced_steer(present, steering) + _balanced_steer(delayed, steering)
         else:
@@ -642,23 +705,34 @@ class _DelayBlock(nn.Module):
             current = current + self.memory_residual(recall)
         return current
 
-    def forward(self, spikes, *, delay_limit=None, shuffle_phase=False, correction_access=None, pulse_counts=None):
+    def forward(self, spikes, *, delay_limit=None, shuffle_phase=False, correction_access=None, pulse_counts=None,
+                local_state=None):
         drive = self.expand(spikes)
         quanta = self.packet_thresholds() if self.packet_thresholds is not None else None
+        firing_quanta = self._firing_quanta(spikes, quanta)
         steering = start = None
         if self.steered:
             drive, steer_drive = drive.chunk(2, dim=-1)
-            steering = self.steer(steer_drive if self.balanced else steer_drive.clamp_min(0), quanta)
+            steering = self.steer(steer_drive if self.balanced else steer_drive.clamp_min(0), firing_quanta)
             if self.phase_bits:
                 start = _steering_start(steer_drive, self.phase_bits, self.steer.cap)
                 if shuffle_phase:
                     start = start.roll(1, dims=-1)
-        present = self.relay(drive, quanta)
+        present = self.relay(drive, firing_quanta)
+        trace_read = None
+        if self.trace is not None:
+            initial = None if local_state is None else local_state.trace_charge
+            trace_read, trace_charge = self.trace(present, steering, initial, pulse_counts)
+            if local_state is not None:
+                local_state.trace_charge = trace_charge
         packets, departure = self._departure_packets(present, steering)
         alternate = recall = anchor = None
         if self.selector is None:
             groups = packets.split(self.delay_widths, dim=-1)
-            delayed_groups, anchor = self._delayed_groups(groups, steering, pulse_counts)
+            if local_state is None:
+                delayed_groups, anchor = self._delayed_groups(groups, steering, pulse_counts)
+            else:
+                delayed_groups = self._chunk_delays(groups, local_state)
             if self.correction is not None:
                 recall = self.correction(spikes, correction_access)
                 if self.memory_residual is None:
@@ -670,7 +744,7 @@ class _DelayBlock(nn.Module):
         else:
             delayed = self.selector(present, delay_limit)
         return self.emit(self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
-                                       departure=departure, anchor=anchor))
+                                       departure=departure, anchor=anchor, trace_read=trace_read))
 
     def _step_compact(self, packets, steering, state, position):
         # Recycle a packet's slot as soon as its fixed delay has elapsed.
@@ -702,14 +776,18 @@ class _DelayBlock(nn.Module):
     def step(self, spikes, state, position):
         drive = self.expand(spikes)
         quanta = self.packet_thresholds() if self.packet_thresholds is not None else None
+        firing_quanta = self._firing_quanta(spikes, quanta)
         steering = start = None
         if self.steered:
             drive, steer_drive = drive.chunk(2, dim=-1)
             steer_charge = steer_drive if self.balanced else steer_drive.clamp_min(0)
-            steering, state.steering_phase = self.steer.step(steer_charge, state.steering_phase, quanta)
+            steering, state.steering_phase = self.steer.step(steer_charge, state.steering_phase, firing_quanta)
             if self.phase_bits:
                 start = _steering_start(steer_drive, self.phase_bits, self.steer.cap)
-        present, state.relay_phase = self.relay.step(drive, state.relay_phase, quanta)
+        present, state.relay_phase = self.relay.step(drive, state.relay_phase, firing_quanta)
+        trace_read = None
+        if self.trace is not None:
+            trace_read, state.trace_charge = self.trace.step(present, steering, state.trace_charge)
         packets, departure = self._departure_packets(present, steering)
         alternate = recall = anchor = None
         if self.compact_delays:
@@ -740,7 +818,7 @@ class _DelayBlock(nn.Module):
                 delayed = self.selector.step(state.history, position)
             state.history[:, position % ring_size].copy_(present[:, :local_width])
         current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
-                                departure=departure, anchor=anchor)
+                                departure=departure, anchor=anchor, trace_read=trace_read)
         spikes, state.output_phase = self.emit.step(current, state.output_phase)
         return spikes
 
@@ -757,8 +835,9 @@ class EventLMState:
 
 @dataclass
 class EventChunkState:
-    local_prefix: torch.Tensor
-    correction: CorrectionState
+    local_prefix: torch.Tensor | None
+    correction: CorrectionState | None
+    local_layers: list[_DelayState] | None = None
 
 
 class EventLM(nn.Module):
@@ -797,6 +876,9 @@ class EventLM(nn.Module):
             raise ValueError("delay matching needs compact delays and reset-per-byte spike neurons")
         if cfg.delay_residual and cfg.delay_window == 1:
             raise ValueError("delay corrections need at least two candidate taps")
+        if cfg.local_trace and (not cfg.compact_delays or cfg.carry or cfg.continuous
+                                or cfg.delay_window != 1 or cfg.departure_coincidence):
+            raise ValueError("local traces need compact fixed delays and reset-per-byte spike routing")
         if not isinstance(cfg.router_charge_bits, int) or not _CHARGE_BITS <= cfg.router_charge_bits < 31:
             raise ValueError("router_charge_bits must be an integer from 6 to 30")
         extra_charge_bits = cfg.router_charge_bits - _CHARGE_BITS
@@ -805,6 +887,12 @@ class EventLM(nn.Module):
             raise ValueError("finer router charge needs reset-per-byte neurons with fixed firing thresholds")
         if not isinstance(cfg.resolution, int) or cfg.resolution < 1:
             raise ValueError("spike resolution must be a positive integer")
+        if cfg.activity_inhibition:
+            if (cfg.carry or cfg.continuous or cfg.learn_packet_thresholds
+                    or cfg.route not in ("steered", "steered_correction_code")):
+                raise ValueError("activity inhibition needs a reset-per-byte router with a fixed threshold floor")
+            if cfg.dim * _HIDDEN_CAP * cfg.resolution >= _FP32_EXACT:
+                raise ValueError("the inhibition pool would exceed the exact FP32 integer range")
         output_bits = 3
         output_cap = _OUTPUT_CAP * cfg.resolution
         if cfg.output_reference:
@@ -926,9 +1014,11 @@ class EventLM(nn.Module):
             drive = drive + F.pad(delayed, (0, 0, padding, 0))
         observed = self.input_emit(drive * self.cfg.resolution)
         spikes = observed
-        for block in self.blocks:
+        local_layers = None if correction_access is None else correction_access.local_layers
+        for index, block in enumerate(self.blocks):
             spikes = block(spikes, delay_limit=delay_limit, shuffle_phase=shuffle_phase,
-                           correction_access=correction_access, pulse_counts=memory_pulses)
+                           correction_access=correction_access, pulse_counts=memory_pulses,
+                           local_state=None if local_layers is None else local_layers[index])
         if self.prediction_memory is not None:
             prediction = self._prediction_code(spikes)
             recall = self.prediction_memory(
@@ -942,13 +1032,15 @@ class EventLM(nn.Module):
         return counts
 
     def forward_chunk(self, tokens, state=None, *, hide_age=None, stats=None, shuffle_keys=False):
-        """Carry the bank and recompute local context at a chunk boundary.
+        """Carry the bank and either replay local context or carry the trace and delays.
 
         In the post-router bank variants, a tuple of ages adds a leading
         axis of read conditions. All conditions share one write trajectory.
         """
-        if not self.has_correction or self.cfg.carry:
-            raise ValueError("chunked correction memory needs reset-per-byte local neurons")
+        if self.cfg.carry or not (self.has_correction or self.cfg.local_trace):
+            raise ValueError("chunked memory needs reset-per-byte local neurons")
+        if hide_age is not None and not self.has_correction:
+            raise ValueError("hiding by age needs a correction bank")
         if shuffle_keys and not self.cfg.match_forecast_key:
             raise ValueError("shuffling memory keys requires a bank that matches stored keys")
         ages = hide_age if isinstance(hide_age, tuple) else (hide_age,)
@@ -956,10 +1048,25 @@ class EventLM(nn.Module):
             raise ValueError("a group of memory ages needs a post-router bank")
         if tokens.ndim != 2 or tokens.shape[1] == 0 or any(age is not None and age < 1 for age in ages):
             raise ValueError("expected nonempty [batch, bytes] and a positive age when hiding old state")
+        correction = None if state is None else state.correction
+        if self.cfg.local_trace:
+            if state is None:
+                layers = [_DelayState() for _ in self.blocks]
+            else:
+                previous = state.local_layers
+                if (previous is None or len(previous) != len(self.blocks) or previous[0].history is None
+                        or previous[0].history.shape[0] != tokens.shape[0]):
+                    raise ValueError("chunk state must match the trace decoder and batch size")
+                layers = [copy.copy(layer) for layer in previous]
+            access = _CorrectionAccess(correction, 0, hide_age, stats, shuffle_keys, local_layers=layers)
+            counts = self(tokens, correction_access=access)
+            return counts, EventChunkState(None, access.state, layers)
+        if state is not None and state.local_prefix is None:
+            raise ValueError("chunk state must contain the local byte prefix")
         prefix = 0 if state is None else state.local_prefix.shape[1]
         if state is not None:
             tokens = torch.cat((state.local_prefix, tokens), dim=1)
-        access = _CorrectionAccess(None if state is None else state.correction, prefix, hide_age, stats, shuffle_keys)
+        access = _CorrectionAccess(correction, prefix, hide_age, stats, shuffle_keys)
         counts = self(tokens, correction_access=access)
         return counts[..., prefix:, :], EventChunkState(tokens[:, -self.local_history:].clone(), access.state)
 

@@ -62,7 +62,7 @@ def _logits_and_targets(model, book, args, device, options, counters=None):
     data = book.data
     event = isinstance(model, EventLM)
     resolution = model.cfg.resolution if event else 1
-    if event and model.has_correction:
+    if event and (model.has_correction or model.cfg.local_trace):
         state = None
         for start in range(0, data.numel() - 1, args.context):
             window = data[start:start + args.context + 1].unsqueeze(0).to(device=device, dtype=torch.long)
@@ -147,12 +147,13 @@ def _evaluate(model, checkpoint, path, books, ages, args, device, options, tempe
     name = checkpoint["run_name"]
     event = isinstance(model, EventLM)
     correction = event and model.has_correction
+    local_trace = event and model.cfg.local_trace
     resolution = model.cfg.resolution if event else 1
 
     def score_logits(tokens):
         return scoring_logits(model(tokens, **options), event, resolution)
 
-    detailed = args.history or correction or temperature != 1
+    detailed = args.history or correction or local_trace or temperature != 1
     if scored_books is not None:
         per_book = list(scored_books)
     elif detailed:
@@ -184,6 +185,7 @@ def _evaluate(model, checkpoint, path, books, ages, args, device, options, tempe
         "scoring": "normalized exponential of scaled output" if event else "softmax over logits",
         "temperature": temperature,
         "continuous_correction_state": correction,
+        **({"continuous_local_trace_state": True} if local_trace else {}),
         "training_context_bytes": checkpoint["args"]["ctx"],
         **({"intervention": options} if options else {}),
         **stats,

@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from snnformer.correction_memory import correction_reads, correction_step
-from snnformer.event_lm import EventLM, EventLMConfig, _DelayCorrection, _SpikeCorrection
+from snnformer.event_lm import EventLM, EventLMConfig, _DelayCorrection, _SpikeCorrection, _SpikeTrace
 
 
 def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
@@ -352,3 +352,71 @@ def test_zero_delay_correction_gains_still_receive_emission_gradients():
     torch.testing.assert_close(spikes, torch.zeros_like(spikes), rtol=0, atol=0)
     gradient, = torch.autograd.grad(spikes.sum(), correction.gain)
     torch.testing.assert_close(gradient, torch.tensor([5., -2.]), rtol=0, atol=0)
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("bits", (6, 8))
+def test_population_inhibition_raises_both_firing_thresholds_and_keeps_native_parity(bits):
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True,
+                        activity_inhibition=True, router_charge_bits=bits)
+    torch.manual_seed(17)
+    model = EventLM(cfg).eval()
+    integer = model.to_integer()
+    block = integer.blocks[0]
+    incoming = torch.tensor([0, 4, 16, -16], dtype=torch.int32)[:, None].expand(-1, cfg.dim)
+    firing = block._firing_quanta(incoming, None)
+    torch.testing.assert_close(firing[:, 0], torch.tensor([4, 5, 8, 8], dtype=torch.int32))
+    current = torch.full((4, cfg.hidden), 8 * (1 << bits), dtype=torch.int32)
+    licensed = torch.tensor([8, 6, 4, 4], dtype=torch.int32)
+    torch.testing.assert_close(block.relay(-current, firing)[:, 0], -licensed)
+    torch.testing.assert_close(block.steer(current, firing)[:, 0], licensed)
+
+    tokens = torch.randint(256, (2, 60))
+    expected = integer(tokens)
+    torch.testing.assert_close(model(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for position, byte in enumerate(tokens.unbind(1)):
+        counts, state = integer.step(byte, state)
+        torch.testing.assert_close(counts, expected[:, position], rtol=0, atol=0)
+    first, chunk = integer.forward_chunk(tokens[:, :23])
+    second, _ = integer.forward_chunk(tokens[:, 23:], chunk)
+    torch.testing.assert_close(torch.cat((first, second), dim=1), expected, rtol=0, atol=0)
+
+
+def test_trace_steering_reads_old_charge_and_resists_writes_within_its_interval():
+    trace = _SpikeTrace(cap=12)
+    present = torch.tensor([5, 5, 5, 0, 4, -2], dtype=torch.int32).reshape(1, -1, 1)
+    steering = torch.tensor([0, 9, 9, 9, 1, 2], dtype=torch.int32).reshape_as(present)
+    pulses = []
+    read, charge = trace(present, steering, None, pulses)
+    assert read.flatten().tolist() == [0, 5, 5, 5, 1, 2]
+    assert charge.item() == 0
+    assert [int(count) for count in pulses] == [10, 18]
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("route", ("steered", "steered_correction_code"))
+def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route):
+    torch.manual_seed(97)
+    cfg = EventLMConfig(dim=16, hidden=21, route=route, carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8 if route.endswith("code") else None,
+                        compact_delays=True, activity_inhibition=True, local_trace=True)
+    model = EventLM(cfg).eval()
+    native = model.to_integer()
+    tokens = torch.randint(256, (2, 93))
+    expected = native(tokens)
+    torch.testing.assert_close(expected, model(tokens).to(torch.int32), rtol=0, atol=0)
+    state = None
+    for i, byte in enumerate(tokens.unbind(1)):
+        counts, state = native.step(byte, state)
+        torch.testing.assert_close(counts, expected[:, i], rtol=0, atol=0)
+    chunk = None
+    cursor = 0
+    for part in tokens.split((1, 3, 13, 35, 41), dim=1):
+        scores, chunk = native.forward_chunk(part, chunk)
+        torch.testing.assert_close(scores, expected[:, cursor:cursor + part.shape[1]], rtol=0, atol=0)
+        cursor += part.shape[1]
+        assert chunk.local_prefix is None
+    for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
+        torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
