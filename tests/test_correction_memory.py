@@ -5,8 +5,8 @@ import torch
 
 from snnformer.correction_memory import _interval_scan, _write_credit_scan, correction_reads, correction_step
 from snnformer.event_lm import (
-    EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _OpponentSteering, _SpikeCorrection, _SpikeTrace,
-    _SpreadCoincidence, _steer_packet,
+    EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _OpponentSteering,
+    _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _steer_packet,
 )
 
 
@@ -482,7 +482,10 @@ def test_opponent_steering_warm_start_and_integer_chunk_and_step_parity():
 
 
 @torch.no_grad()
-@pytest.mark.parametrize("route_options", ({}, {"trace_read_veto": True}, {"spread_coincidence": True}))
+@pytest.mark.parametrize("route_options", (
+    {}, {"trace_read_veto": True}, {"spread_coincidence": True},
+    {"residual_membrane": True, "compact_axon_state": True},
+))
 @pytest.mark.parametrize("route", ("steered", "steered_correction_code"))
 def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route, route_options):
     torch.manual_seed(97)
@@ -512,6 +515,48 @@ def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks
         assert chunk.local_prefix is None
     for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
         torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
+        if cfg.residual_membrane:
+            assert streamed.output_phase.dtype == torch.uint8
+            torch.testing.assert_close(streamed.output_phase, batched.output_phase, rtol=0, atol=0)
+        if cfg.compact_axon_state:
+            assert streamed.history.dtype == batched.history.dtype == torch.int16
+
+
+def test_signed_residual_membrane_conserves_bounded_charge():
+    neuron = _ResidualMembraneFire(cap=3, bits=2)
+    current = torch.tensor([-2, 2, 1, 1, -3, -3, 20, -20], dtype=torch.int32).reshape(1, -1, 1)
+    counts = neuron(current)
+    assert counts.flatten().tolist() == [0, 0, 0, 1, -1, -1, 3, -3]
+
+    phase = None
+    charge = 0
+    pulses = 0
+    for i, value in enumerate(current.unbind(1)):
+        emitted, phase = neuron.step(value, phase)
+        torch.testing.assert_close(emitted, counts[:, i])
+        charge += value.clamp(-12, 12).item()
+        pulses += emitted.item()
+        assert charge == 4 * pulses + phase.item() - 2
+        assert 0 <= phase.item() < 4
+
+    differentiable = current.float().requires_grad_()
+    neuron(differentiable).sum().backward()
+    torch.testing.assert_close(differentiable.grad, (current.abs() <= 12).float() / 4)
+
+
+def test_compact_axon_storage_preserves_signed_maximum_packets():
+    cfg = EventLMConfig(dim=16, hidden=8, route="steered", carry=False, resolution=16, compact_delays=True)
+    dense = EventLM(cfg).blocks[0]
+    compact = EventLM(replace(cfg, compact_axon_state=True)).blocks[0]
+    full_state, compact_state = _DelayState(), _DelayState()
+    packet = torch.tensor([[-512, 512] * 4], dtype=torch.int32)
+    for position in range(15):
+        steering = packet.abs()
+        full, *_ = dense._step_compact(packet, steering, full_state, position)
+        packed, *_ = compact._step_compact(packet, steering, compact_state, position)
+        torch.testing.assert_close(packed, full)
+        packet = -packet
+    assert compact_state.history.untyped_storage().nbytes() * 2 == full_state.history.untyped_storage().nbytes()
 
 
 @torch.no_grad()

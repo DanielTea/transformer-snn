@@ -68,6 +68,8 @@ class EventLMConfig:
     delay_filter: bool = False
     opponent_steering: bool = False
     spread_coincidence: bool = False
+    residual_membrane: bool = False
+    compact_axon_state: bool = False
 
 
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
@@ -182,6 +184,41 @@ class _IntegrateFire(nn.Module):
         counts = total >> self.bits
         phase = (total & (self.threshold - 1)) if self.carry else None
         return self._signed(counts), phase
+
+
+class _ResidualMembraneFire(_IntegrateFire):
+    """Carry the signed rounding residue of a residual neuron across bytes."""
+
+    def __init__(self, cap, bits):
+        super().__init__(cap, bits, True)
+        if (cap + 1) * self.threshold - 1 > torch.iinfo(torch.int32).max:
+            raise ValueError("residual charge exceeds the int32 membrane range")
+        self.phase_dtype = next(dtype for dtype in (torch.uint8, torch.int16, torch.int32)
+                                if self.threshold - 1 <= torch.iinfo(dtype).max)
+
+    def forward(self, current, *, state=None):
+        if (current.shape[1] * self.cap + 1) * self.threshold - 1 > torch.iinfo(torch.int32).max:
+            raise ValueError("byte sequence exceeds the int32 residual charge scan")
+        limit = self.cap * self.threshold
+        bounded = current.clamp(-limit, limit)
+        phase = self.threshold // 2
+        if state is not None and state.output_phase is not None:
+            phase = state.output_phase[:, None].to(torch.int32)
+        total = bounded.to(torch.int32).cumsum(1, dtype=torch.int32) + phase
+        emitted = total >> self.bits
+        counts = emitted.diff(dim=1, prepend=torch.zeros_like(emitted[:, :1]))
+        if state is not None:
+            state.output_phase = (total[:, -1] & (self.threshold - 1)).to(self.phase_dtype)
+        if current.is_floating_point():
+            surrogate = bounded / self.threshold
+            return counts.to(current.dtype) + (surrogate - surrogate.detach())
+        return counts
+
+    def step(self, current, phase):
+        limit = self.cap * self.threshold
+        initial = self.threshold // 2 if phase is None else phase.to(torch.int32)
+        total = current.clamp(-limit, limit).to(torch.int32) + initial
+        return total >> self.bits, (total & (self.threshold - 1)).to(self.phase_dtype)
 
 
 class _PacketThresholds(nn.Module):
@@ -730,7 +767,15 @@ class _DelayBlock(nn.Module):
         self.project = _Synapse((4 if self.steered else 3) * cfg.hidden, cfg.dim, gain=0.65,
                                 continuous=cfg.continuous, charge_bits=bits)
         output_bits = bits + (_PACKET_BITS if self.packet_thresholds is not None else 0)
-        self.emit = _IntegrateFire(cap, output_bits, cfg.carry, continuous=cfg.continuous)
+        self.residual_membrane = cfg.residual_membrane
+        if self.residual_membrane:
+            self.emit = _ResidualMembraneFire(cap, output_bits)
+        else:
+            self.emit = _IntegrateFire(cap, output_bits, cfg.carry, continuous=cfg.continuous)
+        self.axon_dtype = None
+        if cfg.compact_axon_state:
+            self.axon_dtype = next(dtype for dtype in (torch.int8, torch.int16, torch.int32)
+                                   if cap <= torch.iinfo(dtype).max)
 
     def _firing_quanta(self, spikes, quanta):
         if self.activity_inhibition is None:
@@ -793,15 +838,18 @@ class _DelayBlock(nn.Module):
     def _chunk_delays(self, groups, state):
         # Chunk histories are chronological and cover the full span of each tap.
         batch, steps = groups[0].shape[:2]
+        history_dtype = groups[0].dtype
+        if self.axon_dtype is not None and not (groups[0].is_floating_point() and torch.is_grad_enabled()):
+            history_dtype = self.axon_dtype
         if state.history is None:
-            state.history = groups[0].new_zeros(batch, sum(self.delay_sizes))
+            state.history = groups[0].new_zeros(batch, sum(self.delay_sizes), dtype=history_dtype)
         delayed, tails = [], []
         history = state.history.split(self.delay_sizes, dim=-1)
         for storage, group, delay in zip(history, groups, self.local_delays, strict=True):
-            joined = torch.cat((storage.reshape(batch, delay, group.shape[-1]), group), dim=1)
+            joined = torch.cat((storage.reshape(batch, delay, group.shape[-1]).to(group.dtype), group), dim=1)
             delayed.append(joined[:, :steps])
             tails.append(joined[:, -delay:].flatten(1))
-        state.history = torch.cat(tails, dim=-1)
+        state.history = torch.cat(tails, dim=-1).to(history_dtype)
         return delayed
 
     def _current(self, residual, present, delayed, steering, start, alternate=None, recall=None, quanta=None, *,
@@ -887,41 +935,46 @@ class _DelayBlock(nn.Module):
                                        zip(groups, self.alternate_delays, strict=True)], dim=-1)
         else:
             delayed = self.selector(present, delay_limit)
-        return self.emit(self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
-                                       departure=departure, anchor=anchor, coincidence_read=coincidence_read))
+        current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
+                                departure=departure, anchor=anchor, coincidence_read=coincidence_read)
+        if self.residual_membrane:
+            return self.emit(current, state=local_state)
+        return self.emit(current)
 
     def _step_compact(self, packets, steering, state, position):
         # Recycle a packet's slot as soon as its fixed delay has elapsed.
         batch = packets.shape[0]
         if state.history is None:
-            state.history = packets.new_zeros(batch, sum(self.delay_sizes))
+            state.history = packets.new_zeros(batch, sum(self.delay_sizes), dtype=self.axon_dtype)
         groups = packets.split(self.delay_widths, dim=-1)
         history = state.history.split(self.delay_sizes, dim=-1)
         apertures = steering.split(self.widths, dim=-1)
-        previous, slots, filtered = [], [], []
+        previous, slots, base_packets, filtered = [], [], [], []
         for index, (storage, packet, aperture, delay) in enumerate(
             zip(history, groups, apertures, self.local_delays, strict=True)
         ):
             ring = storage.reshape(batch, delay, packet.shape[-1])
             slot = ring[:, position % delay]
             slots.append(slot)
+            old = slot.to(packets.dtype)
+            base_packets.append(old)
             if self.delay_filters is not None:
                 kernel = self.delay_filters[index]
                 if kernel is None:
-                    filtered.append(slot)
+                    filtered.append(old)
                 else:
-                    taps = [ring[:, (position - tap) % delay] for tap in kernel.taps]
-                    filtered.append(kernel(slot, taps))
+                    taps = [ring[:, (position - tap) % delay].to(packets.dtype) for tap in kernel.taps]
+                    filtered.append(kernel(old, taps))
             choices = min(self.delay_window, delay)
             if choices == 1:
-                previous.append(slot)
+                previous.append(old)
             else:
                 ages = delay - self.delay_offsets[:choices]
-                candidates = ring.index_select(1, (position - ages) % delay).transpose(1, 2)
+                candidates = ring.index_select(1, (position - ages) % delay).transpose(1, 2).to(packets.dtype)
                 query = packet.clamp(-aperture, aperture)
                 previous.append(self._match_delay(candidates, query, aperture, position >= ages))
         delayed = torch.cat(previous, dim=-1)
-        anchor = torch.cat(slots, dim=-1) if self.delay_correction is not None else None
+        anchor = torch.cat(base_packets, dim=-1) if self.delay_correction is not None else None
         filtered_packets = torch.cat(filtered, dim=-1) if filtered else None
         for slot, packet in zip(slots, groups, strict=True):
             slot.copy_(packet)
@@ -1026,6 +1079,8 @@ class EventLM(nn.Module):
             raise ValueError("learned packet thresholds need a reset-per-byte spike router")
         if cfg.compact_delays and cfg.route not in ("steered", "steered_correction_code"):
             raise ValueError("compact delays need a fixed steered delay schedule")
+        if cfg.compact_axon_state and (not cfg.compact_delays or cfg.continuous):
+            raise ValueError("compact axon state needs compact delays and integer pulse counts")
         if cfg.departure_coincidence and (not cfg.compact_delays or cfg.carry or cfg.continuous):
             raise ValueError("departure coincidence needs compact delays and reset-per-byte spike neurons")
         if not isinstance(cfg.delay_window, int) or cfg.delay_window < 1:
@@ -1043,6 +1098,8 @@ class EventLM(nn.Module):
             raise ValueError("trace write credit needs a local charge trace")
         if cfg.trace_read_veto and not cfg.local_trace:
             raise ValueError("trace read veto needs a local charge trace")
+        if cfg.residual_membrane and not cfg.local_trace:
+            raise ValueError("residual membranes need chunkable local trace state")
         if cfg.spread_coincidence and (cfg.carry or cfg.continuous
                                        or cfg.route not in ("steered", "steered_correction_code")):
             raise ValueError("spread coincidence needs a reset-per-byte steered spike router")

@@ -108,7 +108,9 @@ def build_model(args):
                             trace_read_veto=args.trace_read_veto,
                             delay_filter=args.delay_filter,
                             opponent_steering=args.opponent_steering,
-                            spread_coincidence=args.spread_coincidence)
+                            spread_coincidence=args.spread_coincidence,
+                            residual_membrane=args.residual_membrane,
+                            compact_axon_state=args.compact_axon_state)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
     if args.local_lookback is not None:
@@ -156,12 +158,14 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
         # reuse the matrices even when the forward pass uses a finer charge grid.
         source_geometry = replace(source_cfg, resolution=model.cfg.resolution,
                                   output_reference=model.cfg.output_reference, compact_delays=model.cfg.compact_delays,
+                                  compact_axon_state=model.cfg.compact_axon_state,
                                   departure_coincidence=model.cfg.departure_coincidence,
                                   delay_window=model.cfg.delay_window, router_charge_bits=model.cfg.router_charge_bits,
                                   delay_residual=source_cfg.delay_residual or model.cfg.delay_residual,
                                   activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace,
                                   trace_write_credit=model.cfg.trace_write_credit,
                                   trace_read_veto=source_cfg.trace_read_veto or model.cfg.trace_read_veto,
+                                  residual_membrane=model.cfg.residual_membrane,
                                   delay_filter=source_cfg.delay_filter or model.cfg.delay_filter,
                                   opponent_steering=source_cfg.opponent_steering or model.cfg.opponent_steering,
                                   spread_coincidence=source_cfg.spread_coincidence or model.cfg.spread_coincidence)
@@ -229,6 +233,8 @@ def main():
                         help="subtract a shared spike reference before vocabulary neurons fire")
     parser.add_argument("--compact-delays", action="store_true",
                         help="allocate a history ring of its own length to each fixed axon group")
+    parser.add_argument("--compact-axon-state", action="store_true",
+                        help="store axon counts in the narrowest signed integer that holds every pulse")
     parser.add_argument("--departure-coincidence", action="store_true",
                         help="route delayed pulses by coincidence with both departure and arrival steering")
     parser.add_argument("--delay-window", type=int, default=1,
@@ -241,6 +247,8 @@ def main():
                         help="raise content and steering thresholds with pooled incoming spike activity")
     parser.add_argument("--local-trace", action="store_true",
                         help="hold each channel's charge within its steering interval across bytes")
+    parser.add_argument("--residual-membrane", action="store_true",
+                        help="retain the signed subthreshold charge at the output of each routing block")
     parser.add_argument("--trace-write-credit", action="store_true",
                         help="send held-charge gradients to the last bound that moved the charge")
     parser.add_argument("--trace-read-veto", action="store_true",
@@ -297,6 +305,7 @@ def main():
     if (args.forecast_key_channels or args.match_forecast_key or args.learn_context_keys) and args.variant != "event_correction_code":
         parser.error("forecast keys need --variant event_correction_code")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
+            or args.compact_axon_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
             or args.local_trace or args.trace_write_credit or args.trace_read_veto
             or args.delay_filter or args.opponent_steering or args.spread_coincidence

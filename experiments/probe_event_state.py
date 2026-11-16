@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 
 import torch
@@ -95,6 +96,10 @@ def probe(model, window, chunk_size):
     if model.cfg.spread_coincidence:
         weights = [block.spread_coincidence.mix for block in model.blocks]
         result["zero_spread_coincidence_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.residual_membrane:
+        reset = EventLM(replace(model.cfg, residual_membrane=False)).eval().to(window.device)
+        reset.load_state_dict(model.state_dict())
+        result["reset_residual_membrane_bpb"] = score(reset, window, chunk_size)
     return result
 
 
