@@ -175,6 +175,12 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
                 "mean": per_byte.mean().item(),
                 "p05_p50_p95": per_byte.quantile(quantiles).tolist(),
             }
+        prior_width = (checkpoint.get("initialization") or {}).get("residual_width_before")
+        if prior_width is not None:
+            row["added_residual_pulses_per_byte"] = {
+                name: activity[name][..., prior_width:].abs().sum(dtype=torch.int64).item() / tokens.numel()
+                for name in ("input", *(f"block_{index}_residual" for index in range(len(integer.blocks))))
+            }
         if integer.cfg.route in ("steered", "steered_correction_code"):
             clock = 1 << (2 * integer.cfg.resolution - 1).bit_length()
             fractions = []

@@ -1,9 +1,25 @@
+from dataclasses import replace
+
 import pytest
 import torch
 import torch.nn.functional as F
 
 from snnformer.config import SNNConfig
 from snnformer.transformer_reference import TransformerLM, _sliding_window_attention
+
+
+def test_feed_forward_growth_preserves_logits_and_new_outputs_can_learn():
+    torch.manual_seed(45)
+    cfg = SNNConfig(neuron="ann", attn="transformer", mlp_ratio=2.0, position_embeddings=True)
+    options = dict(vocab=32, dim=16, depth=2, heads=4, ctx=32)
+    parent = TransformerLM(cfg, **options)
+    grown = TransformerLM(replace(cfg, mlp_ratio=5.0), **options)
+    width = grown.initialize_wider_feed_forward(cfg, parent.state_dict())
+    tokens = torch.randint(32, (2, 23))
+    expected, actual = parent(tokens), grown(tokens)
+    torch.testing.assert_close(actual, expected, atol=1e-7, rtol=1e-6)
+    actual.square().mean().backward()
+    assert all(bool(block.mlp_out.weight.grad[:, width:].any()) for block in grown.blocks)
 
 
 def test_blocked_attention_matches_dense_window_and_gradients():

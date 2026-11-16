@@ -37,6 +37,14 @@ write credit changes how gradients reach the trace during training.
 The separate 3.26M run used the original trace gradient.
 [3.26M control](SCALE_3260K.md) · [Chronological gradient](TRACE_WRITE_CREDIT.md)
 
+The wider Transformer scored 2.03855 bits per byte on enwik8
+and 3.28561 on PG-19 at this exposure. The 3.26M Transformer
+scored 1.86093 and 3.05929. A separate growth experiment starts
+from the trained 3.26M pair and preserves their measured
+predictions before further training.
+[From-scratch Transformer scores](../results/event_lm/scale_6510k_width) ·
+[Matched growth study](GROWN_RESIDUAL.md)
+
 Run from the repository root in Bash with the `spiking` array
 defined in the handoff.
 [Training setup](HANDOFF.md#train-and-continue)

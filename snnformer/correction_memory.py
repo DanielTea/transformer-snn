@@ -72,13 +72,22 @@ def _write_credit_scan(lower, upper, initial):
     return torch.cat((initial[:, None], boundaries), dim=1).gather(1, last_write)
 
 
+def _scan_charge(lower, upper, initial, *, write_credit=False):
+    if not torch.is_grad_enabled() or not (lower.requires_grad or upper.requires_grad or initial.requires_grad):
+        return _paired_interval_scan(lower, upper, initial)
+    if write_credit:
+        return _write_credit_scan(lower, upper, initial)
+    return _interval_scan(lower, upper, initial)
+
+
 def interval_spikes(charge, lower, upper):
     """Signed spikes needed to move charge just inside the allowed interval."""
     return (lower - charge).clamp_min(0) - (charge - upper).clamp_min(0)
 
 
 def correction_reads(address, target, tolerance, limit, state=None, *, bind_previous=False,
-                     hide_age=None, stats=None, key_channels=0, shuffle_keys=False, pulse_counts=None):
+                     hide_age=None, stats=None, key_channels=0, shuffle_keys=False, pulse_counts=None,
+                     write_credit=False):
     """Read before writing, moving each addressed cell by the least signed error."""
     prior_address = None
     if bind_previous:
@@ -90,7 +99,7 @@ def correction_reads(address, target, tolerance, limit, state=None, *, bind_prev
     lower, upper = _bounds(write, target, tolerance, limit)
     if state is None:
         state = CorrectionState(torch.zeros_like(lower[:, 0]))
-    after = _interval_scan(lower, upper, state.charge)
+    after = _scan_charge(lower, upper, state.charge, write_credit=write_credit)
     before = torch.cat((state.charge[:, None], after[:, :-1]), dim=1)
     if pulse_counts is not None:
         pulse_counts.append((after - before).abs().sum())

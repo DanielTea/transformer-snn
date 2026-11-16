@@ -5,7 +5,7 @@ import torch
 
 from snnformer.correction_memory import _interval_scan, _write_credit_scan, correction_reads, correction_step
 from snnformer.event_lm import (
-    EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _OpponentSteering,
+    EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _IntegrateFire, _OpponentSteering,
     _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _steer_packet,
 )
 
@@ -25,6 +25,16 @@ def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
         sequential_reads.append(pulse)
     torch.testing.assert_close(torch.stack(sequential_reads, 1), read)
     torch.testing.assert_close(streaming.charge, state.charge)
+
+
+def test_bank_write_credit_ignores_an_interval_that_just_touches_charge():
+    address = torch.ones((1, 3, 1, 1))
+    targets = torch.tensor([[[[1.]], [[1.]], [[3.]]]], requires_grad=True)
+    reads, state = correction_reads(address, targets, torch.zeros_like(targets), 8, write_credit=True)
+    assert reads.flatten().tolist() == [0, 1, 1]
+    assert state.charge.item() == 3
+    reads.sum().backward()
+    assert targets.grad.flatten().tolist() == [2, 0, 0]
 
 
 def test_read_ablation_uses_age_of_effective_change_and_keeps_state_intact():
@@ -595,6 +605,39 @@ def test_compact_axons_preserve_training_gradients_across_chunks():
         outputs.square().mean().backward()
     for reference, optimized in zip(standard.parameters(), compact.parameters(), strict=True):
         torch.testing.assert_close(reference.grad, optimized.grad, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("router_charge_bits", (6, 8))
+def test_residual_growth_preserves_counts_and_trains_the_added_neurons(router_charge_bits):
+    torch.manual_seed(69)
+    cfg = EventLMConfig(dim=16, hidden=8, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, forecast_key_channels=2,
+                        match_forecast_key=True, compact_delays=True, activity_inhibition=True, local_trace=True)
+    parent = EventLM(cfg)
+    grown = EventLM(replace(cfg, dim=32, inhibition_by_expansion=True, compact_axon_state=True,
+                           router_charge_bits=router_charge_bits))
+    grown.initialize_wider_residual(cfg, parent.state_dict())
+    stream = torch.randint(256, (1, 47))
+
+    def decode(model):
+        native = model.to_integer()
+        pulses = []
+        handles = [
+            module.register_forward_hook(lambda _m, _i, output: pulses.append(output.abs().sum()))
+            for module in native.modules() if isinstance(module, _IntegrateFire)
+        ]
+        counts = native(stream, memory_pulses=pulses)
+        for handle in handles:
+            handle.remove()
+        return counts, torch.stack(pulses).sum()
+
+    for before, after in zip(decode(parent), decode(grown), strict=True):
+        torch.testing.assert_close(after, before, rtol=0, atol=0)
+    grown(stream).square().mean().backward()
+    assert bool(grown.input.weight.grad[:, cfg.dim:].any())
+    assert all(bool(block.project.weight.grad[cfg.dim:].any()) for block in grown.blocks)
+    with pytest.raises(ValueError, match="inhibitory threshold"):
+        EventLM(replace(cfg, dim=32)).initialize_wider_residual(cfg, parent.state_dict())
 
 
 def test_tag_polarities_change_phase_without_adding_an_address_pulse():

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import copy
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from .correction_memory import (
-    CorrectionState, _interval_scan, _write_credit_scan, correction_reads, correction_step, interval_spikes,
+    CorrectionState, _scan_charge, correction_reads, correction_step, interval_spikes,
 )
 
 
@@ -62,8 +62,10 @@ class EventLMConfig:
     delay_residual: bool = False
     router_charge_bits: int = _CHARGE_BITS
     activity_inhibition: bool = False
+    inhibition_by_expansion: bool = False
     local_trace: bool = False
     trace_write_credit: bool = False
+    bank_write_credit: bool = False
     trace_read_veto: bool = False
     delay_filter: bool = False
     opponent_steering: bool = False
@@ -71,6 +73,11 @@ class EventLMConfig:
     residual_membrane: bool = False
     compact_axon_state: bool = False
     tag_phase_address: bool = False
+
+    @property
+    def inhibition_bits(self) -> int:
+        population = 2 * self.hidden if self.inhibition_by_expansion else self.dim
+        return ((population * self.resolution - 1) // _PACKET_UNITS).bit_length()
 
 
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
@@ -485,7 +492,7 @@ class _SpikeCorrection(nn.Module):
     """An address spike probes a bank and enables a bounded correction."""
 
     def __init__(self, dim, width, heads, slots, resolution, bind_previous, *, observed=False, forecast=False,
-                 key_channels=0, match_key=False, tag_phase_address=False):
+                 key_channels=0, match_key=False, tag_phase_address=False, write_credit=False):
         super().__init__()
         if heads < 1 or slots < 2 or width < heads or width % heads:
             raise ValueError("memory needs at least two slots and a positive read width divisible by its heads")
@@ -500,6 +507,7 @@ class _SpikeCorrection(nn.Module):
         self.bind_previous = bind_previous
         self.key_channels = key_channels
         self.match_key = match_key
+        self.write_credit = write_credit
         self.encode = _Synapse(dim, heads * (slots + 1) + (0 if observed else width), gain=1.0)
         self.code = _Synapse(dim, width, gain=0.25 if forecast else 1.0) if observed else None
         # A single byte afferent contributes at most two counts per unit
@@ -608,7 +616,7 @@ class _SpikeCorrection(nn.Module):
             address, target, tolerance, self.value.cap, state, bind_previous=self.bind_previous,
             hide_age=None if access is None else access.hide_age, stats=None if access is None else access.stats,
             key_channels=self.key_channels, shuffle_keys=access is not None and access.shuffle_keys,
-            pulse_counts=pulse_counts,
+            pulse_counts=pulse_counts, write_credit=self.write_credit,
         )
         if access is not None and access.stats is not None and self.phase_negative is not None:
             by_phase = address.detach().unflatten(-1, (self.slots, -1))
@@ -672,11 +680,7 @@ class _SpikeTrace(nn.Module):
         if initial is None:
             initial = torch.zeros_like(present[:, 0])
         lower, upper = self._bounds(present, steering if write_radius is None else write_radius)
-        needs_credit = self.write_credit and torch.is_grad_enabled() and (
-            lower.requires_grad or upper.requires_grad or initial.requires_grad
-        )
-        scan = _write_credit_scan if needs_credit else _interval_scan
-        after = scan(lower, upper, initial)
+        after = _scan_charge(lower, upper, initial, write_credit=self.write_credit)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
         change = after - before
         read = self._read(before, change, steering)
@@ -731,6 +735,7 @@ class _DelayBlock(nn.Module):
             self.correction = _SpikeCorrection(
                 cfg.dim, self.widths[-1], cfg.memory_heads, cfg.memory_slots, cfg.resolution,
                 bind_previous=cfg.route == "steered_correction_binding",
+                write_credit=cfg.bank_write_credit,
             )
             if cfg.route != "steered_correction":
                 self.memory_residual = _Synapse(self.widths[-1], cfg.dim, gain=0.15)
@@ -781,8 +786,7 @@ class _DelayBlock(nn.Module):
         self.activity_inhibition = None
         if cfg.activity_inhibition:
             # One pool receives one unit of charge per spike on either input rail.
-            pool_bits = ((cfg.dim * cfg.resolution - 1) // _PACKET_UNITS).bit_length()
-            self.activity_inhibition = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, pool_bits, False)
+            self.activity_inhibition = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
         bits = cfg.router_charge_bits
         self.expand = _Synapse(cfg.dim, cfg.hidden * (2 if self.steered else 1), gain=1.0,
                                continuous=cfg.continuous, charge_bits=bits)
@@ -1123,6 +1127,8 @@ class EventLM(nn.Module):
             raise ValueError("opponent steering needs a local charge trace")
         if cfg.trace_write_credit and not cfg.local_trace:
             raise ValueError("trace write credit needs a local charge trace")
+        if cfg.bank_write_credit and cfg.route not in (*_CORRECTION_ROUTES, *_PREDICTION_ROUTES):
+            raise ValueError("bank write credit needs a correction bank")
         if cfg.trace_read_veto and not cfg.local_trace:
             raise ValueError("trace read veto needs a local charge trace")
         if cfg.residual_membrane and not cfg.local_trace:
@@ -1141,6 +1147,8 @@ class EventLM(nn.Module):
             raise ValueError("finer router charge needs reset-per-byte neurons with fixed firing thresholds")
         if not isinstance(cfg.resolution, int) or cfg.resolution < 1:
             raise ValueError("spike resolution must be a positive integer")
+        if cfg.inhibition_by_expansion and not cfg.activity_inhibition:
+            raise ValueError("an expansion-sized inhibitory pool needs activity inhibition")
         if cfg.activity_inhibition:
             if (cfg.carry or cfg.continuous or cfg.learn_packet_thresholds
                     or cfg.route not in ("steered", "steered_correction_code")):
@@ -1192,6 +1200,7 @@ class EventLM(nn.Module):
                 cfg.dim, width, cfg.memory_heads, cfg.memory_slots, cfg.resolution, bind_previous=True, observed=True,
                 forecast=cfg.route == "steered_correction_code", key_channels=cfg.forecast_key_channels,
                 match_key=cfg.match_forecast_key, tag_phase_address=cfg.tag_phase_address,
+                write_credit=cfg.bank_write_credit,
             )
             self.recall_synapse = _Synapse(width - cfg.memory_heads * cfg.forecast_key_channels, cfg.dim, gain=0.15)
             self.recall_emit = _IntegrateFire(cap, _CHARGE_BITS, False)
@@ -1336,6 +1345,49 @@ class EventLM(nn.Module):
         access = _CorrectionAccess(correction, prefix, hide_age, stats, shuffle_keys)
         counts = self(tokens, correction_access=access)
         return counts[..., prefix:, :], EventChunkState(tokens[:, -self.local_history:].clone(), access.state)
+
+    @torch.no_grad()
+    def initialize_wider_residual(self, prior: EventLMConfig, previous: dict[str, torch.Tensor]):
+        """Load the trained neurons and start added residual neurons silent."""
+        cfg = self.cfg
+        expected = replace(prior, dim=cfg.dim, trace_write_credit=cfg.trace_write_credit,
+                           bank_write_credit=cfg.bank_write_credit,
+                           compact_axon_state=cfg.compact_axon_state, inhibition_by_expansion=cfg.inhibition_by_expansion,
+                           router_charge_bits=cfg.router_charge_bits)
+        if cfg.dim <= prior.dim or cfg.continuous or expected != cfg:
+            raise ValueError("widening needs the same spiking routing and memory geometry")
+        if cfg.activity_inhibition and prior.inhibition_bits != cfg.inhibition_bits:
+            raise ValueError("widening must preserve the inhibitory threshold")
+        if cfg.router_charge_bits < prior.router_charge_bits:
+            raise ValueError("widening needs at least the checkpoint's charge precision")
+
+        weights = self.state_dict()
+        if previous.keys() != weights.keys():
+            raise ValueError("the wider decoder and checkpoint must contain the same synapses")
+        synapses = {f"{name}.weight": module for name, module in self.named_modules() if isinstance(module, _Synapse)}
+        for name, target in weights.items():
+            original = previous[name]
+            synapse = synapses.get(name)
+            if (cfg.router_charge_bits > prior.router_charge_bits and synapse is not None
+                    and synapse.charge_bits == cfg.router_charge_bits):
+                # Keep existing physical weights on the old grid at initialization.
+                original = _weight_ticks(original, charge_bits=prior.router_charge_bits) / (1 << prior.router_charge_bits)
+            if target.shape == original.shape:
+                weights[name] = original
+                continue
+            if (synapse is None or original.ndim != 2 or target.ndim != 2
+                    or any(new < old for new, old in zip(target.shape, original.shape, strict=True))):
+                raise ValueError(f"incompatible synapse shape while widening: {name}")
+            # New inputs keep their random synapses, so gradients can reach
+            # the new neurons as soon as training starts.
+            output_axis = int(synapse.byte_input)
+            output_added = target.shape[output_axis] - original.shape[output_axis]
+            widened = target.clone()
+            if output_added:
+                widened.narrow(output_axis, original.shape[output_axis], output_added).zero_()
+            widened[:original.shape[0], :original.shape[1]].copy_(original)
+            weights[name] = widened
+        self.load_state_dict(weights)
 
     @torch.no_grad()
     def to_integer(self):

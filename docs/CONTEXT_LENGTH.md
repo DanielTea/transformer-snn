@@ -86,17 +86,18 @@ training target.
 
 | Model | Trained window | enwik8 bpb | PG-19 bpb | PG-19 raw bpb | State |
 |---|---:|---:|---:|---:|---:|
-| Seven-block held charge | 512 | 1.96430 | Scoring | Scoring | 31,692 B |
+| Seven-block held charge | 512 | 1.96430 | 2.88668 | 2.98308 | 31,692 B |
 | Full attention | 512 | 1.84280 | 3.06325 | 3.26568 | 4 MiB |
 | Seven-block held charge | 2,048 | 1.97126 | 2.87693 | 2.96339 | 31,692 B |
 | Full attention | 2,048 | 1.85459 | 3.05282 | 3.24905 | 16 MiB |
 
-At 2,048 bytes the SNN scored lower on each of the 16 PG-19 books.
-Its aggregate lead is 0.17589 calibrated bits per byte and 0.28566
-at raw scale. Full attention led enwik8 by 0.12151 bits per byte
-at 512 bytes and by 0.11667 at 2,048. The shorter-window continuation
-had lower enwik8 loss within each model family. Native CPU and MPS
-counts matched on 4,096 enwik8 test bytes for the 2,048-byte SNN,
-which emitted 306,441 pulses per byte in that audit.
+The SNN scored lower on each of the 16 PG-19 books at both lengths.
+At 2,048 bytes its aggregate lead was 0.17589 calibrated bits per
+byte and 0.28566 at raw scale. Full attention led enwik8 by 0.12151
+bits per byte at 512 bytes and by 0.11667 at 2,048. The shorter
+windows gave lower enwik8 loss within each model family. Native
+CPU and MPS counts matched on 4,096 enwik8 test bytes in both
+SNN audits. The 512- and 2,048-byte models emitted 308,067 and
+306,441 pulses per byte, respectively.
 [Training, corpus scores, and native audit](../results/event_lm/scale_3260k_context) ·
 [Released parents](SCALE_3260K.md)

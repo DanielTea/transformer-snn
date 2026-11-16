@@ -1,4 +1,4 @@
-"""Compare two held-charge gradient rules on the same enwik8 training batch."""
+"""Compare charge gradient rules on the same enwik8 training batch."""
 
 from __future__ import annotations
 
@@ -38,18 +38,19 @@ def main():
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--context", type=int, default=512)
     parser.add_argument("--trials", type=int, default=6)
+    parser.add_argument("--site", choices=("trace", "bank"), default="trace")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
     if min(args.context, args.batch_size, args.trials) < 1:
         parser.error("batch size, context, and trials must be positive")
     torch.set_num_threads(4)
     parent, _ = load_checkpoint(args.checkpoint, torch.device("cpu"))
-    if not isinstance(parent, EventLM) or not parent.cfg.local_trace:
-        parser.error("a held-charge checkpoint is required")
+    if not isinstance(parent, EventLM) or not (parent.cfg.local_trace if args.site == "trace" else parent.has_correction):
+        parser.error(f"the checkpoint needs a {args.site} charge recurrence")
     device = torch.device("mps")
     variants = {}
     for name, credit in (("original", False), ("write_credit", True)):
-        model = EventLM(replace(parent.cfg, trace_write_credit=credit))
+        model = EventLM(replace(parent.cfg, **{f"{args.site}_write_credit": credit}))
         model.load_state_dict(parent.state_dict())
         variants[name] = model.to(device).train()
 
@@ -75,6 +76,7 @@ def main():
         "split": "enwik8_train",
         "sample_sha256": hashlib.sha256(sample).hexdigest(),
         "checkpoint": str(args.checkpoint),
+        "site": args.site,
         "batch_size": args.batch_size,
         "context_bytes": args.context,
         "trials_after_warmup": args.trials,

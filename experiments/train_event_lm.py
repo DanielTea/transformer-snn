@@ -104,7 +104,9 @@ def build_model(args):
                             departure_coincidence=args.departure_coincidence, delay_window=args.delay_window,
                             delay_residual=args.delay_residual,
                             router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
+                            inhibition_by_expansion=args.inhibition_by_expansion,
                             local_trace=args.local_trace, trace_write_credit=args.trace_write_credit,
+                            bank_write_credit=args.bank_write_credit,
                             trace_read_veto=args.trace_read_veto,
                             delay_filter=args.delay_filter,
                             opponent_steering=args.opponent_steering,
@@ -147,13 +149,21 @@ def initialize_router(model, source, source_cfg):
     model.load_state_dict(weights, strict=False)
 
 
-def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
+def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow_residual=False,
+                               grow_feed_forward=False):
     from snnformer import SNNConfig
 
     source = torch.load(path, map_location="cpu", weights_only=True)
     if source.get("task") != "event_lm" or source.get("model_type") != type(model).__name__:
         raise ValueError("--initialize-from needs a checkpoint of the same decoder family")
-    if isinstance(model, EventLM):
+    growth = {}
+    if grow_residual:
+        if not isinstance(model, EventLM) or freeze_router:
+            raise ValueError("--grow-residual needs a trainable spiking decoder")
+        prior = EventLMConfig(**source["cfg"])
+        model.initialize_wider_residual(prior, source["state_dict"])
+        growth["residual_width_before"] = prior.dim
+    elif isinstance(model, EventLM):
         source_cfg = EventLMConfig(**source["cfg"])
         # Training checkpoints store weights in physical units. These switches can
         # reuse the matrices even when the forward pass uses a finer charge grid.
@@ -164,7 +174,9 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
                                   delay_window=model.cfg.delay_window, router_charge_bits=model.cfg.router_charge_bits,
                                   delay_residual=source_cfg.delay_residual or model.cfg.delay_residual,
                                   activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace,
+                                  inhibition_by_expansion=model.cfg.inhibition_by_expansion,
                                   trace_write_credit=model.cfg.trace_write_credit,
+                                  bank_write_credit=model.cfg.bank_write_credit,
                                   trace_read_veto=source_cfg.trace_read_veto or model.cfg.trace_read_veto,
                                   residual_membrane=model.cfg.residual_membrane,
                                   tag_phase_address=model.cfg.tag_phase_address,
@@ -200,15 +212,22 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
     else:
         source_geometry = {name: value for name, value in source["model_kwargs"].items() if name != "ctx"}
         geometry = {name: value for name, value in model_kwargs.items() if name != "ctx"}
-        if SNNConfig(**source["cfg"]) != model.cfg or source_geometry != geometry:
+        prior = SNNConfig(**source["cfg"])
+        if source_geometry != geometry:
             raise ValueError("the checkpoint and Transformer must use the same geometry")
-        model.load_state_dict(source["state_dict"])
+        if grow_feed_forward:
+            growth["feed_forward_width_before"] = model.initialize_wider_feed_forward(prior, source["state_dict"])
+        elif prior != model.cfg:
+            raise ValueError("the checkpoint and Transformer must use the same geometry")
+        else:
+            model.load_state_dict(source["state_dict"])
     options = source["args"]
     previous = source.get("initialization") or {}
     return {
         "checkpoint": str(path),
         "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "training_targets": options["steps"] * options["bs"] * options["ctx"] + previous.get("training_targets", 0),
+        **growth,
     }
 
 
@@ -249,12 +268,16 @@ def main():
                         help="fractional charge bits for local synapses and firing thresholds")
     parser.add_argument("--activity-inhibition", action="store_true",
                         help="raise content and steering thresholds with pooled incoming spike activity")
+    parser.add_argument("--inhibition-by-expansion", action="store_true",
+                        help="size the inhibitory threshold from the content and steering populations")
     parser.add_argument("--local-trace", action="store_true",
                         help="hold each channel's charge within its steering interval across bytes")
     parser.add_argument("--residual-membrane", action="store_true",
                         help="retain the signed subthreshold charge at the output of each routing block")
     parser.add_argument("--trace-write-credit", action="store_true",
                         help="send held-charge gradients to the last bound that moved the charge")
+    parser.add_argument("--bank-write-credit", action="store_true",
+                        help="send each correction-cell gradient to the last write that moved it")
     parser.add_argument("--trace-read-veto", action="store_true",
                         help="use charge correction spikes to inhibit mismatched reads")
     parser.add_argument("--opponent-steering", action="store_true",
@@ -283,6 +306,10 @@ def main():
     parser.add_argument("--final-eval-batches", type=int, default=100)
     parser.add_argument("--validation-only", action="store_true", help="leave the test split untouched during tuning")
     parser.add_argument("--initialize-from", type=Path, help="matching model or compatible plain spike router checkpoint")
+    parser.add_argument("--grow-residual", action="store_true",
+                        help="start extra residual neurons silent while loading the narrower checkpoint")
+    parser.add_argument("--grow-feed-forward", action="store_true",
+                        help="grow a Transformer reference's SwiGLU width from a narrower checkpoint")
     parser.add_argument("--freeze-router", action="store_true", help="update only the newly added bank")
     parser.add_argument("--code-loss-weight", type=float, default=0.0, help="weight for the next-byte spike code loss")
     parser.add_argument("--corrected-code-loss", action="store_true",
@@ -302,6 +329,12 @@ def main():
         parser.error("learning rate must be positive and weight decay must be nonnegative")
     if args.freeze_router and args.initialize_from is None:
         parser.error("--freeze-router requires --initialize-from")
+    if args.grow_residual and (args.initialize_from is None or args.variant not in EVENT_ROUTES or args.freeze_router):
+        parser.error("--grow-residual needs a spiking --initialize-from checkpoint and trainable router")
+    if args.grow_feed_forward and (args.initialize_from is None or args.variant not in ("transformer", "transformer_local")):
+        parser.error("--grow-feed-forward needs a Transformer --initialize-from checkpoint")
+    if args.bank_write_credit and args.variant not in EVENT_ROUTES:
+        parser.error("--bank-write-credit needs a spiking correction bank")
     if args.freeze_router and args.variant not in EVENT_ROUTES:
         parser.error("--freeze-router needs a spiking variant")
     if not math.isfinite(args.code_loss_weight) or args.code_loss_weight < 0:
@@ -316,6 +349,7 @@ def main():
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.compact_axon_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
+            or args.inhibition_by_expansion
             or args.local_trace or args.trace_write_credit or args.trace_read_veto
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
@@ -341,7 +375,8 @@ def main():
         initialization = None
         if args.initialize_from is not None:
             initialization = initialize_from_checkpoint(
-                model, model_kwargs, args.initialize_from.expanduser(), freeze_router=args.freeze_router,
+                model, model_kwargs, args.initialize_from.expanduser(),
+                freeze_router=args.freeze_router, grow_residual=args.grow_residual, grow_feed_forward=args.grow_feed_forward,
             )
         model = model.to(device)
     except (OSError, RuntimeError, ValueError) as exc:
@@ -408,8 +443,9 @@ def main():
                               **({"train_pulses_per_byte": pulses.item(), "val_pulses_per_byte": metrics["pulses_per_byte"],
                                   "spike_price": spike_price.item()} if pulse_counts is not None else {}),
                               **({"code_loss": code_loss.item()} if args.code_loss_weight else {})))
+            activity = f" pulses/byte={metrics['pulses_per_byte']:.0f}" if pulse_counts is not None else ""
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
-                  f"accuracy={metrics['argmax_accuracy']:.4f} ({timer():.1f}s)", flush=True)
+                  f"accuracy={metrics['argmax_accuracy']:.4f} ({timer():.1f}s){activity}", flush=True)
 
     val_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,

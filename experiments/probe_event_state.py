@@ -66,7 +66,7 @@ def score_with_options(model, window, chunk_size, **options):
     return score(variant, window, chunk_size)
 
 
-def probe(model, window, chunk_size):
+def probe(model, window, chunk_size, *, residual_width_before=None):
     pools = [block.activity_inhibition for block in model.blocks if block.activity_inhibition is not None]
     series = [[] for _ in pools]
     hooks = [pool.register_forward_hook(watch(counts)) for pool, counts in zip(pools, series, strict=True)]
@@ -107,6 +107,14 @@ def probe(model, window, chunk_size):
         result["reset_residual_membrane_bpb"] = score_with_options(model, window, chunk_size, residual_membrane=False)
     if model.cfg.tag_phase_address:
         result["one_phase_address_bpb"] = score_with_options(model, window, chunk_size, tag_phase_address=False)
+    if residual_width_before is not None:
+        output_synapses = [model.input, *model.delayed_input, *(block.project for block in model.blocks)]
+        output_synapses += [block.memory_residual for block in model.blocks if block.memory_residual is not None]
+        if model.prediction_memory is not None:
+            output_synapses.append(model.recall_synapse)
+        extra_outputs = [synapse.weight[:, residual_width_before:] if synapse.byte_input
+                         else synapse.weight[residual_width_before:] for synapse in output_synapses]
+        result["silence_added_residual_bpb"] = score_without_synapses(model, window, chunk_size, extra_outputs)
     return result
 
 
@@ -125,7 +133,7 @@ def main():
         parser.error(f"output already exists: {args.json}")
     torch.set_num_threads(4)
     device = resolve_device(args.device)
-    model, _ = load_checkpoint(args.checkpoint, device)
+    model, checkpoint = load_checkpoint(args.checkpoint, device)
     if not isinstance(model, EventLM) or not (model.has_correction or model.cfg.local_trace):
         parser.error("a chunk-capable spiking checkpoint is required")
     if not (model.cfg.activity_inhibition or model.cfg.local_trace or model.cfg.delay_filter):
@@ -142,7 +150,8 @@ def main():
         "sample_sha256": hashlib.sha256(sample).hexdigest(),
         "target_bytes": args.targets,
         "chunk_bytes": args.chunk_size,
-        **probe(model, window, args.chunk_size),
+        **probe(model, window, args.chunk_size,
+                residual_width_before=(checkpoint.get("initialization") or {}).get("residual_width_before")),
     }
     with _atomic_output(args.json, "w", overwrite=False) as output:
         json.dump(record, output, indent=2)

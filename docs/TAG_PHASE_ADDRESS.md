@@ -94,6 +94,19 @@ phase banks with the same trained weights to measure the
 combined effect of the timing and capacity change.
 [Three-step Metal smoke](../results/event_lm/tag_phase_address/event_correction_code_s711_tag_phase_address_smoke.json)
 
+| Seed-711 continuation | enwik8 bpb | PG-19 bpb | Raw PG-19 bpb |
+|---|---:|---:|---:|
+| Held charge with one-phase addressing | 1.96430 | 2.88668 | 2.98308 |
+| Four-phase addressing | 1.99725 | 2.90730 | 2.99722 |
+
+The four-phase continuation had higher loss on both corpora in
+this seed. The native decoder matched Metal counts on 4,096
+enwik8 test bytes and emitted 311,699 pulses per byte. Collapsing
+the trained phase addresses to one slot with the same weights
+lowered validation probe loss from 1.934447 to 1.934276.
+[Training and held-out scores](../results/event_lm/tag_phase_address) ·
+[One-phase control](CONTEXT_LENGTH.md#repeat-at-326m-parameters)
+
 ## Supervise the corrected forecast
 
 The existing auxiliary loss supervises the local forecast of

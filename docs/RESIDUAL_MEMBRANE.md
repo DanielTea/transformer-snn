@@ -65,10 +65,11 @@ training windows on the same SNN and Transformer parents.
 
 The signed-carry model scored 1.96628 bits per byte on the complete
 enwik8 test split. The matched held-charge continuation scored
-1.96430. The signed-carry PG-19 result was 2.89838 calibrated and
-2.99574 raw bits per byte across the same 16 books. Resetting its
-residual membranes with the trained weights lowered the validation
-probe loss from 1.898439 to 1.898362.
+1.96430. On PG-19, signed carry scored 2.89838 versus 2.88668
+for the matched control. Their raw losses were 2.99574 and
+2.98308 bits per byte across the same 16 books. Resetting its
+residual membranes with the trained weights lowered the
+validation probe loss from 1.898439 to 1.898362.
 
 The integer audit matched MPS counts and native chunked output on
 4,096 test bytes. It measured 309,629 pulses per byte and 22,224
