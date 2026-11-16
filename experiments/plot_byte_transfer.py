@@ -7,6 +7,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from matplotlib.ticker import MaxNLocator
+
 from plot_dendrite import BLUE, GRAY, MUTED, ORANGE, RESULTS, TEXT, VIOLET, heading, plt, save, style
 
 
@@ -92,6 +94,7 @@ def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png")
     corpus.set_title("Raw corpus loss", loc="left", color=TEXT, fontsize=12)
     words.set_title("LAMBADA final-word accuracy", loc="left", color=TEXT, fontsize=12)
 
+    largest_count = 0
     for index, (model, label) in enumerate(zip(models, labels, strict=True)):
         color = colors[index % len(colors)]
         metrics = model["benchmarks"]
@@ -100,12 +103,11 @@ def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png")
             offset = (index - len(models) / 2) * 0.17
             corpus.scatter(deltas, [y + offset for y in range(len(DATASETS))],
                            color=color, s=37, zorder=3, label=label)
-        passage, last = (100 * metrics["lambada"][mode]["boundary_exact_match_accuracy"]
-                         for mode in ("passage", "last_sentence"))
-        high, low = max(passage, last), min(passage, last)
-        words.hlines(index, low, high, color=color, linewidth=2)
-        words.scatter(passage, index, color=color, s=42, zorder=3)
-        words.scatter(last, index, color="white", edgecolors=color, linewidths=1.5, s=42, zorder=3)
+        passage, last = (metrics["lambada"][mode]["boundary_exact_matches"] for mode in ("passage", "last_sentence"))
+        largest_count = max(largest_count, passage, last)
+        words.plot((passage, last), (index - 0.13, index + 0.13), color=color, linewidth=1.25)
+        words.scatter(passage, index - 0.13, color=color, s=42, zorder=3)
+        words.scatter(last, index + 0.13, color="white", edgecolors=color, linewidths=1.5, s=42, zorder=3)
     corpus.axvline(0, color=MUTED, linewidth=0.85)
     corpus.set_yticks(range(len(DATASETS)), [label for _, label in DATASETS])
     corpus.invert_yaxis()
@@ -115,7 +117,9 @@ def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png")
 
     words.set_yticks(range(len(labels)), labels)
     words.invert_yaxis()
-    words.set_xlabel("Boundary-checked exact match (%)", color=MUTED)
+    words.set_xlim(-0.2, max(largest_count, 1) + 0.25)
+    words.xaxis.set_major_locator(MaxNLocator(integer=True))
+    words.set_xlabel(f"Exact words out of {record['lambada_examples']:,}", color=MUTED)
     fig.text(0.035, 0.037, "Lower loss is better. Filled and open markers show full-passage and last-sentence scores.",
              color=MUTED, size=9)
     output.mkdir(parents=True, exist_ok=True)

@@ -45,6 +45,7 @@ code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
 code { background: var(--wash); padding: 0.1em 0.35em; border-radius: 4px; }
 .tablewrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+caption { text-align: left; font: 500 var(--step-1) var(--f-display); padding: 4px 0 8px; }
 th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
 th { font: 500 0.72rem/1.3 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 td.num, th.num { text-align: right; padding-right: 0; padding-left: 10px; white-space: nowrap; }
@@ -99,14 +100,26 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <div class="eyebrow">Spiking transformer research · November 2026</div>
   <h1>ShuntFormer</h1>
   <p class="deck">A byte language model built from signed spikes, fixed axons, and learned charge memory. The report also preserves the earlier ShuntFormer and Dendrite experiments.</p>
-  <p class="col callout"><strong>Benchmark scope</strong> Next-byte prediction uses held-out real text from enwik8 and PG-19. Earlier associative recall experiments use generated sequences. The models run in PyTorch on CPUs and Apple GPUs (Metal/MPS). Historical energy estimates use operation counts and assumed costs.</p>
+  <p class="col callout"><strong>Benchmark scope</strong> Next-byte prediction uses held-out real text from enwik8, PG-19 and five byte transfer benchmarks. Earlier associative recall experiments use generated sequences. The models run in PyTorch on CPUs and Apple GPUs (Metal/MPS). Historical energy estimates use operation counts and assumed costs.</p>
   <canvas id="raster" aria-hidden="true"></canvas>
   <div class="strip" id="strip"></div>
 </header>
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
-  <p class="col">The v8 study lets write-correction spikes drive their own held-charge reads. Its matched controls test fractional charge, spare steering, and source polarity. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State counts persistent tensors per stream, including FP32 keys and values for full attention at its evaluation context. The earlier frozen-teacher arm uses additional training compute.</p>
+  <p class="col">The v9 study tests whether scheduled spikes absent from the held-charge read improve next-byte prediction after a reset. It pairs the unmatched-arrival circuit with a selected-arrival control, the ordinary fixed-routing SNN and a full-attention reference. enwik8 and PG-19 scores are bits per byte. PG-19 temperatures are fitted on separate books. State counts persistent tensors per stream, including FP32 keys and values for full attention at its evaluation context.</p>
+  <figure>
+    <a href="../results/figures/event_lm_trace_arrival.png"><img src="../results/figures/event_lm_trace_arrival.png" alt="Held-out enwik8 and PG-19 loss for scheduled spike arrivals"></a>
+    <figcaption>Four continuations at 121.24 million enwik8 training targets.</figcaption>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_arrival_early_context.png"><img src="../results/figures/event_lm_arrival_early_context.png" alt="Paired enwik8 loss difference from full attention in the first 32 predictions" loading="lazy"></a>
+  </figure>
+  <figure id="byte-transfer">
+    <a href="../results/figures/event_lm_byte_transfer_trace_arrival_s9349.png"><img src="../results/figures/event_lm_byte_transfer_trace_arrival_s9349.png" alt="Relative WikiText-103, C4, enwik9 and text8 loss and LAMBADA final-word accuracy" loading="lazy"></a>
+    <figcaption>Four transfer corpora use matched byte windows. LAMBADA pairs full passages with last sentences. <a href="BYTE_TRANSFER.md">Dataset protocol and overlap screen</a></figcaption>
+  </figure>
+  <p class="col">Earlier experiments test write-driven charge reads, fractional thresholds, spare steering and pulse timing. The frozen-teacher arm uses additional training compute.</p>
   <figure>
     <a href="../results/figures/event_lm_trace_read_drive.png"><img src="../results/figures/event_lm_trace_read_drive.png" alt="Held-out loss for reset and carried held-charge reads with matched SNN and full-attention controls" loading="lazy"></a>
   </figure>
@@ -192,7 +205,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v8/README.md">Model and architecture</a> · <a href="V8_HANDOFF.md">Training handoff</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v9/README.md">Model and architecture</a> · <a href="V9_HANDOFF.md">Training handoff</a></p>
 </section>
 
 <section id="dendrite">
