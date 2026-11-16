@@ -108,11 +108,11 @@ Transformer by 16,384,000 enwik8 targets to 49,152,000 total.
 The third repeats the original
 32,768,000-target growth protocol with three-way coincidence in the
 added residual neurons. Each command trains, scores both corpora, and
-runs the integer audit for SNNs. At the release cutoff the extended
-Transformer had finished, and its checkpoint and scores are included.
-On the original workstation, check
-`checkpoints/scale-6510k-data-study/logs/train_trace_s1109.log`
-for the SNN's progress before starting a repeat.
+runs the integer audit for SNNs. Both 49.15M arms have full results.
+The published v4 archive contains the two starting checkpoints and
+the extended Transformer. On the original workstation, the extended
+SNN is saved as `checkpoints/scale-6510k-data-study/trace_s1109.pt`.
+[49.15M scores](GROWN_RESIDUAL.md#extend-training-exposure)
 [Continuation script](../experiments/run_v4_continuation.sh) ·
 [Three-way coincidence design](TRACE_COINCIDENCE.md)
 
@@ -196,12 +196,14 @@ number of targets, and checkpoint path.
 
 | Experiment | State at handoff | Evidence |
 |---|---|---|
+| Expansion to 8.74M | Both wide arms and the original-width control scored. The steering-gradient rerun is queued | [Expansion study](EXPANSION_GROWTH.md) |
+| Delayed write confirmation | Integer parity and full continuation training complete. Held-out scoring in progress | [Write confirmation study](TRACE_WRITE_CONFIRM.md) |
 | Grown 6.51M matched pair | Trained and scored on both corpora, with SNN native parity and an added-neuron ablation | [Growth study](GROWN_RESIDUAL.md) |
 | Grown 6.51M with finer charge | Released reference. Both corpora scored with native parity | [Finer-charge study](GROWN_RESIDUAL.md#finer-synaptic-charge-at-the-same-firing-resolution) |
 | 6.51M pair from scratch | Matched 26.21M-target comparison scored and audited | [Width study](SCALE_6510K_WIDTH.md) |
 | 3.26M context and memory variants | 512- and 2,048-byte continuations, signed residual membranes, four-phase address and corrected forecast scored | [Context](CONTEXT_LENGTH.md#repeat-at-326m-parameters) · [Membranes](RESIDUAL_MEMBRANE.md) · [Address phases](TAG_PHASE_ADDRESS.md) |
-| Three-way coincidence in added neurons | Warm-start parity, gradient check, and three training steps complete | [Design and next run](TRACE_COINCIDENCE.md) |
-| 49.15M cumulative-target extension | Transformer scored and archived. SNN still training at release cutoff | [Continuation commands](#pick-up-the-current-experiments) · [Transformer records](../results/event_lm/scale_6510k_data) |
+| Three-way coincidence in added neurons | Both scores and native audits complete. The matched ordinary SNN led both corpora | [Held-out comparison](TRACE_COINCIDENCE.md#paired-training-run) |
+| 49.15M cumulative-target extension | Matched pair scored on both corpora and native SNN activity audited | [Continuation commands](#pick-up-the-current-experiments) · [Paired records](../results/event_lm/scale_6510k_data) |
 | Original held charge and inhibition | Depth controls and inhibition-only replication complete | [Depth study](DEPTH_INHIBITION.md) |
 | Held-charge replication | Seeds 0–2 scored and audited | [Per-seed results](HELD_CHARGE_REPLICATION.md) |
 | Opponent steering | 512-byte continuation and matched held-charge control scored and audited | [Circuit and intervention](OPPONENT_STEERING.md) |

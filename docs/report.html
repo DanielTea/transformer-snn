@@ -110,10 +110,30 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_grown_6510k.png"><img src="../results/figures/event_lm_grown_6510k.png" alt="Held-out loss for the grown 6.51M spiking and full-attention models" loading="lazy"></a>
   </figure>
-  <h3>6.51M growth · 512-byte continuations · 32,768,000 training targets · seed 711</h3>
+  <figure>
+    <a href="../results/figures/event_lm_6510k_data.png"><img src="../results/figures/event_lm_6510k_data.png" alt="Held-out loss after continuing both 6.51M models to 49.15 million training targets" loading="lazy"></a>
+  </figure>
+  <h3>8.74M expansion and original-width control · 55,705,600 training targets · seed 1801</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Expanded held-charge SNN</th><td class="num">8,739,840</td><td class="num">26,080 B</td><td class="num">1.88812</td><td class="num"><strong>2.83753</strong></td><td class="num">2.94075</td><td class="num">309,457</td></tr>
+<tr><th scope="row">Grown full-attention Transformer</th><td class="num">8,740,352</td><td class="num">4,194,304 B</td><td class="num"><strong>1.79731</strong></td><td class="num">3.01533</td><td class="num">3.22392</td><td class="num">—</td></tr>
+<tr><th scope="row">Original-width held-charge SNN</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.89057</td><td class="num">2.84072</td><td class="num">2.94263</td><td class="num">309,545</td></tr>
+</tbody></table></div>
+<h3>6.51M with more training data · 49,152,000 training targets · seed 1109</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Six-bit grown SNN</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.89440</td><td class="num"><strong>2.82683</strong></td><td class="num">2.91901</td><td class="num">309,688</td></tr>
+<tr><th scope="row">Grown full-attention Transformer</th><td class="num">6,513,152</td><td class="num">4,194,304 B</td><td class="num"><strong>1.80629</strong></td><td class="num">3.03772</td><td class="num">3.24647</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>6.51M growth · 512-byte continuations · 32,768,000 training targets · seed 711</h3>
 <div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
 <tr><th scope="row">Grown SNN, finer charge</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.95110</td><td class="num"><strong>2.85083</strong></td><td class="num">2.93341</td><td class="num">309,505</td></tr>
 <tr><th scope="row">Grown SNN, six-bit charge</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.95646</td><td class="num">2.86904</td><td class="num">2.95290</td><td class="num">306,923</td></tr>
+<tr><th scope="row">Grown full-attention Transformer</th><td class="num">6,513,152</td><td class="num">4,194,304 B</td><td class="num"><strong>1.84266</strong></td><td class="num">3.06318</td><td class="num">3.26549</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>6.51M trace coincidence · 32,768,000 training targets · seed 711</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Grown SNN, six-bit charge</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.95646</td><td class="num"><strong>2.86904</strong></td><td class="num">2.95290</td><td class="num">306,923</td></tr>
+<tr><th scope="row">Three-way coincidence</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.95911</td><td class="num">2.87132</td><td class="num">2.95721</td><td class="num">307,297</td></tr>
 <tr><th scope="row">Grown full-attention Transformer</th><td class="num">6,513,152</td><td class="num">4,194,304 B</td><td class="num"><strong>1.84266</strong></td><td class="num">3.06318</td><td class="num">3.26549</td><td class="num">—</td></tr>
 </tbody></table></div>
 <h3>3.26M · 512-byte continuations · 32,768,000 training targets · seed 711</h3>

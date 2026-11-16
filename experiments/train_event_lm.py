@@ -106,7 +106,8 @@ def build_model(args):
                             router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
                             inhibition_by_expansion=args.inhibition_by_expansion,
                             local_trace=args.local_trace, trace_coincidence_start=args.trace_coincidence_start,
-                            trace_write_credit=args.trace_write_credit,
+                            trace_write_credit=args.trace_write_credit, trace_write_confirm=args.trace_write_confirm,
+                            steering_gradient_at_zero=args.steering_gradient_at_zero,
                             bank_write_credit=args.bank_write_credit,
                             trace_read_veto=args.trace_read_veto,
                             delay_filter=args.delay_filter,
@@ -126,7 +127,7 @@ def build_model(args):
 _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
 _OPTIONAL_ROUTER_PARAMETERS = (
     ".packet_thresholds.", ".delay_correction.", ".delay_filters.", ".opponent_steering.", ".trace.read_veto.",
-    ".spread_coincidence.",
+    ".spread_coincidence.", ".trace.write_confirm.",
 )
 
 
@@ -151,19 +152,23 @@ def initialize_router(model, source, source_cfg):
 
 
 def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow_residual=False,
-                               grow_feed_forward=False):
+                               grow_feed_forward=False, grow_expansion=False):
     from snnformer import SNNConfig
 
     source = torch.load(path, map_location="cpu", weights_only=True)
     if source.get("task") != "event_lm" or source.get("model_type") != type(model).__name__:
         raise ValueError("--initialize-from needs a checkpoint of the same decoder family")
     growth = {}
-    if grow_residual:
+    if grow_residual or grow_expansion:
         if not isinstance(model, EventLM) or freeze_router:
-            raise ValueError("--grow-residual needs a trainable spiking decoder")
+            raise ValueError("growth needs a trainable spiking decoder")
         prior = EventLMConfig(**source["cfg"])
-        model.initialize_wider_residual(prior, source["state_dict"])
-        growth["residual_width_before"] = prior.dim
+        if grow_residual:
+            model.initialize_wider_residual(prior, source["state_dict"])
+            growth["residual_width_before"] = prior.dim
+        else:
+            model.initialize_wider_expansion(prior, source["state_dict"])
+            growth["expansion_width_before"] = prior.hidden
     elif isinstance(model, EventLM):
         source_cfg = EventLMConfig(**source["cfg"])
         # Training checkpoints store weights in physical units. These switches can
@@ -178,6 +183,8 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   trace_coincidence_start=model.cfg.trace_coincidence_start,
                                   inhibition_by_expansion=model.cfg.inhibition_by_expansion,
                                   trace_write_credit=model.cfg.trace_write_credit,
+                                  trace_write_confirm=source_cfg.trace_write_confirm or model.cfg.trace_write_confirm,
+                                  steering_gradient_at_zero=model.cfg.steering_gradient_at_zero,
                                   bank_write_credit=model.cfg.bank_write_credit,
                                   trace_read_veto=source_cfg.trace_read_veto or model.cfg.trace_read_veto,
                                   residual_membrane=model.cfg.residual_membrane,
@@ -195,6 +202,8 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 expected.update(name for name in model.state_dict() if ".opponent_steering." in name)
             if model.cfg.trace_read_veto and not source_cfg.trace_read_veto:
                 expected.update(name for name in model.state_dict() if ".trace.read_veto." in name)
+            if model.cfg.trace_write_confirm and not source_cfg.trace_write_confirm:
+                expected.update(name for name in model.state_dict() if ".trace.write_confirm." in name)
             if model.cfg.spread_coincidence and not source_cfg.spread_coincidence:
                 expected.update(name for name in model.state_dict() if ".spread_coincidence." in name)
             if expected:
@@ -280,6 +289,10 @@ def main():
                         help="retain the signed subthreshold charge at the output of each routing block")
     parser.add_argument("--trace-write-credit", action="store_true",
                         help="send held-charge gradients to the last bound that moved the charge")
+    parser.add_argument("--trace-write-confirm", action="store_true",
+                        help="use delayed content spikes to extend the held-charge write interval")
+    parser.add_argument("--steering-gradient-at-zero", action="store_true",
+                        help="use the right training derivative for steering at zero synaptic charge")
     parser.add_argument("--bank-write-credit", action="store_true",
                         help="send each correction-cell gradient to the last write that moved it")
     parser.add_argument("--trace-read-veto", action="store_true",
@@ -310,9 +323,12 @@ def main():
     parser.add_argument("--final-eval-batches", type=int, default=100)
     parser.add_argument("--validation-only", action="store_true", help="leave the test split untouched during tuning")
     parser.add_argument("--initialize-from", type=Path, help="matching model or compatible plain spike router checkpoint")
-    parser.add_argument("--grow-residual", action="store_true",
+    growth = parser.add_mutually_exclusive_group()
+    growth.add_argument("--grow-residual", action="store_true",
                         help="start extra residual neurons silent while loading the narrower checkpoint")
-    parser.add_argument("--grow-feed-forward", action="store_true",
+    growth.add_argument("--grow-expansion", action="store_true",
+                        help="grow silent content and steering neurons inside each delay group")
+    growth.add_argument("--grow-feed-forward", action="store_true",
                         help="grow a Transformer reference's SwiGLU width from a narrower checkpoint")
     parser.add_argument("--freeze-router", action="store_true", help="update only the newly added bank")
     parser.add_argument("--code-loss-weight", type=float, default=0.0, help="weight for the next-byte spike code loss")
@@ -333,8 +349,10 @@ def main():
         parser.error("learning rate must be positive and weight decay must be nonnegative")
     if args.freeze_router and args.initialize_from is None:
         parser.error("--freeze-router requires --initialize-from")
-    if args.grow_residual and (args.initialize_from is None or args.variant not in EVENT_ROUTES or args.freeze_router):
-        parser.error("--grow-residual needs a spiking --initialize-from checkpoint and trainable router")
+    if (args.grow_residual or args.grow_expansion) and (
+        args.initialize_from is None or args.variant not in EVENT_ROUTES or args.freeze_router
+    ):
+        parser.error("spiking growth needs an --initialize-from checkpoint and a trainable router")
     if args.grow_feed_forward and (args.initialize_from is None or args.variant not in ("transformer", "transformer_local")):
         parser.error("--grow-feed-forward needs a Transformer --initialize-from checkpoint")
     if args.bank_write_credit and args.variant not in EVENT_ROUTES:
@@ -354,8 +372,8 @@ def main():
             or args.compact_axon_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
             or args.inhibition_by_expansion
-            or args.trace_coincidence_start is not None
-            or args.local_trace or args.trace_write_credit or args.trace_read_veto
+            or args.trace_coincidence_start is not None or args.steering_gradient_at_zero
+            or args.local_trace or args.trace_write_credit or args.trace_write_confirm or args.trace_read_veto
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"
@@ -382,6 +400,7 @@ def main():
             initialization = initialize_from_checkpoint(
                 model, model_kwargs, args.initialize_from.expanduser(),
                 freeze_router=args.freeze_router, grow_residual=args.grow_residual, grow_feed_forward=args.grow_feed_forward,
+                grow_expansion=args.grow_expansion,
             )
         model = model.to(device)
     except (OSError, RuntimeError, ValueError) as exc:

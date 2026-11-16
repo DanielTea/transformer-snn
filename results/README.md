@@ -69,8 +69,10 @@ full-corpus scores, and exact training records.
 | [Finer-charge reference](event_lm/grown_fine_charge) | Exact training record, both held-out scores, native audit and ablation |
 | [From-scratch width study](event_lm/scale_6510k_width) | The paired 6.51M training and evaluation records |
 | [3.26M context study](event_lm/scale_3260k_context) | Both checkpoints at 512 and 2,048 training bytes per window |
-| [49.15M-target continuation](event_lm/scale_6510k_data) | Transformer scores at the release cutoff. The matched SNN run was in progress |
-| [Three-way coincidence](event_lm/trace_coincidence) | Warm-start parity and three-step enwik8 smoke |
+| [49.15M-target continuation](event_lm/scale_6510k_data) | Paired scores, native activity, and enwik8 validation memory interventions |
+| [Three-way coincidence](event_lm/trace_coincidence) | Warm-start parity, full held-out scores and routing ablation |
+| [8.74M expansion](event_lm/expansion_8740k) | Warm-start checks and matched continuation records |
+| [Delayed write confirmation](event_lm/trace_write_confirm) | Warm checks for the learned write extension |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
 exposure, geometry, and seed. The v4 archive combines the checkpoint

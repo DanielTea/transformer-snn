@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Run a continuation from the v4 handoff and score the resulting checkpoint.
+# Train and score a continuation from the held-charge studies.
 set -euo pipefail
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
-  echo "Usage: bash experiments/run_v4_continuation.sh {trace-coincidence|extend-snn|extend-transformer} [output-dir]" >&2
+  echo "Usage: bash experiments/run_v4_continuation.sh STUDY [output-dir]" >&2
+  echo "Studies: trace-coincidence trace-write-confirm extend-snn extend-transformer" >&2
+  echo "         expansion-snn expansion-transformer expansion-control expansion-steering" >&2
   exit 2
 fi
 
@@ -38,6 +40,29 @@ case "$study" in
       --initialize-from checkpoints/grown-6510k-residual-study/transformer_s711.pt)
     name=transformer_s1109
     ;;
+  expansion-snn|expansion-steering)
+    training+=("${spiking[@]}" --hidden 256 --grow-expansion
+      --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
+    name=expanded_s1801
+    if [[ $study == expansion-steering ]]; then
+      training+=(--steering-gradient-at-zero)
+      name=expanded_steering_s1801
+    fi
+    ;;
+  expansion-transformer)
+    training+=(--variant transformer --dim 256 --depth 4 --heads 4 --mlp-ratio 14.537109375
+      --grow-feed-forward --initialize-from checkpoints/scale-6510k-data-study/transformer_s1109.pt)
+    name=transformer_s1801
+    ;;
+  expansion-control)
+    training+=("${spiking[@]}" --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
+    name=control_s1801
+    ;;
+  trace-write-confirm)
+    training+=("${spiking[@]}" --trace-write-confirm
+      --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
+    name=confirm_s1801
+    ;;
   *)
     echo "Unknown continuation: $study" >&2
     exit 2
@@ -47,6 +72,13 @@ esac
 if [[ $study == extend-* ]]; then
   training+=(--steps 4000 --warmup 128 --lr 0.0003 --seed 1109 --eval-every 400
     --tag scale_6510k_49152k_targets)
+elif [[ $study == expansion-* || $study == trace-write-confirm ]]; then
+  tag=scale_6510k_trace_write_confirm
+  if [[ $study == expansion-* ]]; then
+    tag="scale_8740k_expansion_${study#expansion-}"
+  fi
+  training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 1801 --eval-every 200
+    --tag "$tag")
 fi
 
 checkpoint="$output_dir/$name.pt"
@@ -56,7 +88,7 @@ mkdir -p "$records"
   --results-dir "$records" --checkpoint "$checkpoint"
 
 context=8192
-if [[ $study == extend-transformer ]]; then
+if [[ $study == *-transformer ]]; then
   context=256
 fi
 score=("$python_exe" -u experiments/eval_event_lm.py --device "$device"
@@ -69,11 +101,15 @@ score=("$python_exe" -u experiments/eval_event_lm.py --device "$device"
   --temperatures 0.8 1.0 1.15 1.25 1.4 1.5 1.65 1.8 2.0 2.25 \
   --json "$records/pg19_$name.json"
 
-if [[ $study != extend-transformer ]]; then
+if [[ $study != *-transformer ]]; then
   "$python_exe" -u experiments/audit_spike_code.py --device "$device" --split test \
     --enwik8 data/enwik8 --activity-profile --checkpoint "$checkpoint" --json "$records/native_$name.json"
 fi
-if [[ $study == trace-coincidence ]]; then
+if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == expansion-snn || $study == expansion-steering ]]; then
   "$python_exe" -u experiments/probe_event_state.py --device "$device" --enwik8 data/enwik8 \
     --chunk-size 512 --targets 65536 --checkpoint "$checkpoint" --json "$records/probe_$name.json"
+fi
+if [[ $study == trace-write-confirm ]]; then
+  "$python_exe" -u experiments/profile_charge_trace.py --split validation --bytes 16384 \
+    --enwik8 data/enwik8 --checkpoint "$checkpoint" --json "$records/trace_ages_$name.json"
 fi

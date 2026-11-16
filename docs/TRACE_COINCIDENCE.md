@@ -68,7 +68,20 @@ enwik8 targets. Score both corpora and audit native pulses.
 On validation, the state probe can switch the new neurons
 back to ordinary coincidence with trained weights held fixed.
 It reports `ordinary_coincidence_bpb` next to the intact loss.
-The paired held-out scores are pending at handoff.
 [Six-bit control](GROWN_RESIDUAL.md#matched-continuation) ·
 [State probe](../experiments/probe_event_state.py) ·
 [Data and checkpoint setup](HANDOFF.md)
+
+| 32,768,000 training targets | enwik8 bpb | PG-19 bpb | Raw PG-19 bpb | Native pulses per byte |
+|---|---:|---:|---:|---:|
+| Six-bit grown control | 1.95646 | 2.86904 | 2.95290 | 306,923 |
+| Three-way coincidence | 1.95911 | 2.87132 | 2.95721 | 307,297 |
+
+The original circuit scored slightly lower on both test sets.
+Switching the trained variant back to ordinary routing on 65,536
+validation targets raised its loss from 1.89174 to 1.89242.
+The learned routing gives a small benefit within that checkpoint
+on this validation sample. The separately trained control has
+the lower held-out loss. Native counts matched CPU step and chunk
+decoding and the Metal batch path.
+[Training, scores, and interventions](../results/event_lm/trace_coincidence)

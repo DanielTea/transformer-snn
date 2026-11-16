@@ -1,4 +1,4 @@
-"""Verify spike parity and gradient flow after widening a trained EventLM."""
+"""Verify spike parity and gradient flow when adding neurons to a trained EventLM."""
 
 from __future__ import annotations
 
@@ -15,12 +15,13 @@ from audit_spike_code import _IntegerExecution
 from benchmark_decode import state_bytes
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
+from probe_event_state import added_expansion_rows
 from snnformer.event_lm import EventLM, _IntegrateFire, _route_packets, _steer_packet
-from train_event_lm import scoring_logits
+from train_event_lm import initialize_from_checkpoint, scoring_logits
 from train_lm import load_splits, random_batch
 
 
-@torch.inference_mode()
+@torch.no_grad()
 def measure(model, tokens, device, *, profile_coincidence):
     native = model.to_integer()
     emissions, memory_emissions, selected_fractions = [], [], []
@@ -73,8 +74,11 @@ def main():
     parser.add_argument("--parent", required=True, type=Path)
     parser.add_argument("--enwik8", required=True, type=Path)
     parser.add_argument("--device", default="cpu", choices=("cpu", "mps", "cuda"))
-    parser.add_argument("--dim", default=768, type=int)
-    parser.add_argument("--router-charge-bits", default=6, type=int, choices=(6, 8))
+    growth = parser.add_mutually_exclusive_group()
+    growth.add_argument("--dim", type=int, help="grow the residual stream (default width 768)")
+    growth.add_argument("--hidden", type=int, help="grow content and steering within each delay group")
+    growth.add_argument("--trace-write-confirm", action="store_true", help="add silent write confirmation neurons")
+    parser.add_argument("--router-charge-bits", type=int, choices=(6, 8))
     parser.add_argument("--trace-coincidence", action="store_true")
     parser.add_argument("--json", required=True, type=Path)
     args = parser.parse_args()
@@ -89,25 +93,52 @@ def main():
     if not isinstance(parent, EventLM) or not parent.cfg.local_trace:
         parser.error("the parent must be a held-charge EventLM")
     prior = parent.cfg
-    cfg = replace(prior, dim=args.dim, router_charge_bits=args.router_charge_bits,
-                  compact_axon_state=True, inhibition_by_expansion=True, trace_write_credit=True,
-                  trace_coincidence_start=prior.dim if args.trace_coincidence else prior.trace_coincidence_start)
-    grown = EventLM(cfg)
-    grown.initialize_wider_residual(prior, checkpoint["state_dict"])
+    if ((args.hidden is not None or args.trace_write_confirm)
+            and (args.router_charge_bits is not None or args.trace_coincidence)):
+        parser.error("charge precision and trace coincidence options apply to residual growth")
+    if args.trace_write_confirm:
+        if prior.trace_write_confirm:
+            parser.error("the parent already has delayed write confirmation")
+        cfg = replace(prior, trace_write_confirm=True)
+        grown = EventLM(cfg)
+        initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False)
+    elif args.hidden is None:
+        cfg = replace(prior, dim=768 if args.dim is None else args.dim,
+                      router_charge_bits=prior.router_charge_bits if args.router_charge_bits is None
+                      else args.router_charge_bits,
+                      compact_axon_state=True, inhibition_by_expansion=True, trace_write_credit=True,
+                      trace_coincidence_start=prior.dim if args.trace_coincidence else prior.trace_coincidence_start)
+        grown = EventLM(cfg)
+        grown.initialize_wider_residual(prior, checkpoint["state_dict"])
+    else:
+        cfg = replace(prior, hidden=args.hidden)
+        grown = EventLM(cfg)
+        grown.initialize_wider_expansion(prior, checkpoint["state_dict"])
     parent_counts, parent_metrics = measure(parent, tokens, device, profile_coincidence=False)
     grown_counts, grown_metrics = measure(grown.eval(), tokens, device, profile_coincidence=args.trace_coincidence)
     torch.testing.assert_close(parent_counts, grown_counts, rtol=0, atol=0)
     if parent_metrics["total_pulses"] != grown_metrics["total_pulses"]:
-        raise AssertionError("widening changed the number of emitted pulses")
+        raise AssertionError("added neurons changed the number of emitted pulses at initialization")
 
     generator = torch.Generator().manual_seed(711)
     inputs, labels = random_batch(train, 1, 512, generator)
     counts = grown.train()(inputs.to(device))
     logits = scoring_logits(counts, True, cfg.resolution)
     F.cross_entropy(logits.flatten(0, 1), labels.to(device).flatten()).backward()
-    gradients = [block.project.weight.grad[prior.dim:].count_nonzero().item() for block in grown.blocks]
+    if args.trace_write_confirm:
+        gradient_field = "active_write_confirmation_gradients_on_512_train_targets"
+        gradients = [block.trace.write_confirm.gain.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.hidden is None:
+        gradient_field = "active_new_projection_gradients_on_512_train_targets"
+        gradients = [block.project.weight.grad[prior.dim:].count_nonzero().item() for block in grown.blocks]
+    else:
+        gradient_field = "active_new_expansion_gradients_on_512_train_targets"
+        gradients = [
+            sum(rows.count_nonzero().item() for rows in added_expansion_rows(block, prior.hidden, block.expand.weight.grad))
+            for block in grown.blocks
+        ]
     if not all(gradients):
-        raise AssertionError("an added residual projection received no gradient")
+        raise AssertionError("the added neurons in a block received no gradient")
 
     with args.parent.open("rb") as source:
         parent_sha256 = hashlib.file_digest(source, "sha256").hexdigest()
@@ -119,8 +150,8 @@ def main():
         "device": str(device),
         "native_step_chunk_and_device_counts_equal": True,
         "parent_count_and_emission_parity": True,
-        "models": {"parent": parent_metrics, "grown": grown_metrics},
-        "active_new_projection_gradients_on_512_train_targets": gradients,
+        "models": {"parent": parent_metrics, "candidate" if args.trace_write_confirm else "grown": grown_metrics},
+        gradient_field: gradients,
     }
     with _atomic_output(args.json, "w", overwrite=False) as stream:
         json.dump(record, stream, indent=2)

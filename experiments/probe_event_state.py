@@ -14,7 +14,7 @@ from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
-from snnformer.event_lm import EventLM
+from snnformer.event_lm import EventLM, _delay_group_widths
 from train_event_lm import scoring_logits
 from train_lm import load_splits
 
@@ -66,7 +66,12 @@ def score_with_options(model, window, chunk_size, **options):
     return score(variant, window, chunk_size)
 
 
-def probe(model, window, chunk_size, *, residual_width_before=None):
+def added_expansion_rows(block, previous_width, weight):
+    before = _delay_group_widths(previous_width, len(block.widths))
+    return [group[width:] for group, width in zip(weight.split(block.widths * 2), before * 2, strict=True)]
+
+
+def probe(model, window, chunk_size, *, residual_width_before=None, expansion_width_before=None):
     pools = [block.activity_inhibition for block in model.blocks if block.activity_inhibition is not None]
     series = [[] for _ in pools]
     hooks = [pool.register_forward_hook(watch(counts)) for pool, counts in zip(pools, series, strict=True)]
@@ -91,6 +96,10 @@ def probe(model, window, chunk_size, *, residual_width_before=None):
         result["fixed_inhibition_pulses_by_block"] = medians
     if model.cfg.local_trace:
         result["periodic_trace_reset_bpb"] = score(model, window, chunk_size, reset_trace=True)
+    if model.prediction_memory is not None:
+        result["mute_bank_corrections_bpb"] = score_without_synapses(
+            model, window, chunk_size, [model.recall_synapse.weight],
+        )
     if model.cfg.delay_filter:
         weights = [kernel.weight for block in model.blocks for kernel in block.delay_filters if kernel is not None]
         result["zero_delay_filter_bpb"] = score_without_synapses(model, window, chunk_size, weights)
@@ -100,6 +109,9 @@ def probe(model, window, chunk_size, *, residual_width_before=None):
     if model.cfg.trace_read_veto:
         weights = [block.trace.read_veto.gain for block in model.blocks]
         result["zero_trace_read_veto_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.trace_write_confirm:
+        weights = [block.trace.write_confirm.gain for block in model.blocks]
+        result["zero_trace_write_confirm_bpb"] = score_without_synapses(model, window, chunk_size, weights)
     if model.cfg.spread_coincidence:
         weights = [block.spread_coincidence.mix for block in model.blocks]
         result["zero_spread_coincidence_bpb"] = score_without_synapses(model, window, chunk_size, weights)
@@ -117,6 +129,10 @@ def probe(model, window, chunk_size, *, residual_width_before=None):
         extra_outputs = [synapse.weight[:, residual_width_before:] if synapse.byte_input
                          else synapse.weight[residual_width_before:] for synapse in output_synapses]
         result["silence_added_residual_bpb"] = score_without_synapses(model, window, chunk_size, extra_outputs)
+    if expansion_width_before is not None:
+        new_rows = [rows for block in model.blocks
+                    for rows in added_expansion_rows(block, expansion_width_before, block.expand.weight)]
+        result["silence_added_expansion_bpb"] = score_without_synapses(model, window, chunk_size, new_rows)
     return result
 
 
@@ -145,6 +161,7 @@ def main():
         parser.error("the requested targets exceed the validation split")
     sample = validation[:args.targets + 1]
     window = torch.from_numpy(sample.copy()).to(device=device, dtype=torch.long)[None]
+    initialization = checkpoint.get("initialization") or {}
     record = {
         "checkpoint": str(args.checkpoint),
         "checkpoint_sha256": hashlib.sha256(args.checkpoint.read_bytes()).hexdigest(),
@@ -153,7 +170,8 @@ def main():
         "target_bytes": args.targets,
         "chunk_bytes": args.chunk_size,
         **probe(model, window, args.chunk_size,
-                residual_width_before=(checkpoint.get("initialization") or {}).get("residual_width_before")),
+                residual_width_before=initialization.get("residual_width_before"),
+                expansion_width_before=initialization.get("expansion_width_before")),
     }
     with _atomic_output(args.json, "w", overwrite=False) as output:
         json.dump(record, output, indent=2)

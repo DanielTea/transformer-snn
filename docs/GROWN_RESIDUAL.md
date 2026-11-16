@@ -145,6 +145,31 @@ checkpoints on 16,384,000 more enwik8 targets each. It uses
 128 warmup steps, and a peak learning rate of 0.0003.
 Each model reaches 49,152,000 cumulative targets. The SNN
 uses the same six-bit router charge and 310,000-pulse target
-as the first grown continuation. The handoff includes the
-commands and the local run status.
-[Resume the study](HANDOFF.md#pick-up-the-current-experiments)
+as the first grown continuation.
+
+| Model at 49,152,000 training targets | enwik8 bpb | PG-19 bpb | Raw PG-19 bpb | Stream state |
+|---|---:|---:|---:|---:|
+| Six-bit grown SNN | 1.89440 | 2.82683 | 2.91901 | 19,536 B |
+| Grown full-attention Transformer | 1.80629 | 3.03772 | 3.24647 | 4 MiB |
+
+The additional exposure lowered enwik8 loss by 0.06206 bits per
+byte for the SNN and 0.03637 for full attention. The gap narrowed
+from 0.11380 to 0.08811, a 22.6% reduction over this interval.
+First occurrences of eight-byte prefixes and repeats at least
+512 bytes away contribute 80.1% of the remaining gap. The
+calibrated PG-19 loss is lower for the SNN on all 16 books.
+The SNN emits 309,688 pulses per byte in the native audit.
+[Matched scores and audit](../results/event_lm/scale_6510k_data) ·
+[Exposure chart](../results/figures/event_lm_6510k_data.png) ·
+[Continuation commands](HANDOFF.md#pick-up-the-current-experiments)
+
+On 65,536 enwik8 validation targets, resetting the local charge
+every 512 bytes raised loss from 1.83258 to 1.84087. Muting the
+bank's correction projection raised it to 1.83320. On a
+separate 16,384-byte validation activity sample, 87.9% of
+held-charge read pulses came from cells changed in the preceding
+seven bytes. When a cell held charge and its steering count was
+zero, 96.8% of those channel steps rewrote charge.
+[State intervention](../results/event_lm/scale_6510k_data/probe_trace_s1109.json) ·
+[Charge age profile](../results/event_lm/scale_6510k_data/trace_ages_s1109.json) ·
+[Expansion experiment](EXPANSION_GROWTH.md)

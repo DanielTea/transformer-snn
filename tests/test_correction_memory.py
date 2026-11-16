@@ -640,6 +640,100 @@ def test_residual_growth_preserves_counts_and_trains_the_added_neurons(router_ch
         EventLM(replace(cfg, dim=32)).initialize_wider_residual(cfg, parent.state_dict())
 
 
+def test_expansion_growth_preserves_each_delay_group_and_trains_the_added_neurons():
+    torch.manual_seed(73)
+    cfg = EventLMConfig(dim=20, hidden=11, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, forecast_key_channels=2,
+                        match_forecast_key=True, compact_delays=True, compact_axon_state=True,
+                        activity_inhibition=True, inhibition_by_expansion=True, local_trace=True,
+                        trace_coincidence_start=10, opponent_steering=True)
+    parent = EventLM(cfg)
+    for block in parent.blocks:
+        with torch.no_grad():
+            block.opponent_steering.weight.uniform_(0.2, 0.8)
+    grown = EventLM(replace(cfg, hidden=16))
+    grown.initialize_wider_expansion(cfg, parent.state_dict())
+    stream = torch.randint(256, (1, 257))
+    expected = parent.to_integer()(stream)
+    native = grown.to_integer()
+    torch.testing.assert_close(native(stream), expected, rtol=0, atol=0)
+    first, state = native.forward_chunk(stream[:, :57])
+    rest, _ = native.forward_chunk(stream[:, 57:], state)
+    torch.testing.assert_close(torch.cat((first, rest), dim=1), expected, rtol=0, atol=0)
+
+    prediction = grown(stream)
+    torch.testing.assert_close(prediction, expected, rtol=0, atol=0, check_dtype=False)
+    prediction.square().mean().backward()
+    new_channels = (3, 7, 11, 14, 15)
+    new_rows = [*new_channels, *(16 + index for index in new_channels)]
+    for block in grown.blocks:
+        assert not bool(block.expand.weight[new_rows].any())
+        assert bool(block.expand.weight.grad[new_rows].any())
+    with pytest.raises(ValueError, match="inhibitory threshold"):
+        EventLM(replace(cfg, hidden=17)).initialize_wider_expansion(cfg, parent.state_dict())
+
+
+@torch.no_grad()
+def test_delayed_confirmation_protects_charge_only_inside_the_extended_write_interval():
+    trace = _SpikeTrace(12, confirm_widths=(1, 1, 1))
+    trace.write_confirm.gain.fill_(1)
+    trace.write_confirm.freeze_integer()
+    present = torch.tensor([[6, -4, 5]], dtype=torch.int32)
+    delayed = torch.tensor([[-2, 3, 5]], dtype=torch.int32)
+    before = torch.tensor([[-1, 2, -3]], dtype=torch.int32)
+    read, after = trace.step(present, torch.zeros_like(present), before, delayed_content=delayed)
+    assert read.tolist() == [[0, 0, 0]]
+    assert after.tolist() == [[-1, 2, 5]]
+
+
+def test_silent_write_confirmation_learns_on_the_delayed_disagreement_rail():
+    trace = _SpikeTrace(32, confirm_widths=(1,), write_credit=True)
+    present = torch.tensor([[[6.0], [0.0]]])
+    delayed = torch.tensor([[[-2.0], [0.0]]])
+    steering = torch.tensor([[[0.0], [10.0]]])
+    read, _ = trace(present, steering, None, None, delayed_content=delayed)
+    assert read.flatten().tolist() == [0.0, 6.0]
+    read.sum().backward()
+    torch.testing.assert_close(trace.write_confirm.gain.grad, torch.tensor([-8.0]), rtol=0, atol=0)
+
+
+def test_silent_steering_takes_the_right_derivative_without_changing_charge():
+    cfg = EventLMConfig(dim=8, hidden=4, route="steered", steering_gradient_at_zero=True)
+    drive = torch.tensor([-2.0, 0.0, 3.0], requires_grad=True)
+    current = EventLM(cfg).blocks[0]._steering_current(drive)
+    torch.testing.assert_close(current, drive.clamp_min(0), rtol=0, atol=0)
+    current.sum().backward()
+    torch.testing.assert_close(drive.grad, torch.tensor([0.0, 1.0, 1.0]), rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_delayed_write_confirmation_starts_silent_and_matches_native_streaming():
+    torch.manual_seed(79)
+    cfg = EventLMConfig(dim=24, hidden=12, route="steered", carry=False, resolution=16,
+                        compact_delays=True, compact_axon_state=True, local_trace=True)
+    parent = EventLM(cfg)
+    model = EventLM(replace(cfg, trace_write_confirm=True))
+    model.load_state_dict(parent.state_dict(), strict=False)
+    tokens = torch.randint(256, (1, 149))
+    prior = parent.to_integer()(tokens)
+    torch.testing.assert_close(model.to_integer()(tokens), prior, rtol=0, atol=0)
+
+    for block in model.blocks:
+        block.trace.write_confirm.gain.copy_(torch.tensor([0.125, 0.25, 0.5, 1.0]))
+    native = model.to_integer()
+    counts = native(tokens)
+    assert bool((counts != prior).any())
+    first, state = native.forward_chunk(tokens[:, :53])
+    rest, _ = native.forward_chunk(tokens[:, 53:], state)
+    torch.testing.assert_close(torch.cat((first, rest), dim=1), counts, rtol=0, atol=0)
+    state = None
+    steps = []
+    for token in tokens.unbind(1):
+        packet, state = native.step(token, state)
+        steps.append(packet)
+    torch.testing.assert_close(torch.stack(steps, dim=1), counts, rtol=0, atol=0)
+
+
 @torch.no_grad()
 def test_trace_conditioned_group_routes_three_way_matches_on_the_same_sign_rail():
     cfg = EventLMConfig(dim=4, hidden=4, route="steered", carry=False, compact_delays=True,

@@ -58,11 +58,15 @@ and temporary workspace.
 
 ## Continue the research
 
-The [handoff](docs/HANDOFF.md#experiment-status) points to the finished
-runs and the next commands. The [three-way coincidence experiment](docs/TRACE_COINCIDENCE.md)
-uses current content, steering, and pre-write charge to choose the
-route into newly added residual neurons. Its warm-start parity and
-training smoke are recorded.
+The research handoff points to the completed runs and the next
+commands. The 49.15M-target continuation measures the effect of
+more enwik8 exposure at fixed size. The next comparisons expand
+the content and steering neurons and test whether delayed spikes
+can help preserve held charge.
+[Handoff](docs/HANDOFF.md#experiment-status) ·
+[Training exposure](docs/GROWN_RESIDUAL.md#extend-training-exposure) ·
+[Expansion study](docs/EXPANSION_GROWTH.md) ·
+[Write confirmation](docs/TRACE_WRITE_CONFIRM.md)
 
 Regenerate the leaderboards and figures from the checked-in results.
 

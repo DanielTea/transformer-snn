@@ -39,6 +39,11 @@ _STEERED_ROUTES = (
 )
 
 
+def _delay_group_widths(channels, groups):
+    width, extra = divmod(channels, groups)
+    return tuple(width + (group < extra) for group in range(groups))
+
+
 @dataclass(frozen=True)
 class EventLMConfig:
     dim: int = 96
@@ -74,6 +79,8 @@ class EventLMConfig:
     compact_axon_state: bool = False
     tag_phase_address: bool = False
     trace_coincidence_start: int | None = None
+    trace_write_confirm: bool = False
+    steering_gradient_at_zero: bool = False
 
     @property
     def inhibition_bits(self) -> int:
@@ -661,14 +668,24 @@ class _DelayState:
 class _SpikeTrace(nn.Module):
     """A causal charge trace that moves only when an interval excludes it."""
 
-    def __init__(self, cap, *, write_credit=False, veto_widths=None):
+    def __init__(self, cap, *, write_credit=False, veto_widths=None, confirm_widths=None):
         super().__init__()
         self.cap = cap
         self.write_credit = write_credit
         self.read_veto = _DelayCorrection(veto_widths, cap) if veto_widths is not None else None
+        self.write_confirm = _DelayCorrection(confirm_widths, cap) if confirm_widths is not None else None
 
-    def _bounds(self, present, radius):
-        return (present - radius).clamp_min(-self.cap), (present + radius).clamp_max(self.cap)
+    def _bounds(self, present, radius, delayed_content=None):
+        lower = present - radius
+        upper = present + radius
+        if self.write_confirm is not None:
+            difference = delayed_content - present
+            extension = self.write_confirm.emit_difference(difference)
+            # Extend the interval toward the delayed packet when the two disagree.
+            # Select the rail before firing so a silent conductance can learn.
+            lower = lower + torch.where(difference < 0, extension, 0)
+            upper = upper + torch.where(difference > 0, extension, 0)
+        return lower.clamp_min(-self.cap), upper.clamp_max(self.cap)
 
     def _read(self, before, change, steering):
         read, _ = _steer_packet(before, steering)
@@ -677,10 +694,11 @@ class _SpikeTrace(nn.Module):
             _, read = _steer_packet(read, veto)
         return read
 
-    def forward(self, present, steering, initial, pulse_counts, *, write_radius=None):
+    def forward(self, present, steering, initial, pulse_counts, *, write_radius=None, delayed_content=None):
         if initial is None:
             initial = torch.zeros_like(present[:, 0])
-        lower, upper = self._bounds(present, steering if write_radius is None else write_radius)
+        radius = steering if write_radius is None else write_radius
+        lower, upper = self._bounds(present, radius, delayed_content)
         after = _scan_charge(lower, upper, initial, write_credit=self.write_credit)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
         change = after - before
@@ -689,10 +707,11 @@ class _SpikeTrace(nn.Module):
             pulse_counts.extend((change.abs().sum(), read.abs().sum()))
         return read, after[:, -1].clone()
 
-    def step(self, present, steering, before, *, write_radius=None):
+    def step(self, present, steering, before, *, write_radius=None, delayed_content=None):
         if before is None:
             before = torch.zeros_like(present)
-        lower, upper = self._bounds(present, steering if write_radius is None else write_radius)
+        radius = steering if write_radius is None else write_radius
+        lower, upper = self._bounds(present, radius, delayed_content)
         change = interval_spikes(before, lower, upper)
         return self._read(before, change, steering), before + change
 
@@ -727,8 +746,7 @@ class _DelayBlock(nn.Module):
         self.steered = cfg.route in _STEERED_ROUTES
         schedule = _STEERED_DELAYS if self.steered else _DELAYS
         self.delays = schedule[depth % len(schedule)]
-        width, extra = divmod(cfg.hidden, len(self.delays))
-        self.widths = tuple(width + (group < extra) for group in range(len(self.delays)))
+        self.widths = _delay_group_widths(cfg.hidden, len(self.delays))
         self.route = cfg.route
         self.correction = None
         self.memory_residual = None
@@ -744,6 +762,7 @@ class _DelayBlock(nn.Module):
         self.local_delays = self.delays[:-1] if replace_delay else self.delays
         self.local_widths = self.widths[:len(self.local_delays)]
         self.balanced = cfg.route == "steered_balanced"
+        self.steering_gradient_at_zero = cfg.steering_gradient_at_zero
         self.phase_bits = 2 if cfg.route == "steered_timed" else int(cfg.route in _PHASE_ROUTES)
         self.alternate_delays = ()
         if cfg.route == "steered_phase_delay":
@@ -769,7 +788,9 @@ class _DelayBlock(nn.Module):
         self.trace_coincidence_start = cfg.trace_coincidence_start
         if cfg.local_trace:
             veto_widths = self.widths if cfg.trace_read_veto else None
-            self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths)
+            confirm_widths = self.widths if cfg.trace_write_confirm else None
+            self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths,
+                                     confirm_widths=confirm_widths)
         self.opponent_steering = (
             _OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits) if cfg.opponent_steering else None
         )
@@ -813,6 +834,14 @@ class _DelayBlock(nn.Module):
             return quanta
         activity = spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)
         return _PACKET_UNITS + self.activity_inhibition(activity)
+
+    def _steering_current(self, drive):
+        if self.balanced:
+            return drive
+        if self.steering_gradient_at_zero and drive.requires_grad:
+            # Use the right derivative at the silent boundary during training.
+            return torch.where(drive >= 0, drive, 0)
+        return drive.clamp_min(0)
 
     def _trace_radius(self, steering, current, quanta):
         if self.opponent_steering is None:
@@ -947,19 +976,13 @@ class _DelayBlock(nn.Module):
         steering = start = None
         if self.steered:
             drive, steer_drive = drive.chunk(2, dim=-1)
-            steering = self.steer(steer_drive if self.balanced else steer_drive.clamp_min(0), firing_quanta)
+            steering = self.steer(self._steering_current(steer_drive), firing_quanta)
             if self.phase_bits:
                 start = _steering_start(steer_drive, self.phase_bits, self.steer.cap)
                 if shuffle_phase:
                     start = start.roll(1, dims=-1)
         present = self.relay(drive, firing_quanta)
         coincidence_read = None
-        if self.trace is not None:
-            initial = None if local_state is None else local_state.trace_charge
-            radius = self._trace_radius(steering, steer_drive, firing_quanta)
-            coincidence_read, trace_charge = self.trace(present, steering, initial, pulse_counts, write_radius=radius)
-            if local_state is not None:
-                local_state.trace_charge = trace_charge
         packets, departure = self._departure_packets(present, steering)
         alternate = recall = anchor = None
         if self.selector is None:
@@ -982,6 +1005,14 @@ class _DelayBlock(nn.Module):
                                        zip(groups, self.alternate_delays, strict=True)], dim=-1)
         else:
             delayed = self.selector(present, delay_limit)
+        if self.trace is not None:
+            initial = None if local_state is None else local_state.trace_charge
+            radius = self._trace_radius(steering, steer_drive, firing_quanta)
+            coincidence_read, trace_charge = self.trace(
+                present, steering, initial, pulse_counts, write_radius=radius, delayed_content=delayed,
+            )
+            if local_state is not None:
+                local_state.trace_charge = trace_charge
         current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
                                 departure=departure, anchor=anchor, coincidence_read=coincidence_read)
         if self.residual_membrane:
@@ -1034,16 +1065,12 @@ class _DelayBlock(nn.Module):
         steering = start = None
         if self.steered:
             drive, steer_drive = drive.chunk(2, dim=-1)
-            steer_charge = steer_drive if self.balanced else steer_drive.clamp_min(0)
+            steer_charge = self._steering_current(steer_drive)
             steering, state.steering_phase = self.steer.step(steer_charge, state.steering_phase, firing_quanta)
             if self.phase_bits:
                 start = _steering_start(steer_drive, self.phase_bits, self.steer.cap)
         present, state.relay_phase = self.relay.step(drive, state.relay_phase, firing_quanta)
         coincidence_read = None
-        if self.trace is not None:
-            radius = self._trace_radius(steering, steer_drive, firing_quanta)
-            coincidence_read, state.trace_charge = self.trace.step(present, steering, state.trace_charge,
-                                                                  write_radius=radius)
         packets, departure = self._departure_packets(present, steering)
         alternate = recall = anchor = None
         if self.compact_delays:
@@ -1075,6 +1102,11 @@ class _DelayBlock(nn.Module):
             else:
                 delayed = self.selector.step(state.history, position)
             state.history[:, position % ring_size].copy_(present[:, :local_width])
+        if self.trace is not None:
+            radius = self._trace_radius(steering, steer_drive, firing_quanta)
+            coincidence_read, state.trace_charge = self.trace.step(
+                present, steering, state.trace_charge, write_radius=radius, delayed_content=delayed,
+            )
         current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
                                 departure=departure, anchor=anchor, coincidence_read=coincidence_read)
         spikes, state.output_phase = self.emit.step(current, state.output_phase)
@@ -1148,6 +1180,10 @@ class EventLM(nn.Module):
             raise ValueError("opponent steering needs a local charge trace")
         if cfg.trace_write_credit and not cfg.local_trace:
             raise ValueError("trace write credit needs a local charge trace")
+        if cfg.trace_write_confirm and not cfg.local_trace:
+            raise ValueError("delayed write confirmation needs a local charge trace")
+        if cfg.steering_gradient_at_zero and cfg.route not in ("steered", "steered_correction_code"):
+            raise ValueError("the right steering gradient needs a rectified steering population")
         if cfg.bank_write_credit and cfg.route not in (*_CORRECTION_ROUTES, *_PREDICTION_ROUTES):
             raise ValueError("bank write credit needs a correction bank")
         if cfg.trace_read_veto and not cfg.local_trace:
@@ -1374,6 +1410,7 @@ class EventLM(nn.Module):
         expected = replace(prior, dim=cfg.dim, trace_write_credit=cfg.trace_write_credit,
                            bank_write_credit=cfg.bank_write_credit,
                            trace_coincidence_start=cfg.trace_coincidence_start,
+                           steering_gradient_at_zero=cfg.steering_gradient_at_zero,
                            compact_axon_state=cfg.compact_axon_state, inhibition_by_expansion=cfg.inhibition_by_expansion,
                            router_charge_bits=cfg.router_charge_bits)
         if cfg.dim <= prior.dim or cfg.continuous or expected != cfg:
@@ -1415,6 +1452,52 @@ class EventLM(nn.Module):
             widened[:original.shape[0], :original.shape[1]].copy_(original)
             weights[name] = widened
         self.load_state_dict(weights)
+
+    @torch.no_grad()
+    def initialize_wider_expansion(self, prior: EventLMConfig, previous: dict[str, torch.Tensor]):
+        """Add silent content and steering neurons inside each fixed-delay group."""
+        cfg = self.cfg
+        expected = replace(prior, hidden=cfg.hidden, steering_gradient_at_zero=cfg.steering_gradient_at_zero)
+        if not cfg.local_trace or cfg.hidden <= prior.hidden or expected != cfg:
+            raise ValueError("expansion growth needs the same held-charge router with a larger expansion")
+        if cfg.activity_inhibition and cfg.inhibition_bits != prior.inhibition_bits:
+            raise ValueError("expansion growth must preserve the inhibitory threshold")
+        groups = self.blocks[0].widths
+        old_groups = _delay_group_widths(prior.hidden, len(groups))
+        if self.prediction_memory is not None and cfg.memory_width is None and groups[-1] != old_groups[-1]:
+            raise ValueError("expansion growth needs a separate memory_width to preserve the forecast bank")
+        weights = self.state_dict()
+        if weights.keys() != previous.keys():
+            raise ValueError("expansion growth needs the same synaptic populations")
+
+        old_channels = []
+        offset = 0
+        device = self.blocks[0].expand.weight.device
+        for before, after in zip(old_groups, groups, strict=True):
+            old_channels.append(torch.arange(offset, offset + before, device=device))
+            offset += after
+        retained = torch.cat(old_channels)
+        expansion_rows = torch.cat((retained, retained + cfg.hidden))
+        projection_columns = torch.cat([retained + route * cfg.hidden for route in range(4)])
+        widened = previous.copy()
+        for index, block in enumerate(self.blocks):
+            expansion_name = f"blocks.{index}.expand.weight"
+            projection_name = f"blocks.{index}.project.weight"
+            expansion = torch.zeros_like(weights[expansion_name])
+            projection = weights[projection_name].clone()
+            expansion.index_copy_(0, expansion_rows, previous[expansion_name].to(expansion))
+            projection.index_copy_(1, projection_columns, previous[projection_name].to(projection))
+            widened[expansion_name] = expansion
+            widened[projection_name] = projection
+            if block.opponent_steering is not None:
+                name = f"blocks.{index}.opponent_steering.weight"
+                opponent = torch.zeros_like(weights[name])
+                opponent.index_copy_(0, retained, previous[name].to(opponent))
+                widened[name] = opponent
+
+        if any(value.shape != weights[name].shape for name, value in widened.items()):
+            raise ValueError("expansion growth would change a synaptic population outside the delay groups")
+        self.load_state_dict(widened)
 
     @torch.no_grad()
     def to_integer(self):

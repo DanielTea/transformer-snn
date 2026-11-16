@@ -23,7 +23,7 @@ def profile(model, tokens):
     def observe(trace, inputs, options, output):
         content, steering, initial, _ = inputs
         radius = options.get("write_radius", steering)
-        lower, upper = trace._bounds(content, radius)
+        lower, upper = trace._bounds(content, radius, options.get("delayed_content"))
         initial = torch.zeros_like(content[:, 0]) if initial is None else initial
         after = _interval_scan(lower, upper, initial)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)

@@ -41,6 +41,9 @@ SCALE_CONTEXT = "event_lm/scale_3260k_context"
 GROWN = "event_lm/grown_6510k_residual"
 WIDTH_6510K = "event_lm/scale_6510k_width"
 FINE_CHARGE = "event_lm/grown_fine_charge"
+SCALE_DATA = "event_lm/scale_6510k_data"
+TRACE_COINCIDENCE = "event_lm/trace_coincidence"
+EXPANSION = "event_lm/expansion_8740k"
 RESIDUAL_MEMBRANE = "event_lm/residual_membrane"
 TAG_PHASE = "event_lm/tag_phase_address"
 CORRECTED = "event_lm/corrected_forecast"
@@ -84,6 +87,21 @@ GROWN_6510K = (
     ("Grown SNN, finer charge", FINE_CHARGE, "fine_s711", f"{FINE_CHARGE}/native_fine_s711.json", VIOLET),
     ("Grown SNN, six-bit charge", GROWN, "grown_s711", f"{GROWN}/native_grown_s711.json", BLUE),
     ("Grown full-attention Transformer", GROWN, "transformer_s711", None, ORANGE),
+)
+DATA_6510K = (
+    ("Six-bit grown SNN", SCALE_DATA, "trace_s1109", f"{SCALE_DATA}/native_trace_s1109.json", BLUE),
+    ("Grown full-attention Transformer", SCALE_DATA, "transformer_s1109", None, ORANGE),
+)
+TRACE_COINCIDENCE_6510K = (
+    GROWN_6510K[1],
+    ("Three-way coincidence", TRACE_COINCIDENCE, "coincidence_s711",
+     f"{TRACE_COINCIDENCE}/native_coincidence_s711.json", VIOLET),
+    GROWN_6510K[-1],
+)
+EXPANSION_8740K = (
+    ("Expanded held-charge SNN", EXPANSION, "expanded_s1801", f"{EXPANSION}/native_expanded_s1801.json", BLUE),
+    ("Grown full-attention Transformer", EXPANSION, "transformer_s1801", None, ORANGE),
+    ("Original-width held-charge SNN", EXPANSION, "control_s1801", f"{EXPANSION}/native_control_s1801.json", GRAY),
 )
 SCRATCH_6510K = (
     ("Wide held-charge SNN", WIDTH_6510K, "trace_s0", f"{WIDTH_6510K}/native_trace_s0.json", BLUE),
@@ -220,7 +238,10 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
+        ("expansion_8740k", "8.74M expansion and original-width control", EXPANSION_8740K, 1801, 512, (49_152_000, 6_553_600)),
+        ("data_6510k", "6.51M with more training data", DATA_6510K, 1109, 512, (32_768_000, 16_384_000)),
         ("grown_6510k", "6.51M growth · 512-byte continuations", GROWN_6510K, 711, 512, continuation),
+        ("trace_coincidence_6510k", "6.51M trace coincidence", TRACE_COINCIDENCE_6510K, 711, 512, continuation),
         ("context_3260k_512", "3.26M · 512-byte continuations", SCALE_CONTEXT_512, 711, 512, continuation),
         ("context_3260k_2048", "3.26M · 2,048-byte continuations", SCALE_CONTEXT_2048, 711, 2048, continuation),
         ("scratch_6510k", "6.51M trained from scratch", SCRATCH_6510K, 0, 512, (0, 26_214_400)),
@@ -327,6 +348,7 @@ def write_leaderboards(data, depth, research):
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
     paragraphs.extend([
+        "![Held-out loss as enwik8 training exposure grows at 6.51M parameters](../results/figures/event_lm_6510k_data.png)",
         "![Held-out next-byte loss for the grown 6.51M models](../results/figures/event_lm_grown_6510k.png)",
         "![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)",
         "[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · "
@@ -453,14 +475,38 @@ def plot_trained_context(research, output):
         ("Held charge with write credit", BLUE, next(row for row in short if row["model"] == "Chronological write credit"), long[0]),
         ("Full-attention Transformer", ORANGE, short[-1], long[-1]),
     )
+    plot_paired_change(pairs, output, title="Changing the trained context length",
+                       subtitle="1.63M parameters · same starting weights within each model family · seed 711",
+                       ticks=("512 bytes", "2,048 bytes"),
+                       note="Each arm uses 6.55M additional enwik8 targets. PG-19 uses validation-fitted temperatures.",
+                       filename="event_lm_trained_context.png")
+
+
+def plot_training_exposure(research, output):
+    base = research["groups"]["grown_6510k"]["rows"]
+    extended = research["groups"]["data_6510k"]["rows"]
+    pairs = (
+        ("Six-bit grown SNN", BLUE, next(row for row in base if row["model"] == "Grown SNN, six-bit charge"), extended[0]),
+        ("Full-attention Transformer", ORANGE, base[-1], extended[-1]),
+    )
+    gaps = [snn["scores"]["enwik8"]["mean"] - attention["scores"]["enwik8"]["mean"]
+            for snn, attention in zip(pairs[0][2:], pairs[1][2:], strict=True)]
+    plot_paired_change(pairs, output, title="More training at fixed model size",
+                       subtitle="About 6.51M parameters · 512-byte training windows · matched enwik8 exposure",
+                       ticks=("32.77M targets", "49.15M targets"),
+                       note=f"The enwik8 gap narrowed from {gaps[0]:.5f} to {gaps[1]:.5f} bits per byte.",
+                       filename="event_lm_6510k_data.png")
+
+
+def plot_paired_change(pairs, output, *, title, subtitle, ticks, note, filename):
     fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.5))
     fig.subplots_adjust(left=0.08, right=0.965, bottom=0.24, top=0.755, wspace=0.24)
-    heading(fig, "Changing the trained context length", "1.63M parameters · same starting weights within each model family · seed 711")
+    heading(fig, title, subtitle)
     for ax, (corpus, name, _) in zip(axes, CORPORA, strict=True):
         style(ax)
         ax.set_title(name, loc="left", size=11, color=TEXT)
         ax.set_ylabel("Bits per byte", color=MUTED, labelpad=7)
-        ax.set_xticks([0, 1], ["512 bytes", "2,048 bytes"])
+        ax.set_xticks([0, 1], ticks)
         ax.set_xlim(-0.25, 1.25)
         ax.margins(y=0.22)
         for label, color, start, end in pairs:
@@ -472,9 +518,8 @@ def plot_trained_context(research, output):
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.079), ncol=2,
                frameon=False, labelcolor=TEXT, fontsize=9)
-    fig.text(0.035, 0.045, "Each arm uses 6.55M additional enwik8 targets. PG-19 uses validation-fitted temperatures.",
-             color=MUTED, size=9)
-    save(fig, output, "event_lm_trained_context.png")
+    fig.text(0.035, 0.045, note, color=MUTED, size=9)
+    save(fig, output, filename)
 
 
 def plot_prefix_age_gap(spiking_source, attention_source, output, *, subtitle, filename):
@@ -534,6 +579,7 @@ def main():
                  subtitle="About 6.51M parameters · 32.77M total enwik8 training targets · seed 711",
                  filename="event_lm_grown_6510k.png", precision=5)
     plot_trained_context(research, output)
+    plot_training_exposure(research, output)
     plot_prefix_age_gap(f"{OPPONENT}/enwik8_opponent_s711.json", f"{CREDIT}/enwik8_transformer_s711.json", output,
                         subtitle="Opponent steering and 512-byte full attention · 4,999,999 shared targets",
                         filename="event_lm_prefix_age_gap.png")
