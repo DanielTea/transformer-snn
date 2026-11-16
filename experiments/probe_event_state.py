@@ -1,4 +1,4 @@
-"""Intervene on inhibition and held charge in a trained spike decoder."""
+"""Intervene on inhibition, held charge, or delay filters in a trained spike decoder."""
 
 from __future__ import annotations
 
@@ -71,6 +71,17 @@ def probe(model, window, chunk_size):
         result["fixed_inhibition_pulses_by_block"] = medians
     if model.cfg.local_trace:
         result["periodic_trace_reset_bpb"] = score(model, window, chunk_size, reset_trace=True)
+    if model.cfg.delay_filter:
+        weights = [kernel.weight for block in model.blocks for kernel in block.delay_filters if kernel is not None]
+        originals = [weight.detach().clone() for weight in weights]
+        with torch.no_grad():
+            try:
+                for weight in weights:
+                    weight.zero_()
+                result["zero_delay_filter_bpb"] = score(model, window, chunk_size)
+            finally:
+                for weight, original in zip(weights, originals, strict=True):
+                    weight.copy_(original)
     return result
 
 
@@ -92,8 +103,8 @@ def main():
     model, _ = load_checkpoint(args.checkpoint, device)
     if not isinstance(model, EventLM) or not (model.has_correction or model.cfg.local_trace):
         parser.error("a chunk-capable spiking checkpoint is required")
-    if not (model.cfg.activity_inhibition or model.cfg.local_trace):
-        parser.error("the checkpoint needs inhibition or a local trace")
+    if not (model.cfg.activity_inhibition or model.cfg.local_trace or model.cfg.delay_filter):
+        parser.error("the checkpoint needs inhibition, a local trace, or delay filters")
     _, validation, _ = load_splits(args.enwik8)
     if args.targets >= len(validation):
         parser.error("the requested targets exceed the validation split")

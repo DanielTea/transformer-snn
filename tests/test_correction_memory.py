@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from snnformer.correction_memory import correction_reads, correction_step
-from snnformer.event_lm import EventLM, EventLMConfig, _DelayCorrection, _SpikeCorrection, _SpikeTrace
+from snnformer.event_lm import EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _SpikeCorrection, _SpikeTrace
 
 
 def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
@@ -420,3 +420,52 @@ def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks
         assert chunk.local_prefix is None
     for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
         torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
+
+
+def test_delay_filter_is_neutral_at_initialization_and_preserves_constant_packets():
+    kernel = _DelayFilter(width=2, delay=4, cap=16)
+    anchor = torch.tensor([[3., -2.]])
+    halfway = torch.tensor([[8., -5.]])
+    recent = torch.tensor([[4., 2.]])
+    unchanged = kernel(anchor, [halfway, recent])
+    torch.testing.assert_close(unchanged, anchor, rtol=0, atol=0)
+    gradient, = torch.autograd.grad(unchanged.sum(), kernel.weight)
+    torch.testing.assert_close(gradient, torch.tensor([[5., 1.], [-3., 4.]]), rtol=0, atol=0)
+    with torch.no_grad():
+        kernel.weight.copy_(torch.tensor([[1., -1.], [1., 0.5]]))
+    kernel.freeze_integer()
+    integer = anchor.to(torch.int32)
+    torch.testing.assert_close(kernel(integer, [integer, integer]), integer, rtol=0, atol=0)
+    torch.testing.assert_close(kernel(integer, [halfway.to(torch.int32), recent.to(torch.int32)]),
+                               torch.tensor([[7, -3]], dtype=torch.int32), rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_delay_filter_warm_start_and_streaming_parity():
+    torch.manual_seed(61)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True, activity_inhibition=True)
+    base = EventLM(cfg).eval()
+    filtered = EventLM(replace(cfg, delay_filter=True)).eval()
+    missing, unexpected = filtered.load_state_dict(base.state_dict(), strict=False)
+    assert missing and all(".delay_filters." in name for name in missing) and not unexpected
+    tokens = torch.randint(256, (2, 73))
+    baseline = base.to_integer()(tokens)
+    torch.testing.assert_close(filtered.to_integer()(tokens), baseline, rtol=0, atol=0)
+
+    for block in filtered.blocks:
+        for kernel in block.delay_filters:
+            if kernel is not None:
+                kernel.weight.fill_(0.5)
+    native = filtered.to_integer()
+    expected = native(tokens)
+    assert not torch.equal(expected, baseline)
+    torch.testing.assert_close(filtered(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for i, byte in enumerate(tokens.unbind(1)):
+        counts, state = native.step(byte, state)
+        torch.testing.assert_close(counts, expected[:, i], rtol=0, atol=0)
+    first, chunk = native.forward_chunk(tokens[:, :3])
+    second, chunk = native.forward_chunk(tokens[:, 3:21], chunk)
+    third, _ = native.forward_chunk(tokens[:, 21:], chunk)
+    torch.testing.assert_close(torch.cat((first, second, third), dim=1), expected, rtol=0, atol=0)

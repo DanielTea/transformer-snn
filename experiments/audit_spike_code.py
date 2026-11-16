@@ -148,6 +148,10 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
         row["router_charge_bits"] = integer.cfg.router_charge_bits
     if integer.cfg.local_trace:
         row["native_batch_matches_chunk_on_prefix"] = tokens.numel()
+    if integer.cfg.delay_filter:
+        weights = [kernel.weight for block in integer.blocks for kernel in block.delay_filters if kernel is not None]
+        row["delay_filter_parameters"] = sum(weight.numel() for weight in weights)
+        row["delay_filter_nonzero_weights"] = sum(int(weight.count_nonzero()) for weight in weights)
     if activity:
         row["activity_profile"] = {}
         quantiles = torch.tensor([0.05, 0.5, 0.95])

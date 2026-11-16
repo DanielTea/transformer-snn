@@ -104,7 +104,7 @@ def build_model(args):
                             departure_coincidence=args.departure_coincidence, delay_window=args.delay_window,
                             delay_residual=args.delay_residual,
                             router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
-                            local_trace=args.local_trace)
+                            local_trace=args.local_trace, delay_filter=args.delay_filter)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
     if args.local_lookback is not None:
@@ -114,7 +114,7 @@ def build_model(args):
 
 
 _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
-_OPTIONAL_ROUTER_PARAMETERS = (".packet_thresholds.", ".delay_correction.")
+_OPTIONAL_ROUTER_PARAMETERS = (".packet_thresholds.", ".delay_correction.", ".delay_filters.")
 
 
 def initialize_router(model, source, source_cfg):
@@ -152,13 +152,18 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
                                   departure_coincidence=model.cfg.departure_coincidence,
                                   delay_window=model.cfg.delay_window, router_charge_bits=model.cfg.router_charge_bits,
                                   delay_residual=source_cfg.delay_residual or model.cfg.delay_residual,
-                                  activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace)
+                                  activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace,
+                                  delay_filter=source_cfg.delay_filter or model.cfg.delay_filter)
         if source_geometry == model.cfg:
+            expected = set()
             if model.cfg.delay_residual and not source_cfg.delay_residual:
+                expected.update(f"blocks.{index}.delay_correction.gain" for index in range(model.cfg.depth))
+            if model.cfg.delay_filter and not source_cfg.delay_filter:
+                expected.update(name for name in model.state_dict() if ".delay_filters." in name)
+            if expected:
                 missing, unexpected = model.load_state_dict(source["state_dict"], strict=False)
-                expected = {f"blocks.{index}.delay_correction.gain" for index in range(model.cfg.depth)}
                 if set(missing) != expected or unexpected:
-                    raise ValueError("the checkpoint must supply every weight except the new delay gains")
+                    raise ValueError("the checkpoint must supply every weight except the new delay synapses")
             else:
                 model.load_state_dict(source["state_dict"])
         else:
@@ -219,6 +224,8 @@ def main():
                         help="raise content and steering thresholds with pooled incoming spike activity")
     parser.add_argument("--local-trace", action="store_true",
                         help="hold each channel's charge within its steering interval across bytes")
+    parser.add_argument("--delay-filter", action="store_true",
+                        help="correct the coincidence path with learned spike differences across fixed taps")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
     parser.add_argument("--spike-resolution", type=int, default=1, help="number of finer spikes per original unit")
     parser.add_argument("--depth", type=int, default=3)
@@ -266,7 +273,7 @@ def main():
         parser.error("forecast keys need --variant event_correction_code")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
-            or args.local_trace
+            or args.local_trace or args.delay_filter
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"
     ):

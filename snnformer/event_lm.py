@@ -61,6 +61,7 @@ class EventLMConfig:
     router_charge_bits: int = _CHARGE_BITS
     activity_inhibition: bool = False
     local_trace: bool = False
+    delay_filter: bool = False
 
 
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
@@ -216,6 +217,30 @@ class _DelayCorrection(nn.Module):
 
     def forward(self, anchor, chosen):
         return self.emit((chosen - anchor) * self.gains().index_select(0, self.groups))
+
+
+class _DelayFilter(nn.Module):
+    """Use changes across fixed taps to emit a correction to the anchor packet."""
+
+    def __init__(self, width, delay, cap):
+        super().__init__()
+        midpoint = (delay + 1) // 2
+        self.taps = (midpoint, 1) if midpoint > 1 else (1,)
+        self.weight = nn.Parameter(torch.zeros(width, len(self.taps)))
+        self.emit = _IntegrateFire(cap, _CHARGE_BITS, False)
+
+    def freeze_integer(self):
+        if self.weight.is_floating_point():
+            self.weight = nn.Parameter(self.weight_ticks().to(torch.int32), requires_grad=False)
+
+    def weight_ticks(self):
+        return _weight_ticks(self.weight)
+
+    def forward(self, anchor, packets):
+        differences = torch.stack(packets, dim=-1) - anchor.unsqueeze(-1)
+        current = (differences * self.weight_ticks()).sum(-1, dtype=anchor.dtype)
+        correction = self.emit(current)
+        return (anchor + correction).clamp(-self.emit.cap, self.emit.cap)
 
 
 def _route_packets(present, delayed, route):
@@ -583,6 +608,13 @@ class _DelayBlock(nn.Module):
         cap = _HIDDEN_CAP * cfg.resolution
         self.trace = _SpikeTrace(cap) if cfg.local_trace else None
         self.delay_correction = _DelayCorrection(self.widths, cap) if cfg.delay_residual else None
+        self.delay_filters = None
+        if cfg.delay_filter:
+            # For an anchor at d, compare with the halfway point and one byte back.
+            self.delay_filters = nn.ModuleList(
+                _DelayFilter(width, delay, cap) if delay > 1 else None
+                for width, delay in zip(self.widths, self.local_delays, strict=True)
+            )
         self.packet_thresholds = _PacketThresholds(self.widths) if cfg.learn_packet_thresholds else None
         self.activity_inhibition = None
         if cfg.activity_inhibition:
@@ -668,7 +700,7 @@ class _DelayBlock(nn.Module):
         return delayed
 
     def _current(self, residual, present, delayed, steering, start, alternate=None, recall=None, quanta=None, *,
-                 departure=None, anchor=None, trace_read=None):
+                 departure=None, anchor=None, coincidence_read=None):
         if alternate is not None:
             # The last half of the phase interval opens the adjacent delay
             # only when a steering packet has actually fired.
@@ -686,9 +718,9 @@ class _DelayBlock(nn.Module):
             replacement, _ = _steer_packet(delayed, steering)
             correction = self.delay_correction(selected, replacement)
             routes = _steer_packet(present, steering) + (selected + correction, bypass)
-        elif trace_read is not None:
+        elif coincidence_read is not None:
             _, bypass = _steer_packet(delayed, steering)
-            routes = _steer_packet(present, steering) + (trace_read, bypass)
+            routes = _steer_packet(present, steering) + (coincidence_read, bypass)
         elif self.balanced:
             routes = _balanced_steer(present, steering) + _balanced_steer(delayed, steering)
         else:
@@ -719,10 +751,10 @@ class _DelayBlock(nn.Module):
                 if shuffle_phase:
                     start = start.roll(1, dims=-1)
         present = self.relay(drive, firing_quanta)
-        trace_read = None
+        coincidence_read = None
         if self.trace is not None:
             initial = None if local_state is None else local_state.trace_charge
-            trace_read, trace_charge = self.trace(present, steering, initial, pulse_counts)
+            coincidence_read, trace_charge = self.trace(present, steering, initial, pulse_counts)
             if local_state is not None:
                 local_state.trace_charge = trace_charge
         packets, departure = self._departure_packets(present, steering)
@@ -733,6 +765,10 @@ class _DelayBlock(nn.Module):
                 delayed_groups, anchor = self._delayed_groups(groups, steering, pulse_counts)
             else:
                 delayed_groups = self._chunk_delays(groups, local_state)
+            if self.delay_filters is not None:
+                filtered = [base if kernel is None else kernel(base, [_lag(group, tap) for tap in kernel.taps])
+                            for group, base, kernel in zip(groups, delayed_groups, self.delay_filters, strict=True)]
+                coincidence_read, _ = _steer_packet(torch.cat(filtered, dim=-1), steering)
             if self.correction is not None:
                 recall = self.correction(spikes, correction_access)
                 if self.memory_residual is None:
@@ -744,7 +780,7 @@ class _DelayBlock(nn.Module):
         else:
             delayed = self.selector(present, delay_limit)
         return self.emit(self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
-                                       departure=departure, anchor=anchor, trace_read=trace_read))
+                                       departure=departure, anchor=anchor, coincidence_read=coincidence_read))
 
     def _step_compact(self, packets, steering, state, position):
         # Recycle a packet's slot as soon as its fixed delay has elapsed.
@@ -754,11 +790,20 @@ class _DelayBlock(nn.Module):
         groups = packets.split(self.delay_widths, dim=-1)
         history = state.history.split(self.delay_sizes, dim=-1)
         apertures = steering.split(self.widths, dim=-1)
-        previous, slots = [], []
-        for storage, packet, aperture, delay in zip(history, groups, apertures, self.local_delays, strict=True):
+        previous, slots, filtered = [], [], []
+        for index, (storage, packet, aperture, delay) in enumerate(
+            zip(history, groups, apertures, self.local_delays, strict=True)
+        ):
             ring = storage.reshape(batch, delay, packet.shape[-1])
             slot = ring[:, position % delay]
             slots.append(slot)
+            if self.delay_filters is not None:
+                kernel = self.delay_filters[index]
+                if kernel is None:
+                    filtered.append(slot)
+                else:
+                    taps = [ring[:, (position - tap) % delay] for tap in kernel.taps]
+                    filtered.append(kernel(slot, taps))
             choices = min(self.delay_window, delay)
             if choices == 1:
                 previous.append(slot)
@@ -769,9 +814,10 @@ class _DelayBlock(nn.Module):
                 previous.append(self._match_delay(candidates, query, aperture, position >= ages))
         delayed = torch.cat(previous, dim=-1)
         anchor = torch.cat(slots, dim=-1) if self.delay_correction is not None else None
+        filtered_packets = torch.cat(filtered, dim=-1) if filtered else None
         for slot, packet in zip(slots, groups, strict=True):
             slot.copy_(packet)
-        return delayed, anchor
+        return delayed, anchor, filtered_packets
 
     def step(self, spikes, state, position):
         drive = self.expand(spikes)
@@ -785,13 +831,15 @@ class _DelayBlock(nn.Module):
             if self.phase_bits:
                 start = _steering_start(steer_drive, self.phase_bits, self.steer.cap)
         present, state.relay_phase = self.relay.step(drive, state.relay_phase, firing_quanta)
-        trace_read = None
+        coincidence_read = None
         if self.trace is not None:
-            trace_read, state.trace_charge = self.trace.step(present, steering, state.trace_charge)
+            coincidence_read, state.trace_charge = self.trace.step(present, steering, state.trace_charge)
         packets, departure = self._departure_packets(present, steering)
         alternate = recall = anchor = None
         if self.compact_delays:
-            delayed, anchor = self._step_compact(packets, steering, state, position)
+            delayed, anchor, filtered = self._step_compact(packets, steering, state, position)
+            if filtered is not None:
+                coincidence_read, _ = _steer_packet(filtered, steering)
         else:
             ring_size = self.history_size
             local_width = sum(self.local_widths)
@@ -818,7 +866,7 @@ class _DelayBlock(nn.Module):
                 delayed = self.selector.step(state.history, position)
             state.history[:, position % ring_size].copy_(present[:, :local_width])
         current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
-                                departure=departure, anchor=anchor, trace_read=trace_read)
+                                departure=departure, anchor=anchor, coincidence_read=coincidence_read)
         spikes, state.output_phase = self.emit.step(current, state.output_phase)
         return spikes
 
@@ -879,6 +927,9 @@ class EventLM(nn.Module):
         if cfg.local_trace and (not cfg.compact_delays or cfg.carry or cfg.continuous
                                 or cfg.delay_window != 1 or cfg.departure_coincidence):
             raise ValueError("local traces need compact fixed delays and reset-per-byte spike routing")
+        if cfg.delay_filter and (not cfg.compact_delays or cfg.carry or cfg.continuous or cfg.delay_window != 1
+                                 or cfg.departure_coincidence or cfg.local_trace):
+            raise ValueError("delay filters need the fixed-delay coincidence path and reset-per-byte spike routing")
         if not isinstance(cfg.router_charge_bits, int) or not _CHARGE_BITS <= cfg.router_charge_bits < 31:
             raise ValueError("router_charge_bits must be an integer from 6 to 30")
         extra_charge_bits = cfg.router_charge_bits - _CHARGE_BITS
@@ -980,6 +1031,8 @@ class EventLM(nn.Module):
         bounds = [row_sums(self.output).amax()]
         for block in self.blocks:
             bounds.append(row_sums(block.expand).amax())
+            if block.delay_filters is not None:
+                bounds.extend(2 * row_sums(kernel).amax() for kernel in block.delay_filters if kernel is not None)
             packet_units = _PACKET_UNITS if block.packet_thresholds is not None else 1
             projected = row_sums(block.project) * packet_units + block.emit.threshold
             if block.correction is not None:
@@ -1077,7 +1130,7 @@ class EventLM(nn.Module):
             raise ValueError("the continuous control has no integer export")
         model = copy.deepcopy(self).cpu().eval()
         for submodule in model.modules():
-            if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection)):
+            if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection, _DelayFilter)):
                 submodule.freeze_integer()
         return model
 
