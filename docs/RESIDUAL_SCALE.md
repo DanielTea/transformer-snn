@@ -257,6 +257,22 @@ Each interval resamples windows from the one matched run.
 [Early test record](../results/event_lm/residual_scale/early_context_test.json) ·
 [Early validation record](../results/event_lm/residual_scale/early_context_val.json)
 
+## Complete PG-19 books
+
+The mixed SNN's PG-19 loss falls from 2.04156 bpb at 14.07M
+to 2.02699 bpb at 25.79M. Both SNNs select temperature 1.0 on
+the calibration excerpts. At 25.79M and equal training
+exposure, enwik8-only continuation scores 2.73942 bpb after
+calibration and 2.83176 bpb at temperature one. The mixture
+lowers calibrated loss on all 16 test books. Per-book gains
+range from 0.43774 to 1.06208 bpb over the enwik8-only control.
+Full attention scores 1.98073 bpb at 14.07M and 1.97644 bpb
+at 25.79M. Both select temperature 1.0. The SNN's gap shrinks
+from 0.06083 to 0.05055 bpb, and the wide Transformer leads on
+every test book.
+[PG-19 width records](../results/event_lm/residual_scale) ·
+[Training-window overlap audit](../results/event_lm/training_mixture/pg19_sampled_overlap_s9631.json)
+
 ## Fixed transfer suite
 
 Widening the mixed SNN reduces C4 loss by 0.00794 bpb and
@@ -266,6 +282,11 @@ mixture improves C4 and WikiText-103 relative to enwik8-only
 training. The enwik8-only arm retains lower loss on the two
 other Wikipedia corpora. These rankings hold on the subset
 of Wikipedia windows with zero overlap hits.
+
+Muting the added projections on the 1,048,575 enwik9 targets
+lowers loss by 0.00145 bpb in the wide mixed SNN and raises it
+by 0.00472 bpb in the wide enwik8-only SNN.
+[Fixed-weight enwik9 record](../results/event_lm/residual_scale/residual_enwik9.json)
 
 Full attention leads on all four fixed text corpora and on
 LAMBADA final-word loss. The full passage lowers answer-byte

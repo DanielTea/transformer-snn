@@ -107,6 +107,20 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
+  <h3 id="residual-scale">Residual width and expanded training data</h3>
+  <p class="col">The v10 study compares the spiking decoder with full attention at 14.07M and 25.79M parameters. All four size-matched models receive the same enwik8, C4 and PG-19 training windows. An enwik8-only continuation provides the corpus control at 25.79M. The SNN uses 28,584 bytes of persistent state per stream at both widths.</p>
+  <figure>
+    <a href="../results/figures/event_lm_residual_scale.png"><img src="../results/figures/event_lm_residual_scale.png" alt="Held-out enwik8 and PG-19 loss at the two matched widths"></a>
+    <figcaption>Four mixture continuations at 131.07 million training targets. PG-19 temperatures are fitted on separate calibration books.</figcaption>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_residual_scale_early_context.png"><img src="../results/figures/event_lm_residual_scale_early_context.png" alt="Change in the SNN-to-Transformer enwik8 loss gap during the first 32 predictions" loading="lazy"></a>
+  </figure>
+  <figure id="byte-transfer">
+    <a href="../results/figures/event_lm_byte_transfer_residual_scale_131072k.png"><img src="../results/figures/event_lm_byte_transfer_residual_scale_131072k.png" alt="Relative loss on the fixed byte corpora and LAMBADA word accuracy for the matched width study" loading="lazy"></a>
+    <figcaption>Every model scores the same windows and word targets. <a href="RESIDUAL_SCALE.md">Width study and corpus preparation</a> · <a href="BYTE_TRANSFER.md">Scoring and overlap audit</a></figcaption>
+  </figure>
+  <h3 id="fixed-arrivals">Fixed-arrival spiking circuits</h3>
   <p class="col">The v9 study tests whether scheduled spikes absent from the held-charge read improve next-byte prediction after a reset. It pairs the unmatched-arrival circuit with a selected-arrival control, the ordinary fixed-routing SNN and a full-attention reference. enwik8 and PG-19 scores are bits per byte. PG-19 temperatures are fitted on separate books. State counts persistent tensors per stream, including FP32 keys and values for full attention at its evaluation context.</p>
   <figure>
     <a href="../results/figures/event_lm_trace_arrival.png"><img src="../results/figures/event_lm_trace_arrival.png" alt="Held-out enwik8 and PG-19 loss for scheduled spike arrivals"></a>
@@ -115,7 +129,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_arrival_early_context.png"><img src="../results/figures/event_lm_arrival_early_context.png" alt="Paired enwik8 loss difference from full attention in the first 32 predictions" loading="lazy"></a>
   </figure>
-  <figure id="byte-transfer">
+  <figure id="byte-transfer-v9">
     <a href="../results/figures/event_lm_byte_transfer_trace_arrival_s9349.png"><img src="../results/figures/event_lm_byte_transfer_trace_arrival_s9349.png" alt="Relative WikiText-103, C4, enwik9 and text8 loss and LAMBADA final-word accuracy" loading="lazy"></a>
     <figcaption>Four transfer corpora use matched byte windows. LAMBADA pairs full passages with last sentences. <a href="BYTE_TRANSFER.md">Dataset protocol and overlap screen</a></figcaption>
   </figure>
@@ -168,7 +182,37 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_65536_prefix_age.png"><img src="../results/figures/event_lm_65536_prefix_age.png" alt="enwik8 loss gap by eight-byte prefix age after 65.54 million training targets" loading="lazy"></a>
   </figure>
-  <h3>Scheduled spike arrivals · 121,241,600 training targets · seed 9349</h3>
+  <h3>Residual width on expanded training data · 131,072,000 training targets · seed 9631</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">14.07M SNN</th><td class="num">14,066,688</td><td class="num">28,584 B</td><td class="num">1.79789</td><td class="num">2.04156</td><td class="num">2.04156</td><td class="num">312,618</td></tr>
+<tr><th scope="row">25.79M SNN</th><td class="num">25,788,928</td><td class="num">28,584 B</td><td class="num">1.79787</td><td class="num">2.02699</td><td class="num">2.02699</td><td class="num">313,142</td></tr>
+<tr><th scope="row">25.79M SNN, enwik8 only</th><td class="num">25,788,928</td><td class="num">28,584 B</td><td class="num">1.78054</td><td class="num">2.73942</td><td class="num">2.83176</td><td class="num">309,020</td></tr>
+<tr><th scope="row">14.07M full attention</th><td class="num">14,068,224</td><td class="num">6,291,456 B</td><td class="num">1.71414</td><td class="num">1.98073</td><td class="num">1.98073</td><td class="num">—</td></tr>
+<tr><th scope="row">25.79M full attention</th><td class="num">25,790,976</td><td class="num">6,291,456 B</td><td class="num"><strong>1.71379</strong></td><td class="num"><strong>1.97644</strong></td><td class="num">1.97644</td><td class="num">—</td></tr>
+</tbody></table></div>
+<div class="tablewrap"><table><caption>Raw corpus loss (bpb)</caption><thead><tr><th scope="col">Model</th><th scope="col">WikiText-103</th><th scope="col">C4</th><th scope="col">enwik9</th><th scope="col">text8</th></tr></thead><tbody>
+<tr><th scope="row">25.79M full attention</th><td class="num">2.29074</td><td class="num">2.03541</td><td class="num">1.68575</td><td class="num">2.12108</td></tr>
+<tr><th scope="row">14.07M full attention</th><td class="num">2.28977</td><td class="num">2.03688</td><td class="num">1.68597</td><td class="num">2.12029</td></tr>
+<tr><th scope="row">14.07M SNN</th><td class="num">2.31564</td><td class="num">2.07191</td><td class="num">1.77591</td><td class="num">2.14140</td></tr>
+<tr><th scope="row">25.79M SNN</th><td class="num">2.31560</td><td class="num">2.06397</td><td class="num">1.77908</td><td class="num">2.14096</td></tr>
+<tr><th scope="row">25.79M SNN, enwik8 only</th><td class="num">2.33948</td><td class="num">2.20845</td><td class="num">1.75987</td><td class="num">2.13790</td></tr>
+</tbody></table></div>
+<div class="tablewrap"><table><caption>Loss on Wikipedia windows with zero overlap hits (bpb)</caption><thead><tr><th scope="col">Model</th><th scope="col">WikiText-103</th><th scope="col">enwik9</th><th scope="col">text8</th></tr></thead><tbody>
+<tr><th scope="row">25.79M full attention</th><td class="num">2.29097</td><td class="num">1.74967</td><td class="num">2.12155</td></tr>
+<tr><th scope="row">14.07M full attention</th><td class="num">2.29001</td><td class="num">1.74991</td><td class="num">2.12076</td></tr>
+<tr><th scope="row">14.07M SNN</th><td class="num">2.31585</td><td class="num">1.83836</td><td class="num">2.14203</td></tr>
+<tr><th scope="row">25.79M SNN</th><td class="num">2.31582</td><td class="num">1.84141</td><td class="num">2.14155</td></tr>
+<tr><th scope="row">25.79M SNN, enwik8 only</th><td class="num">2.33972</td><td class="num">1.82446</td><td class="num">2.13848</td></tr>
+</tbody></table></div>
+<div class="tablewrap"><table><caption>LAMBADA final-word prediction</caption><thead><tr><th scope="col">Model</th><th scope="col">Passage bpb</th><th scope="col">Last sentence bpb</th><th scope="col">Passage exact</th><th scope="col">Last sentence exact</th><th scope="col">Passage at gold length</th><th scope="col">Last sentence at gold length</th></tr></thead><tbody>
+<tr><th scope="row">25.79M full attention</th><td class="num">3.31987</td><td class="num">3.37001</td><td class="num">0.02%</td><td class="num">0.02%</td><td class="num">0.02%</td><td class="num">0.02%</td></tr>
+<tr><th scope="row">14.07M full attention</th><td class="num">3.31851</td><td class="num">3.36985</td><td class="num">0.02%</td><td class="num">0.02%</td><td class="num">0.02%</td><td class="num">0.02%</td></tr>
+<tr><th scope="row">14.07M SNN</th><td class="num">3.43877</td><td class="num">3.44861</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td></tr>
+<tr><th scope="row">25.79M SNN</th><td class="num">3.42301</td><td class="num">3.43326</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td></tr>
+<tr><th scope="row">25.79M SNN, enwik8 only</th><td class="num">3.52373</td><td class="num">3.53761</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td></tr>
+</tbody></table></div>
+<p class="col cap">LAMBADA exact match requires a word boundary. The gold-length columns score predictions through the last answer byte.</p>
+<h3>Scheduled spike arrivals · 121,241,600 training targets · seed 9349</h3>
 <div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
 <tr><th scope="row">Ordinary SNN</th><td class="num">12,799,488</td><td class="num">28,584 B</td><td class="num">1.79102</td><td class="num">2.75679</td><td class="num">2.84618</td><td class="num">309,983</td></tr>
 <tr><th scope="row">Selected arrivals</th><td class="num">14,066,688</td><td class="num">28,584 B</td><td class="num">1.79114</td><td class="num"><strong>2.75550</strong></td><td class="num">2.84606</td><td class="num">308,644</td></tr>
@@ -409,7 +453,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v9/README.md">Model and architecture</a> · <a href="V9_HANDOFF.md">Training handoff</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v10/README.md">Model and architecture</a> · <a href="V10_HANDOFF.md">Training handoff</a></p>
 </section>
 
 <section id="dendrite">
