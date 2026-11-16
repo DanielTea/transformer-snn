@@ -1256,7 +1256,7 @@ class EventLM(nn.Module):
             raise ValueError("quantized weights exceed the exact FP32 accumulator range at this spike resolution")
 
     def forward(self, tokens, *, delay_limit=None, shuffle_phase=False, correction_access=None,
-                return_prediction=False, memory_pulses=None):
+                return_prediction=False, corrected_prediction=False, memory_pulses=None):
         if tokens.ndim != 2 or tokens.shape[1] == 0:
             raise ValueError("expected a nonempty [batch, bytes] tensor")
         if delay_limit is not None and (delay_limit < 1 or self.cfg.route not in _DELAY_ROUTES):
@@ -1265,6 +1265,8 @@ class EventLM(nn.Module):
             raise ValueError("shuffle_phase needs timed steering")
         if return_prediction and self.cfg.route != "steered_correction_code":
             raise ValueError("return_prediction needs a spike forecast")
+        if corrected_prediction and not return_prediction:
+            raise ValueError("a corrected forecast requires returning the prediction")
         if self._check_weights and self.input.weight.is_floating_point():
             self._check_accumulator()
         drive = self.input(tokens)
@@ -1288,6 +1290,11 @@ class EventLM(nn.Module):
         current = self.output(spikes)
         counts = self.output_emit(current, reference=self._reference_counts(current))
         if return_prediction:
+            if corrected_prediction:
+                # The bank emits corrections in the same signed count units as the forecast.
+                # The tag participates in addressing and carries no correction payload.
+                payload = recall.unflatten(-1, (self.cfg.memory_heads, -1))
+                prediction = prediction + F.pad(payload, (self.cfg.forecast_key_channels, 0))
             return counts, prediction, self.prediction_memory.observation_code(observed)
         return counts
 

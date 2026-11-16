@@ -139,6 +139,27 @@ def test_spike_code_prediction_uses_one_vocabulary_pass_and_integer_codes():
     assert prediction.abs().max() <= 2 * model.cfg.resolution
 
 
+@torch.no_grad()
+def test_corrected_forecast_adds_only_the_delivered_error_spikes():
+    torch.manual_seed(244)
+    model = EventLM(EventLMConfig(dim=8, hidden=16, route="steered_correction_code", carry=False,
+                                 memory_heads=2, memory_slots=4, memory_width=8, resolution=4,
+                                 forecast_key_channels=2, match_forecast_key=True)).to_integer()
+    tokens = torch.randint(256, (1, 256))
+    counts, prediction, observed = model(tokens, return_prediction=True)
+    delivered = []
+    handle = model.prediction_memory.register_forward_hook(lambda _m, _i, out: delivered.append(out))
+    corrected_counts, corrected, corrected_observed = model(
+        tokens, return_prediction=True, corrected_prediction=True,
+    )
+    handle.remove()
+    assert bool(delivered[0].any())
+    torch.testing.assert_close(counts, corrected_counts)
+    torch.testing.assert_close(observed, corrected_observed)
+    torch.testing.assert_close(corrected[..., :2], prediction[..., :2])
+    torch.testing.assert_close(corrected[..., 2:], prediction[..., 2:] + delivered[0].unflatten(-1, (2, 2)))
+
+
 def test_forecast_mismatch_cancels_coincident_pulses_on_both_sign_rails():
     bank = _SpikeCorrection(8, 6, 1, 2, 4, bind_previous=True, observed=True, forecast=True,
                             key_channels=2, match_key=True)
@@ -557,6 +578,23 @@ def test_compact_axon_storage_preserves_signed_maximum_packets():
         torch.testing.assert_close(packed, full)
         packet = -packet
     assert compact_state.history.untyped_storage().nbytes() * 2 == full_state.history.untyped_storage().nbytes()
+
+
+def test_compact_axons_preserve_training_gradients_across_chunks():
+    torch.manual_seed(177)
+    cfg = EventLMConfig(dim=16, hidden=12, route="steered", carry=False, resolution=16,
+                        compact_delays=True, local_trace=True)
+    standard = EventLM(cfg)
+    compact = EventLM(replace(cfg, compact_axon_state=True))
+    compact.load_state_dict(standard.state_dict())
+    stream = torch.randint(256, (1, 25))
+    for model in (standard, compact):
+        _, state = model.forward_chunk(stream[:, :11])
+        assert state.local_layers[0].history.requires_grad
+        outputs, _ = model.forward_chunk(stream[:, 11:], state)
+        outputs.square().mean().backward()
+    for reference, optimized in zip(standard.parameters(), compact.parameters(), strict=True):
+        torch.testing.assert_close(reference.grad, optimized.grad, rtol=0, atol=0)
 
 
 def test_tag_polarities_change_phase_without_adding_an_address_pulse():

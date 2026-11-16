@@ -285,6 +285,8 @@ def main():
     parser.add_argument("--initialize-from", type=Path, help="matching model or compatible plain spike router checkpoint")
     parser.add_argument("--freeze-router", action="store_true", help="update only the newly added bank")
     parser.add_argument("--code-loss-weight", type=float, default=0.0, help="weight for the next-byte spike code loss")
+    parser.add_argument("--corrected-code-loss", action="store_true",
+                        help="supervise the next-byte forecast after adding its retrieved correction spikes")
     parser.add_argument("--tag", default="")
     parser.add_argument("--results-dir", type=Path, help="write training JSONs to this directory")
     parser.add_argument("--checkpoint", help="save weights and the exact model configuration")
@@ -306,6 +308,8 @@ def main():
         parser.error("--code-loss-weight must be finite and nonnegative")
     if args.code_loss_weight and (args.variant != "event_correction_code" or args.ctx < 2):
         parser.error("spike code loss needs the forecast bank and at least two input bytes")
+    if args.corrected_code_loss and not args.code_loss_weight:
+        parser.error("--corrected-code-loss needs a positive --code-loss-weight")
     if (args.forecast_key_channels or args.match_forecast_key or args.learn_context_keys
             or args.tag_phase_address) and args.variant != "event_correction_code":
         parser.error("forecast keys need --variant event_correction_code")
@@ -374,7 +378,9 @@ def main():
             pulse_counts.clear()
         forward_options = {} if pulse_counts is None else {"memory_pulses": pulse_counts}
         if args.code_loss_weight:
-            counts, predicted, observed = model(inputs, return_prediction=True, **forward_options)
+            counts, predicted, observed = model(
+                inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
+            )
             if args.learn_context_keys:
                 predicted = predicted[..., args.forecast_key_channels:]
                 observed = observed[..., args.forecast_key_channels:]

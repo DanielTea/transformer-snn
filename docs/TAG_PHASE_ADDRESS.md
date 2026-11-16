@@ -55,6 +55,19 @@ behavior. The warm loss is almost unchanged.
 [Warm probe](../results/event_lm/tag_phase_address/warm_tag_phase_probe.json) ·
 [Compact axons](RESIDUAL_MEMBRANE.md#keep-the-stream-state-small)
 
+A separate 262,144-target validation probe uses the same parent
+weights and compares each head's own tag with the preceding head's
+tag as the phase source. Both four-phase paths keep the original
+write and verification tags. Using each head's own tag gave
+55.39M bank correction pulses and 24.49M delivered payload pulses.
+Using the preceding head's tag gave 101.75M writes and 10.96M
+delivered pulses with the same number of cells. Loss stayed near
+1.912 bits per byte across those two configurations and the
+one-phase control. Suppressing four-phase reads from charge at
+least 512 bytes old raised loss by 0.00016 bits per byte in the
+own-tag configuration.
+[Capacity-matched phase-source and memory-age probe](../results/event_lm/tag_phase_address/validation_memory_age_probe.json)
+
 ## Matched training
 
 The continuation starts from the released seven-block parent
@@ -66,3 +79,21 @@ and the same 16 PG-19 books. The validation probe collapses the
 phase banks with the same trained weights to measure the
 combined effect of the timing and capacity change.
 [Three-step Metal smoke](../results/event_lm/tag_phase_address/event_correction_code_s711_tag_phase_address_smoke.json)
+
+## Supervise the corrected forecast
+
+The existing auxiliary loss supervises the local forecast of
+the observed spike code. The `--corrected-code-loss` experiment
+supervises the same payload coordinates after adding the signed
+error spikes that survived the bank's read inhibition. A silent
+bank leaves the supervised forecast unchanged. Reads use the
+pre-write charge, and the target is the next observed byte's
+code. The next-byte objective, auxiliary loss weight of 0.25,
+pulse target, model geometry, and integer decoding path are
+shared with the four-phase control.
+
+This uses the prediction-error code to give the bank direct
+training feedback about the corrections it delivers. The
+paired run uses the same parent and enwik8 training windows.
+[Trainer](../experiments/train_event_lm.py) ·
+[Three-step Metal smoke](../results/event_lm/tag_phase_address/event_correction_code_s711_corrected_forecast_smoke.json)
