@@ -149,6 +149,14 @@ effect on this sample, and the recall-projection changes are
 below 0.00002 bpb.
 [Paired per-stage records](../results/event_lm/residual_scale/residual_stage_validation.json)
 
+On the fixed C4 validation windows, the mixture-trained narrow
+SNN scores 2.07191 bpb and the wide SNN scores 2.06397 bpb.
+Muting all added projections raises the wide model's C4 loss to
+2.09396 bpb. The same intervention raises the wide enwik8-only
+model's C4 loss by 0.00518 bpb. These scores use the C4 warming
+and target windows from the byte-transfer protocol.
+[Fixed-window C4 ablations](../results/event_lm/residual_scale/residual_c4_validation.json)
+
 ## Paired SNN width validation
 
 The two mixture-trained SNNs reproduced the same hash of all
