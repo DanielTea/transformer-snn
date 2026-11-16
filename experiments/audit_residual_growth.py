@@ -22,9 +22,9 @@ from train_lm import load_splits, random_batch
 
 
 @torch.no_grad()
-def measure(model, tokens, device, *, profile_coincidence):
+def measure(model, tokens, device, *, profile_coincidence, prior_depth=None):
     native = model.to_integer()
-    emissions, memory_emissions, selected_fractions = [], [], []
+    emissions, memory_emissions, selected_fractions, added_inhibition = [], [], [], []
 
     def count_emissions(_module, _inputs, counts):
         emissions.append(counts.abs().sum(dtype=torch.int64).item())
@@ -40,6 +40,12 @@ def measure(model, tokens, device, *, profile_coincidence):
                for module in native.modules() if isinstance(module, _IntegrateFire)]
     if profile_coincidence:
         handles.extend(block.trace.register_forward_hook(count_coincidence) for block in native.blocks)
+    if prior_depth is not None:
+        def count_added_inhibition(_module, _inputs, counts):
+            added_inhibition.append(counts.sum(dtype=torch.int64).item())
+
+        handles.extend(block.activity_inhibition.register_forward_hook(count_added_inhibition)
+                       for block in native.blocks[prior_depth:] if block.activity_inhibition is not None)
     with _IntegerExecution():
         counts = native(tokens, memory_pulses=memory_emissions)
         for handle in handles:
@@ -66,6 +72,8 @@ def measure(model, tokens, device, *, profile_coincidence):
     }
     if profile_coincidence:
         metrics["fraction_of_two_way_matches_also_confirmed"] = selected_fractions
+    if prior_depth is not None:
+        metrics["added_inhibition_pulses_by_block"] = added_inhibition
     return counts, metrics
 
 
@@ -77,6 +85,7 @@ def main():
     growth = parser.add_mutually_exclusive_group()
     growth.add_argument("--dim", type=int, help="grow the residual stream (default width 768)")
     growth.add_argument("--hidden", type=int, help="grow content and steering within each delay group")
+    growth.add_argument("--depth", type=int, help="append silent residual correction blocks to this depth")
     growth.add_argument("--trace-write-confirm", action="store_true", help="add silent write confirmation neurons")
     growth.add_argument("--redistribute-inhibition", action="store_true", help="add silent inhibitory transfers")
     growth.add_argument("--tag-read-competition", action="store_true", help="add silent tag read inhibition")
@@ -99,7 +108,7 @@ def main():
     prior = parent.cfg
     circuit_options = ("trace_write_confirm", "redistribute_inhibition", "tag_read_competition", "late_steering")
     added_circuit = next((option for option in circuit_options if getattr(args, option)), None)
-    if ((args.hidden is not None or added_circuit)
+    if ((args.depth is not None or args.hidden is not None or added_circuit)
             and (args.router_charge_bits is not None or args.trace_coincidence)):
         parser.error("charge precision and trace coincidence options apply to residual growth")
     if added_circuit:
@@ -114,6 +123,11 @@ def main():
         cfg = replace(prior, router_charge_bits=args.refine_router_charge)
         grown = EventLM(cfg)
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False, preserve_router_charge=True)
+    elif args.depth is not None:
+        start = prior.residual_correction_start if prior.residual_correction_start is not None else prior.depth
+        cfg = replace(prior, depth=args.depth, residual_correction_start=start)
+        grown = EventLM(cfg)
+        initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False, grow_depth=True)
     elif args.hidden is None:
         cfg = replace(prior, dim=768 if args.dim is None else args.dim,
                       router_charge_bits=prior.router_charge_bits if args.router_charge_bits is None
@@ -127,10 +141,12 @@ def main():
         grown = EventLM(cfg)
         grown.initialize_wider_expansion(prior, checkpoint["state_dict"])
     parent_counts, parent_metrics = measure(parent, tokens, device, profile_coincidence=False)
-    grown_counts, grown_metrics = measure(grown.eval(), tokens, device, profile_coincidence=args.trace_coincidence)
+    grown_counts, grown_metrics = measure(grown.eval(), tokens, device, profile_coincidence=args.trace_coincidence,
+                                          prior_depth=prior.depth if args.depth is not None else None)
     torch.testing.assert_close(parent_counts, grown_counts, rtol=0, atol=0)
-    if parent_metrics["total_pulses"] != grown_metrics["total_pulses"]:
-        raise AssertionError("added neurons changed the number of emitted pulses at initialization")
+    pulse_delta = grown_metrics["total_pulses"] - parent_metrics["total_pulses"]
+    if pulse_delta != sum(grown_metrics.get("added_inhibition_pulses_by_block", [])):
+        raise AssertionError("an added routing branch emitted at initialization")
 
     generator = torch.Generator().manual_seed(711)
     inputs, labels = random_batch(train, 1, 512, generator)
@@ -153,6 +169,12 @@ def main():
     elif args.refine_router_charge is not None:
         gradient_field = "active_router_gradients_on_512_train_targets"
         gradients = [block.expand.weight.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.depth is not None:
+        gradient_field = "active_added_content_gradients_on_512_train_targets"
+        gradients = [block.expand.weight.grad[:cfg.hidden].count_nonzero().item() for block in grown.blocks[prior.depth:]]
+        grown_metrics["active_added_steering_gradients_on_512_train_targets"] = [
+            block.expand.weight.grad[cfg.hidden:].count_nonzero().item() for block in grown.blocks[prior.depth:]
+        ]
     elif args.hidden is None:
         gradient_field = "active_new_projection_gradients_on_512_train_targets"
         gradients = [block.project.weight.grad[prior.dim:].count_nonzero().item() for block in grown.blocks]
@@ -174,7 +196,8 @@ def main():
         "validation_bytes": sample.size,
         "device": str(device),
         "native_step_chunk_and_device_counts_equal": True,
-        "parent_count_and_emission_parity": True,
+        "parent_count_and_emission_parity": pulse_delta == 0,
+        **({"parent_counts_equal": True, "additional_pulses": pulse_delta} if args.depth is not None else {}),
         "models": {"parent": parent_metrics, "candidate" if added_circuit else "grown": grown_metrics},
         gradient_field: gradients,
     }

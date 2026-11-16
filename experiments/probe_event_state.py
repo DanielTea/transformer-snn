@@ -94,7 +94,7 @@ def probe_tag_read_gains(model, checkpoint_path, window, chunk_size, gains):
     return metrics
 
 
-def probe(model, window, chunk_size, *, residual_width_before=None, expansion_width_before=None):
+def probe(model, window, chunk_size, *, residual_width_before=None, expansion_width_before=None, depth_before=None):
     pools = [block.activity_inhibition for block in model.blocks if block.activity_inhibition is not None]
     series = [[] for _ in pools]
     hooks = [pool.register_forward_hook(watch(counts)) for pool, counts in zip(pools, series, strict=True)]
@@ -169,6 +169,9 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
         new_rows = [rows for block in model.blocks
                     for rows in added_expansion_rows(block, expansion_width_before, block.expand.weight)]
         result["silence_added_expansion_bpb"] = score_without_synapses(model, window, chunk_size, new_rows)
+    if depth_before is not None:
+        added_projections = [block.project.weight for block in model.blocks[depth_before:]]
+        result["silence_added_blocks_bpb"] = score_without_synapses(model, window, chunk_size, added_projections)
     return result
 
 
@@ -205,7 +208,8 @@ def main():
     initialization = checkpoint.get("initialization") or {}
     if args.tag_read_gains is None:
         metrics = probe(model, window, args.chunk_size, residual_width_before=initialization.get("residual_width_before"),
-                        expansion_width_before=initialization.get("expansion_width_before"))
+                        expansion_width_before=initialization.get("expansion_width_before"),
+                        depth_before=initialization.get("depth_before"))
     else:
         metrics = {"tag_read_gain_sweep": probe_tag_read_gains(model, args.checkpoint, window,
                                                               args.chunk_size, args.tag_read_gains)}

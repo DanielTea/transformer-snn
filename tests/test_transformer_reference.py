@@ -22,6 +22,23 @@ def test_feed_forward_growth_preserves_logits_and_new_outputs_can_learn():
     assert all(bool(block.mlp_out.weight.grad[:, width:].any()) for block in grown.blocks)
 
 
+def test_transformer_depth_growth_can_also_widen_the_original_feed_forward_layers():
+    torch.manual_seed(45)
+    cfg = SNNConfig(neuron="ann", attn="transformer", mlp_ratio=2.0, position_embeddings=True)
+    options = dict(vocab=32, dim=16, heads=4, ctx=32)
+    parent = TransformerLM(cfg, depth=2, **options)
+    grown = TransformerLM(replace(cfg, mlp_ratio=3.0), depth=3, **options)
+    width = grown.initialize_deeper(cfg, parent.state_dict(), prior_depth=2)
+    tokens = torch.randint(32, (2, 23))
+    output = grown(tokens)
+    torch.testing.assert_close(output, parent(tokens), atol=1e-7, rtol=1e-6)
+    output.square().mean().backward()
+    assert width == parent.blocks[0].mlp_out.in_features
+    assert all(bool(block.mlp_out.weight.grad[:, width:].any()) for block in grown.blocks[:2])
+    assert bool(grown.blocks[2].attn.out.weight.grad.any())
+    assert bool(grown.blocks[2].mlp_out.weight.grad.any())
+
+
 def test_blocked_attention_matches_dense_window_and_gradients():
     window = 4
     length = 2 * window + 1

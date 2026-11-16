@@ -228,11 +228,16 @@ class TransformerLM(nn.Module):
     @torch.no_grad()
     def initialize_wider_feed_forward(self, prior: SNNConfig, previous: dict[str, torch.Tensor]) -> int:
         """Load the trained feed-forward units and start new units with silent output."""
+        weights, width = self._wider_feed_forward_weights(prior, previous, len(self.blocks))
+        self.load_state_dict(weights)
+        return width
+
+    def _wider_feed_forward_weights(self, prior, previous, retained_depth):
         if replace(prior, mlp_ratio=self.cfg.mlp_ratio) != self.cfg:
             raise ValueError("feed-forward growth needs the same Transformer backbone")
         weights = previous.copy()
         widths = set()
-        for index, block in enumerate(self.blocks):
+        for index, block in enumerate(self.blocks[:retained_depth]):
             incoming = f"blocks.{index}.mlp_in.weight"
             outgoing = f"blocks.{index}.mlp_out.weight"
             old_input, old_output = previous[incoming], previous[outgoing]
@@ -251,8 +256,29 @@ class TransformerLM(nn.Module):
             weights[incoming], weights[outgoing] = new_input, new_output
         if len(widths) != 1:
             raise ValueError("the checkpoint must use the same feed-forward width in every block")
+        return weights, widths.pop()
+
+    @torch.no_grad()
+    def initialize_deeper(self, prior: SNNConfig, previous: dict[str, torch.Tensor], prior_depth: int) -> int | None:
+        """Copy existing layers and start each new residual branch at zero."""
+        if not 0 < prior_depth < len(self.blocks) or replace(prior, mlp_ratio=self.cfg.mlp_ratio) != self.cfg:
+            raise ValueError("depth growth needs the same Transformer backbone with additional blocks")
+        if prior.mlp_ratio == self.cfg.mlp_ratio:
+            weights, width = previous.copy(), None
+        else:
+            weights, width = self._wider_feed_forward_weights(prior, previous, prior_depth)
+
+        new_blocks = self.blocks[prior_depth:]
+        added = {f"blocks.{index}.{name}" for index, block in enumerate(new_blocks, prior_depth)
+                 for name in block.state_dict()}
+        if self.state_dict().keys() - added != previous.keys():
+            raise ValueError("the checkpoint must supply all original Transformer weights")
+        for index, block in enumerate(new_blocks, prior_depth):
+            block.attn.out.weight.zero_()
+            block.mlp_out.weight.zero_()
+            weights.update({f"blocks.{index}.{name}": value for name, value in block.state_dict().items()})
         self.load_state_dict(weights)
-        return widths.pop()
+        return width
 
     @staticmethod
     def _init_weights(module: nn.Module) -> None:

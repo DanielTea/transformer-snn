@@ -10,6 +10,37 @@ from snnformer.event_lm import (
 )
 
 
+def test_depth_growth_preserves_counts_and_active_residuals_match_ordinary_firing():
+    torch.manual_seed(711)
+    prior = EventLMConfig(dim=32, hidden=16, depth=2, route="steered_correction_code", carry=False,
+                          compact_delays=True, local_trace=True, activity_inhibition=True, resolution=4)
+    source = EventLM(prior)
+    parent = source.to_integer()
+    cfg = replace(prior, depth=4, residual_correction_start=2)
+    grown = EventLM(cfg).eval()
+    grown.initialize_deeper(prior, source.state_dict())
+    tokens = torch.randint(256, (2, 23))
+    torch.testing.assert_close(grown.to_integer()(tokens), parent(tokens), rtol=0, atol=0)
+    with torch.no_grad():
+        for block in grown.blocks[prior.depth:]:
+            block.expand.weight.normal_(std=0.25)
+    ordinary = EventLM(replace(cfg, residual_correction_start=None)).eval()
+    ordinary.load_state_dict(grown.state_dict())
+    native = grown.to_integer()
+    expected = ordinary.to_integer()(tokens)
+    torch.testing.assert_close(native(tokens), expected, rtol=0, atol=0)
+    steps, state = [], None
+    for byte in tokens.unbind(1):
+        counts, state = native.step(byte, state)
+        steps.append(counts)
+    torch.testing.assert_close(torch.stack(steps, dim=1), expected, rtol=0, atol=0)
+    chunks, state = [], None
+    for part in tokens.split(7, dim=1):
+        counts, state = native.forward_chunk(part, state)
+        chunks.append(counts)
+    torch.testing.assert_close(torch.cat(chunks, dim=1), expected, rtol=0, atol=0)
+
+
 def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
     address = torch.tensor([[[[1, 0]], [[0, 1]], [[1, 0]], [[1, 0]], [[0, 1]], [[0, 0]]]], dtype=torch.int32)
     target = torch.tensor([[[[5]], [[-6]], [[3]], [[-4]], [[-4]], [[7]]]], dtype=torch.int32)

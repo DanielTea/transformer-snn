@@ -1,4 +1,4 @@
-"""Replay the feed-forward growth and zero-current steering checks on enwik8."""
+"""Replay Transformer growth and zero-current steering checks on enwik8."""
 
 from __future__ import annotations
 
@@ -24,11 +24,14 @@ from train_lm import load_splits, random_batch
 def audit_transformer(args, parent, checkpoint, validation, inputs, labels, device):
     if not isinstance(parent, TransformerLM) or parent.cfg.attn != "transformer":
         raise ValueError("feed-forward growth needs a full-attention Transformer checkpoint")
-    cfg = replace(parent.cfg, mlp_ratio=args.mlp_ratio)
-    kwargs = checkpoint["model_kwargs"]
+    cfg = parent.cfg if args.mlp_ratio is None else replace(parent.cfg, mlp_ratio=args.mlp_ratio)
+    kwargs = checkpoint["model_kwargs"].copy()
+    prior_depth = kwargs["depth"]
+    if args.depth is not None:
+        kwargs["depth"] = args.depth
     grown = make_lm(cfg, **kwargs)
-    initialized = initialize_from_checkpoint(grown, kwargs, args.checkpoint, freeze_router=False, grow_feed_forward=True)
-    previous_width = initialized["feed_forward_width_before"]
+    initialized = initialize_from_checkpoint(grown, kwargs, args.checkpoint, freeze_router=False,
+                                             grow_feed_forward=args.depth is None, grow_depth=args.depth is not None)
     grown.to(device).eval()
     windows = validation.reshape(8, 512).to(device)
     with torch.no_grad():
@@ -37,14 +40,27 @@ def audit_transformer(args, parent, checkpoint, validation, inputs, labels, devi
         torch.testing.assert_close(before, after, rtol=0, atol=0)
     logits = grown.train()(inputs)
     F.cross_entropy(logits.flatten(0, 1), labels.flatten()).backward()
-    gradients = [int(block.mlp_out.weight.grad[:, previous_width:].count_nonzero()) for block in grown.blocks]
-    if not all(gradients):
-        raise AssertionError("added Transformer units received no gradient in a block")
-    return {
+    report = {
         "parent_parameters": count_params(parent), "grown_parameters": count_params(grown),
-        "feed_forward_width_before": previous_width, "feed_forward_width_after": grown.blocks[0].mlp_out.in_features,
-        "validation_logits_exact": True, "active_new_output_gradients_on_512_train_targets": gradients,
+        "validation_logits_exact": True,
     }
+    previous_width = initialized.get("feed_forward_width_before")
+    if previous_width is not None:
+        gradients = [int(block.mlp_out.weight.grad[:, previous_width:].count_nonzero())
+                     for block in grown.blocks[:prior_depth]]
+        if not all(gradients):
+            raise AssertionError("added Transformer units received no gradient in an original block")
+        report.update(feed_forward_width_before=previous_width,
+                      feed_forward_width_after=grown.blocks[0].mlp_out.in_features,
+                      active_new_output_gradients_on_512_train_targets=gradients)
+    if args.depth is not None:
+        gradients = [{"attention": int(block.attn.out.weight.grad.count_nonzero()),
+                      "feed_forward": int(block.mlp_out.weight.grad.count_nonzero())}
+                     for block in grown.blocks[prior_depth:]]
+        if any(not all(block.values()) for block in gradients):
+            raise AssertionError("an added Transformer block received no output gradient")
+        report.update(depth_before=prior_depth, depth_after=len(grown.blocks), added_block_gradients=gradients)
+    return report
 
 
 def audit_steering(parent, checkpoint, validation, inputs, labels, device):
@@ -78,12 +94,13 @@ def main():
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--enwik8", type=Path, required=True)
     parser.add_argument("--mlp-ratio", type=float, help="widen the Transformer's SwiGLU to this ratio")
+    parser.add_argument("--depth", type=int, help="append identity-initialized Transformer blocks to this depth")
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
-    if (args.study == "transformer") != (args.mlp_ratio is not None):
-        parser.error("use --mlp-ratio to specify the new width for the transformer check")
+    if (args.study == "transformer") != (args.mlp_ratio is not None or args.depth is not None):
+        parser.error("use --mlp-ratio or --depth to specify growth for the Transformer check")
 
     torch.set_num_threads(4)
     torch.manual_seed(args.seed)

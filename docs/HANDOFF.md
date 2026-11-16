@@ -233,6 +233,7 @@ number of targets, and checkpoint path.
 | Tag read competition | All arms scored. The active-start runs read older charge and increased held-out loss on both corpora | [Read circuit and scores](TAG_READ_COMPETITION.md) |
 | Late steering | Both corpora scored and late spikes measured. The original-width control led on both | [Feedback circuit and scores](LATE_STEERING.md) |
 | Finer router charge at fixed width | Warm counts agree with v5. The finer router improved enwik8 and increased PG-19 loss in the matched continuation | [Precision study and scores](GROWN_RESIDUAL.md#refine-router-charge-at-fixed-width) |
+| Depth growth with signed residual corrections | The seven-block control scored both corpora. The 11-block SNN and matched width control are training | [Depth study](DEPTH_GROWTH.md) |
 | Redistribution of inhibition | Matched continuation, both scores, native audit and transfer intervention | [Inhibition study](INHIBITION_REDISTRIBUTION.md) |
 | Frozen teacher guidance | Equal-window control, held-out scores and native audit. The student uses extra training compute | [Training study](TEACHER_GUIDANCE.md) |
 | Delayed write confirmation | Both corpora scored. Native activity and write age measured | [Write confirmation study](TRACE_WRITE_CONFIRM.md) |

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +16,7 @@ from torch.utils._pytree import tree_leaves
 from benchmark_decode import state_bytes
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
-from snnformer.event_lm import EventLMConfig, _delay_group_widths, _IntegrateFire, _PACKET_TICKS
+from snnformer.event_lm import EventLM, EventLMConfig, _delay_group_widths, _IntegrateFire, _PACKET_TICKS
 from train_lm import ENWIK8_SHA1, load_splits
 
 
@@ -54,8 +55,29 @@ def _forecast_errors(model, tokens, frequencies):
     }
 
 
+def _residual_emissions(cfg, weights, tokens, expected):
+    candidate = EventLM(cfg).eval()
+    candidate.load_state_dict(weights)
+    candidate = candidate.to_integer()
+    emissions, memory_emissions = [], []
+
+    def count_emissions(_module, _inputs, counts):
+        emissions.append(counts.abs().sum(dtype=torch.int64).item())
+
+    handles = [module.register_forward_hook(count_emissions)
+               for module in candidate.modules() if isinstance(module, _IntegrateFire)]
+    try:
+        with _IntegerExecution():
+            counts = candidate(tokens, memory_pulses=memory_emissions)
+            torch.testing.assert_close(counts, expected, rtol=0, atol=0)
+    finally:
+        for handle in handles:
+            handle.remove()
+    return (sum(emissions) + sum(value.item() for value in memory_emissions)) / tokens.numel()
+
+
 @torch.inference_mode()
-def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
+def _audit(path, device, tokens, frequencies, parent, activity_profile=False, compare_residual_corrections=False):
     model, checkpoint = load_checkpoint(path, torch.device("cpu"))
     parent_seed, parent_weights, parent_counts = parent if parent is not None else (None, None, None)
     if parent_weights is not None and any(
@@ -151,6 +173,15 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
         row["read_competition_gain_ticks"] = integer.prediction_memory.read_inhibition.gains().tolist()
     if integer.cfg.late_steering:
         row["late_steering_gain_ticks"] = [block.late_steering.gains().tolist() for block in integer.blocks]
+    if integer.cfg.residual_correction_start is not None:
+        row["residual_correction_start"] = integer.cfg.residual_correction_start
+        row["ordinary_residual_pulses_per_byte"] = _residual_emissions(
+            replace(integer.cfg, residual_correction_start=None), checkpoint["state_dict"], tokens, counts,
+        )
+    if compare_residual_corrections:
+        row["all_residual_corrections_pulses_per_byte"] = _residual_emissions(
+            replace(integer.cfg, residual_correction_start=0), checkpoint["state_dict"], tokens, counts,
+        )
     if integer.cfg.learn_packet_thresholds:
         row["firing_threshold_ticks"] = [
             (block.packet_thresholds.quanta() * _PACKET_TICKS).tolist() for block in integer.blocks
@@ -231,6 +262,8 @@ def main():
     parser.add_argument("--split", choices=("validation", "test"), default="validation")
     parser.add_argument("--activity-profile", action="store_true",
                         help="record the distribution of absolute pulse counts per channel by population")
+    parser.add_argument("--compare-residual-corrections", action="store_true",
+                        help="verify the same counts and measure emissions when every residual uses corrections")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu")
     parser.add_argument("--json", type=Path, required=True)
     parser.add_argument("--force", action="store_true")
@@ -243,13 +276,16 @@ def main():
     frequencies = torch.from_numpy(np.bincount(train[:1_048_576], minlength=256))
     rows = []
     for parent, control, candidate in args.model_triplet or ():
-        row, reference = _audit(parent, device, tokens, frequencies, None, args.activity_profile)
+        row, reference = _audit(parent, device, tokens, frequencies, None, args.activity_profile,
+                                args.compare_residual_corrections)
         rows.append(row)
         for path in (control, candidate):
-            row, _ = _audit(path, device, tokens, frequencies, reference, args.activity_profile)
+            row, _ = _audit(path, device, tokens, frequencies, reference, args.activity_profile,
+                            args.compare_residual_corrections)
             rows.append(row)
     for path in args.checkpoint or ():
-        row, _ = _audit(path, device, tokens, frequencies, None, args.activity_profile)
+        row, _ = _audit(path, device, tokens, frequencies, None, args.activity_profile,
+                        args.compare_residual_corrections)
         rows.append(row)
     record = {
         "dataset": "enwik8", "data_sha1": ENWIK8_SHA1, "split": args.split,

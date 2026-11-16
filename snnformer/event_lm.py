@@ -84,6 +84,7 @@ class EventLMConfig:
     redistribute_inhibition: bool = False
     tag_read_competition: bool = False
     late_steering: bool = False
+    residual_correction_start: int | None = None
 
     @property
     def inhibition_bits(self) -> int:
@@ -848,7 +849,10 @@ class _DelayBlock(nn.Module):
         self.local_delays = self.delays[:-1] if replace_delay else self.delays
         self.local_widths = self.widths[:len(self.local_delays)]
         self.balanced = cfg.route == "steered_balanced"
-        self.steering_gradient_at_zero = cfg.steering_gradient_at_zero
+        correction_start = cfg.residual_correction_start
+        self.residual_correction = correction_start is not None and depth >= correction_start
+        # Appended silent steering neurons can learn as their content pathway starts firing.
+        self.steering_gradient_at_zero = cfg.steering_gradient_at_zero or (self.residual_correction and correction_start != 0)
         self.phase_bits = 2 if cfg.route == "steered_timed" else int(cfg.route in _PHASE_ROUTES)
         self.alternate_delays = ()
         if cfg.route == "steered_phase_delay":
@@ -1125,7 +1129,10 @@ class _DelayBlock(nn.Module):
                                 departure=departure, anchor=anchor, coincidence_read=coincidence_read)
         if self.residual_membrane:
             return self.emit(current, state=local_state)
-        first = self.emit(current)
+        reference = spikes if self.residual_correction else None
+        first = self.emit(current, reference=reference)
+        if reference is not None:
+            first = first + reference
         if self.late_steering is not None:
             return self._apply_late_steering(current, first, present, steering, firing_quanta, quanta)
         return first
@@ -1220,7 +1227,11 @@ class _DelayBlock(nn.Module):
             )
         current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
                                 departure=departure, anchor=anchor, coincidence_read=coincidence_read)
-        spikes, state.output_phase = self.emit.step(current, state.output_phase)
+        if self.residual_correction:
+            correction, state.output_phase = self.emit.step(current, state.output_phase, reference=spikes)
+            spikes = spikes + correction
+        else:
+            spikes, state.output_phase = self.emit.step(current, state.output_phase)
         if self.late_steering is not None:
             spikes = self._apply_late_steering(current, spikes, present, steering, firing_quanta, quanta)
         return spikes
@@ -1305,6 +1316,11 @@ class EventLM(nn.Module):
             raise ValueError("trace read veto needs a local charge trace")
         if cfg.residual_membrane and not cfg.local_trace:
             raise ValueError("residual membranes need chunkable local trace state")
+        if cfg.residual_correction_start is not None and (
+            cfg.carry or cfg.continuous or cfg.residual_membrane or not isinstance(cfg.residual_correction_start, int)
+            or not 0 <= cfg.residual_correction_start < cfg.depth
+        ):
+            raise ValueError("residual correction needs reset-per-byte neurons and an in-range starting block")
         if cfg.spread_coincidence and (cfg.carry or cfg.continuous
                                        or cfg.route not in ("steered", "steered_correction_code")):
             raise ValueError("spread coincidence needs a reset-per-byte steered spike router")
@@ -1342,6 +1358,9 @@ class EventLM(nn.Module):
                 raise ValueError("pooled output charge would exceed the exact FP32 integer range")
         projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden
         cap = _HIDDEN_CAP * cfg.resolution
+        residual_bits = cfg.router_charge_bits + (_PACKET_BITS if cfg.learn_packet_thresholds else 0)
+        if cfg.residual_correction_start is not None and ((2 * cap + 1) << residual_bits) > torch.iinfo(torch.int32).max:
+            raise ValueError("residual correction charge would exceed the int32 range")
         if cfg.opponent_steering and ((cap * _WEIGHT_LIMIT) << cfg.router_charge_bits) > _FP32_EXACT:
             raise ValueError("opponent steering charge would exceed the exact FP32 integer range")
         if cfg.late_steering and (cap << (cfg.router_charge_bits + _CHARGE_BITS)) > _FP32_EXACT:
@@ -1532,6 +1551,23 @@ class EventLM(nn.Module):
         access = _CorrectionAccess(correction, prefix, hide_age, stats, shuffle_keys)
         counts = self(tokens, correction_access=access)
         return counts[..., prefix:, :], EventChunkState(tokens[:, -self.local_history:].clone(), access.state)
+
+    @torch.no_grad()
+    def initialize_deeper(self, prior: EventLMConfig, previous: dict[str, torch.Tensor]):
+        """Append silent spike branches alongside the existing residual axons."""
+        start = prior.residual_correction_start if prior.residual_correction_start is not None else prior.depth
+        expected = replace(prior, depth=self.cfg.depth, residual_correction_start=start)
+        if self.cfg.depth <= prior.depth or expected != self.cfg or prior.route in _CORRECTION_ROUTES:
+            raise ValueError("depth growth needs the same spiking router with added residual correction blocks")
+
+        new_blocks = self.blocks[prior.depth:]
+        added = {f"blocks.{index}.{name}" for index, block in enumerate(new_blocks, prior.depth)
+                 for name in block.state_dict()}
+        if self.state_dict().keys() - added != previous.keys():
+            raise ValueError("the checkpoint must supply all original blocks and synapses")
+        self.load_state_dict(previous, strict=False)
+        for block in new_blocks:
+            block.expand.weight.zero_()
 
     @torch.no_grad()
     def initialize_wider_residual(self, prior: EventLMConfig, previous: dict[str, torch.Tensor]):

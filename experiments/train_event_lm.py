@@ -152,6 +152,7 @@ def build_model(args):
                             opponent_steering=args.opponent_steering,
                             spread_coincidence=args.spread_coincidence,
                             residual_membrane=args.residual_membrane,
+                            residual_correction_start=args.residual_correction_start,
                             compact_axon_state=args.compact_axon_state,
                             tag_phase_address=args.tag_phase_address)
         return EventLM(cfg), cfg, {}
@@ -191,23 +192,26 @@ def initialize_router(model, source, source_cfg):
 
 
 def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow_residual=False,
-                               grow_feed_forward=False, grow_expansion=False, preserve_router_charge=False):
+                               grow_feed_forward=False, grow_expansion=False, grow_depth=False, preserve_router_charge=False):
     source = torch.load(path, map_location="cpu", weights_only=True)
     if source.get("task") != "event_lm" or source.get("model_type") != type(model).__name__:
         raise ValueError("--initialize-from needs a checkpoint of the same decoder family")
-    if preserve_router_charge and (not isinstance(model, EventLM) or grow_residual or grow_expansion):
+    if preserve_router_charge and (not isinstance(model, EventLM) or grow_residual or grow_expansion or grow_depth):
         raise ValueError("preserving router charge applies to a spiking continuation at the same width")
     growth = {}
-    if grow_residual or grow_expansion:
+    if grow_residual or grow_expansion or (grow_depth and isinstance(model, EventLM)):
         if not isinstance(model, EventLM) or freeze_router:
             raise ValueError("growth needs a trainable spiking decoder")
         prior = EventLMConfig(**source["cfg"])
         if grow_residual:
             model.initialize_wider_residual(prior, source["state_dict"])
             growth["residual_width_before"] = prior.dim
-        else:
+        elif grow_expansion:
             model.initialize_wider_expansion(prior, source["state_dict"])
             growth["expansion_width_before"] = prior.hidden
+        else:
+            model.initialize_deeper(prior, source["state_dict"])
+            growth["depth_before"] = prior.depth
     elif isinstance(model, EventLM):
         source_cfg = EventLMConfig(**source["cfg"])
         # Training checkpoints store weights in physical units. These switches can
@@ -229,6 +233,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   bank_write_credit=model.cfg.bank_write_credit,
                                   trace_read_veto=source_cfg.trace_read_veto or model.cfg.trace_read_veto,
                                   residual_membrane=model.cfg.residual_membrane,
+                                  residual_correction_start=model.cfg.residual_correction_start,
                                   tag_phase_address=model.cfg.tag_phase_address,
                                   tag_read_competition=source_cfg.tag_read_competition or model.cfg.tag_read_competition,
                                   delay_filter=source_cfg.delay_filter or model.cfg.delay_filter,
@@ -272,12 +277,19 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 if name in source["state_dict"] and not name.startswith(_BANK_PARAMETERS):
                     parameter.requires_grad_(False)
     else:
-        source_geometry = {name: value for name, value in source["model_kwargs"].items() if name != "ctx"}
-        geometry = {name: value for name, value in model_kwargs.items() if name != "ctx"}
+        changed_geometry = ("ctx", "depth") if grow_depth else ("ctx",)
+        source_geometry = {name: value for name, value in source["model_kwargs"].items() if name not in changed_geometry}
+        geometry = {name: value for name, value in model_kwargs.items() if name not in changed_geometry}
         prior = SNNConfig(**source["cfg"])
         if source_geometry != geometry:
             raise ValueError("the checkpoint and Transformer must use the same geometry")
-        if grow_feed_forward:
+        if grow_depth:
+            prior_depth = source["model_kwargs"]["depth"]
+            width = model.initialize_deeper(prior, source["state_dict"], prior_depth)
+            growth["depth_before"] = prior_depth
+            if width is not None:
+                growth["feed_forward_width_before"] = width
+        elif grow_feed_forward:
             growth["feed_forward_width_before"] = model.initialize_wider_feed_forward(prior, source["state_dict"])
         elif prior != model.cfg:
             raise ValueError("the checkpoint and Transformer must use the same geometry")
@@ -346,6 +358,8 @@ def main():
                         help="first residual neuron whose present pulses must also match the signed held read")
     parser.add_argument("--residual-membrane", action="store_true",
                         help="retain the signed subthreshold charge at the output of each routing block")
+    parser.add_argument("--residual-correction-start", type=int,
+                        help="first block whose residual axon carries input spikes and emits only corrections")
     parser.add_argument("--trace-write-credit", action="store_true",
                         help="send held-charge gradients to the last bound that moved the charge")
     parser.add_argument("--trace-write-confirm", action="store_true",
@@ -394,6 +408,8 @@ def main():
                         help="grow silent content and steering neurons inside each delay group")
     growth.add_argument("--grow-feed-forward", action="store_true",
                         help="grow a Transformer reference's SwiGLU width from a narrower checkpoint")
+    growth.add_argument("--grow-depth", action="store_true",
+                        help="append identity-initialized blocks to the loaded model")
     parser.add_argument("--freeze-router", action="store_true", help="update only the newly added bank")
     parser.add_argument("--code-loss-weight", type=float, default=0.0, help="weight for the next-byte spike code loss")
     parser.add_argument("--corrected-code-loss", action="store_true",
@@ -421,6 +437,10 @@ def main():
         parser.error("spiking growth needs an --initialize-from checkpoint and a trainable router")
     if args.grow_feed_forward and (args.initialize_from is None or args.variant not in ("transformer", "transformer_local")):
         parser.error("--grow-feed-forward needs a Transformer --initialize-from checkpoint")
+    if args.grow_depth and (args.initialize_from is None or args.freeze_router):
+        parser.error("--grow-depth needs a trainable --initialize-from checkpoint")
+    if args.residual_correction_start is not None and args.variant not in EVENT_ROUTES:
+        parser.error("--residual-correction-start needs a spiking variant")
     if args.preserve_router_charge and (args.initialize_from is None or args.variant not in EVENT_ROUTES):
         parser.error("--preserve-router-charge needs a spiking --initialize-from checkpoint")
     if args.bank_write_credit and args.variant not in EVENT_ROUTES:
@@ -476,7 +496,8 @@ def main():
             initialization = initialize_from_checkpoint(
                 model, model_kwargs, args.initialize_from.expanduser(),
                 freeze_router=args.freeze_router, grow_residual=args.grow_residual, grow_feed_forward=args.grow_feed_forward,
-                grow_expansion=args.grow_expansion, preserve_router_charge=args.preserve_router_charge,
+                grow_expansion=args.grow_expansion, grow_depth=args.grow_depth,
+                preserve_router_charge=args.preserve_router_charge,
             )
         if args.tag_read_initial_gain is not None:
             with torch.no_grad():
