@@ -64,6 +64,7 @@ class EventLMConfig:
     activity_inhibition: bool = False
     local_trace: bool = False
     trace_write_credit: bool = False
+    trace_read_veto: bool = False
     delay_filter: bool = False
     opponent_steering: bool = False
 
@@ -220,7 +221,10 @@ class _DelayCorrection(nn.Module):
             self.gain = nn.Parameter(self.gains().to(torch.int32), requires_grad=False)
 
     def forward(self, anchor, chosen):
-        return self.emit((chosen - anchor) * self.gains().index_select(0, self.groups))
+        return self.emit_difference(chosen - anchor)
+
+    def emit_difference(self, difference):
+        return self.emit(difference * self.gains().index_select(0, self.groups))
 
 
 class _DelayFilter(nn.Module):
@@ -541,13 +545,21 @@ class _DelayState:
 class _SpikeTrace(nn.Module):
     """A causal charge trace that moves only when an interval excludes it."""
 
-    def __init__(self, cap, *, write_credit=False):
+    def __init__(self, cap, *, write_credit=False, veto_widths=None):
         super().__init__()
         self.cap = cap
         self.write_credit = write_credit
+        self.read_veto = _DelayCorrection(veto_widths, cap) if veto_widths is not None else None
 
     def _bounds(self, present, radius):
         return (present - radius).clamp_min(-self.cap), (present + radius).clamp_max(self.cap)
+
+    def _read(self, before, change, steering):
+        read, _ = _steer_packet(before, steering)
+        if self.read_veto is not None:
+            veto = self.read_veto.emit_difference(change.abs())
+            _, read = _steer_packet(read, veto)
+        return read
 
     def forward(self, present, steering, initial, pulse_counts, *, write_radius=None):
         if initial is None:
@@ -559,17 +571,18 @@ class _SpikeTrace(nn.Module):
         scan = _write_credit_scan if needs_credit else _interval_scan
         after = scan(lower, upper, initial)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
-        read, _ = _steer_packet(before, steering)
+        change = after - before
+        read = self._read(before, change, steering)
         if pulse_counts is not None:
-            pulse_counts.extend(((after - before).abs().sum(), read.abs().sum()))
+            pulse_counts.extend((change.abs().sum(), read.abs().sum()))
         return read, after[:, -1].clone()
 
     def step(self, present, steering, before, *, write_radius=None):
         if before is None:
             before = torch.zeros_like(present)
         lower, upper = self._bounds(present, steering if write_radius is None else write_radius)
-        read, _ = _steer_packet(before, steering)
-        return read, before + interval_spikes(before, lower, upper)
+        change = interval_spikes(before, lower, upper)
+        return self._read(before, change, steering), before + change
 
 
 class _OpponentSteering(nn.Module):
@@ -639,7 +652,10 @@ class _DelayBlock(nn.Module):
         self.delay_widths = tuple(counts_per_channel * width for width in self.widths)
         self.delay_sizes = tuple(delay * width for delay, width in zip(self.local_delays, self.delay_widths))
         cap = _HIDDEN_CAP * cfg.resolution
-        self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit) if cfg.local_trace else None
+        self.trace = None
+        if cfg.local_trace:
+            veto_widths = self.widths if cfg.trace_read_veto else None
+            self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths)
         self.opponent_steering = (
             _OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits) if cfg.opponent_steering else None
         )
@@ -975,6 +991,8 @@ class EventLM(nn.Module):
             raise ValueError("opponent steering needs a local charge trace")
         if cfg.trace_write_credit and not cfg.local_trace:
             raise ValueError("trace write credit needs a local charge trace")
+        if cfg.trace_read_veto and not cfg.local_trace:
+            raise ValueError("trace read veto needs a local charge trace")
         if cfg.delay_filter and (not cfg.compact_delays or cfg.carry or cfg.continuous or cfg.delay_window != 1
                                  or cfg.departure_coincidence or cfg.local_trace):
             raise ValueError("delay filters need the fixed-delay coincidence path and reset-per-byte spike routing")
@@ -1001,7 +1019,7 @@ class EventLM(nn.Module):
                 raise ValueError("pooled output charge would exceed the exact FP32 integer range")
         projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden
         cap = _HIDDEN_CAP * cfg.resolution
-        if cfg.opponent_steering and (cap * _WEIGHT_LIMIT) << cfg.router_charge_bits > _FP32_EXACT:
+        if cfg.opponent_steering and ((cap * _WEIGHT_LIMIT) << cfg.router_charge_bits) > _FP32_EXACT:
             raise ValueError("opponent steering charge would exceed the exact FP32 integer range")
         # The additional read projection is bounded by one delay group's width.
         if cfg.route in _CORRECTION_ROUTES and cfg.route != "steered_correction":
@@ -1083,6 +1101,8 @@ class EventLM(nn.Module):
             bounds.append(row_sums(block.expand).amax())
             if block.delay_filters is not None:
                 bounds.extend(2 * row_sums(kernel).amax() for kernel in block.delay_filters if kernel is not None)
+            if block.trace is not None and block.trace.read_veto is not None:
+                bounds.append(2 * block.trace.read_veto.gains().amax())
             packet_units = _PACKET_UNITS if block.packet_thresholds is not None else 1
             projected = row_sums(block.project) * packet_units + block.emit.threshold
             if block.correction is not None:

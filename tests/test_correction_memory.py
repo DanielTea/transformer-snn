@@ -481,13 +481,17 @@ def test_opponent_steering_warm_start_and_integer_chunk_and_step_parity():
 
 
 @torch.no_grad()
+@pytest.mark.parametrize("read_veto", (False, True))
 @pytest.mark.parametrize("route", ("steered", "steered_correction_code"))
-def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route):
+def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route, read_veto):
     torch.manual_seed(97)
     cfg = EventLMConfig(dim=16, hidden=21, route=route, carry=False, resolution=16,
                         memory_heads=2, memory_slots=4, memory_width=8 if route.endswith("code") else None,
-                        compact_delays=True, activity_inhibition=True, local_trace=True)
+                        compact_delays=True, activity_inhibition=True, local_trace=True, trace_read_veto=read_veto)
     model = EventLM(cfg).eval()
+    if read_veto:
+        for block in model.blocks:
+            block.trace.read_veto.gain.fill_(0.5)
     native = model.to_integer()
     tokens = torch.randint(256, (2, 93))
     expected = native(tokens)
@@ -505,6 +509,24 @@ def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks
         assert chunk.local_prefix is None
     for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
         torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
+
+
+def test_trace_correction_vetoes_mismatched_old_charge_without_altering_the_write():
+    trace = _SpikeTrace(cap=12, veto_widths=(1, 1, 1))
+    present = torch.tensor([[3., -3., 5.]])
+    steering = torch.ones_like(present)
+    before = torch.tensor([[5., -5., 5.]])
+    emitted, after = trace(present[:, None], steering[:, None], before, [])
+    assert emitted.flatten().tolist() == [1, -1, 1]
+    gradient, = torch.autograd.grad(emitted.abs().sum(), trace.read_veto.gain)
+    # At zero veto the unused sign rail is tied in the coincidence minimum.
+    torch.testing.assert_close(gradient, torch.tensor([-0.5, -0.5, 0.]), rtol=0, atol=0)
+    with torch.no_grad():
+        trace.read_veto.gain.fill_(1)
+    trace.read_veto.freeze_integer()
+    read, charge = trace.step(present.to(torch.int32), steering.to(torch.int32), before.to(torch.int32))
+    assert read.flatten().tolist() == [0, 0, 1]
+    torch.testing.assert_close(charge, after.to(torch.int32), rtol=0, atol=0)
 
 
 def test_delay_filter_is_neutral_at_initialization_and_preserves_constant_packets():

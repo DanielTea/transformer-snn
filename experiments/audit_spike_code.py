@@ -84,6 +84,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
                 populations[f"block_{index}_inhibition"] = block.activity_inhibition
             if block.opponent_steering is not None:
                 populations[f"block_{index}_write_protection"] = block.opponent_steering.emit
+            if integer.cfg.trace_read_veto:
+                populations[f"block_{index}_trace_read_veto"] = block.trace.read_veto.emit
         for name, module in populations.items():
             handles.append(module.register_forward_hook(
                 lambda _module, _inputs, spikes, label=name: activity.__setitem__(label, spikes),
@@ -154,6 +156,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
         row["opponent_active_gains_by_block"] = [
             block.opponent_steering.weight.count_nonzero().item() for block in integer.blocks
         ]
+    if integer.cfg.trace_read_veto:
+        row["trace_read_veto_gain_ticks"] = [block.trace.read_veto.gains().tolist() for block in integer.blocks]
     if integer.cfg.delay_filter:
         weights = [kernel.weight for block in integer.blocks for kernel in block.delay_filters if kernel is not None]
         row["delay_filter_parameters"] = sum(weight.numel() for weight in weights)

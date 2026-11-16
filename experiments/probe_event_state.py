@@ -89,6 +89,9 @@ def probe(model, window, chunk_size):
     if model.cfg.opponent_steering:
         weights = [block.opponent_steering.weight for block in model.blocks]
         result["zero_opponent_steering_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.trace_read_veto:
+        weights = [block.trace.read_veto.gain for block in model.blocks]
+        result["zero_trace_read_veto_bpb"] = score_without_synapses(model, window, chunk_size, weights)
     return result
 
 
