@@ -106,8 +106,17 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
-  <p class="col">The current depth study compares integer spike decoders with matched Transformer references. All models trained on enwik8. The tables score the complete enwik8 test split and 16 complete PG-19 books in bits per byte. Full attention uses up to 512 bytes per evaluation window. State is persistent tensor storage per stream, including the FP32 keys and values for the full-attention reference.</p>
+  <p class="col">The continuation studies compare integer spike decoders with matched Transformer references at 512 and 2,048 training bytes per window. All models trained on enwik8. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for the full-attention reference at its evaluation context.</p>
   <!-- EVENT_LM_TABLES -->
+  <figure>
+    <a href="../results/figures/event_lm_continuation_test.png"><img src="../results/figures/event_lm_continuation_test.png" alt="Held-out loss for integer spike models and full attention after 512-byte continuations" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_trained_context.png"><img src="../results/figures/event_lm_trained_context.png" alt="Held-out loss for held charge and full attention at both trained context lengths" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_prefix_age_gap.png"><img src="../results/figures/event_lm_prefix_age_gap.png" alt="enwik8 loss gap by time since the previous occurrence of each eight-byte prefix" loading="lazy"></a>
+  </figure>
   <figure>
     <a href="../results/figures/depth_inhibition_test.png"><img src="../results/figures/depth_inhibition_test.png" alt="Held-out next-byte loss for the depth and inhibition comparison" loading="lazy"></a>
   </figure>
@@ -120,7 +129,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v2/README.md">Model, architecture and training handoff</a> · <a href="DEPTH_INHIBITION.md">Depth study and interventions</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v3/README.md">Model and architecture</a> · <a href="HANDOFF.md">Training handoff</a></p>
 </section>
 
 <section id="dendrite">

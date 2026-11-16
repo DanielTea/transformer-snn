@@ -106,8 +106,32 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
-  <p class="col">The current depth study compares integer spike decoders with matched Transformer references. All models trained on enwik8. The tables score the complete enwik8 test split and 16 complete PG-19 books in bits per byte. Full attention uses up to 512 bytes per evaluation window. State is persistent tensor storage per stream, including the FP32 keys and values for the full-attention reference.</p>
-  <h3>Depth and activity inhibition · 26,214,400 training targets · seed 0</h3>
+  <p class="col">The continuation studies compare integer spike decoders with matched Transformer references at 512 and 2,048 training bytes per window. All models trained on enwik8. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for the full-attention reference at its evaluation context.</p>
+  <h3>512-byte continuations · 32,768,000 training targets · seed 711</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
+<tr><th scope="row">Held-charge control</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">1.98564</td><td class="num">2.98490</td></tr>
+<tr><th scope="row">Opponent steering</th><td class="num">1,631,917</td><td class="num">21,320 B</td><td class="num">1.98533</td><td class="num"><strong>2.97309</strong></td></tr>
+<tr><th scope="row">Chronological write credit</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">1.98691</td><td class="num">2.99097</td></tr>
+<tr><th scope="row">Trace read veto</th><td class="num">1,631,012</td><td class="num">21,320 B</td><td class="num">1.98405</td><td class="num">2.98763</td></tr>
+<tr><th scope="row">Spread coincidence</th><td class="num">1,631,012</td><td class="num">21,320 B</td><td class="num">1.98644</td><td class="num">2.98129</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">3,145,728 B</td><td class="num"><strong>1.79625</strong></td><td class="num">3.11887</td></tr>
+</tbody></table></div>
+<h3>2,048-byte continuations · 32,768,000 training targets · seed 711</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
+<tr><th scope="row">Held charge with write credit</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">1.98884</td><td class="num"><strong>2.96180</strong></td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">12,582,912 B</td><td class="num"><strong>1.81712</strong></td><td class="num">3.11395</td></tr>
+</tbody></table></div>
+<h3>3.26M parameter comparison · 26,214,400 training targets · seed 0</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
+<tr><th scope="row">Seven-block held charge</th><td class="num">3,257,088</td><td class="num">31,692 B</td><td class="num">1.99402</td><td class="num"><strong>2.89822</strong></td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">3,256,832</td><td class="num">4,194,304 B</td><td class="num"><strong>1.86093</strong></td><td class="num">3.05929</td></tr>
+</tbody></table></div>
+<h3>Held-charge replication · 26,214,400 training targets per seed · seeds 0–2</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
+<tr><th scope="row">Held-charge SNN</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">2.00633</td><td class="num"><strong>2.98979</strong></td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">3,145,728 B</td><td class="num"><strong>1.82812</strong></td><td class="num">3.09559</td></tr>
+</tbody></table></div>
+<h3>Depth and activity inhibition · 26,214,400 training targets · seed 0</h3>
 <div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
 <tr><th scope="row">Three-block SNN, fixed threshold</th><td class="num">1,630,464</td><td class="num">14,556 B</td><td class="num">2.24386</td><td class="num">3.19752</td></tr>
 <tr><th scope="row">Three-block SNN, activity inhibition</th><td class="num">1,630,464</td><td class="num">14,556 B</td><td class="num">2.16389</td><td class="num">3.11971</td></tr>
@@ -134,6 +158,15 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 <tr><th scope="row">Full-attention Transformer</th><td class="num">815,232</td><td class="num">1,572,864 B</td><td class="num"><strong>2.01841</strong></td><td class="num">3.29072</td></tr>
 </tbody></table></div>
   <figure>
+    <a href="../results/figures/event_lm_continuation_test.png"><img src="../results/figures/event_lm_continuation_test.png" alt="Held-out loss for integer spike models and full attention after 512-byte continuations" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_trained_context.png"><img src="../results/figures/event_lm_trained_context.png" alt="Held-out loss for held charge and full attention at both trained context lengths" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_prefix_age_gap.png"><img src="../results/figures/event_lm_prefix_age_gap.png" alt="enwik8 loss gap by time since the previous occurrence of each eight-byte prefix" loading="lazy"></a>
+  </figure>
+  <figure>
     <a href="../results/figures/depth_inhibition_test.png"><img src="../results/figures/depth_inhibition_test.png" alt="Held-out next-byte loss for the depth and inhibition comparison" loading="lazy"></a>
   </figure>
   <figure>
@@ -145,7 +178,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v2/README.md">Model, architecture and training handoff</a> · <a href="DEPTH_INHIBITION.md">Depth study and interventions</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v3/README.md">Model and architecture</a> · <a href="HANDOFF.md">Training handoff</a></p>
 </section>
 
 <section id="dendrite">

@@ -82,6 +82,10 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
                 populations[f"block_{index}_steering"] = block.steer
             if block.activity_inhibition is not None:
                 populations[f"block_{index}_inhibition"] = block.activity_inhibition
+            if block.opponent_steering is not None:
+                populations[f"block_{index}_write_protection"] = block.opponent_steering.emit
+            if integer.cfg.trace_read_veto:
+                populations[f"block_{index}_trace_read_veto"] = block.trace.read_veto.emit
         for name, module in populations.items():
             handles.append(module.register_forward_hook(
                 lambda _module, _inputs, spikes, label=name: activity.__setitem__(label, spikes),
@@ -148,6 +152,16 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
         row["router_charge_bits"] = integer.cfg.router_charge_bits
     if integer.cfg.local_trace:
         row["native_batch_matches_chunk_on_prefix"] = tokens.numel()
+    if integer.cfg.opponent_steering:
+        row["opponent_active_gains_by_block"] = [
+            block.opponent_steering.weight.count_nonzero().item() for block in integer.blocks
+        ]
+    if integer.cfg.trace_read_veto:
+        row["trace_read_veto_gain_ticks"] = [block.trace.read_veto.gains().tolist() for block in integer.blocks]
+    if integer.cfg.spread_coincidence:
+        row["spread_coincidence_mix_ticks"] = [
+            block.spread_coincidence.mix_ticks().tolist() for block in integer.blocks
+        ]
     if integer.cfg.delay_filter:
         weights = [kernel.weight for block in integer.blocks for kernel in block.delay_filters if kernel is not None]
         row["delay_filter_parameters"] = sum(weight.numel() for weight in weights)
@@ -161,6 +175,17 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
                 "mean": per_byte.mean().item(),
                 "p05_p50_p95": per_byte.quantile(quantiles).tolist(),
             }
+        if integer.cfg.route in ("steered", "steered_correction_code"):
+            clock = 1 << (2 * integer.cfg.resolution - 1).bit_length()
+            fractions = []
+            for index in range(len(integer.blocks)):
+                content = activity[f"block_{index}_content"].abs()
+                steering = activity[f"block_{index}_steering"]
+                packed_open = (steering >= content) & (steering < clock)
+                total = content.sum(dtype=torch.int64).item()
+                opened = content[packed_open].sum(dtype=torch.int64).item()
+                fractions.append(opened / total if total else 0.0)
+            row["packed_open_fraction_at_partial_clock_by_block"] = fractions
     return row, (seed, checkpoint["state_dict"], counts)
 
 

@@ -104,7 +104,11 @@ def build_model(args):
                             departure_coincidence=args.departure_coincidence, delay_window=args.delay_window,
                             delay_residual=args.delay_residual,
                             router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
-                            local_trace=args.local_trace, delay_filter=args.delay_filter)
+                            local_trace=args.local_trace, trace_write_credit=args.trace_write_credit,
+                            trace_read_veto=args.trace_read_veto,
+                            delay_filter=args.delay_filter,
+                            opponent_steering=args.opponent_steering,
+                            spread_coincidence=args.spread_coincidence)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
     if args.local_lookback is not None:
@@ -114,7 +118,10 @@ def build_model(args):
 
 
 _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
-_OPTIONAL_ROUTER_PARAMETERS = (".packet_thresholds.", ".delay_correction.", ".delay_filters.")
+_OPTIONAL_ROUTER_PARAMETERS = (
+    ".packet_thresholds.", ".delay_correction.", ".delay_filters.", ".opponent_steering.", ".trace.read_veto.",
+    ".spread_coincidence.",
+)
 
 
 def initialize_router(model, source, source_cfg):
@@ -153,17 +160,27 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
                                   delay_window=model.cfg.delay_window, router_charge_bits=model.cfg.router_charge_bits,
                                   delay_residual=source_cfg.delay_residual or model.cfg.delay_residual,
                                   activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace,
-                                  delay_filter=source_cfg.delay_filter or model.cfg.delay_filter)
+                                  trace_write_credit=model.cfg.trace_write_credit,
+                                  trace_read_veto=source_cfg.trace_read_veto or model.cfg.trace_read_veto,
+                                  delay_filter=source_cfg.delay_filter or model.cfg.delay_filter,
+                                  opponent_steering=source_cfg.opponent_steering or model.cfg.opponent_steering,
+                                  spread_coincidence=source_cfg.spread_coincidence or model.cfg.spread_coincidence)
         if source_geometry == model.cfg:
             expected = set()
             if model.cfg.delay_residual and not source_cfg.delay_residual:
                 expected.update(f"blocks.{index}.delay_correction.gain" for index in range(model.cfg.depth))
             if model.cfg.delay_filter and not source_cfg.delay_filter:
                 expected.update(name for name in model.state_dict() if ".delay_filters." in name)
+            if model.cfg.opponent_steering and not source_cfg.opponent_steering:
+                expected.update(name for name in model.state_dict() if ".opponent_steering." in name)
+            if model.cfg.trace_read_veto and not source_cfg.trace_read_veto:
+                expected.update(name for name in model.state_dict() if ".trace.read_veto." in name)
+            if model.cfg.spread_coincidence and not source_cfg.spread_coincidence:
+                expected.update(name for name in model.state_dict() if ".spread_coincidence." in name)
             if expected:
                 missing, unexpected = model.load_state_dict(source["state_dict"], strict=False)
                 if set(missing) != expected or unexpected:
-                    raise ValueError("the checkpoint must supply every weight except the new delay synapses")
+                    raise ValueError("the checkpoint must supply every weight except the new router synapses")
             else:
                 model.load_state_dict(source["state_dict"])
         else:
@@ -224,6 +241,14 @@ def main():
                         help="raise content and steering thresholds with pooled incoming spike activity")
     parser.add_argument("--local-trace", action="store_true",
                         help="hold each channel's charge within its steering interval across bytes")
+    parser.add_argument("--trace-write-credit", action="store_true",
+                        help="send held-charge gradients to the last bound that moved the charge")
+    parser.add_argument("--trace-read-veto", action="store_true",
+                        help="use charge correction spikes to inhibit mismatched reads")
+    parser.add_argument("--opponent-steering", action="store_true",
+                        help="use opposing steering spikes to protect held charge from writes")
+    parser.add_argument("--spread-coincidence", action="store_true",
+                        help="spread a learned share of immediate pulses across the steering clock")
     parser.add_argument("--delay-filter", action="store_true",
                         help="correct the coincidence path with learned spike differences across fixed taps")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
@@ -273,7 +298,8 @@ def main():
         parser.error("forecast keys need --variant event_correction_code")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
-            or args.local_trace or args.delay_filter
+            or args.local_trace or args.trace_write_credit or args.trace_read_veto
+            or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"
     ):

@@ -3,8 +3,11 @@ from dataclasses import replace
 import pytest
 import torch
 
-from snnformer.correction_memory import correction_reads, correction_step
-from snnformer.event_lm import EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _SpikeCorrection, _SpikeTrace
+from snnformer.correction_memory import _interval_scan, _write_credit_scan, correction_reads, correction_step
+from snnformer.event_lm import (
+    EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _OpponentSteering, _SpikeCorrection, _SpikeTrace,
+    _SpreadCoincidence, _steer_packet,
+)
 
 
 def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
@@ -395,14 +398,103 @@ def test_trace_steering_reads_old_charge_and_resists_writes_within_its_interval(
     assert [int(count) for count in pulses] == [10, 18]
 
 
+def test_trace_credit_follows_actual_moves_on_an_odd_length_scan_with_ties():
+    lower = torch.tensor([[[2., -3.], [2., -5.], [-1., 4.], [3., 0.], [3., 2.], [0., 1.], [5., -1.]]],
+                         requires_grad=True)
+    upper = torch.tensor([[[2., -1.], [5., -3.], [1., 4.], [3., 4.], [6., 4.], [2., 4.], [8., 0.]]],
+                         requires_grad=True)
+    initial = torch.tensor([[0., 3.]], requires_grad=True)
+    final = initial
+    states = []
+    for lo, hi in zip(lower.unbind(1), upper.unbind(1), strict=True):
+        final = torch.where(final < lo, lo, torch.where(final > hi, hi, final))
+        states.append(final)
+    expected = torch.stack(states, dim=1)
+    actual = _write_credit_scan(lower, upper, initial)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    torch.testing.assert_close(actual, _interval_scan(lower, upper, initial), rtol=0, atol=0)
+
+    weights = torch.arange(actual.numel()).view_as(actual)
+    reference_grads = torch.autograd.grad((expected * weights).sum(), (lower, upper, initial))
+    for observed, desired in zip(torch.autograd.grad((actual * weights).sum(), (lower, upper, initial)),
+                                 reference_grads, strict=True):
+        torch.testing.assert_close(observed, desired, rtol=0, atol=0)
+    assert actual[0, 1, 0].item() == lower[0, 1, 0].item()
+    assert reference_grads[0][0, 1, 0].item() == 0
+
+
+def test_opponent_steering_protects_charge_through_a_silent_read():
+    trace = _SpikeTrace(cap=12)
+    opponent = _OpponentSteering(width=1, cap=12, charge_bits=6)
+    current = torch.tensor([0., -384., 512.]).reshape(1, 3, 1)
+    protection = opponent(current, None)
+    torch.testing.assert_close(protection, torch.zeros_like(protection), rtol=0, atol=0)
+    gradient, = torch.autograd.grad(protection.sum(), opponent.weight)
+    torch.testing.assert_close(gradient, torch.tensor([6.]), rtol=0, atol=0)
+
+    with torch.no_grad():
+        opponent.weight.fill_(1)
+    opponent.freeze_integer()
+    protection = opponent(current.to(torch.int32), None)
+    assert protection.flatten().tolist() == [0, 6, 0]
+    present = torch.tensor([5, 0, 5], dtype=torch.int32).reshape_as(protection)
+    steering = torch.tensor([0, 0, 8], dtype=torch.int32).reshape_as(protection)
+    original, _ = trace(present, steering, None, None)
+    protected, state = trace(present, steering, None, None, write_radius=steering + protection)
+    assert original.flatten().tolist() == [0, 0, 0]
+    assert protected.flatten().tolist() == [0, 0, 5]
+    assert state.item() == 5
+
+
 @torch.no_grad()
+def test_opponent_steering_warm_start_and_integer_chunk_and_step_parity():
+    torch.manual_seed(71)
+    cfg = EventLMConfig(dim=16, hidden=21, depth=4, route="steered_correction_code", carry=False,
+                        resolution=16, memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True,
+                        activity_inhibition=True, local_trace=True)
+    base_master = EventLM(cfg).eval()
+    model = EventLM(replace(cfg, opponent_steering=True)).eval()
+    missing, unexpected = model.load_state_dict(base_master.state_dict(), strict=False)
+    assert not unexpected and set(missing) == {f"blocks.{i}.opponent_steering.weight" for i in range(cfg.depth)}
+    tokens = torch.randint(256, (2, 67))
+    base = base_master.to_integer()
+    original = base(tokens)
+    torch.testing.assert_close(model.to_integer()(tokens), original, rtol=0, atol=0)
+
+    for block in model.blocks:
+        block.opponent_steering.weight.fill_(0.85)
+    native = model.to_integer()
+    expected = native(tokens)
+    assert not torch.equal(expected, original)
+    torch.testing.assert_close(model(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for i, byte in enumerate(tokens.unbind(1)):
+        count, state = native.step(byte, state)
+        torch.testing.assert_close(count, expected[:, i], rtol=0, atol=0)
+    chunk = None
+    parts = []
+    for part in tokens.split((1, 13, 42, 11), dim=1):
+        count, chunk = native.forward_chunk(part, chunk)
+        parts.append(count)
+    torch.testing.assert_close(torch.cat(parts, dim=1), expected, rtol=0, atol=0)
+    for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
+        torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("route_options", ({}, {"trace_read_veto": True}, {"spread_coincidence": True}))
 @pytest.mark.parametrize("route", ("steered", "steered_correction_code"))
-def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route):
+def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route, route_options):
     torch.manual_seed(97)
     cfg = EventLMConfig(dim=16, hidden=21, route=route, carry=False, resolution=16,
                         memory_heads=2, memory_slots=4, memory_width=8 if route.endswith("code") else None,
-                        compact_delays=True, activity_inhibition=True, local_trace=True)
+                        compact_delays=True, activity_inhibition=True, local_trace=True, **route_options)
     model = EventLM(cfg).eval()
+    for block in model.blocks:
+        if cfg.trace_read_veto:
+            block.trace.read_veto.gain.fill_(0.5)
+        if cfg.spread_coincidence:
+            block.spread_coincidence.mix.fill_(0.625)
     native = model.to_integer()
     tokens = torch.randint(256, (2, 93))
     expected = native(tokens)
@@ -420,6 +512,61 @@ def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks
         assert chunk.local_prefix is None
     for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
         torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_spread_coincidence_matches_clock_slots_and_conserves_each_signed_packet():
+    spread = _SpreadCoincidence((6,), cap=128, resolution=4)
+    spread.mix.fill_(0.5)
+    spread.freeze_integer()
+    packet = torch.tensor([-17, -4, 0, 9, 12, 32], dtype=torch.int32)
+    steering = torch.tensor([0, 2, 5, 3, 11, 4], dtype=torch.int32)
+    coincident, bypass = spread(packet, steering, _steer_packet(packet, steering)[0])
+    expected = []
+    for content, window in zip(packet.tolist(), steering.tolist(), strict=True):
+        count = abs(content)
+        timed = (count + 1) // 2
+        # Place event j at the center of its equal-width sector in the clock.
+        observed = sum((2 * j - 1) * spread.clock_slots <= 2 * timed * min(window, spread.clock_slots)
+                       for j in range(1, timed + 1))
+        signed = min(count - timed, window) + observed
+        expected.append(-signed if content < 0 else signed)
+    assert coincident.tolist() == expected
+    torch.testing.assert_close(coincident + bypass, packet, rtol=0, atol=0)
+    assert bool((coincident.abs() <= packet.abs()).all())
+
+
+def test_silent_spread_coincidence_preserves_router_gradients_and_can_learn():
+    spread = _SpreadCoincidence((4, 2), cap=128, resolution=4)
+    packet = torch.tensor([-7., -4., 0., 6., 8., 12.], requires_grad=True)
+    steering = torch.tensor([0., 2., 4., 6., 3., 11.], requires_grad=True)
+    packed, _ = _steer_packet(packet, steering)
+    candidate, bypass = spread(packet, steering, packed)
+    torch.testing.assert_close(candidate, packed, rtol=0, atol=0)
+    torch.testing.assert_close(candidate + bypass, packet, rtol=0, atol=0)
+    expected = torch.autograd.grad(packed.sum(), (packet, steering), retain_graph=True)
+    dp, ds, mix = torch.autograd.grad(candidate.sum(), (packet, steering, spread.mix))
+    torch.testing.assert_close(dp, expected[0], rtol=0, atol=0)
+    torch.testing.assert_close(ds, expected[1], rtol=0, atol=0)
+    assert bool((mix != 0).all())
+
+
+def test_trace_correction_vetoes_mismatched_old_charge_without_altering_the_write():
+    trace = _SpikeTrace(cap=12, veto_widths=(1, 1, 1))
+    present = torch.tensor([[3., -3., 5.]])
+    steering = torch.ones_like(present)
+    before = torch.tensor([[5., -5., 5.]])
+    emitted, after = trace(present[:, None], steering[:, None], before, [])
+    assert emitted.flatten().tolist() == [1, -1, 1]
+    gradient, = torch.autograd.grad(emitted.abs().sum(), trace.read_veto.gain)
+    # At zero veto the unused sign rail is tied in the coincidence minimum.
+    torch.testing.assert_close(gradient, torch.tensor([-0.5, -0.5, 0.]), rtol=0, atol=0)
+    with torch.no_grad():
+        trace.read_veto.gain.fill_(1)
+    trace.read_veto.freeze_integer()
+    read, charge = trace.step(present.to(torch.int32), steering.to(torch.int32), before.to(torch.int32))
+    assert read.flatten().tolist() == [0, 0, 1]
+    torch.testing.assert_close(charge, after.to(torch.int32), rtol=0, atol=0)
 
 
 def test_delay_filter_is_neutral_at_initialization_and_preserves_constant_packets():

@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--enwik8", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"))
     parser.add_argument("--output-dir", type=Path, default=Path("checkpoints/replayed"))
-    parser.add_argument("--parent-checkpoints", type=Path, default=Path("checkpoints"))
+    parser.add_argument("--parent-checkpoints", type=Path, help="override the directory of a recorded parent checkpoint")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -33,7 +33,7 @@ def main():
         if args.device:
             options["device"] = args.device
         if parent:
-            parent_path = args.parent_checkpoints / Path(parent).name
+            parent_path = Path(parent) if args.parent_checkpoints is None else args.parent_checkpoints / Path(parent).name
             initialization = record.get("initialization") or {}
             if not args.dry_run and initialization.get("sha256"):
                 with parent_path.open("rb") as stream:

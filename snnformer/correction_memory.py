@@ -35,6 +35,43 @@ def _interval_scan(lower, upper, initial):
     return initial[:, None].clamp(lower, upper)
 
 
+def _paired_interval_scan(lower, upper, initial):
+    steps = lower.shape[1]
+    if steps < 2:
+        return initial[:, None].clamp(lower, upper)
+
+    pairs = steps // 2
+    left = slice(0, 2 * pairs, 2)
+    right = slice(1, 2 * pairs, 2)
+    paired_lower = lower[:, left].clamp(lower[:, right], upper[:, right])
+    paired_upper = upper[:, left].clamp(lower[:, right], upper[:, right])
+    # Pair endpoints determine the state entering each adjacent pair.
+    odd = _paired_interval_scan(paired_lower, paired_upper, initial)
+    incoming = torch.cat((initial[:, None], odd), dim=1)[:, :(steps + 1) // 2]
+    even = incoming.clamp(lower[:, ::2], upper[:, ::2])
+    states = torch.stack((even[:, :pairs], odd), dim=2).flatten(1, 2)
+    if steps % 2:
+        states = torch.cat((states, even[:, pairs:]), dim=1)
+    return states
+
+
+def _write_credit_scan(lower, upper, initial):
+    """Give each state gradient to the bound that last moved the charge."""
+    if lower.shape[1] == 0:
+        return initial[:, None].clamp(lower, upper)
+    with torch.no_grad():
+        after = _paired_interval_scan(lower, upper, initial)
+        before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
+        below = before < lower
+        moved = below | (before > upper)
+        steps = lower.shape[1]
+        shape = (1, steps) + (1,) * (lower.ndim - 2)
+        positions = torch.arange(1, steps + 1, device=lower.device).reshape(shape)
+        last_write = torch.where(moved, positions, 0).cummax(dim=1).values
+    boundaries = torch.where(below, lower, upper)
+    return torch.cat((initial[:, None], boundaries), dim=1).gather(1, last_write)
+
+
 def interval_spikes(charge, lower, upper):
     """Signed spikes needed to move charge just inside the allowed interval."""
     return (lower - charge).clamp_min(0) - (charge - upper).clamp_min(0)
