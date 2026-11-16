@@ -121,15 +121,22 @@ def build_data():
 
 def spiking_byte_tables():
     folder = RESULTS / "event_lm"
+    research = json.loads((folder / "continuation_leaderboard.json").read_text(encoding="utf-8"))
     latest = json.loads((folder / "depth_inhibition_leaderboard.json").read_text(encoding="utf-8"))
     history = json.loads((folder / "threshold_scale_leaderboard.json").read_text(encoding="utf-8"))
-    groups = {**latest["groups"], **history["groups"]}
-    sections = []
-    for scale, rows in groups.items():
+    groups = [
+        (f'{group["title"]} · {group["rows"][0]["training_targets"]:,} training targets · seed {group["seed"]}',
+         group["rows"])
+        for group in research["groups"].values()
+    ]
+    for scale, rows in {**latest["groups"], **history["groups"]}.items():
         exposure = rows[0]["training_targets"]
         title = (f"Depth and activity inhibition · {exposure:,} training targets · seed 0" if scale == "depth"
                  else f"{scale.capitalize()} context-tag comparison · {exposure:,} training targets per seed · three-seed mean")
-        sections.append(f"<h3>{title}</h3>")
+        groups.append((title, rows))
+    sections = []
+    for title, rows in groups:
+        sections.append(f"<h3>{html.escape(title)}</h3>")
         sections.append('<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th>'
                         '<th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th>'
                         '<th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th>'

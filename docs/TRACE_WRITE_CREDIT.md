@@ -69,7 +69,19 @@ The 1.63M full-attention reference also continued for 6,553,600 targets
 from its seed-0 checkpoint, using the same seed-711 windows and
 AdamW schedule. It scored 1.79625 bits per byte on the complete
 enwik8 split. Opponent steering scored 1.98533 at this training
-exposure, a gap of 0.18908 bits per byte. The PG-19 continuation
-comparison is scoring separately.
+exposure, a gap of 0.18908 bits per byte. The same Transformer scored
+3.11887 bits per byte on PG-19 at a 512-byte context. Opponent
+steering scored 2.97309 and led on all 16 books. Its advantage
+was 0.14578 bits per byte after calibration and 0.26346 at the
+raw output scale.
 [Reference training](../results/event_lm/trace_write_credit/transformer_s711_trace_warm_reference.json) ·
-[Reference enwik8](../results/event_lm/trace_write_credit/enwik8_transformer_s711.json)
+[Reference enwik8](../results/event_lm/trace_write_credit/enwik8_transformer_s711.json) ·
+[Reference PG-19](../results/event_lm/trace_write_credit/pg19_transformer_s711.json)
+
+The enwik8 records group targets by the distance to the previous
+occurrence of their eight-byte prefix. First occurrences and repeats
+at least 512 bytes apart account for 78.7% of the overall enwik8 gap.
+The largest per-target gap is in the 32–127-byte group at 0.35123
+bits per byte. [Opponent-steering enwik8 record](../results/event_lm/opponent_steering/enwik8_opponent_s711.json)
+
+![enwik8 loss gap within prefix age groups and each group's contribution](../results/figures/event_lm_prefix_age_gap.png)

@@ -30,18 +30,32 @@ alone and as a prefix of the 2,048-byte input.
 
 ## Train the longer context
 
-Both architectures completed optimizer steps on two real 2,048-byte
-enwik8 windows per batch with MPS fallback disabled. The comparison
-continues the 1.63M-parameter seed-0 models using those windows. Both
-arms see 6,553,600 additional targets with seed 711. The SNN uses
-the chronological held-charge gradient and its usual 310,000-pulse
-training target. The Transformer will be evaluated with up to
-2,048 bytes of attention context.
-[SNN training smoke](../results/event_lm/context_extrapolation/event_correction_code_s711_long_context_smoke.json) ·
-[Transformer training smoke](../results/event_lm/context_extrapolation/transformer_s711_long_context_smoke.json)
+Both models continued their 1.63M-parameter seed-0 parents on two
+2,048-byte enwik8 windows per batch, with 6,553,600 additional
+targets and seed 711. The SNN used chronological held-charge
+gradients and a 310,000-pulse training target. Full attention saw
+up to 2,048 bytes per scoring window. The comparison below also
+includes the same model families and training exposure at 512 bytes.
+
+| Model | Trained window | enwik8 bpb | PG-19 bpb | PG-19 raw bpb | State |
+|---|---:|---:|---:|---:|---:|
+| Held charge with write credit | 512 | 1.98691 | 2.99097 | 3.10893 | 21,320 B |
+| Full attention | 512 | 1.79625 | 3.11887 | 3.35801 | 3 MiB |
+| Held charge with write credit | 2,048 | 1.98884 | 2.96180 | 3.07240 | 21,320 B |
+| Full attention | 2,048 | 1.81712 | 3.11395 | 3.33558 | 12 MiB |
+
+With longer training windows, the SNN's PG-19 loss fell by
+0.02916 bits per byte and its enwik8 loss rose by 0.00193. At
+2,048 bytes it led on all 16 PG-19 books, with an aggregate lead
+of 0.15215 calibrated bits per byte and 0.26317 at raw scale.
+Full attention led on enwik8 by 0.17172 at 2,048 bytes and reached
+its lowest enwik8 loss with the 512-byte continuation. The matched
+comparison uses one continuation seed.
+[2,048-byte training, per-book scores, and audit](../results/event_lm/long_context_continuation) ·
+[512-byte training and scores](../results/event_lm/trace_write_credit)
 
 The `spiking` array and corpus setup are in the release handoff. Run
-both from the repository root in Bash.
+both from the repository root in Bash, using a new output directory.
 [Training setup](HANDOFF.md#train-and-continue)
 
 ```bash
@@ -50,7 +64,7 @@ continuation=(--data data/enwik8 --device mps --ctx 2048 --bs 2
   --steps 1600 --lr 0.0004 --warmup 64 --eval-every 200 --eval-bs 2
   --eval-batches 8 --final-eval-batches 48 --validation-only
   --seed 711 --tag ctx2048_continuation)
-run=checkpoints/long-context-continuation
+run=checkpoints/work/long-context-continuation
 
 python experiments/train_event_lm.py "${continuation[@]}" "${spiking[@]}" \
   --local-trace --trace-write-credit --initialize-from models/spiking-byte-lm-v2/weights.pt \

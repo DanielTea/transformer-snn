@@ -1,0 +1,134 @@
+{
+  "release": "spiking-byte-lm-v3",
+  "model": {
+    "file": "weights.pt",
+    "source_checkpoint": "long-context-continuation/trace_ctx2048_s711.pt",
+    "sha256": "9a529dbece8a773de0a35e79267ec60dc257ed49d4ebd51b8fa6001727376318",
+    "architecture": {
+      "dim": 264,
+      "hidden": 185,
+      "depth": 5,
+      "route": "steered_correction_code",
+      "carry": false,
+      "continuous": false,
+      "memory_heads": 4,
+      "memory_slots": 14,
+      "resolution": 16,
+      "memory_width": 32,
+      "forecast_key_channels": 2,
+      "match_forecast_key": true,
+      "learn_context_keys": true,
+      "learn_packet_thresholds": false,
+      "output_reference": false,
+      "compact_delays": true,
+      "departure_coincidence": false,
+      "delay_window": 1,
+      "delay_residual": false,
+      "router_charge_bits": 6,
+      "activity_inhibition": true,
+      "local_trace": true,
+      "trace_write_credit": true,
+      "trace_read_veto": false,
+      "delay_filter": false,
+      "opponent_steering": false
+    },
+    "parameters": 1630992,
+    "streaming_tensor_bytes": 21320,
+    "training_targets": 6553600,
+    "seed": 711,
+    "validation_bpb": 2.0179803222740595,
+    "training_record": "results/event_lm/long_context_continuation/event_correction_code_s711_ctx2048_continuation.json",
+    "cumulative_training_targets": 32768000
+  },
+  "archive": {
+    "file": "spiking-byte-lm-v3-checkpoints.tar.gz",
+    "sha256": "dd04867a252bd9d2832d84834cca4f23676ef1e66942c5ba8976518b16a8f3a0",
+    "bytes": 104168507,
+    "contents_checksums": "checkpoints/SHA256SUMS-v3"
+  },
+  "checkpoints": {
+    "charge-scan-study/transformer_s711.pt": {
+      "bytes": 6733431,
+      "sha256": "052224507122318aac4ad228b16188a3428c834d72a4e9f603a16fb113cf9efa",
+      "training_record": "results/event_lm/trace_write_credit/transformer_s711_trace_warm_reference.json",
+      "parent": "checkpoints/scale-1630k-study/transformer_s0.pt"
+    },
+    "charge-scan-study/write_credit_s711.pt": {
+      "bytes": 6530678,
+      "sha256": "d63638b67793023cbbd714e0ade35c3b360f3cb293410b1c48c49f3bd36ad831",
+      "training_record": "results/event_lm/trace_write_credit/event_correction_code_s711_write_credit_warm.json",
+      "parent": "models/spiking-byte-lm-v2/weights.pt"
+    },
+    "depth-inhibition-replication/transformer_s1.pt": {
+      "bytes": 6733175,
+      "sha256": "891890f36a10508d06f9061e11cb8718d829d39c00463c6ae0435ecb7349df02",
+      "training_record": "results/event_lm/depth_inhibition_replication/transformer_s1_depth_pg_confirmation.json"
+    },
+    "depth-inhibition-replication/transformer_s2.pt": {
+      "bytes": 6733175,
+      "sha256": "c1fc1cd56a3dad112f1bcc9dd4dcba7e724b5bc65c0b68a76f574c2def28d750",
+      "training_record": "results/event_lm/depth_inhibition_replication/transformer_s2_depth_pg_confirmation.json"
+    },
+    "depth-inhibition-study/trace_s0.pt": {
+      "bytes": 6530422,
+      "sha256": "4a831c172e2c933c3a0e00d1f64b4f0547c60a733036e1597734405f2ab78376",
+      "training_record": "results/event_lm/depth_inhibition/event_correction_code_s0_deep_trace.json"
+    },
+    "held-charge-replication/trace_s1.pt": {
+      "bytes": 6530422,
+      "sha256": "f61da6b74ef4cec462e33c20c4e0e10932cb3b7c53a9c610ca163932e101ec7d",
+      "training_record": "results/event_lm/held_charge_replication/event_correction_code_s1_held_charge_replication.json"
+    },
+    "long-context-continuation/trace_ctx2048_s711.pt": {
+      "bytes": 6530678,
+      "sha256": "9a529dbece8a773de0a35e79267ec60dc257ed49d4ebd51b8fa6001727376318",
+      "training_record": "results/event_lm/long_context_continuation/event_correction_code_s711_ctx2048_continuation.json",
+      "parent": "models/spiking-byte-lm-v2/weights.pt"
+    },
+    "long-context-continuation/transformer_ctx2048_s711.pt": {
+      "bytes": 6733495,
+      "sha256": "455f56b12e56c6025b69c46075c6732b43cd9c121b1155ae1767e91e33fe4890",
+      "training_record": "results/event_lm/long_context_continuation/transformer_s711_ctx2048_continuation.json",
+      "parent": "checkpoints/scale-1630k-study/transformer_s0.pt"
+    },
+    "opponent-steering-study/control_s711.pt": {
+      "bytes": 6530614,
+      "sha256": "06d7cf263ba82f2aaaded52affcd2f661cbc14fc32a7d969dc5c351783fe9655",
+      "training_record": "results/event_lm/opponent_steering/event_correction_code_s711_opponent_warm_control.json",
+      "parent": "models/spiking-byte-lm-v2/weights.pt"
+    },
+    "opponent-steering-study/opponent_s711.pt": {
+      "bytes": 6535783,
+      "sha256": "bab3c0beba760a905d0e505f4f75923981a4774cda0314d54a65c3772166f1b2",
+      "training_record": "results/event_lm/opponent_steering/event_correction_code_s711_opponent_warm_opponent.json",
+      "parent": "models/spiking-byte-lm-v2/weights.pt"
+    },
+    "scale-1630k-study/transformer_s0.pt": {
+      "bytes": 6733047,
+      "sha256": "32c9eb25a082defbb25635fd6dc341d36f095ee3b1474e55b9292186d05c28ce",
+      "training_record": "results/event_lm/scale_1630k/transformer_s0_scale_1630k.json"
+    },
+    "scale-3260k-study/trace_s0.pt": {
+      "bytes": 13035946,
+      "sha256": "c9e1ba897073e2f43e0384bf508e84ca66168f67cb26a53ca1a4506d25e85e84",
+      "training_record": "results/event_lm/scale_3260k/event_correction_code_s0_scale_3260k_trace.json"
+    },
+    "scale-3260k-study/transformer_s0.pt": {
+      "bytes": 13302711,
+      "sha256": "b213587c672b4381acd4a66dcdb273f41103cb7f7f6a374309b4d6114124f309",
+      "training_record": "results/event_lm/scale_3260k/transformer_s0_scale_3260k.json"
+    },
+    "spread-coincidence-study/spread_s711.pt": {
+      "bytes": 6532327,
+      "sha256": "5a06257016c63918c71ef561cd7c16a982fe16d8caed35d234b1c1439e296ffc",
+      "training_record": "results/event_lm/spread_coincidence/event_correction_code_s711_spread_coincidence_warm.json",
+      "parent": "models/spiking-byte-lm-v2/weights.pt"
+    },
+    "trace-read-veto-study/read_veto_s711.pt": {
+      "bytes": 6532263,
+      "sha256": "1323eb666e1d4fddb72d506045ef4de89b1318e123d01e94acde14c0295b1ea1",
+      "training_record": "results/event_lm/trace_read_veto/event_correction_code_s711_trace_read_veto_warm.json",
+      "parent": "models/spiking-byte-lm-v2/weights.pt"
+    }
+  }
+}

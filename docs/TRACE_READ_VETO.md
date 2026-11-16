@@ -52,3 +52,23 @@ with the chronological held-charge gradient. The candidate enables
 Scoring covers complete enwik8 and PG-19 test inputs. A zero-gain
 intervention isolates the effect of read inhibition after training.
 [Matched training rule](TRACE_WRITE_CREDIT.md)
+
+## Matched continuation results
+
+| Model | enwik8 bits/byte | PG-19 bits/byte | Native pulses per byte |
+|---|---:|---:|---:|
+| Held charge with chronological gradient | 1.98691 | 2.99097 | 307,270 |
+| Correction spikes inhibit incompatible reads | 1.98405 | 2.98763 | 307,412 |
+
+The read-veto run scored 0.00286 bits per byte lower on enwik8 and
+0.00334 lower on calibrated PG-19. Raw PG-19 loss rose from 3.10893
+to 3.11449. The learned gains were zero or 1/64, and zeroing them
+after training lowered the enwik8 validation probe loss slightly,
+from 1.919539 to 1.919396. Attribution of the small held-out gains
+to the trained veto remains uncertain. The candidate kept
+21,320 bytes of streaming state and its integer
+counts matched MPS, including chunked decoding in the native audit.
+[enwik8 score](../results/event_lm/trace_read_veto/enwik8_read_veto_s711.json) ·
+[PG-19 score](../results/event_lm/trace_read_veto/pg19_read_veto_s711.json) ·
+[Native audit](../results/event_lm/trace_read_veto/native_read_veto_s711.json) ·
+[Zero-gain probe](../results/event_lm/trace_read_veto/probe_read_veto_s711.json)

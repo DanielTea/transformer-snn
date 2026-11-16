@@ -1,10 +1,12 @@
 # ShuntFormer
 
-ShuntFormer v2 predicts the next byte with five spiking blocks. Each
-block has a shared inhibitory pool and holds local charge across bytes.
-A bounded memory recalls past forecast errors. The 1,630,992-parameter
-reference uses 21,320 bytes of persistent tensor state per stream. The
-integer CPU decoder emits a signed spike count for each candidate byte.
+ShuntFormer v3 predicts the next byte with five spiking blocks. Shared
+inhibition regulates firing in each block, steering spikes read and
+preserve local charge, and a bounded memory recalls forecast errors
+after checking their learned context tags. The 1,630,992-parameter
+reference was continued on 2,048-byte enwik8 windows. It uses
+21,320 bytes of persistent tensor state per stream and emits signed
+vocabulary spike counts in the integer CPU decoder.
 
 ## Run the current model
 
@@ -14,52 +16,61 @@ From the repository root, use Python 3.11 or 3.12.
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python experiments/generate_event_lm.py models/spiking-byte-lm-v2/weights.pt \
+python experiments/generate_event_lm.py models/spiking-byte-lm-v3/weights.pt \
   --prompt 'The first chapter' --bytes 128
 ```
 
-The checkout contains the reference weights. The v2 release archive adds
-the depth and routing studies, matched Transformer checkpoints, and the
-parents needed to replay the continuation experiments.
-[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v2) ·
-[Checksums and configurations](models/spiking-byte-lm-v2/manifest.json)
+The checkout contains the reference weights. The v3 checkpoint archive
+includes the continuations, matched Transformers, and the parent
+checkpoints needed to replay the studies.
+[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v3) ·
+[Checksums and configurations](models/spiking-byte-lm-v3/manifest.json)
 
 | Start here | Contents |
 |---|---|
-| [Model card](models/spiking-byte-lm-v2/README.md) | Architecture diagram, firing and memory rules, exact state layout |
-| [Research handoff](docs/HANDOFF.md) | Data setup, training replay, warm start, scoring and open experiments |
-| [Leaderboards](docs/LEADERBOARD.md) and [browser report](docs/report.html#spiking-byte-lm) | Ranked results, learning curves and native spike activity |
-| [Depth study](docs/DEPTH_INHIBITION.md) | Matched controls, ablations and source records |
-| [v1 model card](models/spiking-byte-lm/README.md) | Earlier two-size, three-seed study |
+| [Model card](models/spiking-byte-lm-v3/README.md) | Architecture diagram, firing and memory rules, exact state layout |
+| [Research handoff](docs/HANDOFF.md) | Dataset setup, exact training replay, warm start, scoring and run status |
+| [Leaderboards](docs/LEADERBOARD.md) and [browser report](docs/report.html#spiking-byte-lm) | Ranked scores, native pulse counts and generated figures |
+| [Context-length study](docs/CONTEXT_LENGTH.md) | Paired 512- and 2,048-byte training comparisons |
+| [3.26M scale study](docs/SCALE_3260K.md) and [held-charge replication](docs/HELD_CHARGE_REPLICATION.md) | Training from scratch at two sizes and across seeds |
 
 ## Current benchmark
 
-This matched seed-0 comparison uses about 1.63 million parameters and
-26,214,400 enwik8 training targets per model. The table reports bits per
-byte over the full enwik8 test split and 16 complete PG-19 books. Lower
-is better. Full attention sees up to 512 bytes per scoring window and
-reports its FP32 key and value storage at that length.
+Each continuation adds 6,553,600 enwik8 training targets to a
+26,214,400-target parent, for 32,768,000 total. Models have about
+1.63 million parameters. Scores are bits per byte over the complete
+enwik8 test split and 16 complete PG-19 books. Lower is better. PG-19
+uses temperatures fitted on separate books. Transformer state is
+FP32 key and value storage at the stated context.
 
 <!-- event-lm-leaderboard:start -->
 
+**512-byte continuations**
+
 | Model | enwik8 | PG-19 | State |
 |---|---:|---:|---:|
-| Three-block SNN, fixed threshold | 2.24386 | 3.19752 | 14,556 B |
-| Three-block SNN, activity inhibition | 2.16389 | 3.11971 | 14,556 B |
-| Five-block SNN, fixed threshold | 2.19441 | 3.13879 | 17,620 B |
-| Five-block SNN, activity inhibition | 2.07523 | 3.02885 | 17,620 B |
-| Five-block SNN, inhibition + held charge | 2.00577 | **2.98022** | 21,320 B |
-| Local Transformer | 1.89056 | 3.17881 | 64,512 B |
-| Full-attention Transformer | **1.81449** | 3.11725 | 3 MiB |
+| Held-charge control | 1.98564 | 2.98490 | 21,320 B |
+| Opponent steering | 1.98533 | **2.97309** | 21,320 B |
+| Chronological write credit | 1.98691 | 2.99097 | 21,320 B |
+| Trace read veto | 1.98405 | 2.98763 | 21,320 B |
+| Spread coincidence | 1.98644 | 2.98129 | 21,320 B |
+| Full-attention Transformer | **1.79625** | 3.11887 | 3 MiB |
+
+**2,048-byte continuations**
+
+| Model | enwik8 | PG-19 | State |
+|---|---:|---:|---:|
+| Held charge with write credit | 1.98884 | **2.96180** | 21,320 B |
+| Full-attention Transformer | **1.81712** | 3.11395 | 12 MiB |
 
 <!-- event-lm-leaderboard:end -->
 
-The bundled held-charge model led full attention on all 16 PG-19 books
-in seed 0. The inhibition-only control also led on PG-19 in all three
-matched seeds. Full attention led on enwik8 in each comparison.
-[Scores and ranks](docs/LEADERBOARD.md) · [Replication](docs/DEPTH_INHIBITION.md#full-attention-replication)
+The bundled SNN scored lower on all 16 PG-19 books than the matched
+2,048-byte Transformer. Full attention led on enwik8 at both lengths.
+The continuations each use one seed.
+[Per-book results](docs/CONTEXT_LENGTH.md#train-the-longer-context) · [Raw and calibrated scores](docs/LEADERBOARD.md)
 
-![Held-out next-byte loss for matched depth and inhibition models](results/figures/depth_inhibition_test.png)
+![Held-out loss for the SNN and Transformer at both trained context lengths](results/figures/event_lm_trained_context.png)
 
 Regenerate the current leaderboards, charts, and browser report from the
 checked-in JSON results.

@@ -31,15 +31,37 @@ READ_ME_START = "<!-- event-lm-leaderboard:start -->"
 READ_ME_END = "<!-- event-lm-leaderboard:end -->"
 DEPTH = "event_lm/depth_inhibition"
 WIDTH = "event_lm/scale_1630k"
+OPPONENT = "event_lm/opponent_steering"
+CREDIT = "event_lm/trace_write_credit"
+VETO = "event_lm/trace_read_veto"
+SPREAD = "event_lm/spread_coincidence"
+LONG = "event_lm/long_context_continuation"
+SCALE = "event_lm/scale_3260k"
 DEPTH_ARMS = (
-    ("Three-block SNN, fixed threshold", WIDTH, "fixed", "wide_fixed", GRAY),
-    ("Three-block SNN, activity inhibition", DEPTH, "wide_inhibited", "wide_inhibited", BLUE),
-    ("Five-block SNN, fixed threshold", DEPTH, "deep_fixed", "deep_fixed", GRAY),
-    ("Five-block SNN, activity inhibition", DEPTH, "deep_inhibited", "deep_inhibited", BLUE),
+    ("Three-block SNN, fixed threshold", WIDTH, "fixed", f"{DEPTH}/native_wide_fixed.json", GRAY),
+    ("Three-block SNN, activity inhibition", DEPTH, "wide_inhibited", f"{DEPTH}/native_wide_inhibited.json", BLUE),
+    ("Five-block SNN, fixed threshold", DEPTH, "deep_fixed", f"{DEPTH}/native_deep_fixed.json", GRAY),
+    ("Five-block SNN, activity inhibition", DEPTH, "deep_inhibited", f"{DEPTH}/native_deep_inhibited.json", BLUE),
     ("Local Transformer", WIDTH, "transformer_local", None, ORANGE),
     ("Full-attention Transformer", WIDTH, "transformer", None, ORANGE),
 )
-TRACE = ("Five-block SNN, inhibition + held charge", DEPTH, "deep_trace", "deep_trace", VIOLET)
+TRACE = ("Five-block SNN, inhibition + held charge", DEPTH, "deep_trace", f"{DEPTH}/native_deep_trace.json", VIOLET)
+CONTINUATION_512 = (
+    ("Held-charge control", OPPONENT, "control_s711", f"{OPPONENT}/native_control_s711.json", GRAY),
+    ("Opponent steering", OPPONENT, "opponent_s711", f"{OPPONENT}/native_opponent_s711.json", VIOLET),
+    ("Chronological write credit", CREDIT, "write_credit_s711", f"{CREDIT}/native_write_credit_s711.json", BLUE),
+    ("Trace read veto", VETO, "read_veto_s711", f"{VETO}/native_read_veto_s711.json", VIOLET),
+    ("Spread coincidence", SPREAD, "spread_s711", f"{SPREAD}/native_spread_s711.json", BLUE),
+    ("Full-attention Transformer", CREDIT, "transformer_s711", None, ORANGE),
+)
+CONTINUATION_2048 = (
+    ("Held charge with write credit", LONG, "trace_ctx2048_s711", f"{LONG}/native_trace_ctx2048_s711.json", BLUE),
+    ("Full-attention Transformer", LONG, "transformer_ctx2048_s711", None, ORANGE),
+)
+SCALE_3260K = (
+    ("Seven-block held charge", SCALE, "trace_s0", f"{SCALE}/native_trace_s0.json", BLUE),
+    ("Full-attention Transformer", SCALE, "transformer_s0", None, ORANGE),
+)
 
 
 def summarize(values):
@@ -111,9 +133,13 @@ def build_depth():
     trace_files = [f"{DEPTH}/{prefix}_deep_trace.json" for prefix in ("enwik8", "pg19", "native")]
     if all((RESULTS / path).is_file() for path in trace_files):
         definitions.insert(4, TRACE)
+    rows = read_comparison(definitions, seed=0, context=512, exposure=(0, 26_214_400))
+    return {"unit": "bits per byte", "seeds": [0], "groups": {"depth": rows}}
 
+
+def read_comparison(definitions, *, seed, context, exposure):
     rows, test_inputs = [], {}
-    for label, directory, suffix, audit, color in definitions:
+    for label, directory, suffix, audit_path, color in definitions:
         scores, sources = {}, {}
         scored_models = []
         for corpus, dataset, targets in CORPORA:
@@ -122,8 +148,13 @@ def build_depth():
             record = read_result(source)
             (model,) = record["models"]
             books = [(book["book_id"], book["excerpt_sha256"], book["target_bytes"]) for book in model["books"]]
+            calibration = record.get("calibration") or {}
+            inputs = (books, record.get("data_sha1"), record.get("manifest_sha256"),
+                      calibration.get("manifest_sha256"), calibration.get("temperatures"))
             if (record["split"] != "test" or record["target_bytes"] != targets or model["target_bytes"] != targets
-                    or books != test_inputs.setdefault(corpus, books)):
+                    or inputs != test_inputs.setdefault(corpus, inputs)
+                    or model["training_context_bytes"] != context
+                    or model.get("full_attention_context_bytes", context) != context):
                 raise ValueError(f"{source} does not match the complete {dataset} test inputs")
             scores[corpus] = {"mean": model["bpb"], "by_seed": [model["bpb"]], "raw_bpb": model["raw_bpb"]}
             sources[corpus] = source
@@ -133,23 +164,39 @@ def build_depth():
 
         training_path = f'{directory}/{model["run_name"]}.json'
         training = read_result(training_path)
-        if training["args"]["seed"] != 0 or training["train_target_bytes"] != 26_214_400:
-            raise ValueError(f"{training_path} does not match the depth comparison budget")
+        parent_targets = (training.get("initialization") or {}).get("training_targets", 0)
+        if (training["args"]["seed"] != seed or training["args"]["ctx"] != context
+                or (parent_targets, training["train_target_bytes"]) != exposure
+                or training["args"]["checkpoint"] != model["checkpoint"] or training["params"] != model["parameters"]):
+            raise ValueError(f"{training_path} does not match the comparison budget or evaluated checkpoint")
         pulses = None
-        audit_path = f"{DEPTH}/native_{audit}.json" if audit else None
         if audit_path:
             native = read_result(audit_path)
             (measurement,) = native["models"]
             if (native["input_bytes"] != 4096 or native["split"] != "test"
-                    or measurement["checkpoint"] != model["checkpoint"]):
+                    or measurement["checkpoint"] != model["checkpoint"]
+                    or measurement["streaming_tensor_bytes"] != model["streaming_tensor_bytes"]):
                 raise ValueError(f"{audit_path} does not match the evaluated model and audit input size")
             pulses = {"mean": measurement["total_pulses_per_byte"]}
         rows.append({"model": label, "color": color, "parameters": model["parameters"],
-                     "state_bytes": model["streaming_tensor_bytes"], "training_targets": training["train_target_bytes"],
+                     "state_bytes": model["streaming_tensor_bytes"], "training_targets": sum(exposure),
                      "scores": scores, "score_files": sources, "training_record": training_path,
                      "native_audit": audit_path, "pulses_per_byte": pulses})
     rank_scores(rows)
-    return {"unit": "bits per byte", "seeds": [0], "groups": {"depth": rows}}
+    return rows
+
+
+def build_research():
+    groups = {}
+    for name, title, arms, seed, context, exposure in (
+        ("continuation_512", "512-byte continuations", CONTINUATION_512, 711, 512, (26_214_400, 6_553_600)),
+        ("continuation_2048", "2,048-byte continuations", CONTINUATION_2048, 711, 2048, (26_214_400, 6_553_600)),
+        ("scale_3260k", "3.26M parameter comparison", SCALE_3260K, 0, 512, (0, 26_214_400)),
+    ):
+        groups[name] = {"title": title, "seed": seed, "training_context_bytes": context,
+                        "parent_training_targets": exposure[0], "additional_training_targets": exposure[1],
+                        "rows": read_comparison(arms, seed=seed, context=context, exposure=exposure)}
+    return {"unit": "bits per byte", "groups": groups}
 
 
 def score_cell(stats):
@@ -161,47 +208,60 @@ def state_size(state):
     return f"{state / 1024 ** 2:g} MiB" if state >= 1024 ** 2 else f"{state:,} B"
 
 
-def markdown_table(rows, *, include_ranks):
+def markdown_table(rows, *, include_ranks, include_raw_pg19=False):
     if include_ranks:
-        lines = [
-            "| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | Pulses/byte |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|",
-        ]
+        columns = ["Model", "Parameters", "State", "enwik8", "Rank", "PG-19", "Rank", "Pulses/byte"]
+        if include_raw_pg19:
+            columns.insert(7, "PG-19 raw")
     else:
-        lines = ["| Model | enwik8 | PG-19 | State |", "|---|---:|---:|---:|"]
+        columns = ["Model", "enwik8", "PG-19", "State"]
+    lines = ["| " + " | ".join(columns) + " |", "|---|" + "---:|" * (len(columns) - 1)]
     for row in rows:
         enwik8, pg19 = (row["scores"][corpus] for corpus, _, _ in CORPORA)
         state = state_size(row["state_bytes"])
         if include_ranks:
             pulses = row["pulses_per_byte"]
             pulse_text = f'{pulses["mean"]:,.0f}' if pulses else "—"
+            raw = f' {pg19["raw_bpb"]:.5f} |' if include_raw_pg19 else ""
             lines.append(f'| {row["model"]} | {row["parameters"]:,} | {state} | {score_cell(enwik8)} | '
-                         f'{enwik8["rank"]} | {score_cell(pg19)} | {pg19["rank"]} | {pulse_text} |')
+                         f'{enwik8["rank"]} | {score_cell(pg19)} | {pg19["rank"]} |{raw} {pulse_text} |')
         else:
             lines.append(f'| {row["model"]} | {score_cell(enwik8)} | {score_cell(pg19)} | {state} |')
     return "\n".join(lines)
 
 
-def write_leaderboards(data, depth):
+def write_leaderboards(data, depth, research):
     latest = depth["groups"]["depth"]
     paragraphs = [
         "# Spiking byte model leaderboards",
         "Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 training exposure and scores "
         "4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books.",
-        "State is persistent tensor storage for one stream. The separate full-attention "
-        "reference attends to a causal prefix of up to 512 bytes and reports its FP32 key "
-        "and value storage at that length. Pulse counts use a native 4,096-byte enwik8 test sample. "
+        "State is persistent tensor storage for one stream. Full attention reports FP32 "
+        "key and value storage at the context length in each comparison. Pulse counts use "
+        "a native 4,096-byte enwik8 test sample. "
         "Each PG-19 temperature is fitted on eight separate validation books.",
+    ]
+    for group in research["groups"].values():
+        rows = group["rows"]
+        paragraphs.extend([
+            f'## {group["title"]} · {rows[0]["training_targets"]:,} training targets · seed {group["seed"]}',
+            markdown_table(rows, include_ranks=True, include_raw_pg19=True),
+        ])
+    paragraphs.extend([
+        "![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)",
+        "![Held-out loss at both trained context lengths](../results/figures/event_lm_trained_context.png)",
+        "[Continuation and scale source records](../results/event_lm/continuation_leaderboard.json) · "
+        "[Held-charge replication](HELD_CHARGE_REPLICATION.md) · [Current model card](../models/spiking-byte-lm-v3/README.md)",
         "## Depth and activity inhibition · 26,214,400 training targets · seed 0",
         markdown_table(latest, include_ranks=True),
         "![Held-out loss for matched depth and inhibition models](../results/figures/depth_inhibition_test.png)",
         "![Validation curves and residual spike counts](../results/figures/depth_inhibition.png)",
         "[Evaluation records and ranks](../results/event_lm/depth_inhibition_leaderboard.json) · "
         "[Depth study and ablations](DEPTH_INHIBITION.md) · [Replication](DEPTH_INHIBITION.md#full-attention-replication) · "
-        "[Current model card](../models/spiking-byte-lm-v2/README.md)",
+        "[v2 model card](../models/spiking-byte-lm-v2/README.md)",
         "## Earlier context-tag and threshold study",
         "Each score below is a mean over three seeds. Each group has its own training exposure.",
-    ]
+    ])
     for scale, rows in data["groups"].items():
         paragraphs.extend([
             f'### {scale.capitalize()} comparison · {rows[0]["training_targets"]:,} training targets per seed',
@@ -221,8 +281,11 @@ def write_leaderboards(data, depth):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    table = markdown_table(latest, include_ranks=False)
-    readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
+    tables = []
+    for name in ("continuation_512", "continuation_2048"):
+        group = research["groups"][name]
+        tables.extend([f'**{group["title"]}**', markdown_table(group["rows"], include_ranks=False)])
+    readme.write_text(f"{before}{marker}\n\n" + "\n\n".join(tables) + f"\n\n{end}{after}", encoding="utf-8")
 
 
 def plot_loss(data, output):
@@ -282,12 +345,10 @@ def plot_pulses(data, output):
     save(fig, output, "event_lm_pulse_tradeoff.png")
 
 
-def plot_depth_scores(data, output):
-    rows = data["groups"]["depth"]
+def plot_heldout(rows, output, *, title, subtitle, filename, precision=3):
     fig, axes = plt.subplots(1, 2, figsize=(12.2, 4.7), sharey=True)
     fig.subplots_adjust(left=0.32, right=0.973, bottom=0.22, top=0.756, wspace=0.18)
-    heading(fig, "Held-out loss after increasing spiking depth",
-            "1.63M parameters · 26.2M enwik8 training targets · seed 0")
+    heading(fig, title, subtitle)
     for ax, (corpus, name, _) in zip(axes, CORPORA, strict=True):
         style(ax, grid_axis="x")
         ax.set_title(name, fontsize=11, loc="left", color=TEXT)
@@ -295,29 +356,106 @@ def plot_depth_scores(data, output):
         for y, row in enumerate(rows):
             bpb = row["scores"][corpus]["mean"]
             ax.scatter(bpb, y, color=row["color"], s=44, edgecolors="white", linewidth=0.8, zorder=3)
-            ax.annotate(f"{bpb:.3f}", (bpb, y), xytext=(7, 0), textcoords="offset points",
+            ax.annotate(f"{bpb:.{precision}f}", (bpb, y), xytext=(7, 0), textcoords="offset points",
                         va="center", size=8.5, color=TEXT)
         ax.set_yticks(range(len(rows)), [row["model"] for row in rows])
         ax.set_ylim(len(rows) - 0.45, -0.55)
         ax.margins(x=0.25)
     fig.text(0.035, 0.043, "Lower is better. PG-19 uses temperatures fitted on separate validation books.",
              color=MUTED, size=9)
-    save(fig, output, "depth_inhibition_test.png")
+    save(fig, output, filename)
+
+
+def plot_trained_context(research, output):
+    short = research["groups"]["continuation_512"]["rows"]
+    long = research["groups"]["continuation_2048"]["rows"]
+    pairs = (
+        ("Held charge with write credit", BLUE, next(row for row in short if row["model"] == "Chronological write credit"), long[0]),
+        ("Full-attention Transformer", ORANGE, short[-1], long[-1]),
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(11.2, 4.5))
+    fig.subplots_adjust(left=0.08, right=0.965, bottom=0.24, top=0.755, wspace=0.24)
+    heading(fig, "Changing the trained context length", "1.63M parameters · same starting weights within each model family · seed 711")
+    for ax, (corpus, name, _) in zip(axes, CORPORA, strict=True):
+        style(ax)
+        ax.set_title(name, loc="left", size=11, color=TEXT)
+        ax.set_ylabel("Bits per byte", color=MUTED, labelpad=7)
+        ax.set_xticks([0, 1], ["512 bytes", "2,048 bytes"])
+        ax.set_xlim(-0.25, 1.25)
+        ax.margins(y=0.22)
+        for label, color, start, end in pairs:
+            scores = [row["scores"][corpus]["mean"] for row in (start, end)]
+            ax.plot([0, 1], scores, color=color, marker="o", linewidth=1.8, label=label)
+            for x, score in enumerate(scores):
+                ax.annotate(f"{score:.5f}", (x, score), xytext=(0, 9), textcoords="offset points",
+                            ha="center", color=TEXT, size=8.5)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.079), ncol=2,
+               frameon=False, labelcolor=TEXT, fontsize=9)
+    fig.text(0.035, 0.045, "Each arm uses 6.55M additional enwik8 targets. PG-19 uses validation-fitted temperatures.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_trained_context.png")
+
+
+def plot_prefix_age_gap(output):
+    spiking, attention = (
+        read_result(f"{directory}/enwik8_{suffix}_s711.json")["models"][0]
+        for directory, suffix in ((OPPONENT, "opponent"), (CREDIT, "transformer"))
+    )
+    ages = ("unseen", "1-31", "32-127", "128-511", "512+")
+    labels = ("First occurrence", "1–31 bytes", "32–127 bytes", "128–511 bytes", "512+ bytes")
+    gaps, contributions = [], []
+    for age in ages:
+        snn, full = (row["prefix_age"][age] for row in (spiking, attention))
+        if snn["target_bytes"] != full["target_bytes"]:
+            raise ValueError(f"prefix age {age} contains different test target counts")
+        gap = snn["bpb"] - full["bpb"]
+        gaps.append(gap)
+        contributions.append(gap * snn["target_bytes"] / spiking["target_bytes"])
+
+    fig, axes = plt.subplots(1, 2, figsize=(10.7, 4.35), sharey=True)
+    fig.subplots_adjust(left=0.20, right=0.96, bottom=0.215, top=0.76, wspace=0.28)
+    heading(fig, "Where the enwik8 loss gap accumulates",
+            "Opponent steering and 512-byte full attention · 4,999,999 shared targets")
+    for ax, values, title in zip(axes, (gaps, contributions),
+                                 ("Gap within prefix group", "Contribution to total gap"), strict=True):
+        style(ax, grid_axis="x")
+        ax.set_title(title, loc="left", size=11, color=TEXT)
+        bars = ax.barh(range(len(ages)), values, color=[BLUE, GRAY, GRAY, GRAY, BLUE], height=0.53)
+        ax.bar_label(bars, fmt="%.3f", color=TEXT, size=8.5, padding=4)
+        ax.set_yticks(range(len(ages)), labels)
+        ax.set_ylim(len(ages) - 0.5, -0.5)
+        ax.set_xlim(0, 1.2 * max(values))
+        ax.set_xlabel("Additional bits per byte for the SNN", color=MUTED, labelpad=7)
+    fraction = (contributions[0] + contributions[-1]) / sum(contributions)
+    fig.text(0.035, 0.045, f"First occurrences and repeats at 512+ bytes account for {fraction:.1%} of the total gap.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_prefix_age_gap.png")
 
 
 def main():
     data = build()
     depth = build_depth()
+    research = build_research()
     summary = RESULTS / "event_lm/threshold_scale_leaderboard.json"
     summary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     summary = RESULTS / "event_lm/depth_inhibition_leaderboard.json"
     summary.write_text(json.dumps(depth, indent=2) + "\n", encoding="utf-8")
-    write_leaderboards(data, depth)
+    summary = RESULTS / "event_lm/continuation_leaderboard.json"
+    summary.write_text(json.dumps(research, indent=2) + "\n", encoding="utf-8")
+    write_leaderboards(data, depth, research)
     output = RESULTS / "figures"
     output.mkdir(parents=True, exist_ok=True)
     plot_loss(data, output)
     plot_pulses(data, output)
-    plot_depth_scores(depth, output)
+    plot_heldout(depth["groups"]["depth"], output, title="Held-out loss after increasing spiking depth",
+                 subtitle="1.63M parameters · 26.2M enwik8 training targets · seed 0",
+                 filename="depth_inhibition_test.png")
+    plot_heldout(research["groups"]["continuation_512"]["rows"], output, title="Held-out loss after 512-byte continuations",
+                 subtitle="About 1.63M parameters · 32.77M total enwik8 training targets · seed 711",
+                 filename="event_lm_continuation_test.png", precision=5)
+    plot_trained_context(research, output)
+    plot_prefix_age_gap(output)
 
 
 if __name__ == "__main__":
