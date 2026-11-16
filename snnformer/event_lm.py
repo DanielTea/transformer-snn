@@ -11,7 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .correction_memory import (
-    CorrectionState, _scan_charge, correction_reads, correction_step, interval_spikes,
+    CorrectionState, _scan_charge, _scan_translated_charge, correction_reads, correction_step, interval_spikes,
 )
 
 
@@ -85,6 +85,8 @@ class EventLMConfig:
     tag_read_competition: bool = False
     late_steering: bool = False
     residual_correction_start: int | None = None
+    trace_integration: bool = False
+    learn_inhibition_thresholds: bool = False
 
     @property
     def inhibition_bits(self) -> int:
@@ -752,15 +754,36 @@ class _DelayState:
     trace_charge: torch.Tensor | None = None
 
 
-class _SpikeTrace(nn.Module):
-    """A causal charge trace that moves only when an interval excludes it."""
+class _TraceInput(nn.Module):
+    """Emit signed input current into each held-charge cell."""
 
-    def __init__(self, cap, *, write_credit=False, veto_widths=None, confirm_widths=None):
+    def __init__(self, width, cap):
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(2, width))
+        self.emit = _IntegrateFire(cap, _CHARGE_BITS, False)
+
+    def weight_ticks(self):
+        return _weight_ticks(self.weight)
+
+    def freeze_integer(self):
+        if self.weight.is_floating_point():
+            self.weight = nn.Parameter(self.weight_ticks().to(torch.int32), requires_grad=False)
+
+    def forward(self, present, delayed):
+        immediate, arriving = self.weight_ticks().unbind()
+        return self.emit(immediate * present + arriving * delayed)
+
+
+class _SpikeTrace(nn.Module):
+    """A causal charge trace with interval correction and optional input spikes."""
+
+    def __init__(self, cap, *, write_credit=False, veto_widths=None, confirm_widths=None, integration_width=None):
         super().__init__()
         self.cap = cap
         self.write_credit = write_credit
         self.read_veto = _DelayCorrection(veto_widths, cap) if veto_widths is not None else None
         self.write_confirm = _DelayCorrection(confirm_widths, cap) if confirm_widths is not None else None
+        self.input = _TraceInput(integration_width, cap) if integration_width is not None else None
 
     def _bounds(self, present, radius, delayed_content=None):
         lower = present - radius
@@ -772,7 +795,7 @@ class _SpikeTrace(nn.Module):
             # Select the rail before firing so a silent conductance can learn.
             lower = lower + torch.where(difference < 0, extension, 0)
             upper = upper + torch.where(difference > 0, extension, 0)
-        return lower.clamp_min(-self.cap), upper.clamp_max(self.cap)
+        return lower.clamp(-self.cap, self.cap), upper.clamp(-self.cap, self.cap)
 
     def _read(self, before, change, steering):
         read, _ = _steer_packet(before, steering)
@@ -781,14 +804,22 @@ class _SpikeTrace(nn.Module):
             _, read = _steer_packet(read, veto)
         return read
 
+    def _scan(self, lower, upper, initial, present, delayed_content):
+        if self.input is None:
+            return _scan_charge(lower, upper, initial, write_credit=self.write_credit), None
+        pulses = self.input(present, delayed_content)
+        after = _scan_translated_charge(lower, upper, initial, pulses, self.cap, write_credit=self.write_credit)
+        return after, pulses
+
     def forward(self, present, steering, initial, pulse_counts, *, write_radius=None, delayed_content=None):
         if initial is None:
             initial = torch.zeros_like(present[:, 0])
         radius = steering if write_radius is None else write_radius
         lower, upper = self._bounds(present, radius, delayed_content)
-        after = _scan_charge(lower, upper, initial, write_credit=self.write_credit)
+        after, pulses = self._scan(lower, upper, initial, present, delayed_content)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
-        change = after - before
+        moved = before if pulses is None else before + pulses
+        change = after - moved
         read = self._read(before, change, steering)
         if pulse_counts is not None:
             pulse_counts.extend((change.abs().sum(), read.abs().sum()))
@@ -799,8 +830,9 @@ class _SpikeTrace(nn.Module):
             before = torch.zeros_like(present)
         radius = steering if write_radius is None else write_radius
         lower, upper = self._bounds(present, radius, delayed_content)
-        change = interval_spikes(before, lower, upper)
-        return self._read(before, change, steering), before + change
+        moved = before if self.input is None else before + self.input(present, delayed_content)
+        change = interval_spikes(moved, lower, upper)
+        return self._read(before, change, steering), moved + change
 
 
 class _OpponentSteering(nn.Module):
@@ -879,8 +911,9 @@ class _DelayBlock(nn.Module):
         if cfg.local_trace:
             veto_widths = self.widths if cfg.trace_read_veto else None
             confirm_widths = self.widths if cfg.trace_write_confirm else None
+            integration_width = cfg.hidden if cfg.trace_integration else None
             self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths,
-                                     confirm_widths=confirm_widths)
+                                     confirm_widths=confirm_widths, integration_width=integration_width)
         self.opponent_steering = (
             _OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits) if cfg.opponent_steering else None
         )
@@ -900,6 +933,7 @@ class _DelayBlock(nn.Module):
         if cfg.activity_inhibition:
             # One pool receives one unit of charge per spike on either input rail.
             self.activity_inhibition = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
+        self.inhibition_thresholds = _PacketThresholds(self.widths) if cfg.learn_inhibition_thresholds else None
         self.inhibition_redistribution = (
             _InhibitionRedistribution(cfg.dim, self.widths, self.activity_inhibition)
             if cfg.redistribute_inhibition else None
@@ -932,6 +966,8 @@ class _DelayBlock(nn.Module):
         inhibition = self.activity_inhibition(activity)
         if self.inhibition_redistribution is not None:
             inhibition = self.inhibition_redistribution(spikes, inhibition)
+        if self.inhibition_thresholds is not None:
+            return (self.inhibition_thresholds() + inhibition).clamp_min(_PACKET_UNITS)
         return _PACKET_UNITS + inhibition
 
     def _steering_current(self, drive):
@@ -1308,6 +1344,8 @@ class EventLM(nn.Module):
             raise ValueError("trace write credit needs a local charge trace")
         if cfg.trace_write_confirm and not cfg.local_trace:
             raise ValueError("delayed write confirmation needs a local charge trace")
+        if cfg.trace_integration and not cfg.local_trace:
+            raise ValueError("trace integration needs a local charge trace")
         if cfg.steering_gradient_at_zero and cfg.route not in ("steered", "steered_correction_code"):
             raise ValueError("the right steering gradient needs a rectified steering population")
         if cfg.bank_write_credit and cfg.route not in (*_CORRECTION_ROUTES, *_PREDICTION_ROUTES):
@@ -1341,6 +1379,8 @@ class EventLM(nn.Module):
             raise ValueError("spike resolution must be a positive integer")
         if cfg.inhibition_by_expansion and not cfg.activity_inhibition:
             raise ValueError("an expansion-sized inhibitory pool needs activity inhibition")
+        if cfg.learn_inhibition_thresholds and not cfg.activity_inhibition:
+            raise ValueError("learned inhibition thresholds need an activity pool")
         if cfg.redistribute_inhibition and not cfg.activity_inhibition:
             raise ValueError("redistributing inhibition needs activity inhibition")
         if cfg.activity_inhibition:
@@ -1450,6 +1490,10 @@ class EventLM(nn.Module):
                 bounds.extend(2 * row_sums(kernel).amax() for kernel in block.delay_filters if kernel is not None)
             if block.trace is not None and block.trace.read_veto is not None:
                 bounds.append(2 * block.trace.read_veto.gains().amax())
+            if block.trace is not None and block.trace.input is not None:
+                # The unshunted packet thresholds can emit up to twice the nominal count cap.
+                count_scale = 2 if block.packet_thresholds is not None else 1
+                bounds.append(count_scale * block.trace.input.weight_ticks().abs().sum(0).amax())
             packet_units = _PACKET_UNITS if block.packet_thresholds is not None else 1
             projected = row_sums(block.project) * packet_units + block.emit.threshold
             if block.correction is not None:
@@ -1660,6 +1704,11 @@ class EventLM(nn.Module):
                 opponent = torch.zeros_like(weights[name])
                 opponent.index_copy_(0, retained, previous[name].to(opponent))
                 widened[name] = opponent
+            if block.trace.input is not None:
+                name = f"blocks.{index}.trace.input.weight"
+                inputs = torch.zeros_like(weights[name])
+                inputs.index_copy_(1, retained, previous[name].to(inputs))
+                widened[name] = inputs
 
         if any(value.shape != weights[name].shape for name, value in widened.items()):
             raise ValueError("expansion growth would change a synaptic population outside the delay groups")
@@ -1682,7 +1731,7 @@ class EventLM(nn.Module):
         model = copy.deepcopy(self).cpu().eval()
         for submodule in model.modules():
             if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection, _DelayFilter,
-                                      _OpponentSteering, _SpreadCoincidence)):
+                                      _OpponentSteering, _SpreadCoincidence, _TraceInput)):
                 submodule.freeze_integer()
         return model
 

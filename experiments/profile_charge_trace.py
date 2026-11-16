@@ -11,7 +11,6 @@ import torch
 
 from common import _atomic_output
 from eval_event_lm import load_checkpoint
-from snnformer.correction_memory import _interval_scan
 from snnformer.event_lm import EventLM
 from train_lm import ENWIK8_SHA1, load_splits
 
@@ -23,9 +22,10 @@ def profile(model, tokens):
     def observe(trace, inputs, options, output):
         content, steering, initial, _ = inputs
         radius = options.get("write_radius", steering)
-        lower, upper = trace._bounds(content, radius, options.get("delayed_content"))
+        delayed = options.get("delayed_content")
+        lower, upper = trace._bounds(content, radius, delayed)
         initial = torch.zeros_like(content[:, 0]) if initial is None else initial
-        after = _interval_scan(lower, upper, initial)
+        after, _ = trace._scan(lower, upper, initial, content, delayed)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
         changed = after != before
         silent = steering == 0

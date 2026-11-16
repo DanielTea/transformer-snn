@@ -80,6 +80,25 @@ def _scan_charge(lower, upper, initial, *, write_credit=False):
     return _interval_scan(lower, upper, initial)
 
 
+def _scan_translated_charge(lower, upper, initial, pulses, limit, *, write_credit=False):
+    """Integrate signed pulses before projecting each state into its interval."""
+    if pulses.is_floating_point():
+        exact = int(2 / torch.finfo(pulses.dtype).eps)
+    else:
+        exact = torch.iinfo(pulses.dtype).max
+    # Subtract cumulative input from the bounds to reuse the interval scan.
+    # Rebase on the ending state before any prefix can exceed exact integer range.
+    span = max(1, exact // limit - 1)
+    results = []
+    for lo, hi, block in zip(lower.split(span, dim=1), upper.split(span, dim=1),
+                             pulses.split(span, dim=1), strict=True):
+        origin = block.cumsum(dim=1, dtype=block.dtype)
+        after = _scan_charge(lo - origin, hi - origin, initial, write_credit=write_credit) + origin
+        results.append(after)
+        initial = after[:, -1]
+    return results[0] if len(results) == 1 else torch.cat(results, dim=1)
+
+
 def interval_spikes(charge, lower, upper):
     """Signed spikes needed to move charge just inside the allowed interval."""
     return (lower - charge).clamp_min(0) - (charge - upper).clamp_min(0)

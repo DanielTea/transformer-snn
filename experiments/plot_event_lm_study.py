@@ -49,6 +49,7 @@ TAG_READS = "event_lm/tag_read_competition"
 LATE_STEERING = "event_lm/late_steering"
 FINER_ROUTER = "event_lm/finer_router_charge"
 DEPTH_GROWTH = "event_lm/depth_growth"
+TRACE_INTEGRATION = "event_lm/trace_integration"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -593,6 +594,36 @@ def plot_residual_emissions(output):
     save(fig, output, "event_lm_residual_emissions.png")
 
 
+def plot_validation_history(output):
+    record = read_result(f"{TRACE_INTEGRATION}/v6_validation_history.json")
+    snn, attention = (model["histories"] for model in record["models"])
+    histories = [row["history_bytes"] for row in snn]
+    if histories != [row["history_bytes"] for row in attention]:
+        raise ValueError("history comparisons must use matching warmup lengths")
+    snn_loss = [row["bpb"] for row in snn]
+    attention_loss = [row["bpb"] for row in attention]
+
+    fig, (score, gap) = plt.subplots(1, 2, figsize=(11.3, 4.6))
+    fig.subplots_adjust(left=0.09, right=0.967, bottom=0.21, top=0.76, wspace=0.31)
+    heading(fig, "Next-byte loss by available history",
+            f'{record["target_bytes"]:,} matched enwik8 validation targets · 16-byte tails')
+    for ax in (score, gap):
+        style(ax)
+        ax.set_xscale("log", base=2)
+        ax.set_xticks(histories, [str(history) for history in histories])
+        ax.set_xlabel("Warmup bytes before each scored tail", color=MUTED, labelpad=8)
+    score.set_title("Held-out loss", loc="left", color=TEXT, fontsize=11)
+    score.set_ylabel("Bits per byte", color=MUTED, labelpad=7)
+    score.plot(histories, snn_loss, "o-", color=VIOLET, label="11-block SNN")
+    score.plot(histories, attention_loss, "o-", color=ORANGE, label="Full attention")
+    score.legend(frameon=False, labelcolor=TEXT)
+    gap.set_title("SNN minus full attention", loc="left", color=TEXT, fontsize=11)
+    gap.set_ylabel("Additional bits per byte", color=MUTED, labelpad=7)
+    gap.plot(histories, [a - b for a, b in zip(snn_loss, attention_loss, strict=True)], "o-", color=BLUE)
+    gap.set_ylim(0, None)
+    save(fig, output, "event_lm_validation_history.png")
+
+
 def plot_trained_context(research, output):
     short = research["groups"]["continuation_512"]["rows"]
     long = research["groups"]["continuation_2048"]["rows"]
@@ -721,6 +752,7 @@ def main():
                  subtitle="About 6.51M parameters · 81.92M enwik8 training targets · seed 4603",
                  filename="event_lm_residual_output.png", precision=5)
     plot_residual_emissions(output)
+    plot_validation_history(output)
     plot_trained_context(research, output)
     plot_training_exposure(research, output)
     plot_prefix_age_gap(f"{OPPONENT}/enwik8_opponent_s711.json", f"{CREDIT}/enwik8_transformer_s711.json", output,

@@ -3,11 +3,83 @@ from dataclasses import replace
 import pytest
 import torch
 
-from snnformer.correction_memory import CorrectionState, _interval_scan, _write_credit_scan, correction_reads, correction_step
+from snnformer.correction_memory import (
+    CorrectionState, _interval_scan, _scan_translated_charge, _write_credit_scan, correction_reads, correction_step,
+)
 from snnformer.event_lm import (
     EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _IntegrateFire, _OpponentSteering,
     _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _steer_packet,
 )
+
+
+def test_translated_charge_gradient_stops_at_the_last_actual_correction():
+    pulses = torch.tensor([[[1.], [2.], [4.], [-1.], [2.]]], requires_grad=True)
+    lower = torch.full_like(pulses, -4)
+    upper = torch.full_like(pulses, 4, requires_grad=True)
+    initial = torch.zeros(1, 1, requires_grad=True)
+    after = _scan_translated_charge(lower, upper, initial, pulses, 4, write_credit=True)
+    torch.testing.assert_close(after.flatten(), torch.tensor([1., 3., 4., 3., 4.]))
+    after.sum().backward()
+    torch.testing.assert_close(pulses.grad.flatten(), torch.tensor([2., 1., 0., 1., 0.]))
+    torch.testing.assert_close(upper.grad.flatten(), torch.tensor([0., 0., 2., 0., 1.]))
+    torch.testing.assert_close(initial.grad, torch.tensor([[2.]]))
+
+
+def test_learned_group_thresholds_share_the_activity_pool_and_keep_the_firing_floor():
+    cfg = EventLMConfig(dim=8, hidden=4, depth=1, route="steered", carry=False,
+                        activity_inhibition=True, learn_inhibition_thresholds=True)
+    model = EventLM(cfg)
+    with torch.no_grad():
+        model.blocks[0].inhibition_thresholds.relative.copy_(torch.tensor([0.5, 1.0, 1.5, 2.0]))
+    block = model.to_integer().blocks[0]
+    spikes = torch.tensor([[0] * 8, [4] + [0] * 7], dtype=torch.int32)
+    expected = torch.tensor([[4, 4, 6, 8], [4, 6, 8, 10]], dtype=torch.int32)
+    torch.testing.assert_close(block._firing_quanta(spikes, None), expected, rtol=0, atol=0)
+
+
+def test_translated_charge_rebases_before_float32_loses_integer_precision():
+    pulses = torch.full((1, 32780, 1), 512.0, dtype=torch.float32)
+    pulses[:, -4:, 0] = torch.tensor([511., -1., -1., -1.])
+    lower = torch.full_like(pulses, -512.)
+    upper = torch.full_like(pulses, 512.)
+    after = _scan_translated_charge(lower, upper, torch.zeros(1, 1), pulses, 512)
+    assert torch.all(after[:, :-3] == 512)
+    torch.testing.assert_close(after.flatten()[-3:], torch.tensor([511., 510., 509.]), rtol=0, atol=0)
+
+
+def test_trace_input_preserves_native_step_and_chunk_semantics():
+    torch.manual_seed(924)
+    parent_cfg = EventLMConfig(dim=24, hidden=16, depth=3, route="steered_correction_code", carry=False,
+                               local_trace=True, compact_delays=True, activity_inhibition=True, resolution=4)
+    parent = EventLM(parent_cfg).eval()
+    model = EventLM(replace(parent_cfg, trace_integration=True)).eval()
+    missing, unexpected = model.load_state_dict(parent.state_dict(), strict=False)
+    assert not unexpected
+    assert missing == [f"blocks.{index}.trace.input.weight" for index in range(parent_cfg.depth)]
+    tokens = torch.randint(256, (2, 37))
+    old_counts = parent.to_integer()(tokens)
+    torch.testing.assert_close(model.to_integer()(tokens), old_counts, rtol=0, atol=0)
+
+    with torch.no_grad():
+        for block in model.blocks:
+            block.trace.input.weight[0].fill_(0.25)
+            block.trace.input.weight[1].fill_(-0.125)
+        native = model.to_integer()
+        counts = native(tokens)
+        assert not torch.equal(counts, old_counts)
+        torch.testing.assert_close(model(tokens), counts, rtol=0, atol=0, check_dtype=False)
+        steps, state = [], None
+        for byte in tokens.unbind(1):
+            step_counts, state = native.step(byte, state)
+            steps.append(step_counts)
+        chunks, chunk_state = [], None
+        for chunk in tokens.split(7, dim=1):
+            chunk_counts, chunk_state = native.forward_chunk(chunk, chunk_state)
+            chunks.append(chunk_counts)
+        torch.testing.assert_close(torch.stack(steps, dim=1), counts, rtol=0, atol=0)
+        torch.testing.assert_close(torch.cat(chunks, dim=1), counts, rtol=0, atol=0)
+        for step_state, batched_state in zip(state.layers, chunk_state.local_layers, strict=True):
+            torch.testing.assert_close(step_state.trace_charge, batched_state.trace_charge, rtol=0, atol=0)
 
 
 def test_depth_growth_preserves_counts_and_active_residuals_match_ordinary_firing():

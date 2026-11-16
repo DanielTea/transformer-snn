@@ -14,7 +14,7 @@ from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
-from snnformer.event_lm import EventLM, EventLMConfig, _delay_group_widths
+from snnformer.event_lm import EventLM, EventLMConfig, _delay_group_widths, _PACKET_UNITS
 from train_event_lm import initialize_from_checkpoint, scoring_logits
 from train_lm import load_splits
 
@@ -120,8 +120,18 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.cfg.redistribute_inhibition:
         weights = [block.inhibition_redistribution.synapse.weight for block in model.blocks]
         result["zero_inhibition_transfer_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.learn_inhibition_thresholds:
+        hooks = [block.inhibition_thresholds.register_forward_hook(fix_count(_PACKET_UNITS)) for block in model.blocks]
+        try:
+            result["fixed_group_thresholds_bpb"] = score(model, window, chunk_size)
+        finally:
+            for hook in hooks:
+                hook.remove()
     if model.cfg.local_trace:
         result["periodic_trace_reset_bpb"] = score(model, window, chunk_size, reset_trace=True)
+    if model.cfg.trace_integration:
+        weights = [block.trace.input.weight for block in model.blocks]
+        result["zero_trace_input_bpb"] = score_without_synapses(model, window, chunk_size, weights)
     if model.prediction_memory is not None:
         result["mute_bank_corrections_bpb"] = score_without_synapses(
             model, window, chunk_size, [model.recall_synapse.weight],

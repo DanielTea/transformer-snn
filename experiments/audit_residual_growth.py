@@ -87,7 +87,10 @@ def main():
     growth.add_argument("--hidden", type=int, help="grow content and steering within each delay group")
     growth.add_argument("--depth", type=int, help="append silent residual correction blocks to this depth")
     growth.add_argument("--trace-write-confirm", action="store_true", help="add silent write confirmation neurons")
+    growth.add_argument("--trace-integration", action="store_true", help="add silent input neurons to held charge")
     growth.add_argument("--redistribute-inhibition", action="store_true", help="add silent inhibitory transfers")
+    growth.add_argument("--learn-inhibition-thresholds", action="store_true",
+                        help="replace the common resting threshold with learned delay-group thresholds")
     growth.add_argument("--tag-read-competition", action="store_true", help="add silent tag read inhibition")
     growth.add_argument("--late-steering", action="store_true", help="add silent feedback steering")
     growth.add_argument("--refine-router-charge", type=int, choices=(8,), help="refine charge at a fixed width")
@@ -106,7 +109,8 @@ def main():
     if not isinstance(parent, EventLM) or not parent.cfg.local_trace:
         parser.error("the parent must be a held-charge EventLM")
     prior = parent.cfg
-    circuit_options = ("trace_write_confirm", "redistribute_inhibition", "tag_read_competition", "late_steering")
+    circuit_options = ("trace_write_confirm", "trace_integration", "redistribute_inhibition", "learn_inhibition_thresholds",
+                       "tag_read_competition", "late_steering")
     added_circuit = next((option for option in circuit_options if getattr(args, option)), None)
     if ((args.depth is not None or args.hidden is not None or added_circuit)
             and (args.router_charge_bits is not None or args.trace_coincidence)):
@@ -156,10 +160,16 @@ def main():
     if args.trace_write_confirm:
         gradient_field = "active_write_confirmation_gradients_on_512_train_targets"
         gradients = [block.trace.write_confirm.gain.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.trace_integration:
+        gradient_field = "active_trace_input_gradients_on_512_train_targets"
+        gradients = [block.trace.input.weight.grad.count_nonzero().item() for block in grown.blocks]
     elif args.redistribute_inhibition:
         gradient_field = "active_inhibition_gradients_on_512_train_targets"
         gradients = [block.inhibition_redistribution.synapse.weight.grad.count_nonzero().item()
                      for block in grown.blocks]
+    elif args.learn_inhibition_thresholds:
+        gradient_field = "active_threshold_gradients_on_512_train_targets"
+        gradients = [block.inhibition_thresholds.relative.grad.count_nonzero().item() for block in grown.blocks]
     elif args.tag_read_competition:
         gradient_field = "active_read_competition_heads_on_512_train_targets"
         gradients = grown.prediction_memory.read_inhibition.gain.grad.ne(0).int().tolist()

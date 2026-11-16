@@ -115,6 +115,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 populations[f"block_{index}_trace_read_veto"] = block.trace.read_veto.emit
             if integer.cfg.trace_write_confirm:
                 populations[f"block_{index}_trace_write_confirm"] = block.trace.write_confirm.emit
+            if integer.cfg.trace_integration:
+                populations[f"block_{index}_trace_input"] = block.trace.input.emit
         for name, module in populations.items():
             handles.append(module.register_forward_hook(
                 lambda _module, _inputs, spikes, label=name: activity.__setitem__(label, spikes),
@@ -202,6 +204,14 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["trace_read_veto_gain_ticks"] = [block.trace.read_veto.gains().tolist() for block in integer.blocks]
     if integer.cfg.trace_write_confirm:
         row["trace_write_confirm_gain_ticks"] = [block.trace.write_confirm.gains().tolist() for block in integer.blocks]
+    if integer.cfg.trace_integration:
+        row["trace_input_nonzero_weights_by_block"] = [
+            block.trace.input.weight.count_nonzero().item() for block in integer.blocks
+        ]
+    if integer.cfg.learn_inhibition_thresholds:
+        row["inhibition_threshold_quanta_by_block"] = [
+            block.inhibition_thresholds.quanta().tolist() for block in integer.blocks
+        ]
     if integer.cfg.spread_coincidence:
         row["spread_coincidence_mix_ticks"] = [
             block.spread_coincidence.mix_ticks().tolist() for block in integer.blocks
@@ -212,6 +222,11 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["delay_filter_nonzero_weights"] = sum(int(weight.count_nonzero()) for weight in weights)
     if activity:
         row["activity_profile"] = {}
+        if integer.cfg.trace_integration:
+            row["trace_input_pulses_per_byte"] = sum(
+                activity[f"block_{index}_trace_input"].abs().sum(dtype=torch.int64).item()
+                for index in range(len(integer.blocks))
+            ) / tokens.numel()
         quantiles = torch.tensor([0.05, 0.5, 0.95])
         for name, packets in activity.items():
             per_byte = packets.abs().float().mean(-1).flatten()

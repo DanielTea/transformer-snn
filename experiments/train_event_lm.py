@@ -141,9 +141,11 @@ def build_model(args):
                             delay_residual=args.delay_residual,
                             router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
                             inhibition_by_expansion=args.inhibition_by_expansion,
+                            learn_inhibition_thresholds=args.learn_inhibition_thresholds,
                             redistribute_inhibition=args.redistribute_inhibition,
                             local_trace=args.local_trace, trace_coincidence_start=args.trace_coincidence_start,
                             trace_write_credit=args.trace_write_credit, trace_write_confirm=args.trace_write_confirm,
+                            trace_integration=args.trace_integration,
                             steering_gradient_at_zero=args.steering_gradient_at_zero,
                             late_steering=args.late_steering,
                             bank_write_credit=args.bank_write_credit,
@@ -166,8 +168,8 @@ def build_model(args):
 _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
 _OPTIONAL_ROUTER_PARAMETERS = (
     ".packet_thresholds.", ".delay_correction.", ".delay_filters.", ".opponent_steering.", ".trace.read_veto.",
-    ".spread_coincidence.", ".trace.write_confirm.",
-    ".inhibition_redistribution.", ".late_steering.",
+    ".spread_coincidence.", ".trace.write_confirm.", ".trace.input.",
+    ".inhibition_redistribution.", ".inhibition_thresholds.", ".late_steering.",
 )
 
 
@@ -225,9 +227,12 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace,
                                   trace_coincidence_start=model.cfg.trace_coincidence_start,
                                   inhibition_by_expansion=model.cfg.inhibition_by_expansion,
+                                  learn_inhibition_thresholds=(source_cfg.learn_inhibition_thresholds
+                                                               or model.cfg.learn_inhibition_thresholds),
                                   redistribute_inhibition=source_cfg.redistribute_inhibition or model.cfg.redistribute_inhibition,
                                   trace_write_credit=model.cfg.trace_write_credit,
                                   trace_write_confirm=source_cfg.trace_write_confirm or model.cfg.trace_write_confirm,
+                                  trace_integration=source_cfg.trace_integration or model.cfg.trace_integration,
                                   steering_gradient_at_zero=model.cfg.steering_gradient_at_zero,
                                   late_steering=source_cfg.late_steering or model.cfg.late_steering,
                                   bank_write_credit=model.cfg.bank_write_credit,
@@ -251,11 +256,15 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 expected.update(name for name in model.state_dict() if ".trace.read_veto." in name)
             if model.cfg.trace_write_confirm and not source_cfg.trace_write_confirm:
                 expected.update(name for name in model.state_dict() if ".trace.write_confirm." in name)
+            if model.cfg.trace_integration and not source_cfg.trace_integration:
+                expected.update(name for name in model.state_dict() if ".trace.input." in name)
             if model.cfg.spread_coincidence and not source_cfg.spread_coincidence:
                 expected.update(name for name in model.state_dict() if ".spread_coincidence." in name)
             if model.cfg.redistribute_inhibition and not source_cfg.redistribute_inhibition:
                 expected.update(f"blocks.{index}.inhibition_redistribution.synapse.weight"
                                 for index in range(model.cfg.depth))
+            if model.cfg.learn_inhibition_thresholds and not source_cfg.learn_inhibition_thresholds:
+                expected.update(f"blocks.{index}.inhibition_thresholds.relative" for index in range(model.cfg.depth))
             if model.cfg.tag_read_competition and not source_cfg.tag_read_competition:
                 expected.add("prediction_memory.read_inhibition.gain")
             if model.cfg.late_steering and not source_cfg.late_steering:
@@ -352,6 +361,8 @@ def main():
                         help="size the inhibitory threshold from the content and steering populations")
     parser.add_argument("--redistribute-inhibition", action="store_true",
                         help="learn to transfer inhibitory pulses between pairs of delay groups")
+    parser.add_argument("--learn-inhibition-thresholds", action="store_true",
+                        help="learn a shared content and steering threshold in each inhibited delay group")
     parser.add_argument("--local-trace", action="store_true",
                         help="hold each channel's charge within its steering interval across bytes")
     parser.add_argument("--trace-coincidence-start", type=int,
@@ -364,6 +375,8 @@ def main():
                         help="send held-charge gradients to the last bound that moved the charge")
     parser.add_argument("--trace-write-confirm", action="store_true",
                         help="use delayed content spikes to extend the held-charge write interval")
+    parser.add_argument("--trace-integration", action="store_true",
+                        help="integrate learned current and arriving spikes before correcting held charge")
     parser.add_argument("--steering-gradient-at-zero", action="store_true",
                         help="use the right training derivative for steering at zero synaptic charge")
     parser.add_argument("--late-steering", action="store_true",
@@ -467,9 +480,10 @@ def main():
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.compact_axon_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
-            or args.inhibition_by_expansion or args.redistribute_inhibition
+            or args.inhibition_by_expansion or args.redistribute_inhibition or args.learn_inhibition_thresholds
             or args.trace_coincidence_start is not None or args.steering_gradient_at_zero or args.late_steering
             or args.local_trace or args.trace_write_credit or args.trace_write_confirm or args.trace_read_veto
+            or args.trace_integration
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"
