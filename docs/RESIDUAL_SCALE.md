@@ -247,6 +247,24 @@ Each interval resamples windows from the one matched run.
 [Early test record](../results/event_lm/residual_scale/early_context_test.json) ·
 [Early validation record](../results/event_lm/residual_scale/early_context_val.json)
 
+## Fixed transfer suite
+
+Widening the mixed SNN reduces C4 loss by 0.00794 bpb and
+raises enwik9 loss by 0.00317 bpb. WikiText-103 and text8
+change by less than 0.0005 bpb. At the wider size, the
+mixture improves C4 and WikiText-103 relative to enwik8-only
+training. The enwik8-only arm retains lower loss on the two
+other Wikipedia corpora. These rankings hold on the subset
+of Wikipedia windows with zero overlap hits.
+
+Full attention leads on all four fixed text corpora and on
+LAMBADA final-word loss. The full passage lowers answer-byte
+loss relative to the last sentence in all five arms. Both
+full-attention models produce one boundary-checked correct
+word out of 5,153 in each condition. The SNNs produce zero.
+[Transfer tables](LEADERBOARD.md#byte-transfer-at-the-same-training-exposure) ·
+[Complete transfer record](../results/event_lm/byte_transfer/residual_scale_131072k.json)
+
 ## Reproduce the data and launches
 
 Prepare the canonical [enwik8 and PG-19 evaluation files](HANDOFF.md#datasets)

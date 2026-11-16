@@ -113,7 +113,8 @@ def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png")
     corpus.axvline(0, color=MUTED, linewidth=0.85)
     corpus.set_yticks(range(len(DATASETS)), [label for _, label in DATASETS])
     corpus.invert_yaxis()
-    corpus.set_xlabel("Bits per byte relative to full attention", color=MUTED)
+    reference_label = labels[0].replace("Full attention", "full attention")
+    corpus.set_xlabel(f"Bits per byte relative to {reference_label}", color=MUTED)
     corpus.legend(loc="upper center", bbox_to_anchor=(0.5, -0.24), frameon=False,
                   ncols=2 if many_arms else min(3, len(models) - 1), fontsize=8, labelcolor=TEXT)
 
