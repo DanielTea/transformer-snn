@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 from contextlib import contextmanager
+from itertools import combinations
 from pathlib import Path
 
 import numpy as np
@@ -35,7 +36,6 @@ def score(model, windows, batch_size, device):
         nll = F.cross_entropy(output.transpose(1, 2), window[:, 1:], reduction="none")
         losses.append(nll.cpu().double())
     return torch.cat(losses).numpy() / math.log(2)
-
 
 
 @contextmanager
@@ -101,13 +101,15 @@ def main():
     resamples = rng.integers(len(starts), size=(3000, len(starts)))
 
     reference = None
-    models = []
+    models, losses = [], []
     for path in args.checkpoint:
         model, checkpoint = load_checkpoint(path, device)
         with count_arrival_inputs(model, args.profile_arrivals) as arrival_counts:
             actual = score(model, windows, args.batch_size, device)
         if reference is None:
             reference = actual
+        else:
+            losses.append((str(path), actual))
         arrival = None
         muted = None
         if isinstance(model, EventLM) and model.cfg.trace_arrival is not None:
@@ -142,12 +144,22 @@ def main():
             print(f"  muted minus intact at 17–32 {late['muted_minus_intact_bpb']:+.6f} bpb", flush=True)
         del model
 
+    comparisons = []
+    for (reference_path, reference_loss), (arm_path, arm_loss) in combinations(losses, 2):
+        ages = []
+        for low, high in CONTEXT_BINS:
+            difference = (arm_loss - reference_loss)[:, low - 1:high]
+            ages.append({"context_bytes": [low, high], "delta_bpb": float(difference.mean()),
+                         "paired_95_bpb": paired_interval(difference, resamples)})
+        comparisons.append({"reference": reference_path, "checkpoint": arm_path, "ages": ages})
+
     result = {
         "data_sha1": ENWIK8_SHA1, "split": args.split, "device": str(device), "positions_from": str(args.positions_from),
-        "target_start_offsets": starts.tolist(), "target_bytes": len(starts) * CONTEXT_BYTES,
+        "batch_size": args.batch_size, "target_start_offsets": starts.tolist(),
+        "target_bytes": len(starts) * CONTEXT_BYTES,
         "reference": str(args.checkpoint[0]),
         "bootstrap": "3000 paired resamples of complete 32-target windows, seed 5261",
-        "models": models,
+        "models": models, "nonreference_comparisons": comparisons,
     }
     with _atomic_output(args.json, "w", overwrite=False) as output:
         json.dump(result, output, indent=2)

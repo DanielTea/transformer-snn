@@ -3,7 +3,7 @@
 The suite evaluates released checkpoints on pinned text corpora. It
 uses identical byte windows and targets for every model. The four
 corpus scores are raw bits per byte. LAMBADA reports bits per byte on
-the answer word and greedy exact match under two prompt conditions.
+the answer word and boundary-checked greedy exact match under two prompt conditions.
 enwik8 and PG-19 retain the release leaderboard's established
 full-corpus protocols.
 
@@ -11,12 +11,13 @@ full-corpus protocols.
 |---|---|
 | WikiText-103 | The complete Salesforce `wikitext-103-raw-v1` test split. Empty line records contribute a line break. The reconstructed raw file contains 1,289,123 bytes. |
 | C4 English | 256 validation documents. Select the 32 lowest SHA-256 hashes of complete document text in each of the eight cleaned English validation shards. Score up to 2,048 original UTF-8 bytes per document. |
-| LAMBADA | The original plain-text test distribution. Score the final word in both the whole passage and its last sentence on the same 5,078 examples. |
+| LAMBADA | The original plain-text test distribution. Score the final word in both the whole passage and its last sentence on the same 5,153 examples. |
 | enwik9 | The 1,048,576-byte slice beginning at zero-based offset 100,000,000. Preparation verifies the published full-file SHA-1 and the canonical enwik8 prefix. |
 | text8 | The final 1,048,576 bytes of the canonical lowercased letters-and-spaces corpus. Preparation verifies the publisher's MD5 and audits shared training text. |
 
 [WikiText paper](https://arxiv.org/abs/1609.07843) ·
 [C4 corpus study](https://aclanthology.org/2021.emnlp-main.98/) ·
+[LAMBADA paper](https://aclanthology.org/P16-1144/) ·
 [Original LAMBADA dataset](https://zenodo.org/records/2630551) ·
 [enwik9 and text8 checksums](https://mattmahoney.net/dc/textdata.html)
 
@@ -32,17 +33,18 @@ model's existing vocabulary readout at temperature one.
 LAMBADA uses the final whitespace-delimited field of each source
 passage as its target. The original source uses tokenized punctuation.
 The last-sentence prompt starts at the final span from the pinned
-English PySBD segmenter. Seventy-five passages exceed the shared
-512-byte context and are excluded from both conditions, leaving
-5,078 whole passages. Both conditions score exactly the same
-target words. The byte log-loss excludes the preceding separator.
+English PySBD segmenter. Both conditions score all 5,153 target
+words and the byte log-loss excludes the preceding separator. The
+longest complete prompt with its answer is 986 bytes. Seventy-five
+passages exceed the common 512-byte training window and are scored
+with their full context for each model.
 
-Greedy exact match requires the correct argmax at every target byte.
-Those predictions equal an autoregressive greedy continuation up to
-the end of the word. The raw report also includes boundary-qualified
-exact match, which checks that the next prediction is whitespace or
-one of the recorded punctuation bytes. This checks whether the
-decoder would stop the word at the correct place.
+At gold length, a greedy match requires the correct argmax at every
+answer byte. Those predictions equal an autoregressive continuation
+through the last answer byte. The exact-match columns also require
+the next prediction to be ASCII whitespace or a listed punctuation
+byte. Gold-length results are reported separately. The score record
+lists which byte values qualify as boundaries.
 
 ## Wikipedia overlap
 
@@ -89,7 +91,7 @@ Use `uv pip install -r requirements-benchmarks.txt` with an active
 uv environment. For each iteration, supply the checkpoint paths in
 comparison order, with full attention first. The evaluator records
 the source and prepared catalogue hashes, the checkpoint digests,
-training exposure and raw scores.
+training exposure, scoring batch size and raw scores.
 
 ```bash
 study=checkpoints/trace-arrival-study
@@ -98,5 +100,11 @@ python experiments/eval_byte_transfer.py --device mps --prepared data/transfer-v
   --json "$study/results/byte_transfer.json"
 ```
 
+For each new leaderboard group, save its score record under
+`results/event_lm/byte_transfer/<group-id>.json`. The charts and
+browser report pick up the record and verify its matched training
+runs and pinned dataset. Find group IDs in the continuation leaderboard.
+
+[Leaderboard groups](../results/event_lm/continuation_leaderboard.json) ·
 [Preparation](../experiments/prepare_byte_benchmarks.py) ·
 [Evaluator](../experiments/eval_byte_transfer.py)

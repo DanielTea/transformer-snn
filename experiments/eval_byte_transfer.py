@@ -71,7 +71,7 @@ def lambada_windows(folder, catalogue):
         for case in cases:
             prefix = case[condition].encode("utf-8")
             word = case["word"].encode("utf-8")
-            if not prefix or not word or len(prefix) + len(word) > catalogue["context_bytes"]:
+            if not prefix or not word or len(prefix) + len(word) > catalogue["lambada"]["max_passage_bytes"]:
                 raise ValueError(f"invalid LAMBADA case {case['id']}")
             windows.append(Window(prefix + word, len(prefix)))
         suites[condition] = windows
@@ -156,8 +156,10 @@ def main():
     questions = lambada_windows(args.prepared, catalogue)
     header = {"suite": catalogue["suite"], "catalogue_sha256": file_hash(source),
               "manifest_sha256": catalogue["manifest_sha256"], "device": str(device),
-              "context_bytes": catalogue["context_bytes"], "targets_per_window": catalogue["targets_per_window"],
+              "batch_size": args.batch_size, "context_bytes": catalogue["context_bytes"],
+              "targets_per_window": catalogue["targets_per_window"],
               "lambada_examples": catalogue["lambada"]["scored_examples"],
+              "lambada_max_passage_bytes": catalogue["lambada"]["max_passage_bytes"],
               "lambada_word_boundary_bytes": list(WORD_BOUNDARIES)}
     checkpoints = [(path, file_hash(path)) for path in args.checkpoint]
     partial = args.json.with_suffix(args.json.suffix + ".partial")
@@ -171,8 +173,6 @@ def main():
         print(f"Resuming after {len(rows)} completed checkpoints", flush=True)
     for path, digest in checkpoints[len(rows):]:
         model, metadata = load_checkpoint(path, device)
-        if not isinstance(model, EventLM) and metadata["model_kwargs"]["ctx"] < catalogue["context_bytes"]:
-            parser.error(f"{path.name} has fewer learned positions than the shared evaluation window")
         metrics = {}
         for name, windows in corpora.items():
             metrics[name] = score_windows(model, windows, args.batch_size, device, overlap=name in catalogue["overlap"])
@@ -185,8 +185,8 @@ def main():
                   f"{score['exact_match_accuracy']:.2%} exact", flush=True)
         metrics["lambada"] = lambada
         rows.append({"checkpoint": str(path), "checkpoint_sha256": digest, "run_name": metadata["run_name"],
-                     "model_type": type(model).__name__, "parameters": sum(parameter.numel()
-                                                                           for parameter in model.parameters()),
+                     "model_type": type(model).__name__, "attention": metadata["cfg"].get("attn"),
+                     "parameters": sum(parameter.numel() for parameter in model.parameters()),
                      "training_targets": training_exposure(metadata), "benchmarks": metrics})
         with _atomic_output(partial, "w", overwrite=True) as output:
             json.dump({**header, "models": rows}, output, indent=2)

@@ -131,24 +131,19 @@ def read_lambada(path, context_bytes):
     if len(texts) != 5153:
         raise ValueError("unexpected LAMBADA test size")
     segmenter = Segmenter(language="en", clean=False, char_span=True)
-    cases = []
-    exclusions = {"over_context": 0, "no_last_sentence_prefix": 0}
+    cases, passage_lengths = [], []
     for index, item in enumerate(texts):
         text = item.as_py().rstrip()
-        if len(text.encode("utf-8")) > context_bytes:
-            exclusions["over_context"] += 1
-            continue
         word = text.split()[-1]
         stop = len(text) - len(word)
         sentence = segmenter.segment(text)[-1]
         if not 0 <= sentence.start < stop or sentence.end != len(text):
-            exclusions["no_last_sentence_prefix"] += 1
-            continue
+            raise ValueError(f"LAMBADA case {index} has no last-sentence context")
         cases.append({"id": index, "passage": text[:stop], "last_sentence": text[sentence.start:stop],
                       "word": word})
-    if not cases:
-        raise ValueError("empty LAMBADA evaluation set")
-    return cases, {"source_examples": len(texts), "scored_examples": len(cases), "excluded": exclusions}
+        passage_lengths.append(len(text.encode("utf-8")))
+    return cases, {"scored_examples": len(cases), "max_passage_bytes": max(passage_lengths),
+                   "passages_longer_than_corpus_window": sum(length > context_bytes for length in passage_lengths)}
 
 
 def overlap_words(text):

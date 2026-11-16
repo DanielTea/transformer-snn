@@ -20,31 +20,33 @@ def read_transfer(path):
     for key, name in expected.items():
         if record[key] != hashlib.sha256((SOURCE_DIR / name).read_bytes()).hexdigest():
             raise ValueError(f"{path} uses a different fixed byte transfer dataset")
-    reference, *comparisons = record["models"]
-    for row in comparisons:
+    catalogue = json.loads((SOURCE_DIR / "prepared_v1.json").read_text())
+    if any(record[key] != catalogue[key] for key in ("suite", "context_bytes", "targets_per_window")):
+        raise ValueError(f"{path} uses a different scoring window")
+    expected_words = catalogue["lambada"]["scored_examples"]
+    if (record["lambada_examples"] != expected_words
+            or record["lambada_max_passage_bytes"] != catalogue["lambada"]["max_passage_bytes"]):
+        raise ValueError(f"{path} uses a different LAMBADA prompt set")
+    reference = record["models"][0]["benchmarks"]
+    for row in record["models"]:
+        scores = row["benchmarks"]
         for key, _ in DATASETS:
-            left, right = reference["benchmarks"][key], row["benchmarks"][key]
-            if left["target_bytes"] != right["target_bytes"] or left.get("overlap_flagged_targets") != right.get(
-                "overlap_flagged_targets"
-            ):
+            expected_targets = sum(doc["bytes"] - 1 for doc in catalogue["corpora"][key]["documents"])
+            if (scores[key]["target_bytes"] != expected_targets
+                    or reference[key].get("overlap_flagged_targets") != scores[key].get("overlap_flagged_targets")):
                 raise ValueError(f"{row['checkpoint']} did not score the same {key} targets")
         for condition in ("passage", "last_sentence"):
-            left = reference["benchmarks"]["lambada"][condition]
-            right = row["benchmarks"]["lambada"][condition]
-            if left["target_bytes"] != right["target_bytes"] or left["examples"] != right["examples"]:
+            actual = scores["lambada"][condition]
+            if (actual["target_bytes"] != reference["lambada"]["passage"]["target_bytes"]
+                    or actual["examples"] != expected_words):
                 raise ValueError(f"{row['checkpoint']} did not score the same LAMBADA words")
     return record
 
 
-def transfer_tables(record, labels):
+def transfer_table_rows(record, labels):
     models = record["models"]
     if len(labels) != len(models):
         raise ValueError("supply one label per evaluated checkpoint")
-
-    def table(headers, rows):
-        lines = ["| " + " | ".join(headers) + " |", "|---|" + "---:|" * (len(headers) - 1)]
-        lines += ["| " + " | ".join(row) + " |" for row in rows]
-        return "\n".join(lines)
 
     corpus, overlap, lambada = [], [], []
     for label, model in zip(labels, models, strict=True):
@@ -53,16 +55,30 @@ def transfer_tables(record, labels):
         screened = [scores[key]["without_overlap_hits"]["bpb"] for key in ("wikitext103", "enwik9", "text8")]
         overlap.append([label] + [f"{score:.5f}" if score is not None else "—" for score in screened])
         full, last = (scores["lambada"][name] for name in ("passage", "last_sentence"))
-        lambada.append([label, f'{full["bpb"]:.5f}', f'{last["bpb"]:.5f}', f'{full["exact_match_accuracy"]:.2%}',
-                        f'{last["exact_match_accuracy"]:.2%}'])
+        lambada.append([
+            label, f'{full["bpb"]:.5f}', f'{last["bpb"]:.5f}',
+            f'{full["boundary_exact_match_accuracy"]:.2%}', f'{last["boundary_exact_match_accuracy"]:.2%}',
+            f'{full["exact_match_accuracy"]:.2%}', f'{last["exact_match_accuracy"]:.2%}',
+        ])
     return (
-        table(["Model"] + [label for _, label in DATASETS], corpus),
-        table(["Model", "WikiText-103", "enwik9", "text8"], overlap),
-        table(["Model", "Passage bpb", "Last sentence bpb", "Passage exact", "Last sentence exact"], lambada),
+        ("Raw corpus loss (bpb)", ["Model"] + [label for _, label in DATASETS], corpus),
+        ("Loss on Wikipedia windows with zero overlap hits (bpb)", ["Model", "WikiText-103", "enwik9", "text8"], overlap),
+        ("LAMBADA final-word prediction",
+         ["Model", "Passage bpb", "Last sentence bpb", "Passage exact", "Last sentence exact",
+          "Passage at gold length", "Last sentence at gold length"], lambada),
     )
 
 
-def plot_transfer(record, labels, output):
+def transfer_tables(record, labels):
+    def table(headers, rows):
+        lines = ["| " + " | ".join(headers) + " |", "|---|" + "---:|" * (len(headers) - 1)]
+        lines += ["| " + " | ".join(row) + " |" for row in rows]
+        return "\n".join(lines)
+
+    return [table(headers, rows) for _, headers, rows in transfer_table_rows(record, labels)]
+
+
+def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png"):
     models = record["models"]
     if len(labels) != len(models) or len(models) < 2:
         raise ValueError("a comparison needs a label for each of at least two checkpoints")
@@ -84,7 +100,7 @@ def plot_transfer(record, labels, output):
             offset = (index - len(models) / 2) * 0.17
             corpus.scatter(deltas, [y + offset for y in range(len(DATASETS))],
                            color=color, s=37, zorder=3, label=label)
-        passage, last = (100 * metrics["lambada"][mode]["exact_match_accuracy"]
+        passage, last = (100 * metrics["lambada"][mode]["boundary_exact_match_accuracy"]
                          for mode in ("passage", "last_sentence"))
         high, low = max(passage, last), min(passage, last)
         words.hlines(index, low, high, color=color, linewidth=2)
@@ -99,11 +115,11 @@ def plot_transfer(record, labels, output):
 
     words.set_yticks(range(len(labels)), labels)
     words.invert_yaxis()
-    words.set_xlabel("Greedy exact match (%)", color=MUTED)
+    words.set_xlabel("Boundary-checked exact match (%)", color=MUTED)
     fig.text(0.035, 0.037, "Lower loss is better. Filled and open markers show full-passage and last-sentence scores.",
              color=MUTED, size=9)
     output.mkdir(parents=True, exist_ok=True)
-    save(fig, output, "event_lm_byte_transfer.png")
+    save(fig, output, filename)
 
 
 def main():
