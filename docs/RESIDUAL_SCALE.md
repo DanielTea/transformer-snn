@@ -98,6 +98,16 @@ continues to use the same pinned scoring inputs.
 [Overlap counts and hashes](../results/event_lm/training_mixture/prepared_v1.json) ·
 [Transfer protocol](BYTE_TRANSFER.md)
 
+The PG-19 audit also reconstructs the exact 19,200 windows used
+by the four mixture arms and checks every position for common
+64-byte or normalized 12-word spans against the 16 test books
+and eight calibration excerpts. Across the 9,600 C4 and PG-19
+windows, both match counts are zero. One of the 9,600 enwik8
+windows shares an exact span with test book 26239. The normalized
+screen reports zero enwik8 matches at its stated length.
+[Sampled-window audit](../results/event_lm/training_mixture/pg19_sampled_overlap_s9631.json) ·
+[Audit code](../experiments/audit_mixture_pg19_overlap.py)
+
 ## Comparison
 
 All arms add 9,830,400 targets in 2,400 updates of eight
