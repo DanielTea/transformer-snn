@@ -8,11 +8,12 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 187-channel SNN | 9,960,960 | 29,674 B | 1.80153 | 4 | 2.77445 | 3 | 2.86922 | 309,773 |
-| 243-channel SNN | 12,799,488 | 32,616 B | 1.80080 | 3 | 2.76563 | 2 | 2.85588 | 308,415 |
-| Original full attention | 9,962,496 | 6 MiB | 1.71789 | 2 | 2.88474 | 4 | 3.08009 | — |
-| Wider full attention | 12,801,024 | 6 MiB | **1.71786** | 1 | 2.88475 | 5 | 3.08010 | — |
-| Delayed steering transfers | 12,879,678 | 32,616 B | 1.80187 | 5 | **2.76241** | 1 | 2.85741 | 308,085 |
+| 187-channel SNN | 9,960,960 | 29,674 B | 1.80153 | 4 | 2.77445 | 4 | 2.86922 | 309,773 |
+| 243-channel SNN | 12,799,488 | 32,616 B | 1.80080 | 3 | 2.76563 | 3 | 2.85588 | 308,415 |
+| Original full attention | 9,962,496 | 6 MiB | 1.71789 | 2 | 2.88474 | 5 | 3.08009 | — |
+| Wider full attention | 12,801,024 | 6 MiB | **1.71786** | 1 | 2.88475 | 6 | 3.08010 | — |
+| Delayed steering transfers | 12,879,678 | 32,616 B | 1.80187 | 5 | 2.76241 | 2 | 2.85741 | 308,085 |
+| Growth in shortest groups | 12,799,488 | 28,584 B | 1.80256 | 6 | **2.76153** | 1 | 2.85249 | 309,698 |
 
 ![Held-out loss at the original and wider sizes](../results/figures/event_lm_packed_width.png)
 

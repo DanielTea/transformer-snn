@@ -211,6 +211,20 @@ The short-group decoder completed an AdamW update on eight
 configuration, parent digest, and counted pulses.
 [Short-group training smoke](../results/event_lm/packed_width/event_correction_code_s7907_packed_width_short_smoke.json)
 
+After the matched continuation, the short-group layout scores
+1.802562 bpb on enwik8 and 2.761530 bpb on calibrated PG-19.
+Relative to the even-width SNN, enwik8 loss rises by 0.001758
+bpb and calibrated PG-19 loss falls by 0.004096 bpb. Fifteen
+of the 16 test books improve. Raw PG-19 loss falls to 2.852489
+bpb. The native decoder uses 28,584 bytes of persistent state
+and counts 309,698 pulses per byte on the 4,096-byte test audit.
+It matches the Metal counts on the full audit sample.
+[enwik8](../results/event_lm/packed_width/enwik8_short_groups_s7907.json) ·
+[PG-19](../results/event_lm/packed_width/pg19_short_groups_s7907.json) ·
+[Training](../results/event_lm/packed_width/event_correction_code_s7907_packed_width_short_groups.json) ·
+[Native audit](../results/event_lm/packed_width/native_short_groups_s7907.json) ·
+[Frozen interventions](../results/event_lm/packed_width/probe_short_groups_s7907.json)
+
 ## Contribution of the wider Transformer units
 
 The full-attention width change moves the held-out scores by

@@ -163,6 +163,8 @@ PACKED_WIDTH_111411K = (
     ("Wider full attention", PACKED_WIDTH, "transformer_s7907", None, "#a34073"),
     ("Delayed steering transfers", PACKED_WIDTH, "delayed_transfer_s7907",
      f"{PACKED_WIDTH}/native_delayed_transfer_s7907.json", "#138372"),
+    ("Growth in shortest groups", PACKED_WIDTH, "short_groups_s7907",
+     f"{PACKED_WIDTH}/native_short_groups_s7907.json", "#7a6a50"),
 )
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
