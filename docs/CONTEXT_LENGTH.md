@@ -74,3 +74,29 @@ python experiments/train_event_lm.py "${continuation[@]}" \
   --initialize-from checkpoints/scale-1630k-study/transformer_s0.pt \
   --results-dir "$run/results" --checkpoint "$run/transformer_ctx2048_s711.pt"
 ```
+
+## Repeat at 3.26M parameters
+
+Both model families continued their released seed-0 checkpoints
+on 6,553,600 more enwik8 targets with seed 711. The 512-byte arms
+use eight windows per batch. The 2,048-byte arms use two. Each
+model has seen 32,768,000 training targets at evaluation. The
+SNN uses chronological held-charge gradients and a 310,000-pulse
+training target.
+
+| Model | Trained window | enwik8 bpb | PG-19 bpb | PG-19 raw bpb | State |
+|---|---:|---:|---:|---:|---:|
+| Seven-block held charge | 512 | 1.96430 | Scoring | Scoring | 31,692 B |
+| Full attention | 512 | 1.84280 | 3.06325 | 3.26568 | 4 MiB |
+| Seven-block held charge | 2,048 | 1.97126 | 2.87693 | 2.96339 | 31,692 B |
+| Full attention | 2,048 | 1.85459 | 3.05282 | 3.24905 | 16 MiB |
+
+At 2,048 bytes the SNN scored lower on each of the 16 PG-19 books.
+Its aggregate lead is 0.17589 calibrated bits per byte and 0.28566
+at raw scale. Full attention led enwik8 by 0.12151 bits per byte
+at 512 bytes and by 0.11667 at 2,048. The shorter-window continuation
+had lower enwik8 loss within each model family. Native CPU and MPS
+counts matched on 4,096 enwik8 test bytes for the 2,048-byte SNN,
+which emitted 306,441 pulses per byte in that audit.
+[Training, corpus scores, and native audit](../results/event_lm/scale_3260k_context) ·
+[Released parents](SCALE_3260K.md)

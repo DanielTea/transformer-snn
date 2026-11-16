@@ -26,6 +26,20 @@ integer comparisons and coincidence. Training sends a surrogate
 gradient through the tag polarity that selected the slot.
 [Decoder](../snnformer/event_lm.py) · [Charge update](../snnformer/correction_memory.py)
 
+```mermaid
+flowchart LR
+    Local["Local residual spikes"] --> Address["One winning address spike"]
+    Local --> Tag["Forecast tag spike counts"]
+    Address --> Phase["Arrival delayed by negative tag rails"]
+    Tag --> Phase
+    Phase --> Read["Read the corresponding cell's old charge"]
+    Read --> Check["Stored tag mismatch emits inhibition"]
+    Tag --> Check
+    Check --> Payload["Surviving signed correction spikes"]
+    Phase --> Prior["Retain the paired address for the next byte"]
+    Prior --> Write["Write that forecast's error within tolerance"]
+```
+
 Product keys and coincidence addressing have prior work. The
 combination tested here splits one spike address into timed cells
 using the same tag that verifies the selected cell's payload.

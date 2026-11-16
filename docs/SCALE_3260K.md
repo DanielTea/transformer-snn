@@ -31,3 +31,9 @@ over 4,096 enwik8 test bytes and counted 308,389 pulses per byte.
 [Scaled training, test scores and audit](../results/event_lm/scale_3260k) ·
 [Original depth study](DEPTH_INHIBITION.md) ·
 [Checkpoint inventory](../models/spiking-byte-lm-v3/manifest.json)
+
+The continuation study tests 512- and 2,048-byte windows at
+matched exposure. A separate width study doubles the residual
+channels while keeping the expansion and memory layout.
+[Context continuations](CONTEXT_LENGTH.md#repeat-at-326m-parameters) ·
+[Six-million-parameter width study](SCALE_6510K_WIDTH.md)

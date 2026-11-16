@@ -62,3 +62,16 @@ target. A separate 2,048-byte continuation evaluates longer
 training windows on the same SNN and Transformer parents.
 [Scale setup](SCALE_3260K.md) ·
 [Three-step Metal smoke](../results/event_lm/residual_membrane/event_correction_code_s711_residual_membrane_smoke.json)
+
+The signed-carry model scored 1.96628 bits per byte on the complete
+enwik8 test split. The matched held-charge continuation scored
+1.96430. The signed-carry PG-19 result was 2.89838 calibrated and
+2.99574 raw bits per byte across the same 16 books. Resetting its
+residual membranes with the trained weights lowered the validation
+probe loss from 1.898439 to 1.898362.
+
+The integer audit matched MPS counts and native chunked output on
+4,096 test bytes. It measured 309,629 pulses per byte and 22,224
+bytes of stream state.
+[Training, test results, and reset intervention](../results/event_lm/residual_membrane) ·
+[Equal-exposure enwik8 control](../results/event_lm/scale_3260k_context/enwik8_trace_ctx512_s711.json)
