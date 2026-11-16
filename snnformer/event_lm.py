@@ -64,7 +64,6 @@ class EventLMConfig:
     activity_inhibition: bool = False
     inhibition_by_expansion: bool = False
     local_trace: bool = False
-    trace_coincidence_start: int | None = None
     trace_write_credit: bool = False
     bank_write_credit: bool = False
     trace_read_veto: bool = False
@@ -74,6 +73,7 @@ class EventLMConfig:
     residual_membrane: bool = False
     compact_axon_state: bool = False
     tag_phase_address: bool = False
+    trace_coincidence_start: int | None = None
 
     @property
     def inhibition_bits(self) -> int:
