@@ -1,4 +1,4 @@
-"""Verify spike parity and gradient flow when adding neurons to a trained EventLM."""
+"""Verify spike parity and gradient flow after changing a trained EventLM."""
 
 from __future__ import annotations
 
@@ -81,6 +81,7 @@ def main():
     growth.add_argument("--redistribute-inhibition", action="store_true", help="add silent inhibitory transfers")
     growth.add_argument("--tag-read-competition", action="store_true", help="add silent tag read inhibition")
     growth.add_argument("--late-steering", action="store_true", help="add silent feedback steering")
+    growth.add_argument("--refine-router-charge", type=int, choices=(8,), help="refine charge at a fixed width")
     parser.add_argument("--router-charge-bits", type=int, choices=(6, 8))
     parser.add_argument("--trace-coincidence", action="store_true")
     parser.add_argument("--json", required=True, type=Path)
@@ -107,6 +108,12 @@ def main():
         cfg = replace(prior, **{added_circuit: True})
         grown = EventLM(cfg)
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False)
+    elif args.refine_router_charge is not None:
+        if args.router_charge_bits is not None or args.trace_coincidence:
+            parser.error("use --refine-router-charge on its own for fixed-width refinement")
+        cfg = replace(prior, router_charge_bits=args.refine_router_charge)
+        grown = EventLM(cfg)
+        initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False, preserve_router_charge=True)
     elif args.hidden is None:
         cfg = replace(prior, dim=768 if args.dim is None else args.dim,
                       router_charge_bits=prior.router_charge_bits if args.router_charge_bits is None
@@ -143,6 +150,9 @@ def main():
     elif args.late_steering:
         gradient_field = "active_late_steering_gradients_on_512_train_targets"
         gradients = [block.late_steering.gain.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.refine_router_charge is not None:
+        gradient_field = "active_router_gradients_on_512_train_targets"
+        gradients = [block.expand.weight.grad.count_nonzero().item() for block in grown.blocks]
     elif args.hidden is None:
         gradient_field = "active_new_projection_gradients_on_512_train_targets"
         gradients = [block.project.weight.grad[prior.dim:].count_nonzero().item() for block in grown.blocks]

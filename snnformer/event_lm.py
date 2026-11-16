@@ -107,6 +107,10 @@ def _unit_gain_ticks(weight):
     return ticks.detach().clamp(0, _TICKS) + (ticks - ticks.detach())
 
 
+def _weights_on_charge_grid(weight, bits):
+    return _weight_ticks(weight, charge_bits=bits) / (1 << bits)
+
+
 class _Synapse(nn.Module):
     def __init__(self, inputs: int, outputs: int, gain: float, *, byte_input: bool = False,
                  continuous: bool = False, charge_bits: int = _CHARGE_BITS):
@@ -1561,7 +1565,7 @@ class EventLM(nn.Module):
             if (cfg.router_charge_bits > prior.router_charge_bits and synapse is not None
                     and synapse.charge_bits == cfg.router_charge_bits):
                 # Keep existing physical weights on the old grid at initialization.
-                original = _weight_ticks(original, charge_bits=prior.router_charge_bits) / (1 << prior.router_charge_bits)
+                original = _weights_on_charge_grid(original, prior.router_charge_bits)
             if target.shape == original.shape:
                 weights[name] = original
                 continue
@@ -1624,6 +1628,15 @@ class EventLM(nn.Module):
         if any(value.shape != weights[name].shape for name, value in widened.items()):
             raise ValueError("expansion growth would change a synaptic population outside the delay groups")
         self.load_state_dict(widened)
+
+    @torch.no_grad()
+    def preserve_router_charge(self, prior_bits):
+        """Place the loaded routing synapses on their previous physical charge grid."""
+        if self.cfg.router_charge_bits <= prior_bits:
+            raise ValueError("preserving router charge requires a finer target grid")
+        for block in self.blocks:
+            for synapse in (block.expand, block.project):
+                synapse.weight.copy_(_weights_on_charge_grid(synapse.weight, prior_bits))
 
     @torch.no_grad()
     def to_integer(self):

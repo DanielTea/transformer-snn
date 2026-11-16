@@ -9,7 +9,7 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         scale-data-snn scale-data-transformer" >&2
   echo "         residual-growth-snn residual-growth-transformer residual-growth-control" >&2
   echo "         residual-growth-control-transformer" >&2
-  echo "         redistribute-inhibition teacher-guidance late-steering" >&2
+  echo "         redistribute-inhibition teacher-guidance late-steering finer-router-charge" >&2
   echo "         tag-read-competition tag-read-active-start tag-read-supervision" >&2
   exit 2
 fi
@@ -93,6 +93,11 @@ case "$study" in
       --initialize-from checkpoints/scale-6510k-next-data-study/trace_s2503.pt)
     name=late_s3307
     ;;
+  finer-router-charge)
+    training+=("${spiking[@]}" --router-charge-bits 8 --preserve-router-charge
+      --initialize-from checkpoints/scale-6510k-next-data-study/trace_s2503.pt)
+    name=fine_charge_s3307
+    ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
       --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
@@ -144,7 +149,7 @@ elif [[ $study == residual-growth-control-transformer ]]; then
 elif [[ $study == residual-growth-* ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
     --tag "scale_13030k_residual_${study#residual-growth-}")
-elif [[ $study == tag-read-* || $study == late-steering ]]; then
+elif [[ $study == tag-read-* || $study == late-steering || $study == finer-router-charge ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
     --tag "${study//-/_}")
 elif [[ $study == expansion-* || $study == trace-write-confirm || $study == redistribute-inhibition ||

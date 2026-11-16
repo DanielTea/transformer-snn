@@ -191,10 +191,12 @@ def initialize_router(model, source, source_cfg):
 
 
 def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow_residual=False,
-                               grow_feed_forward=False, grow_expansion=False):
+                               grow_feed_forward=False, grow_expansion=False, preserve_router_charge=False):
     source = torch.load(path, map_location="cpu", weights_only=True)
     if source.get("task") != "event_lm" or source.get("model_type") != type(model).__name__:
         raise ValueError("--initialize-from needs a checkpoint of the same decoder family")
+    if preserve_router_charge and (not isinstance(model, EventLM) or grow_residual or grow_expansion):
+        raise ValueError("preserving router charge applies to a spiking continuation at the same width")
     growth = {}
     if grow_residual or grow_expansion:
         if not isinstance(model, EventLM) or freeze_router:
@@ -261,6 +263,8 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 model.load_state_dict(source["state_dict"])
         else:
             initialize_router(model, source, source_cfg)
+        if preserve_router_charge:
+            model.preserve_router_charge(source_cfg.router_charge_bits)
         if freeze_router:
             if model.prediction_memory is None:
                 raise ValueError("--freeze-router needs a model with a trainable prediction bank")
@@ -328,6 +332,8 @@ def main():
                         help="emit learned correction pulses from matching delays into the fixed split")
     parser.add_argument("--router-charge-bits", type=int, default=EventLMConfig.router_charge_bits,
                         help="fractional charge bits for local synapses and firing thresholds")
+    parser.add_argument("--preserve-router-charge", action="store_true",
+                        help="put loaded router weights on the old charge grid before refining it")
     parser.add_argument("--activity-inhibition", action="store_true",
                         help="raise content and steering thresholds with pooled incoming spike activity")
     parser.add_argument("--inhibition-by-expansion", action="store_true",
@@ -415,6 +421,8 @@ def main():
         parser.error("spiking growth needs an --initialize-from checkpoint and a trainable router")
     if args.grow_feed_forward and (args.initialize_from is None or args.variant not in ("transformer", "transformer_local")):
         parser.error("--grow-feed-forward needs a Transformer --initialize-from checkpoint")
+    if args.preserve_router_charge and (args.initialize_from is None or args.variant not in EVENT_ROUTES):
+        parser.error("--preserve-router-charge needs a spiking --initialize-from checkpoint")
     if args.bank_write_credit and args.variant not in EVENT_ROUTES:
         parser.error("--bank-write-credit needs a spiking correction bank")
     if args.freeze_router and args.variant not in EVENT_ROUTES:
@@ -468,7 +476,7 @@ def main():
             initialization = initialize_from_checkpoint(
                 model, model_kwargs, args.initialize_from.expanduser(),
                 freeze_router=args.freeze_router, grow_residual=args.grow_residual, grow_feed_forward=args.grow_feed_forward,
-                grow_expansion=args.grow_expansion,
+                grow_expansion=args.grow_expansion, preserve_router_charge=args.preserve_router_charge,
             )
         if args.tag_read_initial_gain is not None:
             with torch.no_grad():

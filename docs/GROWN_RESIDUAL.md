@@ -290,3 +290,32 @@ The two Transformer widths scored within 0.00007 bits per byte
 on each corpus at this exposure.
 [Paired scores, audits, and intervention](../results/event_lm/residual_growth_13030k) ·
 [Original-width Transformer scores](../results/event_lm/scale_6510k_short_control)
+
+### Refine router charge at fixed width
+
+The v4 finer-charge run changed both the residual width and the
+charge grid relative to its starting weights. This continuation
+starts at width 768 and uses the same 6,514,176 parameters and
+19,536-byte stream state as the v5 parent. It sets the loaded router
+weights to their previous six-bit physical values, then trains on
+an eight-bit charge grid. Every old router charge and threshold
+uses four times as many ticks on the finer grid. Firing resolution
+is 16×, with the original-width control's pulse target, seed 3307,
+and 6,553,600 additional training targets.
+
+On 4,096 enwik8 validation bytes, CPU step, CPU chunk and Metal
+counts agreed. The unchanged-width models emitted the same output
+counts and 1,288,006,522 total pulses on that sample. All seven
+expansion populations had nonzero gradients. The trainable router
+can now move in quarter-size charge increments from that starting
+function.
+[Warm-start record](../results/event_lm/finer_router_charge/warm_finer_router_charge.json)
+
+```bash
+export PYTORCH_ENABLE_MPS_FALLBACK=0
+mkdir -p checkpoints/work
+python experiments/audit_residual_growth.py --enwik8 data/enwik8 --device mps \
+  --parent checkpoints/scale-6510k-next-data-study/trace_s2503.pt --refine-router-charge 8 \
+  --json checkpoints/work/warm_finer_router_charge.json
+bash experiments/run_v4_continuation.sh finer-router-charge
+```
