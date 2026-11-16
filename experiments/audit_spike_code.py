@@ -96,6 +96,17 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
     handles.append(integer.output.register_forward_hook(lambda *_: vocabulary_calls.append(1)))
     activity = {}
     tap_winners = []
+    verified_transfers = 0
+    if integer.cfg.steering_transfer is not None:
+        def check_transfers(module, inputs, output):
+            nonlocal verified_transfers
+            before = inputs[0].index_select(-1, module.paired_channels).unflatten(-1, (-1, 2))
+            after = output.index_select(-1, module.paired_channels).unflatten(-1, (-1, 2))
+            if not torch.equal(before.sum(-1, dtype=torch.int32), after.sum(-1, dtype=torch.int32)):
+                raise AssertionError("a steering transfer changed the pulse count of a pair")
+            verified_transfers += 1
+
+        handles.extend(block.steering_transfer.register_forward_hook(check_transfers) for block in integer.blocks)
     if integer.cfg.trace_tap_read is not None:
         handles.extend(block.trace_taps.register_forward_hook(
             lambda _module, _inputs, output: tap_winners.append(output[2]),
@@ -203,6 +214,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["delay_correction_gain_ticks"] = [block.delay_correction.gains().tolist() for block in integer.blocks]
     if integer.cfg.router_charge_bits != EventLMConfig.router_charge_bits:
         row["router_charge_bits"] = integer.cfg.router_charge_bits
+    if integer.cfg.delay_group_widths is not None:
+        row["delay_group_widths"] = integer.cfg.group_widths
     if integer.cfg.local_trace:
         row["native_batch_matches_chunk_on_prefix"] = tokens.numel()
     if integer.cfg.opponent_steering:
@@ -218,7 +231,10 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
             block.trace.input.weight.count_nonzero().item() for block in integer.blocks
         ]
     if integer.cfg.steering_transfer is not None:
+        if verified_transfers != len(integer.blocks):
+            raise AssertionError("the native audit did not check every steering transfer block")
         row["steering_transfer"] = integer.cfg.steering_transfer
+        row["steering_pairs_conserve_pulses"] = True
         row["steering_transfer_active_weights_by_block"] = [
             sum(weight.count_nonzero().item() for weight in block.steering_transfer.weights)
             for block in integer.blocks
@@ -286,11 +302,12 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 name: activity[name][..., prior_width:].abs().sum(dtype=torch.int64).item() / tokens.numel()
                 for name in ("input", *(f"block_{index}_residual" for index in range(len(integer.blocks))))
             }
-        prior_expansion = initialization.get("expansion_width_before")
+        prior_expansion = initialization.get("expansion_groups_before", initialization.get("expansion_width_before"))
         if prior_expansion is not None:
             added = {}
             for index, block in enumerate(integer.blocks):
-                previous = _delay_group_widths(prior_expansion, len(block.widths))
+                previous = (_delay_group_widths(prior_expansion, len(block.widths))
+                            if isinstance(prior_expansion, int) else tuple(prior_expansion))
                 for population in ("content", "steering"):
                     name = f"block_{index}_{population}"
                     groups = activity[name].split(block.widths, dim=-1)

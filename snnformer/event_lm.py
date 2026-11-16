@@ -96,6 +96,13 @@ class EventLMConfig:
     trace_tap_read: str | None = None
     compact_trace_state: bool = False
     steering_transfer: str | None = None
+    delay_group_widths: tuple[int, ...] | None = None
+
+    @property
+    def group_widths(self) -> tuple[int, ...]:
+        if self.delay_group_widths is not None:
+            return tuple(self.delay_group_widths)
+        return _delay_group_widths(self.hidden, len(_STEERED_DELAYS[0]))
 
     @property
     def inhibition_bits(self) -> int:
@@ -1010,7 +1017,7 @@ class _DelayBlock(nn.Module):
         self.steered = cfg.route in _STEERED_ROUTES
         schedule = _STEERED_DELAYS if self.steered else _DELAYS
         self.delays = schedule[depth % len(schedule)]
-        self.widths = _delay_group_widths(cfg.hidden, len(self.delays))
+        self.widths = cfg.group_widths
         self.route = cfg.route
         self.correction = None
         self.memory_residual = None
@@ -1485,6 +1492,11 @@ class EventLM(nn.Module):
         super().__init__()
         if min(cfg.dim, cfg.depth) < 1 or cfg.hidden < len(_DELAYS[0]):
             raise ValueError("invalid decoder dimensions")
+        if cfg.delay_group_widths is not None:
+            groups = cfg.group_widths
+            if (len(groups) != len(_STEERED_DELAYS[0]) or any(not isinstance(width, int) or width < 1 for width in groups)
+                    or sum(groups) != cfg.hidden):
+                raise ValueError("delay group widths must be positive integers that partition the expansion")
         if cfg.route not in ("coincidence", "tonic", *_STEERED_ROUTES):
             raise ValueError("invalid spike packet route")
         if cfg.continuous and (cfg.route != "steered" or cfg.carry):
@@ -1525,7 +1537,7 @@ class EventLM(nn.Module):
             raise ValueError("compact trace state needs a local charge trace")
         if cfg.steering_transfer is not None and (
             cfg.steering_transfer not in ("present", "delayed") or not cfg.local_trace
-            or cfg.hidden <= len(_STEERED_DELAYS[0])
+            or max(cfg.group_widths) < 2
         ):
             raise ValueError("steering transfers need paired held-charge neurons and present or delayed input")
         if cfg.trace_coincidence_start is not None and (not cfg.local_trace
@@ -1600,7 +1612,7 @@ class EventLM(nn.Module):
             count_scale = 2 if cfg.learn_packet_thresholds else 1
             ticks = 2 * cap * count_scale * _TICKS
             if cfg.trace_tap_read == "race":
-                ticks *= 2 * max(_delay_group_widths(cfg.hidden, len(_STEERED_DELAYS[0])))
+                ticks *= 2 * max(cfg.group_widths)
             if ticks > _FP32_EXACT:
                 raise ValueError("trace tap charge would exceed the exact FP32 integer range")
         residual_bits = cfg.router_charge_bits + (_PACKET_BITS if cfg.learn_packet_thresholds else 0)
@@ -1612,7 +1624,7 @@ class EventLM(nn.Module):
             raise ValueError("late steering charge would exceed the exact FP32 integer range")
         # The additional read projection is bounded by one delay group's width.
         if cfg.route in _CORRECTION_ROUTES and cfg.route != "steered_correction":
-            projection_width += cfg.hidden // len(_STEERED_DELAYS[0])
+            projection_width += cfg.group_widths[-1]
         if cfg.memory_width is not None:
             if cfg.route not in _PREDICTION_ROUTES:
                 raise ValueError("memory_width requires a prediction bank")
@@ -1881,13 +1893,16 @@ class EventLM(nn.Module):
         add_transfer = prior.steering_transfer is None and cfg.steering_transfer is not None
         expected = replace(prior, hidden=cfg.hidden, steering_gradient_at_zero=cfg.steering_gradient_at_zero,
                            compact_trace_state=cfg.compact_trace_state,
-                           steering_transfer=cfg.steering_transfer if add_transfer else prior.steering_transfer)
+                           steering_transfer=cfg.steering_transfer if add_transfer else prior.steering_transfer,
+                           delay_group_widths=cfg.delay_group_widths)
         if not cfg.local_trace or cfg.hidden <= prior.hidden or expected != cfg:
             raise ValueError("expansion growth needs the same held-charge router with a larger expansion")
         if cfg.activity_inhibition and cfg.inhibition_bits != prior.inhibition_bits:
             raise ValueError("expansion growth must preserve the inhibitory threshold")
         groups = self.blocks[0].widths
-        old_groups = _delay_group_widths(prior.hidden, len(groups))
+        old_groups = prior.group_widths
+        if any(after < before for before, after in zip(old_groups, groups, strict=True)):
+            raise ValueError("expansion growth needs room for every existing delay channel")
         if self.prediction_memory is not None and cfg.memory_width is None and groups[-1] != old_groups[-1]:
             raise ValueError("expansion growth needs a separate memory_width to preserve the forecast bank")
         weights = self.state_dict()

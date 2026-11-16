@@ -64,7 +64,8 @@ def audit_transformer(args, parent, checkpoint, validation, inputs, labels, devi
 
 
 def audit_steering(parent, checkpoint, validation, inputs, labels, device):
-    prior_width = (checkpoint.get("initialization") or {}).get("expansion_width_before")
+    initialization = checkpoint.get("initialization") or {}
+    prior_width = initialization.get("expansion_groups_before", initialization.get("expansion_width_before"))
     if not isinstance(parent, EventLM) or prior_width is None or parent.cfg.steering_gradient_at_zero:
         raise ValueError("the steering check needs an expanded SNN trained with the ordinary rectifier")
     candidate = EventLM(replace(parent.cfg, steering_gradient_at_zero=True)).eval()

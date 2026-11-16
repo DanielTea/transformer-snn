@@ -74,7 +74,8 @@ def test_steering_transfer_survives_expansion_and_native_streaming():
                         local_trace=True, compact_delays=True, compact_axon_state=True,
                         trace_write_credit=True, activity_inhibition=True, resolution=4)
     parent = EventLM(cfg).eval()
-    cfg = replace(cfg, hidden=14, compact_trace_state=True, steering_transfer="delayed")
+    cfg = replace(cfg, hidden=14, compact_trace_state=True, steering_transfer="delayed",
+                  delay_group_widths=(5, 3, 4, 2))
     model = EventLM(cfg).eval()
     model.initialize_wider_expansion(parent.cfg, parent.state_dict())
     tokens = torch.randint(256, (2, 37))
@@ -86,7 +87,7 @@ def test_steering_transfer_survives_expansion_and_native_streaming():
         native = model.to_integer()
         counts = native(tokens)
         torch.testing.assert_close(model(tokens), counts, rtol=0, atol=0, check_dtype=False)
-        widened = EventLM(replace(cfg, hidden=18)).eval()
+        widened = EventLM(replace(cfg, hidden=18, delay_group_widths=(6, 4, 4, 4))).eval()
         widened.initialize_wider_expansion(cfg, model.state_dict())
         torch.testing.assert_close(widened.to_integer()(tokens), counts, rtol=0, atol=0)
 

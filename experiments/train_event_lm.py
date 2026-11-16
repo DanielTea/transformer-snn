@@ -129,6 +129,7 @@ def evaluate(model, data, *, context, batches, batch_size, device, event, pulse_
 def build_model(args):
     model_kwargs = dict(vocab=256, dim=args.dim, heads=args.heads, depth=args.depth, ctx=args.ctx)
     if args.variant in EVENT_ROUTES:
+        groups = None if args.delay_group_widths is None else tuple(map(int, args.delay_group_widths.split(",")))
         cfg = EventLMConfig(dim=args.dim, hidden=args.hidden, depth=args.depth, route=EVENT_ROUTES[args.variant],
                             carry=not args.no_carry, continuous=args.variant == "event_continuous",
                             memory_heads=args.memory_heads, memory_slots=args.memory_slots,
@@ -148,6 +149,7 @@ def build_model(args):
                             trace_write_credit=args.trace_write_credit, trace_write_confirm=args.trace_write_confirm,
                             trace_integration=args.trace_integration, trace_tap_read=args.trace_tap_read,
                             steering_transfer=args.steering_transfer,
+                            delay_group_widths=groups,
                             steering_gradient_at_zero=args.steering_gradient_at_zero,
                             late_steering=args.late_steering,
                             bank_write_credit=args.bank_write_credit,
@@ -181,7 +183,8 @@ def initialize_router(model, source, source_cfg):
     if source_cfg.route != "steered":
         raise ValueError("--initialize-from needs a matching spiking configuration or a plain router checkpoint")
     fields = ("dim", "hidden", "depth", "carry", "continuous", "resolution")
-    if any(getattr(source_cfg, name) != getattr(model.cfg, name) for name in fields):
+    if (any(getattr(source_cfg, name) != getattr(model.cfg, name) for name in fields)
+            or source_cfg.group_widths != model.cfg.group_widths):
         raise ValueError("the checkpoint and model must use the same local router settings")
     if model.cfg.route != "steered" and model.prediction_memory is None:
         raise ValueError("router initialization supports the plain router and post-router banks")
@@ -214,6 +217,8 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
         elif grow_expansion:
             model.initialize_wider_expansion(prior, source["state_dict"])
             growth["expansion_width_before"] = prior.hidden
+            if prior.delay_group_widths is not None:
+                growth["expansion_groups_before"] = prior.group_widths
         else:
             model.initialize_deeper(prior, source["state_dict"])
             growth["depth_before"] = prior.depth
@@ -333,6 +338,7 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--dim", type=int, default=96)
     parser.add_argument("--hidden", type=int, default=288, help="event feed-forward width")
+    parser.add_argument("--delay-group-widths", help="four comma-separated axon group widths that sum to --hidden")
     parser.add_argument("--memory-heads", type=int, default=4)
     parser.add_argument("--memory-slots", type=int, default=16)
     parser.add_argument("--memory-width", type=int, help="total width of a prediction bank before splitting keys")
@@ -496,6 +502,8 @@ def main():
         parser.error("bank read ranking weight must be finite and nonnegative")
     if args.bank_read_rank_weight and (not args.tag_read_competition or args.ctx < 2):
         parser.error("bank read ranking needs --tag-read-competition and at least two input bytes")
+    if args.delay_group_widths is not None and args.variant not in EVENT_ROUTES:
+        parser.error("custom delay groups need a spiking decoder")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.compact_axon_state or args.compact_trace_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition

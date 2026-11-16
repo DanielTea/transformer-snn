@@ -66,8 +66,30 @@ def score_with_options(model, window, chunk_size, **options):
     return score(variant, window, chunk_size)
 
 
-def added_expansion_rows(block, previous_width, weight):
-    before = _delay_group_widths(previous_width, len(block.widths))
+def probe_temporal_groups(model, window, chunk_size):
+    groups = [{"delays": [], "axon_cells": 0, "held_cells": 0, "columns": []}
+              for _ in model.blocks[0].widths]
+    hidden = model.cfg.hidden
+    for block in model.blocks:
+        offset = 0
+        for width, delay, group in zip(block.widths, block.local_delays, groups, strict=True):
+            group["delays"].append(delay)
+            group["axon_cells"] += delay * width
+            group["held_cells"] += width
+            for route in (2, 3):
+                first = route * hidden + offset
+                group["columns"].append(block.project.weight[:, first:first + width])
+            offset += width
+
+    intact = score(model, window, chunk_size)
+    for group in groups:
+        columns = group.pop("columns")
+        group["muted_bpb"] = score_without_synapses(model, window, chunk_size, columns)
+    return {"intact_bpb": intact, "muted_temporal_groups": groups}
+
+
+def added_expansion_rows(block, previous, weight):
+    before = _delay_group_widths(previous, len(block.widths)) if isinstance(previous, int) else tuple(previous)
     return [group[width:] for group, width in zip(weight.split(block.widths * 2), before * 2, strict=True)]
 
 
@@ -243,6 +265,8 @@ def main():
                               help="intervene on all read competition conductances and score the validation text")
     intervention.add_argument("--trace-input-gains", type=float, nargs="+",
                               help="scale the trained trace input synapses and score the validation text")
+    intervention.add_argument("--temporal-groups", action="store_true",
+                              help="mute the held-read and arriving bypass projections for one delay group at a time")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
     if min(args.targets, args.chunk_size) < 1:
@@ -262,6 +286,8 @@ def main():
     if args.trace_input_gains is not None and (not model.cfg.trace_integration
             or any(not math.isfinite(gain) or gain < 0 for gain in args.trace_input_gains)):
         parser.error("trace input gain interventions require a trained trace input and finite nonnegative gains")
+    if args.temporal_groups and not model.cfg.local_trace:
+        parser.error("temporal group interventions require the held-charge router")
     _, validation, _ = load_splits(args.enwik8)
     if args.targets >= len(validation):
         parser.error("the requested targets exceed the validation split")
@@ -275,9 +301,12 @@ def main():
         metrics = {"trace_input_gain_sweep": probe_trace_input_gains(
             model, window, args.chunk_size, args.trace_input_gains,
         )}
+    elif args.temporal_groups:
+        metrics = probe_temporal_groups(model, window, args.chunk_size)
     else:
+        previous_expansion = initialization.get("expansion_groups_before", initialization.get("expansion_width_before"))
         metrics = probe(model, window, args.chunk_size, residual_width_before=initialization.get("residual_width_before"),
-                        expansion_width_before=initialization.get("expansion_width_before"),
+                        expansion_width_before=previous_expansion,
                         depth_before=initialization.get("depth_before"))
     record = {
         "checkpoint": str(args.checkpoint),

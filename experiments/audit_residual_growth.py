@@ -75,6 +75,8 @@ def measure(model, tokens, device, *, profile_coincidence, prior_depth=None):
         "persistent_tensor_bytes": state_bytes(state),
         "total_pulses": sum(emissions) + sum(value.item() for value in memory_emissions),
     }
+    if model.cfg.delay_group_widths is not None:
+        metrics["delay_group_widths"] = model.cfg.group_widths
     if profile_coincidence:
         metrics["fraction_of_two_way_matches_also_confirmed"] = selected_fractions
     if prior_depth is not None:
@@ -106,6 +108,7 @@ def main():
     parser.add_argument("--inhibition-threshold-bits", type=int)
     parser.add_argument("--compact-trace-state", action="store_true",
                         help="pack the trace tensors while growing the expansion")
+    parser.add_argument("--delay-group-widths", help="four comma-separated widths for expansion growth")
     parser.add_argument("--steering-transfer", choices=("present", "delayed"),
                         help="add silent transfers alone or while widening the expansion")
     parser.add_argument("--trace-coincidence", action="store_true")
@@ -113,6 +116,8 @@ def main():
     args = parser.parse_args()
     if args.compact_trace_state and args.hidden is None:
         parser.error("--compact-trace-state in this audit accompanies --hidden")
+    if args.delay_group_widths is not None and args.hidden is None:
+        parser.error("--delay-group-widths in this audit accompanies --hidden")
     if args.inhibition_threshold_bits is not None and not args.learn_inhibition_thresholds:
         parser.error("threshold precision requires --learn-inhibition-thresholds")
 
@@ -166,8 +171,9 @@ def main():
         grown = EventLM(cfg)
         grown.initialize_wider_residual(prior, checkpoint["state_dict"])
     else:
+        groups = None if args.delay_group_widths is None else tuple(map(int, args.delay_group_widths.split(",")))
         cfg = replace(prior, hidden=args.hidden, compact_trace_state=prior.compact_trace_state or args.compact_trace_state,
-                      steering_transfer=args.steering_transfer or prior.steering_transfer)
+                      steering_transfer=args.steering_transfer or prior.steering_transfer, delay_group_widths=groups)
         grown = EventLM(cfg)
         grown.initialize_wider_expansion(prior, checkpoint["state_dict"])
     parent_counts, parent_metrics = measure(parent, tokens, device, profile_coincidence=False)
@@ -229,7 +235,9 @@ def main():
     else:
         gradient_field = "active_new_expansion_gradients_on_512_train_targets"
         gradients = [
-            sum(rows.count_nonzero().item() for rows in added_expansion_rows(block, prior.hidden, block.expand.weight.grad))
+            sum(rows.count_nonzero().item() for rows in added_expansion_rows(
+                block, prior.group_widths, block.expand.weight.grad,
+            ))
             for block in grown.blocks
         ]
     if not all(gradients):

@@ -17,7 +17,7 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         trace-fine-group-thresholds" >&2
   echo "         trace-tap-control trace-tap-fixed trace-tap-race trace-tap-transformer" >&2
   echo "         packed-width-snn packed-width-control packed-width-transformer packed-width-control-transformer" >&2
-  echo "         packed-width-present-transfer packed-width-delayed-transfer" >&2
+  echo "         packed-width-present-transfer packed-width-delayed-transfer packed-width-short-groups" >&2
   exit 2
 fi
 
@@ -172,7 +172,7 @@ case "$study" in
       --initialize-from checkpoints/trace-transport-study/transformer_s5801.pt)
     name=transformer_s6899
     ;;
-  packed-width-snn|packed-width-control|packed-width-present-transfer|packed-width-delayed-transfer)
+  packed-width-snn|packed-width-control|packed-width-present-transfer|packed-width-delayed-transfer|packed-width-short-groups)
     training+=("${spiking[@]}" --depth 11 --router-charge-bits 8 --residual-correction-start 7
       --initialize-from checkpoints/trace-tap-study/control_s6899.pt)
     if [[ $study != packed-width-control ]]; then
@@ -181,6 +181,10 @@ case "$study" in
     case "$study" in
       packed-width-snn) name=wide_s7907 ;;
       packed-width-control) name=control_s7907 ;;
+      packed-width-short-groups)
+        training+=(--delay-group-widths 75,75,47,46)
+        name=short_groups_s7907
+        ;;
       packed-width-*-transfer)
         source=${study#packed-width-}
         source=${source%-transfer}

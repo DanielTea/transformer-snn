@@ -17,6 +17,7 @@ the gain from observing more training targets.
 |---|---:|---:|
 | Continued 187-channel SNN | 9,960,960 | 29,674 B |
 | Packed 243-channel SNN | 12,799,488 | 32,616 B |
+| Packed 243-channel SNN, growth in the first two groups | 12,799,488 | 28,584 B |
 | Continued full attention | 9,962,496 | 6 MiB |
 | Wider full attention | 12,801,024 | 6 MiB |
 | 243-channel SNN, present steering transfers | 12,879,678 | 32,616 B |
@@ -109,6 +110,51 @@ training path.
 [Present warm audit](../results/event_lm/packed_width/warm_present_transfer.json) ·
 [Optimizer smoke run](../results/event_lm/packed_width/event_correction_code_s7907_packed_width_transfer_smoke.json)
 
+## Add channels to the shortest-delay groups
+
+On 65,536 validation targets, the v7 SNN scored 1.74428 bpb.
+For each intervention, the same frozen weights run while the held
+read and arrival bypass projections from one group are muted in
+every block. The group's immediate projections stay active.
+[Frozen temporal-group interventions](../results/event_lm/packed_width/parent_temporal_groups.json)
+
+| Delays across blocks, bytes | Axon cells | Held cells | Muted loss increase |
+|---|---:|---:|---:|
+| 1 | 517 | 517 | 0.87238 bpb |
+| 1, 2, 3 | 987 | 517 | 0.70274 bpb |
+| 2, 4, 9 | 2,397 | 517 | 0.57198 bpb |
+| 3, 8, 27 | 5,750 | 506 | 0.29103 bpb |
+
+The short-group growth arm adds 28 channels to each of the first
+two groups. It keeps every parent channel inside its original
+delay group. The widths become 75, 75, 47, and 46. This spends
+4,032 fewer persistent bytes than the even 243-channel expansion
+at the same parameter count. On 4,096 validation bytes, the
+warm model keeps each parent output count and the exact pulse
+total. Every block's new expansion receives a next-byte gradient.
+The group ablation motivates the allocation. The matched
+continuation measures what adding channels changes.
+[Short-group warm audit](../results/event_lm/packed_width/warm_short_groups.json)
+
+## Learning rate at a continuation boundary
+
+A separate CPU probe continues the released 187-channel SNN for
+120 updates, or 491,520 enwik8 targets. Both runs use seed 7907,
+16 warmup steps, and the same validation windows, pulse target,
+and AdamW settings. The v7 parent scores 1.79099 bpb on these
+32,768 validation targets.
+[Original weights and both exact training logs](../results/event_lm/packed_width/restart)
+
+| Peak learning rate | 40 updates | 80 updates | 120 updates |
+|---:|---:|---:|---:|
+| 0.00020 | 1.8225 | 1.8139 | 1.8091 |
+| 0.00005 | 1.7946 | 1.7931 | 1.7927 |
+
+The quarter-rate pilot ends 0.01641 bpb below the standard-rate
+pilot on this validation slice. Its loss still rises by 0.00174
+bpb from the parent. A longer matched continuation is needed to
+measure the effect on test loss.
+
 ## Matched runs
 
 The launcher trains all arms with seed 7907, 2,400 AdamW updates,
@@ -125,7 +171,7 @@ the learned delayed synapses also work with present input.
 
 ```bash
 study=checkpoints/work/packed-width
-for arm in snn control transformer control-transformer delayed-transfer present-transfer; do
+for arm in snn control transformer control-transformer delayed-transfer present-transfer short-groups; do
   PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh "packed-width-$arm" "$study"
 done
 ```
