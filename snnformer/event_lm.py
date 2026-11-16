@@ -10,7 +10,9 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from .correction_memory import CorrectionState, _interval_scan, correction_reads, correction_step, interval_spikes
+from .correction_memory import (
+    CorrectionState, _interval_scan, _write_credit_scan, correction_reads, correction_step, interval_spikes,
+)
 
 
 _VOCAB = 256
@@ -61,6 +63,7 @@ class EventLMConfig:
     router_charge_bits: int = _CHARGE_BITS
     activity_inhibition: bool = False
     local_trace: bool = False
+    trace_write_credit: bool = False
     delay_filter: bool = False
     opponent_steering: bool = False
 
@@ -538,9 +541,10 @@ class _DelayState:
 class _SpikeTrace(nn.Module):
     """A causal charge trace that moves only when an interval excludes it."""
 
-    def __init__(self, cap):
+    def __init__(self, cap, *, write_credit=False):
         super().__init__()
         self.cap = cap
+        self.write_credit = write_credit
 
     def _bounds(self, present, radius):
         return (present - radius).clamp_min(-self.cap), (present + radius).clamp_max(self.cap)
@@ -549,7 +553,11 @@ class _SpikeTrace(nn.Module):
         if initial is None:
             initial = torch.zeros_like(present[:, 0])
         lower, upper = self._bounds(present, steering if write_radius is None else write_radius)
-        after = _interval_scan(lower, upper, initial)
+        needs_credit = self.write_credit and torch.is_grad_enabled() and (
+            lower.requires_grad or upper.requires_grad or initial.requires_grad
+        )
+        scan = _write_credit_scan if needs_credit else _interval_scan
+        after = scan(lower, upper, initial)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
         read, _ = _steer_packet(before, steering)
         if pulse_counts is not None:
@@ -631,7 +639,7 @@ class _DelayBlock(nn.Module):
         self.delay_widths = tuple(counts_per_channel * width for width in self.widths)
         self.delay_sizes = tuple(delay * width for delay, width in zip(self.local_delays, self.delay_widths))
         cap = _HIDDEN_CAP * cfg.resolution
-        self.trace = _SpikeTrace(cap) if cfg.local_trace else None
+        self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit) if cfg.local_trace else None
         self.opponent_steering = (
             _OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits) if cfg.opponent_steering else None
         )
@@ -965,6 +973,8 @@ class EventLM(nn.Module):
             raise ValueError("local traces need compact fixed delays and reset-per-byte spike routing")
         if cfg.opponent_steering and not cfg.local_trace:
             raise ValueError("opponent steering needs a local charge trace")
+        if cfg.trace_write_credit and not cfg.local_trace:
+            raise ValueError("trace write credit needs a local charge trace")
         if cfg.delay_filter and (not cfg.compact_delays or cfg.carry or cfg.continuous or cfg.delay_window != 1
                                  or cfg.departure_coincidence or cfg.local_trace):
             raise ValueError("delay filters need the fixed-delay coincidence path and reset-per-byte spike routing")

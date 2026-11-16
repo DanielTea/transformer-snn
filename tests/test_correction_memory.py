@@ -3,7 +3,7 @@ from dataclasses import replace
 import pytest
 import torch
 
-from snnformer.correction_memory import correction_reads, correction_step
+from snnformer.correction_memory import _interval_scan, _write_credit_scan, correction_reads, correction_step
 from snnformer.event_lm import (
     EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _OpponentSteering, _SpikeCorrection, _SpikeTrace,
 )
@@ -395,6 +395,31 @@ def test_trace_steering_reads_old_charge_and_resists_writes_within_its_interval(
     assert read.flatten().tolist() == [0, 5, 5, 5, 1, 2]
     assert charge.item() == 0
     assert [int(count) for count in pulses] == [10, 18]
+
+
+def test_trace_credit_follows_actual_moves_on_an_odd_length_scan_with_ties():
+    lower = torch.tensor([[[2., -3.], [2., -5.], [-1., 4.], [3., 0.], [3., 2.], [0., 1.], [5., -1.]]],
+                         requires_grad=True)
+    upper = torch.tensor([[[2., -1.], [5., -3.], [1., 4.], [3., 4.], [6., 4.], [2., 4.], [8., 0.]]],
+                         requires_grad=True)
+    initial = torch.tensor([[0., 3.]], requires_grad=True)
+    final = initial
+    states = []
+    for lo, hi in zip(lower.unbind(1), upper.unbind(1), strict=True):
+        final = torch.where(final < lo, lo, torch.where(final > hi, hi, final))
+        states.append(final)
+    expected = torch.stack(states, dim=1)
+    actual = _write_credit_scan(lower, upper, initial)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    torch.testing.assert_close(actual, _interval_scan(lower, upper, initial), rtol=0, atol=0)
+
+    weights = torch.arange(actual.numel()).view_as(actual)
+    reference_grads = torch.autograd.grad((expected * weights).sum(), (lower, upper, initial))
+    for observed, desired in zip(torch.autograd.grad((actual * weights).sum(), (lower, upper, initial)),
+                                 reference_grads, strict=True):
+        torch.testing.assert_close(observed, desired, rtol=0, atol=0)
+    assert actual[0, 1, 0].item() == lower[0, 1, 0].item()
+    assert reference_grads[0][0, 1, 0].item() == 0
 
 
 def test_opponent_steering_protects_charge_through_a_silent_read():

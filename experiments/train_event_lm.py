@@ -104,7 +104,8 @@ def build_model(args):
                             departure_coincidence=args.departure_coincidence, delay_window=args.delay_window,
                             delay_residual=args.delay_residual,
                             router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
-                            local_trace=args.local_trace, delay_filter=args.delay_filter,
+                            local_trace=args.local_trace, trace_write_credit=args.trace_write_credit,
+                            delay_filter=args.delay_filter,
                             opponent_steering=args.opponent_steering)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
@@ -154,6 +155,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
                                   delay_window=model.cfg.delay_window, router_charge_bits=model.cfg.router_charge_bits,
                                   delay_residual=source_cfg.delay_residual or model.cfg.delay_residual,
                                   activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace,
+                                  trace_write_credit=model.cfg.trace_write_credit,
                                   delay_filter=source_cfg.delay_filter or model.cfg.delay_filter,
                                   opponent_steering=source_cfg.opponent_steering or model.cfg.opponent_steering)
         if source_geometry == model.cfg:
@@ -228,6 +230,8 @@ def main():
                         help="raise content and steering thresholds with pooled incoming spike activity")
     parser.add_argument("--local-trace", action="store_true",
                         help="hold each channel's charge within its steering interval across bytes")
+    parser.add_argument("--trace-write-credit", action="store_true",
+                        help="send held-charge gradients to the last bound that moved the charge")
     parser.add_argument("--opponent-steering", action="store_true",
                         help="use opposing steering spikes to protect held charge from writes")
     parser.add_argument("--delay-filter", action="store_true",
@@ -279,7 +283,7 @@ def main():
         parser.error("forecast keys need --variant event_correction_code")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
-            or args.local_trace or args.delay_filter or args.opponent_steering
+            or args.local_trace or args.trace_write_credit or args.delay_filter or args.opponent_steering
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"
     ):
