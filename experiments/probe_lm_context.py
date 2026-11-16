@@ -7,6 +7,7 @@ import json
 import math
 import os
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -77,6 +78,8 @@ def main():
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--device", choices=("cpu", "cuda", "mps", "auto"), default="cpu")
     parser.add_argument("--memory-ablation", action="store_true", help="also score hybrid checkpoints with memory silenced")
+    parser.add_argument("--trace-read-drive-ablation", action="store_true",
+                        help="also score an SNN's read synapses zeroed and with their input swapped")
     parser.add_argument("--json", type=Path, help="optional path for machine-readable results")
     args = parser.parse_args()
 
@@ -110,11 +113,29 @@ def main():
         positions = getattr(model, "pos", None)
         if positions is not None and max(histories) + args.tail_bytes - 1 > len(positions):
             parser.error(f"{name}: requested history and tail exceed its learned position table ({len(positions)})")
+        if args.trace_read_drive_ablation:
+            if not isinstance(model, EventLM) or model.cfg.trace_read_drive is None:
+                parser.error(f"{name}: --trace-read-drive-ablation requires a driven held-charge read")
+            source = "present" if model.cfg.trace_read_drive == "write" else "write"
+            zero = EventLM(model.cfg).to(device).eval()
+            swapped = EventLM(replace(model.cfg, trace_read_drive=source)).to(device).eval()
+            zero.load_state_dict(model.state_dict())
+            swapped.load_state_dict(model.state_dict())
+            with torch.no_grad():
+                for block in zero.blocks:
+                    block.trace.read_drive.weight.zero_()
         result = {"checkpoint": str(path), "run_name": name, "parameters": count_params(model), "histories": []}
+        if args.trace_read_drive_ablation:
+            result["trace_read_drive"] = model.cfg.trace_read_drive
         for history in histories:
             bpb = score(model, data, starts, history, args.tail_bytes, args.batch_size, device)
             row = {"history_bytes": history, "bpb": bpb}
             description = f"{name} | history {history:4d} | {bpb:.4f} bpb"
+            if args.trace_read_drive_ablation:
+                zero_bpb = score(zero, data, starts, history, args.tail_bytes, args.batch_size, device)
+                swapped_bpb = score(swapped, data, starts, history, args.tail_bytes, args.batch_size, device)
+                row.update(zero_trace_read_drive_bpb=zero_bpb, swapped_trace_read_drive_bpb=swapped_bpb)
+                description += f" | zero synapses {zero_bpb:.5f} | swapped input {swapped_bpb:.5f}"
             if args.memory_ablation and getattr(model.cfg, "attn", None) == "transformer_event":
                 with memory_disabled(model):
                     ablated = score(model, data, starts, history, args.tail_bytes, args.batch_size, device)
@@ -125,6 +146,8 @@ def main():
             print(description, flush=True)
         results.append(result)
         del model
+        if args.trace_read_drive_ablation:
+            del zero, swapped
 
     if args.json is not None:
         payload = {

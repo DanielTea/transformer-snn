@@ -28,6 +28,7 @@ def score(model, window, chunk_size, *, reset_trace=False):
         if reset_trace and state is not None:
             for layer in state.local_layers:
                 layer.trace_charge = None
+                layer.trace_read_phase = None
         counts, state = model.forward_chunk(section[:, :-1], state)
         logits = scoring_logits(counts, True, model.cfg.resolution)
         losses.append(F.cross_entropy(logits.flatten(0, 1), section[:, 1:].flatten(), reduction="sum").item())

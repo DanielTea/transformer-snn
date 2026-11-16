@@ -71,6 +71,28 @@ def test_driven_trace_read_changes_only_the_bounded_read_emission(source, expect
     assert [count.item() for count in writes] == [18]
 
 
+def test_driven_read_retains_subthreshold_charge_across_chunks_and_bytes():
+    drive = _TraceReadDrive(1, 64, "write", bits=8, carry=True)
+    with torch.no_grad():
+        drive.weight.fill_(1 / 256)
+        drive.freeze_integer()
+    correction = torch.tensor([[[80], [80], [80], [-80], [-80], [0]]], dtype=torch.int32)
+    steering = torch.tensor([[[1], [1], [0], [1], [1], [1]]], dtype=torch.int32)
+    read = torch.zeros_like(correction)
+    expected = torch.tensor([[[0], [1], [0], [-1], [0], [0]]], dtype=torch.int32)
+    torch.testing.assert_close(drive(read, steering, read, correction), expected)
+
+    for segment in (1, 3):
+        state = _DelayState()
+        chunks = []
+        for start in range(0, read.shape[1], segment):
+            index = slice(start, start + segment) if segment > 1 else start
+            counts = drive(read[:, index], steering[:, index], read[:, index], correction[:, index], state=state)
+            chunks.append(counts if segment > 1 else counts[:, None])
+        torch.testing.assert_close(torch.cat(chunks, dim=1), expected)
+        torch.testing.assert_close(state.trace_read_phase, torch.tensor([[128]], dtype=torch.uint8))
+
+
 def test_steering_transfer_conserves_each_pair_at_its_firing_limit():
     circuit = _SteeringTransfer((3, 2), 32, 4, "delayed")
     with torch.no_grad():

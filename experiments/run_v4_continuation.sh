@@ -19,6 +19,7 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         packed-width-snn packed-width-control packed-width-transformer packed-width-control-transformer" >&2
   echo "         packed-width-present-transfer packed-width-delayed-transfer packed-width-short-groups" >&2
   echo "         trace-read-drive-control trace-read-drive-write trace-read-drive-present trace-read-drive-transformer" >&2
+  echo "         trace-read-drive-write-fine trace-read-drive-write-carry trace-read-drive-present-carry" >&2
   exit 2
 fi
 
@@ -205,15 +206,22 @@ case "$study" in
       name=control_transformer_s7907
     fi
     ;;
-  trace-read-drive-control|trace-read-drive-write|trace-read-drive-present)
+  trace-read-drive-control|trace-read-drive-write|trace-read-drive-present|trace-read-drive-write-fine|trace-read-drive-write-carry|trace-read-drive-present-carry)
     training+=("${spiking[@]}" --depth 11 --hidden 243 --router-charge-bits 8 --residual-correction-start 7
       --compact-trace-state --delay-group-widths 75,75,47,46
       --initialize-from checkpoints/packed-width-study/short_groups_s7907.pt)
     arm=${study#trace-read-drive-}
-    if [[ $arm != control ]]; then
-      training+=(--trace-read-drive "$arm")
-    fi
-    name="${arm}_s8237"
+    case "$arm" in
+      control) ;;
+      write-fine)
+        training+=(--trace-read-drive write --trace-read-drive-bits 8)
+        ;;
+      *-carry)
+        training+=(--trace-read-drive "${arm%-carry}" --trace-read-drive-bits 8 --trace-read-drive-carry)
+        ;;
+      *) training+=(--trace-read-drive "$arm") ;;
+    esac
+    name="${arm//-/_}_s8237"
     ;;
   trace-read-drive-transformer)
     training+=(--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 14.185546875

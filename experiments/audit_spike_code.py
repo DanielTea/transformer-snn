@@ -245,6 +245,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         if len(read_changes) != len(integer.blocks):
             raise AssertionError("the native audit did not check every driven read population")
         row["trace_read_drive"] = integer.cfg.trace_read_drive
+        row["trace_read_drive_bits"] = integer.cfg.trace_read_drive_bits
+        row["trace_read_drive_carry"] = integer.cfg.trace_read_drive_carry
         row["trace_read_counts_stayed_within_aperture"] = True
         row["trace_read_drive_active_weights_by_block"] = [
             block.trace.read_drive.weight.count_nonzero().item() for block in integer.blocks

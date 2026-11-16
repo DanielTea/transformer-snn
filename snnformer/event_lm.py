@@ -98,6 +98,8 @@ class EventLMConfig:
     steering_transfer: str | None = None
     delay_group_widths: tuple[int, ...] | None = None
     trace_read_drive: str | None = None
+    trace_read_drive_bits: int = _CHARGE_BITS
+    trace_read_drive_carry: bool = False
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -234,12 +236,13 @@ class _IntegrateFire(nn.Module):
 class _ResidualMembraneFire(_IntegrateFire):
     """Carry the signed rounding residue of a residual neuron across bytes."""
 
-    def __init__(self, cap, bits):
+    def __init__(self, cap, bits, *, phase_field="output_phase"):
         super().__init__(cap, bits, True)
         if (cap + 1) * self.threshold - 1 > torch.iinfo(torch.int32).max:
             raise ValueError("residual charge exceeds the int32 membrane range")
         self.phase_dtype = next(dtype for dtype in (torch.uint8, torch.int16, torch.int32)
                                 if self.threshold - 1 <= torch.iinfo(dtype).max)
+        self.phase_field = phase_field
 
     def forward(self, current, *, state=None):
         if (current.shape[1] * self.cap + 1) * self.threshold - 1 > torch.iinfo(torch.int32).max:
@@ -247,13 +250,14 @@ class _ResidualMembraneFire(_IntegrateFire):
         limit = self.cap * self.threshold
         bounded = current.clamp(-limit, limit)
         phase = self.threshold // 2
-        if state is not None and state.output_phase is not None:
-            phase = state.output_phase[:, None].to(torch.int32)
+        previous = None if state is None else getattr(state, self.phase_field)
+        if previous is not None:
+            phase = previous[:, None].to(torch.int32)
         total = bounded.to(torch.int32).cumsum(1, dtype=torch.int32) + phase
         emitted = total >> self.bits
         counts = emitted.diff(dim=1, prepend=torch.zeros_like(emitted[:, :1]))
         if state is not None:
-            state.output_phase = (total[:, -1] & (self.threshold - 1)).to(self.phase_dtype)
+            setattr(state, self.phase_field, (total[:, -1] & (self.threshold - 1)).to(self.phase_dtype))
         if current.is_floating_point():
             surrogate = bounded / self.threshold
             return counts.to(current.dtype) + (surrogate - surrogate.detach())
@@ -784,6 +788,7 @@ class _DelayState:
     output_phase: torch.Tensor | None = None
     correction: CorrectionState | None = None
     trace_charge: torch.Tensor | None = None
+    trace_read_phase: torch.Tensor | None = None
 
 
 class _TraceInput(nn.Module):
@@ -809,24 +814,30 @@ class _TraceInput(nn.Module):
 class _TraceReadDrive(nn.Module):
     """Send one more spike input to each existing held-charge read neuron."""
 
-    def __init__(self, width, cap, source):
+    def __init__(self, width, cap, source, *, bits=_CHARGE_BITS, carry=False):
         super().__init__()
         self.from_write = source == "write"
         self.weight = nn.Parameter(torch.zeros(width))
-        self.emit = _IntegrateFire(cap, _CHARGE_BITS, False)
+        self.emit = (_ResidualMembraneFire(cap, bits, phase_field="trace_read_phase") if carry
+                     else _IntegrateFire(cap, bits, False))
 
     def weight_ticks(self):
-        return _weight_ticks(self.weight)
+        return _weight_ticks(self.weight, charge_bits=self.emit.bits)
 
     def freeze_integer(self):
         if self.weight.is_floating_point():
             self.weight = nn.Parameter(self.weight_ticks().to(torch.int32), requires_grad=False)
 
-    def forward(self, read, steering, present, correction):
+    def forward(self, read, steering, present, correction, *, state=None):
         source = correction if self.from_write else present
         current = read * self.emit.threshold + self.weight_ticks() * source
         limit = steering.clamp(max=self.emit.cap) * self.emit.threshold
-        return self.emit(current.clamp(-limit, limit))
+        current = current.clamp(-limit, limit)
+        if not self.emit.carry:
+            return self.emit(current)
+        if current.ndim == 2:
+            return self.emit(current[:, None], state=state)[:, 0]
+        return self.emit(current, state=state)
 
 
 class _SpikeTrace(nn.Module):
@@ -855,13 +866,13 @@ class _SpikeTrace(nn.Module):
             upper = upper + torch.where(difference > 0, extension, 0)
         return lower.clamp(-self.cap, self.cap), upper.clamp(-self.cap, self.cap)
 
-    def _read(self, before, change, steering, present):
+    def _read(self, before, change, steering, present, state):
         read, _ = _steer_packet(before, steering)
         if self.read_veto is not None:
             veto = self.read_veto.emit_difference(change.abs())
             _, read = _steer_packet(read, veto)
         if self.read_drive is not None:
-            read = self.read_drive(read, steering, present, change)
+            read = self.read_drive(read, steering, present, change, state=state)
         return read
 
     def _scan(self, lower, upper, initial, present, delayed_content):
@@ -876,7 +887,7 @@ class _SpikeTrace(nn.Module):
             return charge
         return charge.to(self.storage_dtype)
 
-    def forward(self, present, steering, initial, pulse_counts, *, write_radius=None, delayed_content=None):
+    def forward(self, present, steering, initial, pulse_counts, *, write_radius=None, delayed_content=None, state=None):
         if initial is None:
             initial = torch.zeros_like(present[:, 0])
         elif self.storage_dtype is not None:
@@ -887,14 +898,14 @@ class _SpikeTrace(nn.Module):
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
         moved = before if pulses is None else before + pulses
         change = after - moved
-        read = self._read(before, change, steering, present)
+        read = self._read(before, change, steering, present, state)
         if pulse_counts is not None:
             pulse_counts.append(change.abs().sum())
             if self.read_drive is None:
                 pulse_counts.append(read.abs().sum())
         return read, self._store(after[:, -1].clone())
 
-    def step(self, present, steering, before, *, write_radius=None, delayed_content=None):
+    def step(self, present, steering, before, *, write_radius=None, delayed_content=None, state=None):
         if before is None:
             before = torch.zeros_like(present)
         elif self.storage_dtype is not None:
@@ -903,7 +914,7 @@ class _SpikeTrace(nn.Module):
         lower, upper = self._bounds(present, radius, delayed_content)
         moved = before if self.input is None else before + self.input(present, delayed_content)
         change = interval_spikes(moved, lower, upper)
-        return self._read(before, change, steering, present), self._store(moved + change)
+        return self._read(before, change, steering, present, state), self._store(moved + change)
 
 
 class _OpponentSteering(nn.Module):
@@ -1094,7 +1105,8 @@ class _DelayBlock(nn.Module):
             veto_widths = self.widths if cfg.trace_read_veto else None
             confirm_widths = self.widths if cfg.trace_write_confirm else None
             integration_width = cfg.hidden if cfg.trace_integration else None
-            read_drive = (_TraceReadDrive(cfg.hidden, cap, cfg.trace_read_drive)
+            read_drive = (_TraceReadDrive(cfg.hidden, cap, cfg.trace_read_drive, bits=cfg.trace_read_drive_bits,
+                                          carry=cfg.trace_read_drive_carry)
                           if cfg.trace_read_drive is not None else None)
             self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths,
                                      confirm_widths=confirm_widths, integration_width=integration_width,
@@ -1360,6 +1372,7 @@ class _DelayBlock(nn.Module):
             radius = self._trace_radius(steering, steer_drive, firing_quanta)
             coincidence_read, trace_charge = self.trace(
                 present, steering, initial, pulse_counts, write_radius=radius, delayed_content=delayed,
+                state=local_state,
             )
             if local_state is not None:
                 local_state.trace_charge = trace_charge
@@ -1476,7 +1489,7 @@ class _DelayBlock(nn.Module):
         if self.trace is not None:
             radius = self._trace_radius(steering, steer_drive, firing_quanta)
             coincidence_read, state.trace_charge = self.trace.step(
-                present, steering, state.trace_charge, write_radius=radius, delayed_content=delayed,
+                present, steering, state.trace_charge, write_radius=radius, delayed_content=delayed, state=state,
             )
         if self.trace_taps is not None:
             coincidence_read, delayed, _ = self.trace_taps(
@@ -1592,6 +1605,10 @@ class EventLM(nn.Module):
             cfg.trace_read_drive not in ("write", "present") or not cfg.local_trace
         ):
             raise ValueError("trace read drive needs a local charge trace and write or present spikes")
+        if not isinstance(cfg.trace_read_drive_bits, int) or not _CHARGE_BITS <= cfg.trace_read_drive_bits < 31:
+            raise ValueError("trace read drive precision must be an integer from 6 to 30")
+        if cfg.trace_read_drive is None and (cfg.trace_read_drive_bits != _CHARGE_BITS or cfg.trace_read_drive_carry):
+            raise ValueError("trace read precision and carry require a driven read")
         if cfg.residual_membrane and not cfg.local_trace:
             raise ValueError("residual membranes need chunkable local trace state")
         if cfg.residual_correction_start is not None and (
@@ -1645,7 +1662,8 @@ class EventLM(nn.Module):
         cap = _HIDDEN_CAP * cfg.resolution
         if cfg.trace_read_drive is not None:
             source_cap = 3 if cfg.trace_integration and cfg.trace_read_drive == "write" else 2
-            if cap * (_TICKS + source_cap * _WEIGHT_LIMIT) > _FP32_EXACT:
+            read_limit = (cap * (_TICKS + source_cap * _WEIGHT_LIMIT)) << (cfg.trace_read_drive_bits - _CHARGE_BITS)
+            if read_limit > _FP32_EXACT:
                 raise ValueError("trace read drive would exceed the exact FP32 integer range")
         if cfg.trace_tap_read is not None:
             count_scale = 2 if cfg.learn_packet_thresholds else 1
