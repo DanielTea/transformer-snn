@@ -107,6 +107,28 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
+  <h3 id="surprise-clock">Surprise clock and fast synapses</h3>
+  <p class="col">The v11 study uses one signal for two circuits. A population of forecast neurons predicts every byte. The spikes it gets wrong drive a clock for four added blocks and decide which bytes a set of fast synapses stores. Six arms continue the 25.79M v10 models on identical windows. Two more add the fitted synapses to trained decoders without a gradient step. The synapses hold 24,576 bytes per stream.</p>
+  <figure>
+    <a href="../results/figures/event_lm_surprise_clock.png"><img src="../results/figures/event_lm_surprise_clock.png" alt="Held-out enwik8 and PG-19 loss for the surprise clock, its controls and the fast synapses"></a>
+    <figcaption>Eight endpoints at 140.90 million training targets. Full attention reads 512 bytes. PG-19 temperatures are fitted on separate calibration books.</figcaption>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_fast_synapse_sweep.png"><img src="../results/figures/event_lm_fast_synapse_sweep.png" alt="Loss removed by the fast synapses as their state grows, for writes on error spikes and on every byte" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_surprise_prefix_age.png"><img src="../results/figures/event_lm_surprise_prefix_age.png" alt="enwik8 loss gap to the size-matched Transformer by distance to the previous occurrence of the context" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_surprise_words.png"><img src="../results/figures/event_lm_surprise_words.png" alt="Loss by byte position inside a word and the share of clock ticks at each position" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_surprise_history_gap.png"><img src="../results/figures/event_lm_surprise_history_gap.png" alt="Loss gap to the size-matched Transformer by bytes seen since a reset" loading="lazy"></a>
+  </figure>
+  <figure id="byte-transfer">
+    <a href="../results/figures/event_lm_byte_transfer_surprise_clock_140902k.png"><img src="../results/figures/event_lm_byte_transfer_surprise_clock_140902k.png" alt="Relative loss on the fixed byte corpora and LAMBADA word accuracy for the surprise study" loading="lazy"></a>
+    <figcaption>Every model scores the same 512-byte windows from a reset. <a href="SURPRISE_CLOCK.md">Surprise study and controls</a> · <a href="BYTE_TRANSFER.md">Scoring and overlap audit</a></figcaption>
+  </figure>
   <h3 id="residual-scale">Residual width and expanded training data</h3>
   <p class="col">The v10 study compares the spiking decoder with full attention at 14.07M and 25.79M parameters. All four size-matched models receive the same enwik8, C4 and PG-19 training windows. An enwik8-only continuation provides the corpus control at 25.79M. The SNN uses 28,584 bytes of persistent state per stream at both widths.</p>
   <figure>
@@ -116,7 +138,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_residual_scale_early_context.png"><img src="../results/figures/event_lm_residual_scale_early_context.png" alt="Change in the SNN-to-Transformer enwik8 loss gap during the first 32 predictions" loading="lazy"></a>
   </figure>
-  <figure id="byte-transfer">
+  <figure id="byte-transfer-v10">
     <a href="../results/figures/event_lm_byte_transfer_residual_scale_131072k.png"><img src="../results/figures/event_lm_byte_transfer_residual_scale_131072k.png" alt="Relative loss on the fixed byte corpora and LAMBADA word accuracy for the matched width study" loading="lazy"></a>
     <figcaption>Every model scores the same windows and word targets. <a href="RESIDUAL_SCALE.md">Width study and corpus preparation</a> · <a href="BYTE_TRANSFER.md">Scoring and overlap audit</a></figcaption>
   </figure>
@@ -219,7 +241,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v10/README.md">Model and architecture</a> · <a href="V10_HANDOFF.md">Training handoff</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v11/README.md">Model and architecture</a> · <a href="V11_HANDOFF.md">Training handoff</a></p>
 </section>
 
 <section id="dendrite">

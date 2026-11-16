@@ -28,6 +28,7 @@ from train_lm import load_splits, random_batch
 def measure(model, tokens, device, *, profile_coincidence, prior_depth=None):
     native = model.to_integer()
     emissions, memory_emissions, selected_fractions, added_inhibition, tap_releases = [], [], [], [], []
+    forecast_pulses = []
 
     def count_emissions(_module, _inputs, counts):
         emissions.append(counts.abs().sum(dtype=torch.int64).item())
@@ -49,6 +50,9 @@ def measure(model, tokens, device, *, profile_coincidence, prior_depth=None):
 
         handles.extend(block.activity_inhibition.register_forward_hook(count_added_inhibition)
                        for block in native.blocks[prior_depth:] if block.activity_inhibition is not None)
+    if native.cfg.clock_start is not None:
+        handles.append(native.forecast_emit.register_forward_hook(
+            lambda _module, _inputs, counts: forecast_pulses.append(counts.abs().sum(dtype=torch.int64).item())))
     if native.cfg.trace_tap_read is not None:
         def count_tap_releases(_module, _inputs, output):
             tap_releases.append(output[2].ge(0).sum(dtype=torch.int64).item())
@@ -86,6 +90,8 @@ def measure(model, tokens, device, *, profile_coincidence, prior_depth=None):
         metrics["added_inhibition_pulses_by_block"] = added_inhibition
     if tap_releases:
         metrics["tap_release_pulses_by_block"] = tap_releases
+    if forecast_pulses:
+        metrics["forecast_pulses"] = sum(forecast_pulses)
     return counts, metrics
 
 
@@ -123,12 +129,17 @@ def main():
     parser.add_argument("--steering-transfer", choices=("present", "delayed"),
                         help="add silent transfers alone or while widening the expansion")
     parser.add_argument("--trace-coincidence", action="store_true")
+    parser.add_argument("--clock-start", type=int, help="with --depth: run the blocks from this index on clock ticks")
+    parser.add_argument("--clock-threshold", type=int, default=0, help="forecast error spikes or bytes per tick")
+    parser.add_argument("--clock-source", choices=("surprise", "periodic"), default="surprise")
     parser.add_argument("--json", required=True, type=Path)
     args = parser.parse_args()
     if args.compact_trace_state and args.hidden is None:
         parser.error("--compact-trace-state in this audit accompanies --hidden")
     if args.delay_group_widths is not None and args.hidden is None:
         parser.error("--delay-group-widths in this audit accompanies --hidden")
+    if args.clock_start is not None and args.depth is None:
+        parser.error("the clock in this audit accompanies --depth")
     if args.inhibition_threshold_bits is not None and not args.learn_inhibition_thresholds:
         parser.error("threshold precision requires --learn-inhibition-thresholds")
     if args.trace_read_drive is None and (args.trace_read_drive_carry or args.trace_read_share_steering
@@ -179,7 +190,8 @@ def main():
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False, preserve_router_charge=True)
     elif args.depth is not None:
         start = prior.residual_correction_start if prior.residual_correction_start is not None else prior.depth
-        cfg = replace(prior, depth=args.depth, residual_correction_start=start)
+        cfg = replace(prior, depth=args.depth, residual_correction_start=start, clock_start=args.clock_start,
+                      clock_threshold=args.clock_threshold, clock_source=args.clock_source)
         grown = EventLM(cfg)
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False, grow_depth=True)
     elif args.hidden is None:
@@ -201,7 +213,9 @@ def main():
                                           prior_depth=prior.depth if args.depth is not None else None)
     torch.testing.assert_close(parent_counts, grown_counts, rtol=0, atol=0)
     pulse_delta = grown_metrics["total_pulses"] - parent_metrics["total_pulses"]
-    known_pulses = sum(grown_metrics.get("added_inhibition_pulses_by_block", []))
+    # Added blocks emit inhibition only. A clocked growth also adds its forecast neurons' spikes.
+    known_pulses = (sum(grown_metrics.get("added_inhibition_pulses_by_block", []))
+                    + grown_metrics.get("forecast_pulses", 0))
     if args.trace_tap_read is not None:
         known_pulses += sum(grown_metrics["tap_release_pulses_by_block"])
     if pulse_delta != known_pulses:

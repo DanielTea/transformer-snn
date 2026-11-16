@@ -26,6 +26,8 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         trace-arrival-control trace-arrival-selected trace-arrival-unmatched trace-arrival-transformer" >&2
   echo "         residual-scale-snn residual-scale-wide-snn residual-scale-enwik8-snn" >&2
   echo "         residual-scale-transformer residual-scale-wide-transformer" >&2
+  echo "         surprise-clock-control surprise-clock-depth surprise-clock-clock surprise-clock-stride" >&2
+  echo "         surprise-clock-transformer surprise-clock-control-transformer" >&2
   exit 2
 fi
 
@@ -297,6 +299,34 @@ case "$study" in
     fi
     name="${study#residual-scale-}_s9631"
     ;;
+  surprise-clock-control|surprise-clock-depth|surprise-clock-clock|surprise-clock-stride)
+    training+=("${spiking[@]}" --dim 1408 --depth 11 --hidden 243 --router-charge-bits 8
+      --residual-correction-start 7 --compact-trace-state --delay-group-widths 75,75,47,46
+      --trace-arrival selected --trace-arrival-groups 2
+      --initialize-from checkpoints/residual-scale-study/wide-snn_s9631.pt)
+    arm=${study#surprise-clock-}
+    # Four added blocks follow block 11. The forecast neurons read the stream that enters them.
+    case "$arm" in
+      depth) training+=(--depth 15 --grow-depth --early-readout 11) ;;
+      clock) training+=(--depth 15 --grow-depth --clock-start 11 --clock-threshold 35) ;;
+      stride) training+=(--depth 15 --grow-depth --clock-start 11 --clock-source periodic --clock-threshold 5) ;;
+    esac
+    if [[ $arm != control ]]; then
+      training+=(--early-readout-weight 0.25)
+    fi
+    name="${arm}_s10007"
+    ;;
+  surprise-clock-transformer|surprise-clock-control-transformer)
+    training+=(--variant transformer --dim 256 --depth 6 --heads 4
+      --initialize-from checkpoints/residual-scale-study/wide-transformer_s9631.pt)
+    if [[ $study == surprise-clock-transformer ]]; then
+      training+=(--mlp-ratio 42.216796875 --grow-feed-forward)
+      name=transformer_s10007
+    else
+      training+=(--mlp-ratio 30.703125)
+      name=control-transformer_s10007
+    fi
+    ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
       --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
@@ -369,6 +399,10 @@ elif [[ $study == residual-scale-* ]]; then
   if [[ $study != residual-scale-enwik8-snn ]]; then
     training+=(--training-mixture "${SNN_TRAINING_MIXTURE:-data/training-v1/prepared/catalogue.json}")
   fi
+elif [[ $study == surprise-clock-* ]]; then
+  training+=(--steps "${SNN_STEPS:-2400}" --warmup 96 --lr 0.00012 --seed 10007 --eval-every 240
+    --tag "${study//-/_}"
+    --training-mixture "${SNN_TRAINING_MIXTURE:-data/training-v1/prepared/catalogue.json}")
 elif [[ $study == residual-growth-control-transformer ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
     --tag scale_6510k_residual_transformer_control)
@@ -440,6 +474,7 @@ if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == 
       ($study == trace-read-* && $study != *transformer) ||
       ($study == trace-arrival-* && $study != *transformer) ||
       ($study == residual-scale-* && $study != *transformer) ||
+      ($study == surprise-clock-* && $study != *transformer) ||
       ($study == packed-width-* && $study != *transformer) ]]; then
   run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
     --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"

@@ -61,6 +61,9 @@ ARRIVAL_TRANSFER = "event_lm/byte_transfer/trace_arrival_s9349.json"
 RESIDUAL_SCALE = "event_lm/residual_scale"
 RESIDUAL_SCALE_GROUP = "residual_scale_131072k"
 RESIDUAL_SCALE_CHECKPOINTS = "event_lm/residual_scale_checkpoints.sha256"
+SURPRISE_CLOCK = "event_lm/surprise_clock"
+SURPRISE_CLOCK_GROUP = "surprise_clock_140902k"
+SURPRISE_CLOCK_CHECKPOINTS = "event_lm/surprise_clock_checkpoints.sha256"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -190,6 +193,21 @@ RESIDUAL_SCALE_ARMS = (
      f"{RESIDUAL_SCALE}/native_enwik8-snn_s9631.json", "#187b62"),
     ("14.07M full attention", RESIDUAL_SCALE, "transformer_s9631", None, GRAY),
     ("25.79M full attention", RESIDUAL_SCALE, "wide-transformer_s9631", None, ORANGE),
+)
+SURPRISE_CLOCK_ARMS = (
+    ("25.79M SNN", SURPRISE_CLOCK, "control_s10007", f"{SURPRISE_CLOCK}/native_control_s10007.json", BLUE),
+    ("25.79M SNN with fast synapses", SURPRISE_CLOCK, "control-synapses_s10007",
+     f"{SURPRISE_CLOCK}/native_control-synapses_s10007.json", "#187b62"),
+    ("34.85M SNN, every byte", SURPRISE_CLOCK, "depth_s10007", f"{SURPRISE_CLOCK}/native_depth_s10007.json",
+     "#7a6a50"),
+    ("34.85M SNN, fixed stride", SURPRISE_CLOCK, "stride_s10007", f"{SURPRISE_CLOCK}/native_stride_s10007.json",
+     "#9a6fb0"),
+    ("34.85M SNN, surprise clock", SURPRISE_CLOCK, "clock_s10007", f"{SURPRISE_CLOCK}/native_clock_s10007.json",
+     VIOLET),
+    ("34.85M SNN, surprise clock and fast synapses", SURPRISE_CLOCK, "clock-synapses_s10007",
+     f"{SURPRISE_CLOCK}/native_clock-synapses_s10007.json", "#c2410c"),
+    ("25.79M full attention", SURPRISE_CLOCK, "control-transformer_s10007", None, GRAY),
+    ("34.85M full attention", SURPRISE_CLOCK, "transformer_s10007", None, ORANGE),
 )
 TRACE_READ_DRIVE_116326K = (
     ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
@@ -387,6 +405,17 @@ def width_gap_by_prefix_age(narrow, wide, narrow_full, wide_full):
 
 def build_research():
     groups = {}
+    if (RESULTS / SURPRISE_CLOCK_CHECKPOINTS).is_file():
+        rows = read_comparison(SURPRISE_CLOCK_ARMS, seed=10007, context=512, exposure=(131_072_000, 9_830_400))
+        if [row["parameters"] for row in rows] != [25_788_928, 25_788_928, 34_845_184, 34_845_184, 34_845_184,
+                                                   34_845_184, 25_790_976, 34_845_696]:
+            raise ValueError("the surprise study must use its eight audited sizes")
+        groups[SURPRISE_CLOCK_GROUP] = {
+            "title": "Surprise clock and fast synapses", "seeds": [10007], "rows": rows,
+            "training_context_bytes": 512, "training_summary": "140,902,400 training targets · seed 10007",
+            "parent_training_targets": 131_072_000, "additional_training_targets": 9_830_400,
+            "transfer_record": f"event_lm/byte_transfer/{SURPRISE_CLOCK_GROUP}.json",
+        }
     if (RESULTS / RESIDUAL_SCALE_CHECKPOINTS).is_file():
         rows = read_comparison(RESIDUAL_SCALE_ARMS, seed=9631, context=512, exposure=(121_241_600, 9_830_400))
         mixture = residual_scale_mixture(RESULTS / row["training_record"] for row in rows)
@@ -551,6 +580,18 @@ def write_leaderboards(data, depth, research, transfers):
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
     ]
     study_figures = {
+        SURPRISE_CLOCK_GROUP: (
+            "![Held-out loss with the surprise clock and fast synapses](../results/figures/event_lm_surprise_clock.png)",
+            "![Where surprise falls inside words and where the trained clock ticks]"
+            "(../results/figures/event_lm_surprise_words.png)",
+            "![Held-out gain of the fast synapses by state and write rule]"
+            "(../results/figures/event_lm_fast_synapse_sweep.png)",
+            "![enwik8 loss by distance to the previous occurrence of the context]"
+            "(../results/figures/event_lm_surprise_prefix_age.png)",
+            "![Gap to the size-matched Transformer by bytes seen since a reset]"
+            "(../results/figures/event_lm_surprise_history_gap.png)",
+            "[Surprise measurements, circuits, controls and replay](SURPRISE_CLOCK.md)",
+        ),
         RESIDUAL_SCALE_GROUP: (
             "![Held-out loss at both residual widths](../results/figures/event_lm_residual_scale.png)",
             "![Change in the enwik8 gap during the first 32 predictions]"
@@ -604,6 +645,11 @@ def write_leaderboards(data, depth, research, transfers):
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
         paragraphs.extend(study_figures.get(name, ()))
+        if name == SURPRISE_CLOCK_GROUP:
+            paragraphs.append(
+                "Fast synapses carry one stream of any length. Full attention rows read 512 bytes. "
+                "The synapse strengths are fitted on enwik8 validation and no row trains on test text."
+            )
         if name == RESIDUAL_SCALE_GROUP:
             gap = group["enwik8_width_gap"]
             paragraphs.extend([
@@ -671,7 +717,9 @@ def write_leaderboards(data, depth, research, transfers):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    latest_group = research["groups"].get(RESIDUAL_SCALE_GROUP, research["groups"][ARRIVAL_GROUP])
+    latest_group = research["groups"].get(
+        SURPRISE_CLOCK_GROUP, research["groups"].get(RESIDUAL_SCALE_GROUP, research["groups"][ARRIVAL_GROUP]),
+    )
     table = markdown_table(latest_group["rows"],
                            include_ranks=False, include_raw_pg19=True)
     readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
@@ -1243,6 +1291,15 @@ def main():
     plot_arrival_early_context(early, run_labels, output)
     if scale:
         plot_residual_scale(scale, scale_early, output)
+    surprise = research["groups"].get(SURPRISE_CLOCK_GROUP)
+    if surprise:
+        from plot_surprise_clock import plot_surprise_study
+
+        plot_heldout(surprise["rows"], output, title="Surprise clock and fast synapses",
+                     subtitle="140.90M training targets · identical windows · seed 10007",
+                     filename="event_lm_surprise_clock.png", precision=5,
+                     height=4.7 + 0.32 * (len(surprise["rows"]) - 4))
+        plot_surprise_study(surprise, output)
     for transfer, labels, filename in transfers.values():
         plot_transfer(transfer, labels, output, filename)
     packed_rows = research["groups"]["packed_width_111411k"]["rows"]

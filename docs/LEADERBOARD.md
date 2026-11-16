@@ -4,6 +4,78 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## Surprise clock and fast synapses · 140,902,400 training targets · seed 10007
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 25.79M SNN | 25,788,928 | 28,584 B | 1.78973 | 8 | 1.97852 | 8 | 1.97852 | 313,700 |
+| 25.79M SNN with fast synapses | 25,788,928 | 53,432 B | 1.64541 | 2 | 1.93961 | 4 | 1.93961 | 321,971 |
+| 34.85M SNN, every byte | 34,845,184 | 40,714 B | 1.78633 | 5 | 1.96913 | 6 | 1.96913 | 306,647 |
+| 34.85M SNN, fixed stride | 34,845,184 | 43,796 B | 1.78761 | 6 | 1.96842 | 5 | 1.96842 | 312,966 |
+| 34.85M SNN, surprise clock | 34,845,184 | 43,796 B | 1.78973 | 7 | 1.97528 | 7 | 1.97528 | 314,668 |
+| 34.85M SNN, surprise clock and fast synapses | 34,845,184 | 68,388 B | **1.64278** | 1 | **1.93610** | 1 | **1.93610** | 314,852 |
+| 25.79M full attention | 25,790,976 | 6 MiB | 1.70433 | 4 | 1.93711 | 3 | 1.93711 | — |
+| 34.85M full attention | 34,845,696 | 6 MiB | 1.70426 | 3 | 1.93678 | 2 | 1.93678 | — |
+
+![Held-out loss with the surprise clock and fast synapses](../results/figures/event_lm_surprise_clock.png)
+
+![Where surprise falls inside words and where the trained clock ticks](../results/figures/event_lm_surprise_words.png)
+
+![Held-out gain of the fast synapses by state and write rule](../results/figures/event_lm_fast_synapse_sweep.png)
+
+![enwik8 loss by distance to the previous occurrence of the context](../results/figures/event_lm_surprise_prefix_age.png)
+
+![Gap to the size-matched Transformer by bytes seen since a reset](../results/figures/event_lm_surprise_history_gap.png)
+
+[Surprise measurements, circuits, controls and replay](SURPRISE_CLOCK.md)
+
+Fast synapses carry one stream of any length. Full attention rows read 512 bytes. The synapse strengths are fitted on enwik8 validation and no row trains on test text.
+
+### Byte transfer at the same training exposure
+
+Raw corpus loss in bits per byte uses identical 512-byte windows.
+
+| Model | WikiText-103 | C4 | enwik9 | text8 |
+|---|---:|---:|---:|---:|
+| 34.85M full attention | 2.28963 | 2.00954 | 1.67524 | 2.10989 |
+| 25.79M full attention | 2.28971 | 2.00978 | 1.67531 | 2.10996 |
+| 25.79M SNN | 2.30999 | 2.03742 | 1.77154 | 2.13618 |
+| 34.85M SNN, every byte | 2.30601 | 2.03239 | 1.76726 | 2.13582 |
+| 34.85M SNN, fixed stride | 2.30950 | 2.03350 | 1.76755 | 2.13497 |
+| 34.85M SNN, surprise clock | 2.31033 | 2.03587 | 1.76867 | 2.13854 |
+| 25.79M SNN with fast synapses | 2.21540 | 1.94965 | 1.69739 | 2.01978 |
+| 34.85M SNN, surprise clock and fast synapses | 2.21538 | 1.94873 | 1.69564 | 2.02194 |
+
+Wikipedia windows with zero hits under the training-overlap screen.
+
+| Model | WikiText-103 | enwik9 | text8 |
+|---|---:|---:|---:|
+| 34.85M full attention | 2.28986 | 1.73887 | 2.11034 |
+| 25.79M full attention | 2.28995 | 1.73894 | 2.11041 |
+| 25.79M SNN | 2.31023 | 1.83336 | 2.13684 |
+| 34.85M SNN, every byte | 2.30626 | 1.82944 | 2.13643 |
+| 34.85M SNN, fixed stride | 2.30972 | 1.82958 | 2.13561 |
+| 34.85M SNN, surprise clock | 2.31055 | 1.83077 | 2.13915 |
+| 25.79M SNN with fast synapses | 2.21558 | 1.75790 | 2.02020 |
+| 34.85M SNN, surprise clock and fast synapses | 2.21555 | 1.75661 | 2.02226 |
+
+LAMBADA scores the same final words under both conditioning lengths. Exact match requires a word boundary. The gold-length columns score predictions through the last answer byte.
+
+| Model | Passage bpb | Last sentence bpb | Passage exact | Last sentence exact | Passage at gold length | Last sentence at gold length |
+|---|---:|---:|---:|---:|---:|---:|
+| 34.85M full attention | 3.30493 | 3.37476 | 0.02% | 0.00% | 0.02% | 0.00% |
+| 25.79M full attention | 3.30510 | 3.37480 | 0.02% | 0.00% | 0.02% | 0.00% |
+| 25.79M SNN | 3.44139 | 3.44977 | 0.00% | 0.00% | 0.00% | 0.00% |
+| 34.85M SNN, every byte | 3.44382 | 3.45402 | 0.00% | 0.00% | 0.00% | 0.00% |
+| 34.85M SNN, fixed stride | 3.43027 | 3.44224 | 0.00% | 0.00% | 0.00% | 0.00% |
+| 34.85M SNN, surprise clock | 3.43838 | 3.45019 | 0.00% | 0.00% | 0.00% | 0.00% |
+| 25.79M SNN with fast synapses | 2.62609 | 3.38565 | 3.38% | 0.37% | 3.71% | 0.39% |
+| 34.85M SNN, surprise clock and fast synapses | 2.62199 | 3.38665 | 3.32% | 0.41% | 3.51% | 0.43% |
+
+![Transfer loss and LAMBADA final-word accuracy](../results/figures/event_lm_byte_transfer_surprise_clock_140902k.png)
+
+[Protocol, provenance, and overlap counts](BYTE_TRANSFER.md) · [Exact score records](../results/event_lm/byte_transfer/surprise_clock_140902k.json)
+
 ## Residual width on expanded training data · 131,072,000 training targets · seed 9631
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |

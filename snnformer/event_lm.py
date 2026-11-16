@@ -10,6 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from .fast_synapses import FastSynapses, SynapseState
 from .correction_memory import (
     CorrectionState, _scan_charge, _scan_translated_charge, correction_reads, correction_step, interval_spikes,
 )
@@ -40,6 +41,7 @@ _STEERED_ROUTES = (
 )
 _TRACE_READ_DRIVE_SOURCES = ("write", "present", "write-rails", "present-rails")
 _TRACE_ARRIVAL_MODES = ("selected", "unmatched")
+_CLOCK_SOURCES = ("surprise", "periodic")
 
 
 def _delay_group_widths(channels, groups):
@@ -105,6 +107,15 @@ class EventLMConfig:
     trace_read_share_steering: bool = False
     trace_arrival: str | None = None
     trace_arrival_groups: int = 2
+    clock_start: int | None = None
+    clock_threshold: int = 0
+    clock_leak: int = 0
+    clock_source: str = "surprise"
+    synapse_orders: tuple[int, ...] | None = None
+    synapse_groups: int = 4
+    synapse_cells: int = 4096
+    synapse_levels: int = 4
+    synapse_gate: int = 1
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -567,6 +578,8 @@ class _CorrectionAccess:
     shuffle_keys: bool = False
     local_layers: list[_DelayState] | None = None
     local_position: int = 0
+    clock: ClockState | None = None
+    synapses: SynapseState | None = None
 
 
 class _SpikeCorrection(nn.Module):
@@ -1115,6 +1128,85 @@ class _SteeringTransfer(nn.Module):
         return steering.index_add(-1, self.paired_channels, adjustment)
 
 
+_LOCAL_STATE_FIELDS = ("history", "relay_phase", "steering_phase", "output_phase", "trace_charge",
+                       "trace_read_phase")
+
+
+def _state_rows(state, rows):
+    """The local state of a subset of streams."""
+    return _DelayState(**{name: None if getattr(state, name) is None else getattr(state, name)[rows]
+                          for name in _LOCAL_STATE_FIELDS})
+
+
+def _join_state_rows(state, parts):
+    """Stack per-stream states. A stream without events keeps resting state."""
+    for name in _LOCAL_STATE_FIELDS:
+        values = [getattr(part, name) for part in parts]
+        present = next((value for value in values if value is not None), None)
+        if present is not None:
+            setattr(state, name, torch.cat([torch.zeros_like(present) if value is None else value
+                                            for value in values]))
+
+
+def _write_state_rows(state, rows, part, batch):
+    for name in _LOCAL_STATE_FIELDS:
+        value = getattr(part, name)
+        if value is None:
+            continue
+        whole = getattr(state, name)
+        if whole is None:
+            whole = value.new_zeros((batch, *value.shape[1:]))
+            setattr(state, name, whole)
+        whole[rows] = value
+
+
+@dataclass
+class ClockState:
+    """What the surprise clock carries from one byte to the next."""
+
+    membrane: torch.Tensor
+    forecast: torch.Tensor | None
+    held: torch.Tensor
+    events: torch.Tensor
+
+
+def _unmatched_winner_spikes(counts, tokens, previous=None):
+    """Surprise at each arriving byte, in forecast spikes.
+
+    The forecast neurons fired before the byte arrived. The winner's spikes
+    that the arriving byte's own neuron did not match are the error spikes.
+    """
+    first = counts[:, :1] if previous is None else previous[:, None].to(counts.device, counts.dtype)
+    forecast = torch.cat((first, counts[:, :-1]), dim=1)
+    surprise = forecast.amax(-1) - forecast.gather(-1, tokens.unsqueeze(-1)).squeeze(-1)
+    if previous is None:
+        surprise[:, 0] = 0
+    return surprise
+
+
+def _clock_ticks(surprise, threshold, leak, membrane=None):
+    """One integrate-and-fire neuron per stream with subtractive reset.
+
+    The input saturates at one threshold and the leak holds the membrane at
+    or above rest, so the membrane ends every byte inside [0, threshold) and
+    the neuron fires at most once per byte.
+    """
+    rows = surprise.clamp(max=threshold).tolist()
+    start = [0] * len(rows) if membrane is None else membrane.tolist()
+    ticks, final = [], []
+    for row, charge in zip(rows, start, strict=True):
+        fired = []
+        for value in row:
+            charge = max(charge + value - leak, 0)
+            spike = charge >= threshold
+            if spike:
+                charge -= threshold
+            fired.append(spike)
+        ticks.append(fired)
+        final.append(charge)
+    return torch.tensor(ticks, dtype=torch.bool), torch.tensor(final, dtype=torch.int32)
+
+
 class _DelayBlock(nn.Module):
     def __init__(self, cfg: EventLMConfig, depth: int):
         super().__init__()
@@ -1594,6 +1686,8 @@ class EventLMState:
     previous_bytes: torch.Tensor | None = None
     position: int = 0
     prediction_memory: CorrectionState | None = None
+    clock: ClockState | None = None
+    synapses: SynapseState | None = None
 
 
 @dataclass
@@ -1602,6 +1696,8 @@ class EventChunkState:
     correction: CorrectionState | None
     local_layers: list[_DelayState] | None = None
     position: int = 0
+    clock: ClockState | None = None
+    synapses: SynapseState | None = None
 
 
 class EventLM(nn.Module):
@@ -1738,6 +1834,25 @@ class EventLM(nn.Module):
                 raise ValueError("activity inhibition needs a reset-per-byte router with a fixed threshold floor")
             if cfg.dim * _HIDDEN_CAP * cfg.resolution >= _FP32_EXACT:
                 raise ValueError("the inhibition pool would exceed the exact FP32 integer range")
+        if cfg.clock_start is None:
+            if cfg.clock_threshold or cfg.clock_leak or cfg.clock_source != "surprise":
+                raise ValueError("clock settings need a first clocked block")
+        else:
+            if (cfg.carry or cfg.continuous or not cfg.local_trace
+                    or cfg.route not in ("steered", "steered_correction_code")):
+                raise ValueError("a surprise clock needs reset-per-byte routing with chunkable held charge")
+            if not isinstance(cfg.clock_start, int) or not 0 < cfg.clock_start < cfg.depth:
+                raise ValueError("the clock needs byte-rate blocks below it and at least one clocked block")
+            if cfg.clock_source not in _CLOCK_SOURCES:
+                raise ValueError("the clock integrates surprise or a constant drive")
+            if (not isinstance(cfg.clock_threshold, int) or not isinstance(cfg.clock_leak, int)
+                    or not 0 <= cfg.clock_leak < cfg.clock_threshold
+                    or cfg.clock_threshold > torch.iinfo(torch.int16).max):
+                raise ValueError("the clock needs a positive threshold above a nonnegative leak")
+            if cfg.clock_source == "periodic" and cfg.clock_leak:
+                raise ValueError("a periodic clock has no leak")
+            if cfg.output_reference:
+                raise ValueError("the clock's forecast population has no shared output reference")
         output_bits = 3
         output_cap = _OUTPUT_CAP * cfg.resolution
         if cfg.output_reference:
@@ -1782,6 +1897,9 @@ class EventLM(nn.Module):
             raise ValueError("synaptic accumulator would exceed the int32 integer range")
         self._check_weights = not cfg.continuous and max_drive >= _FP32_EXACT
         self.cfg = cfg
+        # Probes can mute the clocked correction or displace its ticks at fixed weights.
+        self.clock_intervention = None
+        self.clock_trace = None
         self.input = _Synapse(_VOCAB, cfg.dim, gain=0.9, byte_input=True, continuous=cfg.continuous)
         taps = 2 if cfg.route == "convergent" else 0
         self.delayed_input = nn.ModuleList(_Synapse(_VOCAB, cfg.dim, gain=0.5, byte_input=True) for _ in range(taps))
@@ -1790,6 +1908,18 @@ class EventLM(nn.Module):
         self.local_history = len(self.delayed_input) + sum(block.history_size for block in self.blocks)
         self.output = _Synapse(cfg.dim, _VOCAB, gain=0.8, continuous=cfg.continuous)
         self.output_emit = _IntegrateFire(output_cap, output_bits, cfg.carry, continuous=cfg.continuous)
+        # A second vocabulary population reads the byte-rate stream through the same
+        # synapses. Its higher threshold removes the finer spike resolution.
+        coarse = cfg.resolution.bit_length() - 1
+        self.forecast_resolution = cfg.resolution / (1 << coarse)
+        forecast_cap = min(-(-output_cap >> coarse), torch.iinfo(torch.int8).max)
+        self.forecast_emit = _IntegrateFire(forecast_cap, output_bits + coarse, False)
+        self.fast_synapses = None
+        if cfg.synapse_orders is not None:
+            if cfg.carry or cfg.continuous or not cfg.local_trace or cfg.output_reference:
+                raise ValueError("fast synapses need reset-per-byte routing with chunkable held charge")
+            self.fast_synapses = FastSynapses(cfg.synapse_orders, cfg.synapse_groups, cfg.synapse_cells,
+                                              cfg.synapse_levels, cfg.synapse_gate)
         self.output_reference = None
         if cfg.output_reference:
             self.output_reference = _IntegrateFire(output_cap, output_bits + _VOCAB.bit_length() - 1, False)
@@ -1876,8 +2006,107 @@ class EventLM(nn.Module):
         if not torch.stack(bounds).amax().item() <= limit:
             raise ValueError("quantized weights exceed the exact FP32 accumulator range at this spike resolution")
 
+    def _forecast_counts(self, spikes):
+        return self.forecast_emit(self.output(spikes))
+
+    def _surprise(self, forecast, tokens, access):
+        """Error spikes at each arriving byte: the winner's forecast spikes its own neuron did not match."""
+        previous = None
+        if access is not None and access.local_layers is not None:
+            if self.cfg.clock_start is not None:
+                previous = None if access.clock is None else access.clock.forecast
+            elif access.synapses is not None:
+                previous = access.synapses.forecast
+        with torch.no_grad():
+            return _unmatched_winner_spikes(forecast.detach(), tokens, previous).to("cpu", torch.int64)
+
+    def _add_recall_spikes(self, counts, votes, levels):
+        """Count each recall neuron's spikes together with its vocabulary neuron's spikes.
+
+        The recall neurons are a population of their own, so the vocabulary
+        neurons' spike limit does not clip the sum.
+        """
+        if self.fast_synapses.muted:
+            return counts
+        return counts + self.fast_synapses.excitation(votes, levels).to(counts.device, counts.dtype)
+
+    def _excite_vocabulary(self, counts, tokens, surprise, forecast, access):
+        """Move the fast synapses on error spikes and let the agreeing ones fire the recall neurons."""
+        carried = access is not None and access.local_layers is not None
+        votes, levels, state = self.fast_synapses(tokens, surprise, access.synapses if carried else None, carry=carried)
+        if carried:
+            if self.cfg.clock_start is None:
+                state.forecast = forecast[:, -1].detach().to("cpu", _spike_storage_dtype(self.forecast_emit.cap))
+            access.synapses = state
+        return self._add_recall_spikes(counts, votes, levels)
+
+    def _event_level(self, blocks, packed, lengths, layers, pulse_counts):
+        if layers is None or packed.shape[0] == 1 or bool((lengths == lengths[0]).all()):
+            # Padding follows every stream's last event and causal blocks never read it.
+            for index, block in enumerate(blocks):
+                packed = block(packed, pulse_counts=pulse_counts,
+                               local_state=None if layers is None else layers[index])
+            return packed
+        # Carried delay lines and held charge stop at each stream's own last event.
+        emitted = torch.zeros_like(packed)
+        parts = [[] for _ in blocks]
+        for row, length in enumerate(lengths.tolist()):
+            states = [_state_rows(layer, slice(row, row + 1)) for layer in layers]
+            if length:
+                spikes = packed[row:row + 1, :length]
+                for block, state in zip(blocks, states, strict=True):
+                    spikes = block(spikes, pulse_counts=pulse_counts, local_state=state)
+                emitted[row, :length] = spikes[0]
+            for part, state in zip(parts, states, strict=True):
+                part.append(state)
+        for layer, part in zip(layers, parts, strict=True):
+            _join_state_rows(layer, part)
+        return emitted
+
+    def _clocked_blocks(self, spikes, tokens, forecast, surprise, access, pulse_counts):
+        """Advance the upper blocks only on bytes where the clock neuron fires.
+
+        Their delays and held charge count events. The correction they
+        add to the stream is held until the next event.
+        """
+        cfg = self.cfg
+        carried = access is not None and access.local_layers is not None
+        clock = access.clock if carried else None
+        layers = access.local_layers[cfg.clock_start:] if carried else None
+        with torch.no_grad():
+            drive = torch.ones(tokens.shape, dtype=torch.int64) if cfg.clock_source == "periodic" else surprise
+            ticks, membrane = _clock_ticks(drive, cfg.clock_threshold, cfg.clock_leak,
+                                           None if clock is None else clock.membrane)
+            if self.clock_intervention == "shuffle":
+                ticks = ticks.roll(tokens.shape[1] // 2, dims=1)
+            if self.clock_trace is not None:
+                self.clock_trace.append(ticks.clone())
+            ticks = ticks.to(spikes.device)
+            slot = ticks.cumsum(1)
+            lengths = slot[:, -1]
+        batch, _, dim = spikes.shape
+        held = spikes.new_zeros(batch, dim) if clock is None else clock.held.to(spikes.dtype)
+        table = held[:, None]
+        longest = int(lengths.max())
+        if longest:
+            rows, steps = ticks.nonzero(as_tuple=True)
+            packed = spikes.new_zeros(batch, longest, dim)
+            packed[rows, slot[rows, steps] - 1] = spikes[rows, steps]
+            emitted = self._event_level(self.blocks[cfg.clock_start:], packed, lengths, layers, pulse_counts)
+            table = torch.cat((table, emitted - packed), dim=1)
+        correction = table.gather(1, slot.unsqueeze(-1).expand(-1, -1, dim))
+        if carried:
+            events = lengths.cpu() if clock is None else clock.events + lengths.cpu()
+            access.clock = ClockState(membrane, forecast[:, -1].detach().clone(),
+                                      correction[:, -1].detach().clone(), events)
+        if self.clock_intervention == "mute":
+            return spikes
+        cap = self.input_emit.cap
+        return (spikes + correction).clamp(-cap, cap)
+
     def forward(self, tokens, *, delay_limit=None, shuffle_phase=False, correction_access=None,
-                return_prediction=False, corrected_prediction=False, memory_pulses=None, bank_read_losses=None):
+                return_prediction=False, corrected_prediction=False, memory_pulses=None, bank_read_losses=None,
+                early_readout=None):
         if tokens.ndim != 2 or tokens.shape[1] == 0:
             raise ValueError("expected a nonempty [batch, bytes] tensor")
         if delay_limit is not None and (delay_limit < 1 or self.cfg.route not in _DELAY_ROUTES):
@@ -1902,10 +2131,28 @@ class EventLM(nn.Module):
         observed = self.input_emit(drive * self.cfg.resolution)
         spikes = observed
         local_layers = None if correction_access is None else correction_access.local_layers
+        clock_start = self.cfg.clock_start
+        # The forecast neurons read the stream under the clock, or the top stream of an unclocked decoder.
+        forecast_tap = clock_start
+        if forecast_tap is None and self.fast_synapses is not None:
+            forecast_tap = len(self.blocks)
+        tap = forecast_tap if early_readout is None else early_readout
+        if tap is not None and (not 0 < tap <= len(self.blocks) or (forecast_tap is not None and tap != forecast_tap)):
+            raise ValueError("the early readout follows a byte-rate block and coincides with the surprise forecast")
+        early = surprise = None
         for index, block in enumerate(self.blocks):
+            if index == tap:
+                early = self._forecast_counts(spikes)
+                surprise = self._surprise(early, tokens, correction_access)
+                if clock_start is not None:
+                    spikes = self._clocked_blocks(spikes, tokens, early, surprise, correction_access, memory_pulses)
+                    break
             spikes = block(spikes, delay_limit=delay_limit, shuffle_phase=shuffle_phase,
                            correction_access=correction_access, pulse_counts=memory_pulses,
                            local_state=None if local_layers is None else local_layers[index])
+        if tap == len(self.blocks):
+            early = self._forecast_counts(spikes)
+            surprise = self._surprise(early, tokens, correction_access)
         if self.prediction_memory is not None:
             prediction = self._prediction_code(spikes)
             recall = self.prediction_memory(
@@ -1915,14 +2162,17 @@ class EventLM(nn.Module):
             spikes = self._apply_recall(spikes, recall)
         current = self.output(spikes)
         counts = self.output_emit(current, reference=self._reference_counts(current))
+        if self.fast_synapses is not None:
+            counts = self._excite_vocabulary(counts, tokens, surprise, early, correction_access)
         if return_prediction:
             if corrected_prediction:
                 # The bank emits corrections in the same signed count units as the forecast.
                 # The tag participates in addressing and carries no correction payload.
                 payload = recall.unflatten(-1, (self.cfg.memory_heads, -1))
                 prediction = prediction + F.pad(payload, (self.cfg.forecast_key_channels, 0))
-            return counts, prediction, self.prediction_memory.observation_code(observed)
-        return counts
+            outputs = (counts, prediction, self.prediction_memory.observation_code(observed))
+            return outputs if early_readout is None else (*outputs, early)
+        return counts if early_readout is None else (counts, early)
 
     def forward_chunk(self, tokens, state=None, *, hide_age=None, stats=None, shuffle_keys=False):
         """Carry the bank and either replay local context or carry the trace and delays.
@@ -1953,9 +2203,11 @@ class EventLM(nn.Module):
                 layers = [copy.copy(layer) for layer in previous]
             position = 0 if state is None else state.position
             access = _CorrectionAccess(correction, 0, hide_age, stats, shuffle_keys, local_layers=layers,
-                                       local_position=position)
+                                       local_position=position, clock=None if state is None else state.clock,
+                                       synapses=None if state is None else state.synapses)
             counts = self(tokens, correction_access=access)
-            return counts, EventChunkState(None, access.state, layers, position + tokens.shape[1])
+            return counts, EventChunkState(None, access.state, layers, position + tokens.shape[1], access.clock,
+                                           access.synapses)
         if state is not None and state.local_prefix is None:
             raise ValueError("chunk state must contain the local byte prefix")
         prefix = 0 if state is None else state.local_prefix.shape[1]
@@ -1969,9 +2221,20 @@ class EventLM(nn.Module):
     def initialize_deeper(self, prior: EventLMConfig, previous: dict[str, torch.Tensor]):
         """Append silent spike branches alongside the existing residual axons."""
         start = prior.residual_correction_start if prior.residual_correction_start is not None else prior.depth
-        expected = replace(prior, depth=self.cfg.depth, residual_correction_start=start)
-        if self.cfg.depth <= prior.depth or expected != self.cfg or prior.route in _CORRECTION_ROUTES:
+        cfg = self.cfg
+        expected = replace(prior, depth=cfg.depth, residual_correction_start=start, clock_start=cfg.clock_start,
+                           clock_threshold=cfg.clock_threshold, clock_leak=cfg.clock_leak,
+                           clock_source=cfg.clock_source, synapse_orders=cfg.synapse_orders,
+                           synapse_groups=cfg.synapse_groups, synapse_cells=cfg.synapse_cells,
+                           synapse_levels=cfg.synapse_levels, synapse_gate=cfg.synapse_gate)
+        if cfg.depth <= prior.depth or expected != cfg or prior.route in _CORRECTION_ROUTES:
             raise ValueError("depth growth needs the same spiking router with added residual correction blocks")
+        if prior.clock_start is not None and (
+            prior.clock_start, prior.clock_threshold, prior.clock_leak, prior.clock_source
+        ) != (cfg.clock_start, cfg.clock_threshold, cfg.clock_leak, cfg.clock_source):
+            raise ValueError("depth growth keeps an existing clock")
+        if prior.clock_start is None and cfg.clock_start is not None and cfg.clock_start < prior.depth:
+            raise ValueError("depth growth can put only the added blocks on the clock")
 
         new_blocks = self.blocks[prior.depth:]
         added = {f"blocks.{index}.{name}" for index, block in enumerate(new_blocks, prior.depth)
@@ -2164,8 +2427,21 @@ class EventLM(nn.Module):
             state.previous_bytes[:, state.position % taps].copy_(tokens)
         observed, state.input_phase = self.input_emit.step(drive * self.cfg.resolution, state.input_phase)
         spikes = observed
-        for block, layer in zip(self.blocks, state.layers):
+        forecast = surprise = None
+        for index, (block, layer) in enumerate(zip(self.blocks, state.layers, strict=True)):
+            if index == self.cfg.clock_start:
+                forecast = self._forecast_counts(spikes)
+                surprise = self._step_surprise(tokens, None if state.clock is None else state.clock.forecast)
+                spikes = self._step_clocked(spikes, tokens, state, forecast, surprise)
+                break
             spikes = block.step(spikes, layer, state.position)
+        if self.fast_synapses is not None:
+            if state.synapses is None:
+                state.synapses = self.fast_synapses.new_state(tokens.shape[0])
+            if self.cfg.clock_start is None:
+                forecast = self._forecast_counts(spikes)
+                surprise = self._step_surprise(tokens, state.synapses.forecast)
+                state.synapses.forecast = forecast.to(_spike_storage_dtype(self.forecast_emit.cap))
         if self.prediction_memory is not None:
             recall, state.prediction_memory = self.prediction_memory.step(
                 spikes, state.prediction_memory, observed=observed, prediction_code=self._prediction_code(spikes),
@@ -2175,8 +2451,51 @@ class EventLM(nn.Module):
         counts, state.output_phase = self.output_emit.step(
             current, state.output_phase, reference=self._reference_counts(current),
         )
+        if self.fast_synapses is not None:
+            votes, levels, state.synapses = self.fast_synapses.step(tokens, surprise, state.synapses)
+            counts = self._add_recall_spikes(counts, votes, levels)
         state.position += 1
         return counts, state
+
+    @staticmethod
+    def _step_surprise(tokens, previous):
+        if previous is None:
+            return torch.zeros(tokens.shape[0], dtype=torch.int32)
+        previous = previous.to(torch.int32)
+        return previous.amax(-1) - previous.gather(-1, tokens.unsqueeze(-1)).squeeze(-1)
+
+    def _step_clocked(self, spikes, tokens, state, forecast, surprise):
+        cfg = self.cfg
+        batch = tokens.shape[0]
+        clock = state.clock
+        if clock is None:
+            clock = state.clock = ClockState(
+                torch.zeros(batch, dtype=torch.int16), None,
+                torch.zeros((batch, cfg.dim), dtype=_spike_storage_dtype(2 * self.input_emit.cap)),
+                torch.zeros(batch, dtype=torch.int64),
+            )
+        drive = torch.ones(batch, dtype=torch.int32) if cfg.clock_source == "periodic" else surprise
+        membrane = (clock.membrane + drive.clamp(max=cfg.clock_threshold) - cfg.clock_leak).clamp_min(0)
+        ticks = membrane >= cfg.clock_threshold
+        clock.membrane = (membrane - cfg.clock_threshold * ticks).to(torch.int16)
+        clock.forecast = forecast.to(_spike_storage_dtype(self.forecast_emit.cap))
+        layers = state.layers[cfg.clock_start:]
+        blocks = self.blocks[cfg.clock_start:]
+        for count in clock.events[ticks].unique().tolist():
+            # Streams at the same event index share the ring position of their delay lines.
+            rows = (ticks & (clock.events == count)).nonzero().squeeze(-1)
+            parts = [_state_rows(layer, rows) for layer in layers]
+            emitted = spikes[rows]
+            for block, part in zip(blocks, parts, strict=True):
+                emitted = block.step(emitted, part, count)
+            clock.held[rows] = (emitted - spikes[rows]).to(clock.held.dtype)
+            for layer, part in zip(layers, parts, strict=True):
+                _write_state_rows(layer, rows, part, batch)
+        clock.events += ticks
+        if self.clock_intervention == "mute":
+            return spikes
+        cap = self.input_emit.cap
+        return (spikes + clock.held).clamp(-cap, cap)
 
     @staticmethod
     def byte(counts):

@@ -1,0 +1,202 @@
+{
+  "release": "spiking-byte-lm-v11",
+  "model": {
+    "file": "weights.pt",
+    "source_checkpoint": "surprise-clock-study/control-synapses_s10007.pt",
+    "sha256": "f12040b0222d4afe9f9afc21813846a90b8567ce2a4e7d96729569fb01afdbba",
+    "architecture": {
+      "dim": 1408,
+      "hidden": 243,
+      "depth": 11,
+      "route": "steered_correction_code",
+      "carry": false,
+      "continuous": false,
+      "memory_heads": 4,
+      "memory_slots": 14,
+      "resolution": 16,
+      "memory_width": 32,
+      "forecast_key_channels": 2,
+      "match_forecast_key": true,
+      "learn_context_keys": true,
+      "learn_packet_thresholds": false,
+      "output_reference": false,
+      "compact_delays": true,
+      "departure_coincidence": false,
+      "delay_window": 1,
+      "delay_residual": false,
+      "router_charge_bits": 8,
+      "activity_inhibition": true,
+      "inhibition_by_expansion": true,
+      "local_trace": true,
+      "trace_write_credit": true,
+      "bank_write_credit": false,
+      "trace_read_veto": false,
+      "delay_filter": false,
+      "opponent_steering": false,
+      "spread_coincidence": false,
+      "residual_membrane": false,
+      "compact_axon_state": true,
+      "tag_phase_address": false,
+      "trace_coincidence_start": null,
+      "trace_write_confirm": false,
+      "steering_gradient_at_zero": false,
+      "redistribute_inhibition": false,
+      "tag_read_competition": false,
+      "late_steering": false,
+      "residual_correction_start": 7,
+      "trace_integration": false,
+      "learn_inhibition_thresholds": false,
+      "inhibition_threshold_bits": 2,
+      "trace_tap_read": null,
+      "compact_trace_state": true,
+      "steering_transfer": null,
+      "delay_group_widths": [
+        75,
+        75,
+        47,
+        46
+      ],
+      "trace_read_drive": null,
+      "trace_read_drive_bits": 6,
+      "trace_read_drive_carry": false,
+      "trace_read_share_steering": false,
+      "trace_arrival": "selected",
+      "trace_arrival_groups": 2,
+      "clock_start": null,
+      "clock_threshold": 0,
+      "clock_leak": 0,
+      "clock_source": "surprise",
+      "synapse_orders": [
+        3,
+        4,
+        6,
+        8,
+        12,
+        16
+      ],
+      "synapse_groups": 4,
+      "synapse_cells": 1024,
+      "synapse_levels": 4,
+      "synapse_gate": 1
+    },
+    "parameters": 25788928,
+    "streaming_tensor_bytes": 53432,
+    "training_targets": 9830400,
+    "seed": 10007,
+    "validation_bpb_before_fast_synapses": 1.8405495476696685,
+    "training_record": "results/event_lm/surprise_clock/event_correction_code_s10007_surprise_clock_control_fast_synapses.json",
+    "cumulative_training_targets": 140902400,
+    "fast_synapses": {
+      "source_checkpoint": "checkpoints/surprise-clock-study/control_s10007.pt",
+      "source_sha256": "33548cf476459d4f377ae34522ac1dc4c697597483216224527ec7c6b9f1deb4",
+      "fit_split": "enwik8 val",
+      "fit_targets": 4999999,
+      "fit_record": "synapses_control_s10007.json"
+    }
+  },
+  "archive": {
+    "file": "spiking-byte-lm-v11-checkpoints.tar.gz",
+    "sha256": "f8c08eb6d27a83a4a40d2cd9940969848c1e19ee554907e53de191131f3a7cff",
+    "bytes": 1126514130,
+    "contents_checksums": "checkpoints/SHA256SUMS-v11"
+  },
+  "checkpoints": {
+    "residual-scale-study/wide-snn_s9631.pt": {
+      "bytes": 103171057,
+      "sha256": "dbd46b94f28d72dff163d35826761b5d40529821529f2f9407ec45ee3f283158",
+      "training_record": "results/event_lm/residual_scale/event_correction_code_s9631_residual_scale_wide_snn.json",
+      "parent": "checkpoints/trace-arrival-study/selected_s9349.pt"
+    },
+    "residual-scale-study/wide-transformer_s9631.pt": {
+      "bytes": 103445959,
+      "sha256": "406deb1fe328aa5a2c0bdd359e880b68a9896aebccf7e796b53a53425b60e399",
+      "training_record": "results/event_lm/residual_scale/transformer_s9631_residual_scale_wide_transformer.json",
+      "parent": "checkpoints/trace-arrival-study/transformer_s9349.pt"
+    },
+    "surprise-clock-study/clock-synapses_s10007.pt": {
+      "bytes": 139411763,
+      "sha256": "79f329626967c320218e8a752d919d3097fc8fa7ac56bf195261cdc16b5505c6",
+      "training_record": "results/event_lm/surprise_clock/event_correction_code_s10007_surprise_clock_clock_fast_synapses.json",
+      "parent": "checkpoints/residual-scale-study/wide-snn_s9631.pt",
+      "fast_synapses_on": "checkpoints/surprise-clock-study/clock_s10007.pt",
+      "fast_synapse_fit": "results/event_lm/surprise_clock/synapses_clock_s10007.json"
+    },
+    "surprise-clock-study/clock_s10007.pt": {
+      "bytes": 139399949,
+      "sha256": "256b7033003dc0bdcac8bdebf0303a9d94f208bd75b7179ade5e7abfac85b0ac",
+      "training_record": "results/event_lm/surprise_clock/event_correction_code_s10007_surprise_clock_clock.json",
+      "parent": "checkpoints/residual-scale-study/wide-snn_s9631.pt"
+    },
+    "surprise-clock-study/control-synapses_s10007.pt": {
+      "bytes": 103181579,
+      "sha256": "f12040b0222d4afe9f9afc21813846a90b8567ce2a4e7d96729569fb01afdbba",
+      "training_record": "results/event_lm/surprise_clock/event_correction_code_s10007_surprise_clock_control_fast_synapses.json",
+      "parent": "checkpoints/residual-scale-study/wide-snn_s9631.pt",
+      "fast_synapses_on": "checkpoints/surprise-clock-study/control_s10007.pt",
+      "fast_synapse_fit": "results/event_lm/surprise_clock/synapses_control_s10007.json"
+    },
+    "surprise-clock-study/control-transformer_s10007.pt": {
+      "bytes": 103446151,
+      "sha256": "79f27ad3bcfdfe668c419b63fd698aa9f213f2582ba6649ed96e7445f275cc88",
+      "training_record": "results/event_lm/surprise_clock/transformer_s10007_surprise_clock_control_transformer.json",
+      "parent": "checkpoints/residual-scale-study/wide-transformer_s9631.pt"
+    },
+    "surprise-clock-study/control_s10007.pt": {
+      "bytes": 103171313,
+      "sha256": "33548cf476459d4f377ae34522ac1dc4c697597483216224527ec7c6b9f1deb4",
+      "training_record": "results/event_lm/surprise_clock/event_correction_code_s10007_surprise_clock_control.json",
+      "parent": "checkpoints/residual-scale-study/wide-snn_s9631.pt"
+    },
+    "surprise-clock-study/depth_s10007.pt": {
+      "bytes": 139401101,
+      "sha256": "f73be831da533347836aab29be1c19b47a17eb488510ad6f91772ed3470c26c8",
+      "training_record": "results/event_lm/surprise_clock/event_correction_code_s10007_surprise_clock_depth.json",
+      "parent": "checkpoints/residual-scale-study/wide-snn_s9631.pt"
+    },
+    "surprise-clock-study/stride_s10007.pt": {
+      "bytes": 139401157,
+      "sha256": "803ba08a4692f9d8708e78a22486ed2367379b2fbeff6f37c85943ac9434aff1",
+      "training_record": "results/event_lm/surprise_clock/event_correction_code_s10007_surprise_clock_stride.json",
+      "parent": "checkpoints/residual-scale-study/wide-snn_s9631.pt"
+    },
+    "surprise-clock-study/transformer_s10007.pt": {
+      "bytes": 139665031,
+      "sha256": "620c830e8c383f7b059febae7323a1b5ad53b6ffe88d3902992c1d8259130662",
+      "training_record": "results/event_lm/surprise_clock/transformer_s10007_surprise_clock_transformer.json",
+      "parent": "checkpoints/residual-scale-study/wide-transformer_s9631.pt"
+    }
+  },
+  "upstream_manifest": "models/spiking-byte-lm-v10/manifest.json",
+  "transfer_benchmarks": {
+    "suite": "byte-transfer-v1",
+    "record": "results/event_lm/byte_transfer/surprise_clock_140902k.json",
+    "sha256": "c6fa38952386b013a61a7a21bcfefdddfcce69a7fdca70a844f09c4891aa7ac3",
+    "sources": "results/event_lm/byte_transfer/sources_v1.json",
+    "catalogue": "results/event_lm/byte_transfer/prepared_v1.json"
+  },
+  "training_mixture": {
+    "catalogue": "results/event_lm/training_mixture/prepared_v1.json",
+    "sources": "results/event_lm/training_mixture/sources_v1.json",
+    "window_receipt": "results/event_lm/training_mixture/windows_s10007.json",
+    "receipt": {
+      "name": "enwik8-c4-pg19-v1",
+      "catalogue_sha256": "b1afd12784f54c91884d0cad861ad03928f0d583b22b8ecea61679fe1ce17bae",
+      "source_targets": {
+        "enwik8": 4915200,
+        "c4": 2457600,
+        "pg19": 2457600
+      },
+      "ordered_input_and_target_windows_sha256": "115bbd8ad4d173afcb77125451574cb5a2513ed19cdedceac964577892021b59"
+    },
+    "mixture_checkpoints": [
+      "checkpoints/surprise-clock-study/clock-synapses_s10007.pt",
+      "checkpoints/surprise-clock-study/clock_s10007.pt",
+      "checkpoints/surprise-clock-study/control-synapses_s10007.pt",
+      "checkpoints/surprise-clock-study/control-transformer_s10007.pt",
+      "checkpoints/surprise-clock-study/control_s10007.pt",
+      "checkpoints/surprise-clock-study/depth_s10007.pt",
+      "checkpoints/surprise-clock-study/stride_s10007.pt",
+      "checkpoints/surprise-clock-study/transformer_s10007.pt"
+    ]
+  }
+}
