@@ -200,22 +200,19 @@ It beat the shortest tap on 179,732 active queries. This measures
 agreement between spike packets on real text.
 [Tap comparisons by delay group](../results/event_lm/trace_integration/tap_choices_control_s5801.json)
 
-The next decoder test can use the mismatch counts to delay each
-candidate's firing. The first candidate to fire would deliver its
-own spike packet. Computing the held trace with the ordinary axons
-before selecting an arrival preserves the parallel interval update
-and gives the selector the pre-write charge. A zero-initialized
-signed correction from the selected packet to the ordinary packet
-can preserve the starting predictions. The fixed-tap and adaptive arms
-would share their parameter and pulse budgets, with the short-history
-probe measuring where next-byte loss changes.
+The next study uses mismatch counts to delay each candidate's
+firing. The earliest release spike selects its own packet. The
+shortest-tap arm uses the same correction conductances and the two
+arms share the original axon rings and pulse training target.
+[Circuit and matched results](TRACE_TAP_READ.md)
 
 ## Reproduce
 
-The five trained endpoints live under `checkpoints/trace-transport-study/`
-in the experiment checkout. Their digests bind the saved weights to
+The five trained endpoints restore under `checkpoints/trace-transport-study/`
+from the v7 release archive. Their digests bind the saved weights to
 this comparison. The commands below replay the runs from the two v6
 parents in fresh output directories.
+[Restore the checkpoints](HANDOFF.md#checkpoints) ·
 [Checkpoint checksums](../results/event_lm/trace_integration_checkpoints.sha256)
 
 ```bash

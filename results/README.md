@@ -83,14 +83,15 @@ full-corpus scores, and exact training records.
 | [Finer router charge at fixed width](event_lm/finer_router_charge) | Warm-start parity, full-corpus scores, eight-bit native pulse audit, and six-bit intervention |
 | [Depth growth with signed residual corrections](event_lm/depth_growth) | Six matched endpoints at 81.92M targets, both held-out corpora, warm starts, native parity, interventions and CPU timing |
 | [Held-charge inputs and group thresholds](event_lm/trace_integration) | Five matched endpoints at 91.75M targets, paired history and axon tap probes, fine-threshold offsets, and native parity |
+| [Axon tap reads](event_lm/trace_tap_read) | Four matched endpoints at 101.58M targets, warm checks, full-corpus scores, per-group winning delays, frozen-weight interventions, and packed-width parity |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
-exposure, geometry, and seed. The v6 archive uses
-`event_lm/v6_checkpoints.sha256` for the new studies and their
-parent chains. Earlier catalogs remain available with the prior
-releases.
-[v6 archive manifest](../models/spiking-byte-lm-v6/manifest.json) ·
-[v5 archive manifest](../models/spiking-byte-lm-v5/manifest.json)
+exposure, geometry, and seed. The v7 archive uses
+`event_lm/v7_checkpoints.sha256` and `event_lm/trace_integration_checkpoints.sha256`.
+The v6 archive uses `event_lm/v6_checkpoints.sha256` for its studies and
+their parent chains.
+[v7 archive manifest](../models/spiking-byte-lm-v7/manifest.json) ·
+[v6 archive manifest](../models/spiking-byte-lm-v6/manifest.json)
 
 Regenerate the [leaderboards and current figures](../docs/LEADERBOARD.md)
 with `python experiments/plot_event_lm_study.py` and
