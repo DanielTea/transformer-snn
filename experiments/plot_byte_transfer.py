@@ -85,11 +85,13 @@ def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png")
     if len(labels) != len(models) or len(models) < 2:
         raise ValueError("a comparison needs a label for each of at least two checkpoints")
     reference = models[0]["benchmarks"]
-    colors = (ORANGE, GRAY, BLUE, VIOLET, "#187b62", "#9c4772")
+    colors = (ORANGE, GRAY, BLUE, VIOLET, "#187b62", "#9c4772", "#7a6a50", "#c2410c")
     many_arms = len(models) > 4
-    fig, (corpus, words) = plt.subplots(1, 2, figsize=(14.2 if many_arms else 12.8, 4.75), width_ratios=(1.1, 1))
-    fig.subplots_adjust(left=0.145, right=0.967, bottom=0.30 if many_arms else 0.26,
-                        top=0.735, wspace=0.62 if many_arms else 0.43)
+    crowded = len(models) > 6
+    width = 15.6 if crowded else 14.2 if many_arms else 12.8
+    fig, (corpus, words) = plt.subplots(1, 2, figsize=(width, 5.9 if crowded else 4.75), width_ratios=(1.1, 1))
+    fig.subplots_adjust(left=0.145, right=0.967, bottom=0.36 if crowded else 0.30 if many_arms else 0.26,
+                        top=0.78 if crowded else 0.735, wspace=0.92 if crowded else 0.62 if many_arms else 0.43)
     heading(fig, "Byte-model transfer", "Fixed English corpora and paired LAMBADA prompts")
     for axes in (corpus, words):
         style(axes, grid_axis="x")
@@ -102,7 +104,7 @@ def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png")
         metrics = model["benchmarks"]
         if index:
             deltas = [metrics[key]["bpb"] - reference[key]["bpb"] for key, _ in DATASETS]
-            offset = (index - len(models) / 2) * 0.17
+            offset = (index - len(models) / 2) * (0.1 if crowded else 0.17)
             corpus.scatter(deltas, [y + offset for y in range(len(DATASETS))],
                            color=color, s=37, zorder=3, label=label)
         passage, last = (metrics["lambada"][mode]["boundary_exact_matches"] for mode in ("passage", "last_sentence"))
@@ -115,12 +117,16 @@ def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png")
     corpus.invert_yaxis()
     reference_label = labels[0].replace("Full attention", "full attention")
     corpus.set_xlabel(f"Bits per byte relative to {reference_label}", color=MUTED)
-    corpus.legend(loc="upper center", bbox_to_anchor=(0.5, -0.24), frameon=False,
+    if crowded:
+        corpus.xaxis.set_major_locator(MaxNLocator(6))
+    corpus.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2 if crowded else -0.24), frameon=False,
                   ncols=2 if many_arms else min(3, len(models) - 1), fontsize=8, labelcolor=TEXT)
 
     words.set_yticks(range(len(labels)), labels)
     words.invert_yaxis()
-    words.set_xlim(-0.2, max(largest_count, 1) + 0.25)
+    largest_count = max(largest_count, 1)
+    # Large counts need a margin in proportion, so that the end markers stay inside the axes.
+    words.set_xlim(-max(0.2, 0.03 * largest_count), largest_count + max(0.25, 0.03 * largest_count))
     words.xaxis.set_major_locator(MaxNLocator(integer=True))
     words.set_xlabel(f"Exact words out of {record['lambada_examples']:,}", color=MUTED)
     fig.text(0.035, 0.037, "Lower loss is better. Filled and open markers show full-passage and last-sentence scores.",

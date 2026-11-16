@@ -37,6 +37,17 @@ def _prefix_ages(data, order=8):
     return torch.bucketize(torch.from_numpy(ages), torch.tensor([1, 32, 128, 512]), right=True)
 
 
+def _stream_state_bytes(native, data, limit=4096):
+    """Persistent bytes per stream once the clocked blocks hold their delay lines."""
+    state = None
+    for byte in data[:limit].long():
+        _, state = native.step(byte[None], state)
+        # A clocked block allocates its state at the first tick.
+        if state.clock is None or state.clock.events.min() > 0:
+            return state_bytes(state)
+    raise ValueError(f"the clock did not fire in the first {limit:,} bytes")
+
+
 def _loss_summary(nll, targets):
     return {"target_bytes": targets, "nll_nats": nll, "bpb": nll / (targets * math.log(2)) if targets else None}
 
@@ -246,8 +257,7 @@ def main():
             full_attention_context = None
             byte = books[0].data[:1].long()
             if isinstance(model, EventLM) and not model.cfg.continuous:
-                _, state = model.to_integer().step(byte)
-                streaming_bytes = state_bytes(state)
+                streaming_bytes = _stream_state_bytes(model.to_integer(), books[0].data)
             elif not isinstance(model, EventLM) and model.cfg.attn == "transformer_local":
                 _, state = model.step(byte.to(device))
                 streaming_bytes = state_bytes(state)

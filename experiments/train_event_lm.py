@@ -28,7 +28,9 @@ from common import (
     setup,
 )
 from snnformer import SNNConfig, count_params
-from snnformer.event_lm import EventLM, EventLMConfig, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES
+from snnformer.event_lm import (
+    EventLM, EventLMConfig, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES,
+)
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
 
@@ -167,7 +169,9 @@ def build_model(args):
                             residual_correction_start=args.residual_correction_start,
                             compact_axon_state=args.compact_axon_state,
                             compact_trace_state=args.compact_trace_state,
-                            tag_phase_address=args.tag_phase_address)
+                            tag_phase_address=args.tag_phase_address,
+                            clock_start=args.clock_start, clock_threshold=args.clock_threshold,
+                            clock_leak=args.clock_leak, clock_source=args.clock_source)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
     if args.local_lookback is not None:
@@ -432,6 +436,18 @@ def main():
                         help="project the selected fixed arrival or its unmatched spikes against the held read")
     parser.add_argument("--trace-arrival-groups", type=int, default=EventLMConfig.trace_arrival_groups,
                         help="number of shortest fixed delay groups with arrival synapses")
+    parser.add_argument("--clock-start", type=int,
+                        help="first block that runs only when the surprise clock ticks")
+    parser.add_argument("--clock-threshold", type=int, default=0,
+                        help="unmatched winner output spikes that the clock neuron integrates per tick")
+    parser.add_argument("--clock-leak", type=int, default=0,
+                        help="inhibitory spikes per byte against the clock membrane")
+    parser.add_argument("--clock-source", choices=_CLOCK_SOURCES, default="surprise",
+                        help="integrate surprise, or one unit per byte as the fixed-stride control")
+    parser.add_argument("--early-readout", type=int,
+                        help="number of leading blocks whose stream also drives the vocabulary neurons")
+    parser.add_argument("--early-readout-weight", type=float, default=0.0,
+                        help="weight of the next-byte loss on the early readout")
     parser.add_argument("--steering-transfer", choices=("present", "delayed"),
                         help="move steering pulses within each pair in response to present or arriving content")
     parser.add_argument("--steering-gradient-at-zero", action="store_true",
@@ -536,6 +552,12 @@ def main():
         parser.error("bank read ranking needs --tag-read-competition and at least two input bytes")
     if args.delay_group_widths is not None and args.variant not in EVENT_ROUTES:
         parser.error("custom delay groups need a spiking decoder")
+    if (args.clock_start is not None or args.early_readout is not None) and args.variant not in EVENT_ROUTES:
+        parser.error("the surprise clock and the early readout need a spiking decoder")
+    if not math.isfinite(args.early_readout_weight) or args.early_readout_weight < 0:
+        parser.error("--early-readout-weight must be finite and nonnegative")
+    if args.early_readout_weight and args.early_readout is None and args.clock_start is None:
+        parser.error("an early readout loss needs --early-readout or a clocked model")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.compact_axon_state or args.compact_trace_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
@@ -633,8 +655,10 @@ def main():
         if args.bank_read_rank_weight:
             bank_read_losses = []
             forward_options["bank_read_losses"] = bank_read_losses
+        if args.early_readout_weight:
+            forward_options["early_readout"] = args.clock_start if args.early_readout is None else args.early_readout
         if args.code_loss_weight:
-            counts, predicted, observed = model(
+            counts, predicted, observed, *early = model(
                 inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
             )
             if args.learn_context_keys:
@@ -642,6 +666,8 @@ def main():
                 observed = observed[..., args.forecast_key_channels:]
             resolution = args.spike_resolution
             code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
+        elif args.early_readout_weight:
+            counts, *early = model(inputs, **forward_options)
         else:
             counts = model(inputs, **forward_options)
         logits = scoring_logits(counts, event, args.spike_resolution)
@@ -655,6 +681,10 @@ def main():
             loss, language_loss, teacher_fraction = guided_language_loss(logits, targets, guidance, args.teacher_weight)
         if args.code_loss_weight:
             loss = loss + args.code_loss_weight * code_loss
+        if args.early_readout_weight:
+            early_logits = scoring_logits(early[0], event, model.forecast_resolution)
+            early_loss = F.cross_entropy(early_logits.flatten(0, 1), targets.flatten())
+            loss = loss + args.early_readout_weight * early_loss
         if args.bank_read_rank_weight:
             (bank_read_loss,) = bank_read_losses
             loss = loss + args.bank_read_rank_weight * bank_read_loss
@@ -676,7 +706,9 @@ def main():
                                   "spike_price": spike_price.item()} if pulse_counts is not None else {}),
                               **({"teacher_selected_fraction": teacher_fraction.item()} if teacher is not None else {}),
                               **({"bank_read_rank_loss": bank_read_loss.item()} if args.bank_read_rank_weight else {}),
-                              **({"code_loss": code_loss.item()} if args.code_loss_weight else {})))
+                              **({"code_loss": code_loss.item()} if args.code_loss_weight else {}),
+                              **({"early_train_bpb": early_loss.item() / math.log(2)}
+                                 if args.early_readout_weight else {})))
             activity = f" pulses/byte={metrics['pulses_per_byte']:.0f}" if pulse_counts is not None else ""
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
                   f"accuracy={metrics['argmax_accuracy']:.4f} ({timer():.1f}s){activity}", flush=True)

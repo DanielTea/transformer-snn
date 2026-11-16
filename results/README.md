@@ -86,19 +86,23 @@ full-corpus scores, and exact training records.
 | [Axon tap reads](event_lm/trace_tap_read) | Four matched endpoints at 101.58M targets, warm checks, full-corpus scores, per-group winning delays, frozen-weight interventions, and packed-width parity |
 | [Packed width and steering transfers](event_lm/packed_width) | Matched 9.96M and 12.8M scores, paired history and routing probes, integer warm starts, CPU timing and generation samples |
 | [Residual width on expanded training data](event_lm/residual_scale) | Matched width and corpus controls, full held-out loss, paired prediction gaps, residual ablations and native integer audits |
+| [Surprise clock and fast synapses](event_lm/surprise_clock) | Frozen-decoder surprise measurements, six matched continuations, fitted fast synapses, clock and synapse interventions, paired history gaps, warm starts and native integer audits |
 | [Training mixture](event_lm/training_mixture) | Pinned sources, prepared corpus inventory, exact sampled-window receipt and PG-19 overlap audit |
 | [Fixed-arrival coincidence](event_lm/trace_arrival) | Four continuations, full enwik8 and PG-19, paired early predictions, muted projections and native integer audits |
 | [Byte transfer](event_lm/byte_transfer) | Prepared-window catalogue, source hashes, overlap flags and matched scores on four text corpora and both LAMBADA prompts |
 | [Held-charge reads driven by write spikes](event_lm/trace_read_drive) | Matched held-out scores, fractional-charge and pulse audits, steering and polarity interventions, and 25.6M growth checks |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
-exposure, geometry, and seed. The v10 archive contains the five
-width-study endpoints and their two v9 parents. The v9 archive holds
+exposure, geometry, and seed. The v11 archive contains the eight
+surprise-study endpoints and their two v10 parents. The v10 archive
+contains the five width-study endpoints and their two v9 parents. The v9 archive holds
 the four arrival endpoints and their two v8 parents. The v8 archive uses the packed-width,
 driven-read and supporting checkpoint catalogs. The v7 archive uses
 `event_lm/v7_checkpoints.sha256` and `event_lm/trace_integration_checkpoints.sha256`.
 The v6 archive uses `event_lm/v6_checkpoints.sha256` for its studies and
 their parent chains.
+[v11 archive manifest](../models/spiking-byte-lm-v11/manifest.json) ·
+[Surprise-study checkpoint digests](event_lm/surprise_clock_checkpoints.sha256) ·
 [v10 archive manifest](../models/spiking-byte-lm-v10/manifest.json) ·
 [Width-study checkpoint digests](event_lm/residual_scale_checkpoints.sha256) ·
 [v9 archive manifest](../models/spiking-byte-lm-v9/manifest.json) ·

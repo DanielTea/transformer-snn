@@ -25,6 +25,7 @@ RELEASES = {
     "v8": ("spiking-byte-lm-v8", "spiking-byte-lm-v8-checkpoints"),
     "v9": ("spiking-byte-lm-v9", "spiking-byte-lm-v9-checkpoints"),
     "v10": ("spiking-byte-lm-v10", "spiking-byte-lm-v10-checkpoints"),
+    "v11": ("spiking-byte-lm-v11", "spiking-byte-lm-v11-checkpoints"),
 }
 DEPTH_REFERENCE = "depth-inhibition-study/trace_s0.pt"
 CONTINUATION_REFERENCE = "long-context-continuation/trace_ctx2048_s711.pt"
@@ -42,6 +43,9 @@ ARRIVAL_TRANSFER = "byte_transfer/trace_arrival_s9349.json"
 V9_MANIFEST = "models/spiking-byte-lm-v9/manifest.json"
 RESIDUAL_SCALE_REFERENCE = "residual-scale-study/wide-snn_s9631.pt"
 RESIDUAL_SCALE_TRANSFER = "byte_transfer/residual_scale_131072k.json"
+V10_MANIFEST = "models/spiking-byte-lm-v10/manifest.json"
+SURPRISE_CLOCK_REFERENCE = "surprise-clock-study/control-synapses_s10007.pt"
+SURPRISE_CLOCK_TRANSFER = "byte_transfer/surprise_clock_140902k.json"
 
 
 def sha256(path):
@@ -183,6 +187,17 @@ def collect_catalog_release(directory, catalogs, reference, audit_path, *, upstr
             if hashes.get(teacher_path) != teacher["sha256"]:
                 raise ValueError(f"teacher checkpoint is missing or has the wrong hash: {teacher_path}")
             entry["teacher"] = teacher_path
+        synapses = record.get("fast_synapses")
+        if synapses:
+            # The weights are another catalogued checkpoint's. Only the fitted synapses were added.
+            trained = synapses["source_checkpoint"]
+            if hashes.get(trained) != synapses["source_sha256"]:
+                raise ValueError(f"the decoder under the fast synapses is missing or has the wrong hash: {trained}")
+            fit = path.with_name(synapses["fit_record"])
+            if json.loads(fit.read_text(encoding="utf-8"))["source_checkpoint"] != trained:
+                raise ValueError(f"the fast-synapse fit belongs to a different decoder: {fit}")
+            entry["fast_synapses_on"] = trained
+            entry["fast_synapse_fit"] = fit.relative_to(ROOT).as_posix()
         entries[name] = entry
 
     source = f"checkpoints/{reference}"
@@ -237,6 +252,32 @@ def residual_scale_mixture(training_paths):
         "catalogue": catalogue.relative_to(ROOT).as_posix(), "sources": sources.relative_to(ROOT).as_posix(),
         "window_receipt": plan.relative_to(ROOT).as_posix(), "receipt": expected,
         "mixture_checkpoints": sorted(mixed), "enwik8_only_checkpoint": control[0],
+    }
+
+
+def surprise_clock_mixture(training_paths):
+    folder = RESULTS / "training_mixture"
+    plan = folder / "windows_s10007.json"
+    catalogue = folder / "prepared_v1.json"
+    sources = folder / "sources_v1.json"
+    expected = json.loads(plan.read_text())
+    prepared = json.loads(catalogue.read_text())
+    if (sha256(catalogue) != expected["catalogue_sha256"]
+            or sha256(sources) != prepared["source_manifest_sha256"]):
+        raise ValueError("the surprise study must use its pinned training mixture")
+    checkpoints = []
+    for path in training_paths:
+        record = json.loads(path.read_text())
+        if (record.get("training_mixture") != expected
+                or sum(expected["source_targets"].values()) != record["train_target_bytes"]):
+            raise ValueError(f"the training windows differ from the matched mixture: {path}")
+        checkpoints.append(record["args"]["checkpoint"])
+    if len(set(checkpoints)) != 8:
+        raise ValueError("the surprise study needs six trained arms and two decoders with fast synapses")
+    return {
+        "catalogue": catalogue.relative_to(ROOT).as_posix(), "sources": sources.relative_to(ROOT).as_posix(),
+        "window_receipt": plan.relative_to(ROOT).as_posix(), "receipt": expected,
+        "mixture_checkpoints": sorted(checkpoints),
     }
 
 
@@ -319,6 +360,15 @@ def main():
             )
             endpoints = [name for name in entries if name.startswith("trace-arrival-study/")]
             transfer = transfer_evidence(RESULTS / ARRIVAL_TRANSFER, entries, endpoints)
+        elif args.release == "v11":
+            upstream_manifest = V10_MANIFEST
+            entries, candidate, measured = collect_catalog_release(
+                args.checkpoint_dir, ("surprise_clock_checkpoints.sha256",), SURPRISE_CLOCK_REFERENCE,
+                "surprise_clock/native_control-synapses_s10007.json", upstream_manifest=upstream_manifest,
+            )
+            endpoints = [name for name in entries if name.startswith("surprise-clock-study/")]
+            transfer = transfer_evidence(RESULTS / SURPRISE_CLOCK_TRANSFER, entries, endpoints)
+            training_mixture = surprise_clock_mixture(ROOT / entries[name]["training_record"] for name in endpoints)
         else:
             upstream_manifest = V9_MANIFEST
             entries, candidate, measured = collect_catalog_release(
@@ -347,7 +397,9 @@ def main():
                 "architecture": training["cfg"], "parameters": training["params"],
                 "streaming_tensor_bytes": measured["streaming_tensor_bytes"],
                 "training_targets": training["train_target_bytes"], "seed": training["args"]["seed"],
-                ("selection_validation_bpb" if args.release == "v1" else "validation_bpb"): val_bpb,
+                ("selection_validation_bpb" if args.release == "v1" else
+                 # A decoder with fitted synapses keeps the validation record of its gradient training.
+                 "validation_bpb_before_fast_synapses" if training.get("fast_synapses") else "validation_bpb"): val_bpb,
                 "training_record": record_path.relative_to(ROOT).as_posix(),
             },
             "archive": {"file": bundle.name, "sha256": bundle_sha256, "bytes": bundle.stat().st_size},
@@ -364,6 +416,8 @@ def main():
             manifest["transfer_benchmarks"] = transfer
         if training_mixture:
             manifest["training_mixture"] = training_mixture
+        if training.get("fast_synapses"):
+            manifest["model"]["fast_synapses"] = training["fast_synapses"]
         (model_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         print(f"Packaged {len(entries)} checkpoints in {bundle}")
     except (OSError, ValueError, KeyError) as exc:

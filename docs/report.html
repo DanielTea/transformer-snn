@@ -107,6 +107,28 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
+  <h3 id="surprise-clock">Surprise clock and fast synapses</h3>
+  <p class="col">The v11 study uses one signal for two circuits. A population of forecast neurons predicts every byte. The spikes it gets wrong drive a clock for four added blocks and decide which bytes a set of fast synapses stores. Six arms continue the 25.79M v10 models on identical windows. Two more add the fitted synapses to trained decoders without a gradient step. The synapses hold 24,576 bytes per stream.</p>
+  <figure>
+    <a href="../results/figures/event_lm_surprise_clock.png"><img src="../results/figures/event_lm_surprise_clock.png" alt="Held-out enwik8 and PG-19 loss for the surprise clock, its controls and the fast synapses"></a>
+    <figcaption>Eight endpoints at 140.90 million training targets. Full attention reads 512 bytes. PG-19 temperatures are fitted on separate calibration books.</figcaption>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_fast_synapse_sweep.png"><img src="../results/figures/event_lm_fast_synapse_sweep.png" alt="Loss removed by the fast synapses as their state grows, for writes on error spikes and on every byte" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_surprise_prefix_age.png"><img src="../results/figures/event_lm_surprise_prefix_age.png" alt="enwik8 loss gap to the size-matched Transformer by distance to the previous occurrence of the context" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_surprise_words.png"><img src="../results/figures/event_lm_surprise_words.png" alt="Loss by byte position inside a word and the share of clock ticks at each position" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_surprise_history_gap.png"><img src="../results/figures/event_lm_surprise_history_gap.png" alt="Loss gap to the size-matched Transformer by bytes seen since a reset" loading="lazy"></a>
+  </figure>
+  <figure id="byte-transfer">
+    <a href="../results/figures/event_lm_byte_transfer_surprise_clock_140902k.png"><img src="../results/figures/event_lm_byte_transfer_surprise_clock_140902k.png" alt="Relative loss on the fixed byte corpora and LAMBADA word accuracy for the surprise study" loading="lazy"></a>
+    <figcaption>Every model scores the same 512-byte windows from a reset. <a href="SURPRISE_CLOCK.md">Surprise study and controls</a> · <a href="BYTE_TRANSFER.md">Scoring and overlap audit</a></figcaption>
+  </figure>
   <h3 id="residual-scale">Residual width and expanded training data</h3>
   <p class="col">The v10 study compares the spiking decoder with full attention at 14.07M and 25.79M parameters. All four size-matched models receive the same enwik8, C4 and PG-19 training windows. An enwik8-only continuation provides the corpus control at 25.79M. The SNN uses 28,584 bytes of persistent state per stream at both widths.</p>
   <figure>
@@ -116,7 +138,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_residual_scale_early_context.png"><img src="../results/figures/event_lm_residual_scale_early_context.png" alt="Change in the SNN-to-Transformer enwik8 loss gap during the first 32 predictions" loading="lazy"></a>
   </figure>
-  <figure id="byte-transfer">
+  <figure id="byte-transfer-v10">
     <a href="../results/figures/event_lm_byte_transfer_residual_scale_131072k.png"><img src="../results/figures/event_lm_byte_transfer_residual_scale_131072k.png" alt="Relative loss on the fixed byte corpora and LAMBADA word accuracy for the matched width study" loading="lazy"></a>
     <figcaption>Every model scores the same windows and word targets. <a href="RESIDUAL_SCALE.md">Width study and corpus preparation</a> · <a href="BYTE_TRANSFER.md">Scoring and overlap audit</a></figcaption>
   </figure>
@@ -182,7 +204,49 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_65536_prefix_age.png"><img src="../results/figures/event_lm_65536_prefix_age.png" alt="enwik8 loss gap by eight-byte prefix age after 65.54 million training targets" loading="lazy"></a>
   </figure>
-  <h3>Residual width on expanded training data · 131,072,000 training targets · seed 9631</h3>
+  <h3>Surprise clock and fast synapses · 140,902,400 training targets · seed 10007</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">25.79M SNN</th><td class="num">25,788,928</td><td class="num">28,584 B</td><td class="num">1.78973</td><td class="num">1.97852</td><td class="num">1.97852</td><td class="num">313,700</td></tr>
+<tr><th scope="row">25.79M SNN with fast synapses</th><td class="num">25,788,928</td><td class="num">53,432 B</td><td class="num">1.64541</td><td class="num">1.93961</td><td class="num">1.93961</td><td class="num">321,971</td></tr>
+<tr><th scope="row">34.85M SNN, every byte</th><td class="num">34,845,184</td><td class="num">40,714 B</td><td class="num">1.78633</td><td class="num">1.96913</td><td class="num">1.96913</td><td class="num">306,647</td></tr>
+<tr><th scope="row">34.85M SNN, fixed stride</th><td class="num">34,845,184</td><td class="num">43,796 B</td><td class="num">1.78761</td><td class="num">1.96842</td><td class="num">1.96842</td><td class="num">312,966</td></tr>
+<tr><th scope="row">34.85M SNN, surprise clock</th><td class="num">34,845,184</td><td class="num">43,796 B</td><td class="num">1.78973</td><td class="num">1.97528</td><td class="num">1.97528</td><td class="num">314,668</td></tr>
+<tr><th scope="row">34.85M SNN, surprise clock and fast synapses</th><td class="num">34,845,184</td><td class="num">68,388 B</td><td class="num"><strong>1.64278</strong></td><td class="num"><strong>1.93610</strong></td><td class="num">1.93610</td><td class="num">314,852</td></tr>
+<tr><th scope="row">25.79M full attention</th><td class="num">25,790,976</td><td class="num">6,291,456 B</td><td class="num">1.70433</td><td class="num">1.93711</td><td class="num">1.93711</td><td class="num">—</td></tr>
+<tr><th scope="row">34.85M full attention</th><td class="num">34,845,696</td><td class="num">6,291,456 B</td><td class="num">1.70426</td><td class="num">1.93678</td><td class="num">1.93678</td><td class="num">—</td></tr>
+</tbody></table></div>
+<div class="tablewrap"><table><caption>Raw corpus loss (bpb)</caption><thead><tr><th scope="col">Model</th><th scope="col">WikiText-103</th><th scope="col">C4</th><th scope="col">enwik9</th><th scope="col">text8</th></tr></thead><tbody>
+<tr><th scope="row">34.85M full attention</th><td class="num">2.28963</td><td class="num">2.00954</td><td class="num">1.67524</td><td class="num">2.10989</td></tr>
+<tr><th scope="row">25.79M full attention</th><td class="num">2.28971</td><td class="num">2.00978</td><td class="num">1.67531</td><td class="num">2.10996</td></tr>
+<tr><th scope="row">25.79M SNN</th><td class="num">2.30999</td><td class="num">2.03742</td><td class="num">1.77154</td><td class="num">2.13618</td></tr>
+<tr><th scope="row">34.85M SNN, every byte</th><td class="num">2.30601</td><td class="num">2.03239</td><td class="num">1.76726</td><td class="num">2.13582</td></tr>
+<tr><th scope="row">34.85M SNN, fixed stride</th><td class="num">2.30950</td><td class="num">2.03350</td><td class="num">1.76755</td><td class="num">2.13497</td></tr>
+<tr><th scope="row">34.85M SNN, surprise clock</th><td class="num">2.31033</td><td class="num">2.03587</td><td class="num">1.76867</td><td class="num">2.13854</td></tr>
+<tr><th scope="row">25.79M SNN with fast synapses</th><td class="num">2.21540</td><td class="num">1.94965</td><td class="num">1.69739</td><td class="num">2.01978</td></tr>
+<tr><th scope="row">34.85M SNN, surprise clock and fast synapses</th><td class="num">2.21538</td><td class="num">1.94873</td><td class="num">1.69564</td><td class="num">2.02194</td></tr>
+</tbody></table></div>
+<div class="tablewrap"><table><caption>Loss on Wikipedia windows with zero overlap hits (bpb)</caption><thead><tr><th scope="col">Model</th><th scope="col">WikiText-103</th><th scope="col">enwik9</th><th scope="col">text8</th></tr></thead><tbody>
+<tr><th scope="row">34.85M full attention</th><td class="num">2.28986</td><td class="num">1.73887</td><td class="num">2.11034</td></tr>
+<tr><th scope="row">25.79M full attention</th><td class="num">2.28995</td><td class="num">1.73894</td><td class="num">2.11041</td></tr>
+<tr><th scope="row">25.79M SNN</th><td class="num">2.31023</td><td class="num">1.83336</td><td class="num">2.13684</td></tr>
+<tr><th scope="row">34.85M SNN, every byte</th><td class="num">2.30626</td><td class="num">1.82944</td><td class="num">2.13643</td></tr>
+<tr><th scope="row">34.85M SNN, fixed stride</th><td class="num">2.30972</td><td class="num">1.82958</td><td class="num">2.13561</td></tr>
+<tr><th scope="row">34.85M SNN, surprise clock</th><td class="num">2.31055</td><td class="num">1.83077</td><td class="num">2.13915</td></tr>
+<tr><th scope="row">25.79M SNN with fast synapses</th><td class="num">2.21558</td><td class="num">1.75790</td><td class="num">2.02020</td></tr>
+<tr><th scope="row">34.85M SNN, surprise clock and fast synapses</th><td class="num">2.21555</td><td class="num">1.75661</td><td class="num">2.02226</td></tr>
+</tbody></table></div>
+<div class="tablewrap"><table><caption>LAMBADA final-word prediction</caption><thead><tr><th scope="col">Model</th><th scope="col">Passage bpb</th><th scope="col">Last sentence bpb</th><th scope="col">Passage exact</th><th scope="col">Last sentence exact</th><th scope="col">Passage at gold length</th><th scope="col">Last sentence at gold length</th></tr></thead><tbody>
+<tr><th scope="row">34.85M full attention</th><td class="num">3.30493</td><td class="num">3.37476</td><td class="num">0.02%</td><td class="num">0.00%</td><td class="num">0.02%</td><td class="num">0.00%</td></tr>
+<tr><th scope="row">25.79M full attention</th><td class="num">3.30510</td><td class="num">3.37480</td><td class="num">0.02%</td><td class="num">0.00%</td><td class="num">0.02%</td><td class="num">0.00%</td></tr>
+<tr><th scope="row">25.79M SNN</th><td class="num">3.44139</td><td class="num">3.44977</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td></tr>
+<tr><th scope="row">34.85M SNN, every byte</th><td class="num">3.44382</td><td class="num">3.45402</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td></tr>
+<tr><th scope="row">34.85M SNN, fixed stride</th><td class="num">3.43027</td><td class="num">3.44224</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td></tr>
+<tr><th scope="row">34.85M SNN, surprise clock</th><td class="num">3.43838</td><td class="num">3.45019</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td><td class="num">0.00%</td></tr>
+<tr><th scope="row">25.79M SNN with fast synapses</th><td class="num">2.62609</td><td class="num">3.38565</td><td class="num">3.38%</td><td class="num">0.37%</td><td class="num">3.71%</td><td class="num">0.39%</td></tr>
+<tr><th scope="row">34.85M SNN, surprise clock and fast synapses</th><td class="num">2.62199</td><td class="num">3.38665</td><td class="num">3.32%</td><td class="num">0.41%</td><td class="num">3.51%</td><td class="num">0.43%</td></tr>
+</tbody></table></div>
+<p class="col cap">LAMBADA exact match requires a word boundary. The gold-length columns score predictions through the last answer byte.</p>
+<h3>Residual width on expanded training data · 131,072,000 training targets · seed 9631</h3>
 <div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
 <tr><th scope="row">14.07M SNN</th><td class="num">14,066,688</td><td class="num">28,584 B</td><td class="num">1.79789</td><td class="num">2.04156</td><td class="num">2.04156</td><td class="num">312,618</td></tr>
 <tr><th scope="row">25.79M SNN</th><td class="num">25,788,928</td><td class="num">28,584 B</td><td class="num">1.79787</td><td class="num">2.02699</td><td class="num">2.02699</td><td class="num">313,142</td></tr>
@@ -453,7 +517,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v10/README.md">Model and architecture</a> · <a href="V10_HANDOFF.md">Training handoff</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v11/README.md">Model and architecture</a> · <a href="V11_HANDOFF.md">Training handoff</a></p>
 </section>
 
 <section id="dendrite">

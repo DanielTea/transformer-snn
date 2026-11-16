@@ -204,8 +204,17 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
             ))
     memory_stats = {}
     memory_pulses = []
+    forecast_spikes = []
+    handles.append(integer.forecast_emit.register_forward_hook(
+        lambda _module, _inputs, spikes: forecast_spikes.append(spikes.abs().sum(dtype=torch.int64).item()),
+    ))
+    if integer.fast_synapses is not None:
+        integer.fast_synapses.capture = []
     with _IntegerExecution() as guard:
         counts = integer(tokens, memory_pulses=memory_pulses)
+        synapse_activity = None
+        if integer.fast_synapses is not None:
+            synapse_activity, integer.fast_synapses.capture = integer.fast_synapses.capture[0], None
         for handle in handles:
             handle.remove()
         state = None
@@ -328,6 +337,32 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
             sum(weight.count_nonzero().item() for weight in block.steering_transfer.weights)
             for block in integer.blocks
         ]
+    if forecast_spikes:
+        row["forecast_pulses_per_byte"] = sum(forecast_spikes) / tokens.numel()
+    if integer.cfg.clock_start is not None:
+        row["clock"] = {
+            "source": integer.cfg.clock_source, "threshold_forecast_spikes": integer.cfg.clock_threshold,
+            "first_clocked_block": integer.cfg.clock_start,
+            "ticks_per_byte": chunk_state.clock.events.sum().item() / tokens.numel(),
+        }
+    if synapse_activity is not None:
+        votes, levels, errors = synapse_activity
+        memory = integer.fast_synapses
+        added = memory.excitation(votes, levels).abs().sum().item()
+        # One key neuron fires in every group of every head that has seen its whole context.
+        key_spikes = sum(memory.groups * max(tokens.shape[1] - order + 1, 0) for order in memory.orders)
+        row["fast_synapses"] = {
+            "context_bytes_by_head": list(memory.orders), "groups": memory.groups,
+            "key_neurons_per_group": memory.cells, "agreement_levels": memory.levels,
+            "store_gate_forecast_spikes": memory.gate,
+            "key_neurons": memory.state_cells,
+            "readout_spikes_by_head_and_level": memory.readout[:, 1:].tolist(),
+            "stored_byte_share": (errors >= memory.gate).float().mean().item(),
+            "key_spikes_per_byte": key_spikes / tokens.numel(),
+            "recall_spikes_per_byte": added / tokens.numel(),
+            "synapse_state_bytes": state.synapses.successor.numel(),
+        }
+        row["total_pulses_per_byte"] += (key_spikes + added) / tokens.numel()
     if integer.cfg.trace_arrival is not None:
         if len(arrival_activity) != len(integer.blocks):
             raise AssertionError("the audit did not visit every arrival projection")
