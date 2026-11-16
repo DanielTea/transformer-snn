@@ -161,6 +161,8 @@ PACKED_WIDTH_111411K = (
     ("243-channel SNN", PACKED_WIDTH, "wide_s7907", f"{PACKED_WIDTH}/native_wide_s7907.json", VIOLET),
     ("Original full attention", PACKED_WIDTH, "control_transformer_s7907", None, ORANGE),
     ("Wider full attention", PACKED_WIDTH, "transformer_s7907", None, "#a34073"),
+    ("Delayed steering transfers", PACKED_WIDTH, "delayed_transfer_s7907",
+     f"{PACKED_WIDTH}/native_delayed_transfer_s7907.json", "#138372"),
 )
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
@@ -324,7 +326,7 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
-        ("packed_width_111411k", "12.8M packed SNN width",
+        ("packed_width_111411k", "Packed width and steering transfers",
          PACKED_WIDTH_111411K, 7907, 512, (101_580_800, 9_830_400)),
         ("trace_tap_101580k", "9.96M axon tap reads",
          TRACE_TAP_101580K, 6899, 512, (91_750_400, 9_830_400)),
@@ -892,7 +894,7 @@ def main():
                  subtitle="About 9.96M parameters · 101.58M enwik8 training targets · seed 6899",
                  filename="event_lm_trace_tap_read.png", precision=5)
     plot_trace_tap_training(tap_rows, output)
-    narrow_snn, wide_snn, narrow_full, wide_full = research["groups"]["packed_width_111411k"]["rows"]
+    narrow_snn, wide_snn, narrow_full, wide_full, *_ = research["groups"]["packed_width_111411k"]["rows"]
     width_pairs = (("11-block SNN", BLUE, narrow_snn, wide_snn),
                    ("6-block full attention", ORANGE, narrow_full, wide_full))
     plot_paired_change(width_pairs, output, title="Widening both models at matched exposure",
