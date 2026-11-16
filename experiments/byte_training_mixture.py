@@ -48,8 +48,8 @@ class TrainingMixture:
         self.context = context
         raw_catalogue = catalogue_path.read_bytes()
         catalogue = json.loads(raw_catalogue)
-        if catalogue["format"] != 1 or catalogue["context_bytes"] != context:
-            raise ValueError("the training mixture needs its recorded context and catalogue format")
+        if catalogue["format"] != 1:
+            raise ValueError("unsupported training mixture catalogue format")
         self.name = catalogue["name"]
         self.catalogue_sha256 = hashlib.sha256(raw_catalogue).hexdigest()
         sources = catalogue["corpora"]
