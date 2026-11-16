@@ -176,6 +176,21 @@ model's C4 loss by 0.00518 bpb. These scores use the C4 warming
 and target windows from the byte-transfer protocol.
 [Fixed-window C4 ablations](../results/event_lm/residual_scale/residual_c4_validation.json)
 
+A second comparison gives both corpora the same preceding
+context lengths. It scores the same 16 targets per window at
+both lengths. enwik8 uses the 1,535 fixed validation tails. C4
+uses one tail starting 256 bytes into each of 241 documents long
+enough to supply the targets.
+
+| Preceding bytes | enwik8 mute change (bpb) | C4 mute change (bpb) |
+|---:|---:|---:|
+| 17 | −0.00679 [−0.00985, −0.00371] | +0.02997 [+0.02237, +0.03782] |
+| 256 | −0.00249 [−0.00576, +0.00073] | +0.02738 [+0.01946, +0.03544] |
+
+The intervals resample the paired tails. At 17 bytes, the
+effect has opposite signs across the two validation samples.
+[Matched-history ablations](../results/event_lm/residual_scale/residual_history_validation.json)
+
 ## Paired SNN width validation
 
 The two mixture-trained SNNs reproduced the same hash of all
