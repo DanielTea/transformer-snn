@@ -64,3 +64,12 @@ training workload feasible locally.
 [PG-19 score](../results/event_lm/trace_write_credit/pg19_write_credit_s711.json) ·
 [Native audit](../results/event_lm/trace_write_credit/native_write_credit_s711.json) ·
 [Read-veto design](TRACE_READ_VETO.md) · [Longer-context comparison](CONTEXT_LENGTH.md)
+
+The 1.63M full-attention reference also continued for 6,553,600 targets
+from its seed-0 checkpoint, using the same seed-711 windows and
+AdamW schedule. It scored 1.79625 bits per byte on the complete
+enwik8 split. Opponent steering scored 1.98533 at this training
+exposure, a gap of 0.18908 bits per byte. The PG-19 continuation
+comparison is scoring separately.
+[Reference training](../results/event_lm/trace_write_credit/transformer_s711_trace_warm_reference.json) ·
+[Reference enwik8](../results/event_lm/trace_write_credit/enwik8_transformer_s711.json)
