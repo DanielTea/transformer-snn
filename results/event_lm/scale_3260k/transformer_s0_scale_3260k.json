@@ -1,0 +1,227 @@
+{
+ "args": {
+  "variant": "transformer",
+  "data": "data/enwik8",
+  "device": "mps",
+  "threads": 4,
+  "seed": 0,
+  "dim": 256,
+  "hidden": 288,
+  "memory_heads": 4,
+  "memory_slots": 16,
+  "memory_width": null,
+  "forecast_key_channels": 0,
+  "match_forecast_key": false,
+  "learn_context_keys": false,
+  "learn_packet_thresholds": false,
+  "output_reference": false,
+  "compact_delays": false,
+  "departure_coincidence": false,
+  "delay_window": 1,
+  "delay_residual": false,
+  "router_charge_bits": 6,
+  "activity_inhibition": false,
+  "local_trace": false,
+  "delay_filter": false,
+  "pulse_budget": null,
+  "spike_resolution": 1,
+  "depth": 4,
+  "no_carry": false,
+  "heads": 4,
+  "mlp_ratio": 4.078125,
+  "local_window": 32,
+  "local_lookback": null,
+  "ctx": 512,
+  "bs": 8,
+  "steps": 6400,
+  "warmup": 160,
+  "lr": 0.003,
+  "wd": 0.05,
+  "eval_every": 400,
+  "eval_bs": 8,
+  "eval_batches": 8,
+  "final_eval_batches": 48,
+  "validation_only": true,
+  "initialize_from": null,
+  "freeze_router": false,
+  "code_loss_weight": 0.0,
+  "tag": "scale_3260k",
+  "results_dir": "checkpoints/scale-3260k-study/results",
+  "checkpoint": "checkpoints/scale-3260k-study/transformer_s0.pt",
+  "force": false
+ },
+ "cfg": {
+  "neuron": "ann",
+  "levels": 4,
+  "T": 1,
+  "tau": 2.0,
+  "v_th": 1.0,
+  "attn": "transformer",
+  "position_embeddings": true,
+  "address_bits": 4,
+  "memory_block": 32,
+  "memory_delay": 1,
+  "memory_relay": false,
+  "local_window": 32,
+  "temporal_carry": true,
+  "pulse_memory_cells": 0,
+  "pulse_preserve_reads": true,
+  "pulse_write_holds": [],
+  "pulse_read_bins": 2,
+  "pulse_fixed_cuts": false,
+  "pulse_global_cuts": false,
+  "charge_memory": "none",
+  "event_width": null,
+  "successor_orders": [
+   2,
+   3,
+   4,
+   5,
+   7
+  ],
+  "successor_slots": 2048,
+  "successor_spikes": true,
+  "successor_scaled_votes": false,
+  "mlp": "cdglu",
+  "mlp_ratio": 4.078125,
+  "qk_levels": null,
+  "softmax_temp_init": 1.0,
+  "wta_k": 1,
+  "sel_alpha": 4.0,
+  "csa_compete": true,
+  "csa_normalize": true,
+  "csa_levels": 1,
+  "pre_bn": true,
+  "causal_norm": false
+ },
+ "device": "mps",
+ "params": 3256832,
+ "trainable_params": 3256832,
+ "initialization": null,
+ "data_sha1": "57b8363b814821dc9d47aa4d41f58733519076b2",
+ "train_target_bytes": 26214400,
+ "curve": [
+  {
+   "step": 400,
+   "tokens": 1638400,
+   "train_bpb": 3.225619920326804,
+   "val_bpb": 2.8688398043244345,
+   "val_argmax_accuracy": 0.437713623046875
+  },
+  {
+   "step": 800,
+   "tokens": 3276800,
+   "train_bpb": 2.454067224442451,
+   "val_bpb": 2.5973270742824934,
+   "val_argmax_accuracy": 0.48846435546875
+  },
+  {
+   "step": 1200,
+   "tokens": 4915200,
+   "train_bpb": 2.3241725118640906,
+   "val_bpb": 2.411041722736824,
+   "val_argmax_accuracy": 0.517181396484375
+  },
+  {
+   "step": 1600,
+   "tokens": 6553600,
+   "train_bpb": 2.425444151859354,
+   "val_bpb": 2.3231196340755087,
+   "val_argmax_accuracy": 0.53570556640625
+  },
+  {
+   "step": 2000,
+   "tokens": 8192000,
+   "train_bpb": 2.2493650462356443,
+   "val_bpb": 2.267437219664453,
+   "val_argmax_accuracy": 0.543853759765625
+  },
+  {
+   "step": 2400,
+   "tokens": 9830400,
+   "train_bpb": 2.078496327002474,
+   "val_bpb": 2.1750144525192145,
+   "val_argmax_accuracy": 0.55816650390625
+  },
+  {
+   "step": 2800,
+   "tokens": 11468800,
+   "train_bpb": 1.9555127372490353,
+   "val_bpb": 2.106332428473054,
+   "val_argmax_accuracy": 0.5736083984375
+  },
+  {
+   "step": 3200,
+   "tokens": 13107200,
+   "train_bpb": 2.285842222518344,
+   "val_bpb": 2.056736544569527,
+   "val_argmax_accuracy": 0.58380126953125
+  },
+  {
+   "step": 3600,
+   "tokens": 14745600,
+   "train_bpb": 2.1414701823730034,
+   "val_bpb": 2.0171434296141575,
+   "val_argmax_accuracy": 0.590301513671875
+  },
+  {
+   "step": 4000,
+   "tokens": 16384000,
+   "train_bpb": 2.0705627673181723,
+   "val_bpb": 1.9719888686821747,
+   "val_argmax_accuracy": 0.596649169921875
+  },
+  {
+   "step": 4400,
+   "tokens": 18022400,
+   "train_bpb": 2.009689680027932,
+   "val_bpb": 1.9382693912103972,
+   "val_argmax_accuracy": 0.60638427734375
+  },
+  {
+   "step": 4800,
+   "tokens": 19660800,
+   "train_bpb": 1.7807011437621845,
+   "val_bpb": 1.9064097771207127,
+   "val_argmax_accuracy": 0.6092529296875
+  },
+  {
+   "step": 5200,
+   "tokens": 21299200,
+   "train_bpb": 2.145774392176147,
+   "val_bpb": 1.881735447699257,
+   "val_argmax_accuracy": 0.616668701171875
+  },
+  {
+   "step": 5600,
+   "tokens": 22937600,
+   "train_bpb": 1.944544199724958,
+   "val_bpb": 1.866915659678746,
+   "val_argmax_accuracy": 0.620513916015625
+  },
+  {
+   "step": 6000,
+   "tokens": 24576000,
+   "train_bpb": 1.8802928572238196,
+   "val_bpb": 1.8521720169769045,
+   "val_argmax_accuracy": 0.623626708984375
+  },
+  {
+   "step": 6400,
+   "tokens": 26214400,
+   "train_bpb": 2.16422486294336,
+   "val_bpb": 1.8476504211030704,
+   "val_argmax_accuracy": 0.623291015625
+  }
+ ],
+ "val_bpb": 1.9161673740511493,
+ "test_bpb": null,
+ "val": {
+  "bpb": 1.9161673740511493,
+  "argmax_accuracy": 0.6107584635416666,
+  "target_bytes": 196608
+ },
+ "test": null,
+ "scoring": "softmax over logits",
+ "seconds": 409.5231354236603
+}
