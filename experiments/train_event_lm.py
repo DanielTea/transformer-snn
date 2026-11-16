@@ -27,7 +27,7 @@ from common import (
     setup,
 )
 from snnformer import SNNConfig, count_params
-from snnformer.event_lm import EventLM, EventLMConfig
+from snnformer.event_lm import EventLM, EventLMConfig, _TRACE_READ_DRIVE_SOURCES
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
 
@@ -151,6 +151,7 @@ def build_model(args):
                             trace_read_drive=args.trace_read_drive,
                             trace_read_drive_bits=args.trace_read_drive_bits,
                             trace_read_drive_carry=args.trace_read_drive_carry,
+                            trace_read_share_steering=args.trace_read_share_steering,
                             steering_transfer=args.steering_transfer,
                             delay_group_widths=groups,
                             steering_gradient_at_zero=args.steering_gradient_at_zero,
@@ -250,6 +251,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   trace_read_drive=source_cfg.trace_read_drive or model.cfg.trace_read_drive,
                                   trace_read_drive_bits=model.cfg.trace_read_drive_bits,
                                   trace_read_drive_carry=model.cfg.trace_read_drive_carry,
+                                  trace_read_share_steering=model.cfg.trace_read_share_steering,
                                   steering_transfer=source_cfg.steering_transfer or model.cfg.steering_transfer,
                                   steering_gradient_at_zero=model.cfg.steering_gradient_at_zero,
                                   late_steering=source_cfg.late_steering or model.cfg.late_steering,
@@ -408,12 +410,14 @@ def main():
                         help="integrate learned current and arriving spikes before correcting held charge")
     parser.add_argument("--trace-tap-read", choices=("fixed", "race"),
                         help="read the shortest candidate tap or let held spikes race among recent taps")
-    parser.add_argument("--trace-read-drive", choices=("write", "present"),
-                        help="drive held-charge reads with correction spikes or current content spikes")
+    parser.add_argument("--trace-read-drive", choices=_TRACE_READ_DRIVE_SOURCES,
+                        help="choose the read input and whether to learn independent gains for its two rails")
     parser.add_argument("--trace-read-drive-bits", type=int, default=EventLMConfig.trace_read_drive_bits,
                         help="fixed-point charge precision of the driven read neurons")
     parser.add_argument("--trace-read-drive-carry", action="store_true",
                         help="retain the driven read neuron's fractional charge across bytes")
+    parser.add_argument("--trace-read-share-steering", action="store_true",
+                        help="match blocked read charge to spare steering pulses within each delay group")
     parser.add_argument("--steering-transfer", choices=("present", "delayed"),
                         help="move steering pulses within each pair in response to present or arriving content")
     parser.add_argument("--steering-gradient-at-zero", action="store_true",
@@ -526,7 +530,7 @@ def main():
             or args.trace_coincidence_start is not None or args.steering_gradient_at_zero or args.late_steering
             or args.local_trace or args.trace_write_credit or args.trace_write_confirm or args.trace_read_veto
             or args.trace_integration or args.trace_tap_read is not None or args.steering_transfer is not None
-            or args.trace_read_drive is not None or args.trace_read_drive_carry
+            or args.trace_read_drive is not None or args.trace_read_drive_carry or args.trace_read_share_steering
             or args.trace_read_drive_bits != EventLMConfig.trace_read_drive_bits
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (

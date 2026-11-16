@@ -8,6 +8,7 @@ from snnformer.correction_memory import (
 )
 from snnformer.event_lm import (
     EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _IntegrateFire, _OpponentSteering,
+    _ReadSteeringShare,
     _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _SteeringTransfer,
     _TraceReadDrive, _TraceTapRead, _steer_packet,
 )
@@ -91,6 +92,37 @@ def test_driven_read_retains_subthreshold_charge_across_chunks_and_bytes():
             chunks.append(counts if segment > 1 else counts[:, None])
         torch.testing.assert_close(torch.cat(chunks, dim=1), expected)
         torch.testing.assert_close(state.trace_read_phase, torch.tensor([[128]], dtype=torch.uint8))
+
+
+def test_read_steering_sharing_preserves_each_group_and_keeps_donors_readable():
+    share = _ReadSteeringShare((4, 3), 8, 8)
+    aperture = torch.tensor([[0, 4, 0, 3, 5, 0, 0]], dtype=torch.int32)
+    current = torch.tensor([[80, 270, -700, -256, 1024, 160, 600]], dtype=torch.int32)
+    requests = []
+    handle = share.request.register_forward_hook(lambda _module, _inputs, output: requests.append(output))
+    try:
+        assigned = share(current, aperture)
+    finally:
+        handle.remove()
+    torch.testing.assert_close(requests[0], torch.tensor([[1, 0, 3, 0, 0, 1, 3]], dtype=torch.int32))
+    torch.testing.assert_close(assigned, torch.tensor([[1, 2, 3, 1, 4, 1, 0]], dtype=torch.int32))
+    torch.testing.assert_close(share(current.float(), aperture.float()), assigned.float())
+
+
+def test_separate_read_gains_convert_opposite_writes_into_a_spike():
+    options = dict(bits=8, carry=True, steering_widths=(2,))
+    signed = _TraceReadDrive(2, 64, "write", **options)
+    separate = _TraceReadDrive(2, 64, "write-rails", **options)
+    with torch.no_grad():
+        for driver in (signed, separate):
+            driver.weight.fill_(1 / 256)
+            driver.freeze_integer()
+    correction = torch.tensor([[[80, 0], [-80, 0], [80, 0], [-80, 0]]], dtype=torch.int32)
+    read = torch.zeros_like(correction)
+    aperture = torch.tensor([[[0, 1]]], dtype=torch.int32).expand_as(read)
+    torch.testing.assert_close(signed(read, aperture, read, correction), read)
+    expected = torch.tensor([[[0, 0], [1, 0], [0, 0], [0, 0]]], dtype=torch.int32)
+    torch.testing.assert_close(separate(read, aperture, read, correction), expected)
 
 
 def test_steering_transfer_conserves_each_pair_at_its_firing_limit():

@@ -6,6 +6,7 @@ import argparse
 from dataclasses import replace
 import hashlib
 import json
+import math
 from pathlib import Path
 
 import torch
@@ -37,12 +38,13 @@ def audit_transformer(args, parent, checkpoint, validation, inputs, labels, devi
     with torch.no_grad():
         before = parent.to(device)(windows)
         after = grown(windows)
-        torch.testing.assert_close(before, after, rtol=0, atol=0)
+        torch.testing.assert_close(before, after, rtol=0, atol=args.logit_atol)
     logits = grown.train()(inputs)
     F.cross_entropy(logits.flatten(0, 1), labels.flatten()).backward()
     report = {
         "parent_parameters": count_params(parent), "grown_parameters": count_params(grown),
-        "validation_logits_exact": True,
+        "validation_logits_exact": torch.equal(before, after),
+        "validation_logits_max_abs_difference": (before - after).abs().max().item(),
     }
     previous_width = initialized.get("feed_forward_width_before")
     if previous_width is not None:
@@ -96,12 +98,17 @@ def main():
     parser.add_argument("--enwik8", type=Path, required=True)
     parser.add_argument("--mlp-ratio", type=float, help="widen the Transformer's SwiGLU to this ratio")
     parser.add_argument("--depth", type=int, help="append identity-initialized Transformer blocks to this depth")
+    parser.add_argument("--logit-atol", type=float, default=0.0,
+                        help="absolute FP32 tolerance for Transformer growth checks")
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
     if (args.study == "transformer") != (args.mlp_ratio is not None or args.depth is not None):
         parser.error("use --mlp-ratio or --depth to specify growth for the Transformer check")
+    if (not math.isfinite(args.logit_atol) or args.logit_atol < 0
+            or (args.logit_atol and args.study != "transformer")):
+        parser.error("--logit-atol needs a finite nonnegative tolerance for the Transformer check")
 
     torch.set_num_threads(4)
     torch.manual_seed(args.seed)

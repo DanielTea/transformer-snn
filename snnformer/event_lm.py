@@ -38,6 +38,7 @@ _STEERED_ROUTES = (
     "steered", "steered_local", "convergent", "steered_balanced",
     *_CORRECTION_ROUTES, *_PREDICTION_ROUTES, *_PHASE_ROUTES, *_DELAY_ROUTES,
 )
+_TRACE_READ_DRIVE_SOURCES = ("write", "present", "write-rails", "present-rails")
 
 
 def _delay_group_widths(channels, groups):
@@ -100,6 +101,7 @@ class EventLMConfig:
     trace_read_drive: str | None = None
     trace_read_drive_bits: int = _CHARGE_BITS
     trace_read_drive_carry: bool = False
+    trace_read_share_steering: bool = False
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -811,15 +813,60 @@ class _TraceInput(nn.Module):
         return self.emit(immediate * present + arriving * delayed)
 
 
+class _ReadSteeringShare(nn.Module):
+    """Match overflow requests to spare steering within each delay group."""
+
+    def __init__(self, widths, cap, bits):
+        super().__init__()
+        self.widths = widths
+        self.request = _IntegrateFire(cap, bits, False)
+        starts, ends = [], []
+        first = 0
+        for width in widths:
+            starts.extend([first] * width)
+            first += width
+            ends.extend([first] * width)
+        self.register_buffer("group_start", torch.tensor(starts, dtype=torch.long), persistent=False)
+        self.register_buffer("group_end", torch.tensor(ends, dtype=torch.long), persistent=False)
+
+    def forward(self, current, aperture):
+        threshold = self.request.threshold
+        charge = aperture * threshold
+        magnitude = current.abs()
+        overflow = (magnitude - charge).clamp_min(0)
+        overflow = overflow.minimum(self.request.cap * threshold - charge)
+        # Request a whole aperture pulse even for a fractional overflow.
+        requests = self.request(overflow + overflow.sign() * (threshold // 2 - 1))
+        slack = (charge - magnitude).clamp_min(0)
+        spare = slack.to(torch.int32) >> self.request.bits
+        if slack.is_floating_point():
+            surrogate = slack / threshold
+            spare = spare.to(slack.dtype) + (surrogate - surrogate.detach())
+
+        # The two pulse trains meet in their group's common pulse order.
+        runs = torch.stack((requests, spare), dim=-1)
+        prefix = F.pad(runs, (0, 0, 1, 0)).cumsum(dim=-2, dtype=runs.dtype)
+        start = prefix.index_select(-2, self.group_start)
+        earlier_wants, earlier_spare = (prefix[..., :-1, :] - start).unbind(-1)
+        total_wants, total_spare = (prefix.index_select(-2, self.group_end) - start).unbind(-1)
+        take = (total_spare - earlier_wants).clamp_min(0).minimum(requests)
+        give = (total_wants - earlier_spare).clamp_min(0).minimum(spare)
+        return aperture + (take - give)
+
+
 class _TraceReadDrive(nn.Module):
     """Send one more spike input to each existing held-charge read neuron."""
 
-    def __init__(self, width, cap, source, *, bits=_CHARGE_BITS, carry=False):
+    def __init__(self, width, cap, source, *, bits=_CHARGE_BITS, carry=False, steering_widths=None):
         super().__init__()
-        self.from_write = source == "write"
-        self.weight = nn.Parameter(torch.zeros(width))
+        self.from_write = source.startswith("write")
+        self.separate_rails = source.endswith("-rails")
+        shape = (2, width) if self.separate_rails else (width,)
+        self.weight = nn.Parameter(torch.zeros(shape))
         self.emit = (_ResidualMembraneFire(cap, bits, phase_field="trace_read_phase") if carry
                      else _IntegrateFire(cap, bits, False))
+        self.steering_share = (_ReadSteeringShare(steering_widths, cap, bits)
+                               if steering_widths is not None else None)
 
     def weight_ticks(self):
         return _weight_ticks(self.weight, charge_bits=self.emit.bits)
@@ -828,10 +875,20 @@ class _TraceReadDrive(nn.Module):
         if self.weight.is_floating_point():
             self.weight = nn.Parameter(self.weight_ticks().to(torch.int32), requires_grad=False)
 
-    def forward(self, read, steering, present, correction, *, state=None):
+    def drive_ticks(self, present, correction):
         source = correction if self.from_write else present
-        current = read * self.emit.threshold + self.weight_ticks() * source
-        limit = steering.clamp(max=self.emit.cap) * self.emit.threshold
+        weights = self.weight_ticks()
+        if self.separate_rails:
+            positive, negative = weights.unbind(0)
+            return positive * source.clamp_min(0) + negative * (-source).clamp_min(0)
+        return weights * source
+
+    def forward(self, read, steering, present, correction, *, state=None):
+        current = read * self.emit.threshold + self.drive_ticks(present, correction)
+        aperture = steering.clamp(max=self.emit.cap)
+        if self.steering_share is not None:
+            aperture = self.steering_share(current, aperture)
+        limit = aperture * self.emit.threshold
         current = current.clamp(-limit, limit)
         if not self.emit.carry:
             return self.emit(current)
@@ -1106,7 +1163,8 @@ class _DelayBlock(nn.Module):
             confirm_widths = self.widths if cfg.trace_write_confirm else None
             integration_width = cfg.hidden if cfg.trace_integration else None
             read_drive = (_TraceReadDrive(cfg.hidden, cap, cfg.trace_read_drive, bits=cfg.trace_read_drive_bits,
-                                          carry=cfg.trace_read_drive_carry)
+                                          carry=cfg.trace_read_drive_carry,
+                                          steering_widths=self.widths if cfg.trace_read_share_steering else None)
                           if cfg.trace_read_drive is not None else None)
             self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths,
                                      confirm_widths=confirm_widths, integration_width=integration_width,
@@ -1602,13 +1660,14 @@ class EventLM(nn.Module):
         if cfg.trace_read_veto and not cfg.local_trace:
             raise ValueError("trace read veto needs a local charge trace")
         if cfg.trace_read_drive is not None and (
-            cfg.trace_read_drive not in ("write", "present") or not cfg.local_trace
+            cfg.trace_read_drive not in _TRACE_READ_DRIVE_SOURCES or not cfg.local_trace
         ):
             raise ValueError("trace read drive needs a local charge trace and write or present spikes")
         if not isinstance(cfg.trace_read_drive_bits, int) or not _CHARGE_BITS <= cfg.trace_read_drive_bits < 31:
             raise ValueError("trace read drive precision must be an integer from 6 to 30")
-        if cfg.trace_read_drive is None and (cfg.trace_read_drive_bits != _CHARGE_BITS or cfg.trace_read_drive_carry):
-            raise ValueError("trace read precision and carry require a driven read")
+        if cfg.trace_read_drive is None and (cfg.trace_read_drive_bits != _CHARGE_BITS or cfg.trace_read_drive_carry
+                                             or cfg.trace_read_share_steering):
+            raise ValueError("trace read precision, carry and steering sharing require a driven read")
         if cfg.residual_membrane and not cfg.local_trace:
             raise ValueError("residual membranes need chunkable local trace state")
         if cfg.residual_correction_start is not None and (
@@ -1661,7 +1720,7 @@ class EventLM(nn.Module):
         projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden
         cap = _HIDDEN_CAP * cfg.resolution
         if cfg.trace_read_drive is not None:
-            source_cap = 3 if cfg.trace_integration and cfg.trace_read_drive == "write" else 2
+            source_cap = 3 if cfg.trace_integration and cfg.trace_read_drive.startswith("write") else 2
             read_limit = (cap * (_TICKS + source_cap * _WEIGHT_LIMIT)) << (cfg.trace_read_drive_bits - _CHARGE_BITS)
             if read_limit > _FP32_EXACT:
                 raise ValueError("trace read drive would exceed the exact FP32 integer range")
@@ -1999,7 +2058,7 @@ class EventLM(nn.Module):
             if block.trace.read_drive is not None:
                 name = f"blocks.{index}.trace.read_drive.weight"
                 read = torch.zeros_like(weights[name])
-                read.index_copy_(0, retained, previous[name].to(read))
+                read.index_copy_(-1, retained, previous[name].to(read))
                 widened[name] = read
             if block.trace_taps is not None:
                 name = f"blocks.{index}.trace_taps.weight"

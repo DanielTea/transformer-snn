@@ -20,6 +20,9 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         packed-width-present-transfer packed-width-delayed-transfer packed-width-short-groups" >&2
   echo "         trace-read-drive-control trace-read-drive-write trace-read-drive-present trace-read-drive-transformer" >&2
   echo "         trace-read-drive-write-fine trace-read-drive-write-carry trace-read-drive-present-carry" >&2
+  echo "         trace-read-drive-write-share trace-read-drive-present-share trace-read-drive-write-rails-share" >&2
+  echo "         trace-read-scale-snn trace-read-scale-control-snn" >&2
+  echo "         trace-read-scale-transformer trace-read-scale-control-transformer" >&2
   exit 2
 fi
 
@@ -206,7 +209,9 @@ case "$study" in
       name=control_transformer_s7907
     fi
     ;;
-  trace-read-drive-control|trace-read-drive-write|trace-read-drive-present|trace-read-drive-write-fine|trace-read-drive-write-carry|trace-read-drive-present-carry)
+  trace-read-drive-control|trace-read-drive-write|trace-read-drive-present|\
+  trace-read-drive-write-fine|trace-read-drive-write-carry|trace-read-drive-present-carry|\
+  trace-read-drive-write-share|trace-read-drive-present-share|trace-read-drive-write-rails-share)
     training+=("${spiking[@]}" --depth 11 --hidden 243 --router-charge-bits 8 --residual-correction-start 7
       --compact-trace-state --delay-group-widths 75,75,47,46
       --initialize-from checkpoints/packed-width-study/short_groups_s7907.pt)
@@ -219,6 +224,10 @@ case "$study" in
       *-carry)
         training+=(--trace-read-drive "${arm%-carry}" --trace-read-drive-bits 8 --trace-read-drive-carry)
         ;;
+      *-share)
+        training+=(--trace-read-drive "${arm%-share}" --trace-read-drive-bits 8 --trace-read-drive-carry
+          --trace-read-share-steering)
+        ;;
       *) training+=(--trace-read-drive "$arm") ;;
     esac
     name="${arm//-/_}_s8237"
@@ -227,6 +236,29 @@ case "$study" in
     training+=(--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 14.185546875
       --initialize-from checkpoints/packed-width-study/transformer_s7907.pt)
     name=transformer_s8237
+    ;;
+  trace-read-scale-snn|trace-read-scale-control-snn)
+    training+=("${spiking[@]}" --depth 11 --hidden 243 --router-charge-bits 8 --residual-correction-start 7
+      --compact-trace-state --delay-group-widths 75,75,47,46
+      --trace-read-drive write --trace-read-drive-bits 8 --trace-read-drive-carry
+      --initialize-from checkpoints/trace-read-drive-study/write_carry_s8237.pt)
+    if [[ $study == trace-read-scale-snn ]]; then
+      training+=(--dim 1536 --grow-residual)
+      name=wide_snn_s9277
+    else
+      name=control_snn_s9277
+    fi
+    ;;
+  trace-read-scale-transformer|trace-read-scale-control-transformer)
+    training+=(--variant transformer --dim 256 --depth 6 --heads 4
+      --initialize-from checkpoints/trace-read-drive-study/transformer_s8237.pt)
+    if [[ $study == trace-read-scale-transformer ]]; then
+      training+=(--mlp-ratio 30.462890625 --grow-feed-forward)
+      name=wide_transformer_s9277
+    else
+      training+=(--mlp-ratio 14.185546875)
+      name=control_transformer_s9277
+    fi
     ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
@@ -287,6 +319,9 @@ elif [[ $study == packed-width-* ]]; then
     --tag "${study//-/_}")
 elif [[ $study == trace-read-drive-* ]]; then
   training+=(--steps 1200 --warmup 48 --lr 0.00008 --seed 8237 --eval-every 150
+    --tag "${study//-/_}")
+elif [[ $study == trace-read-scale-* ]]; then
+  training+=(--steps 1200 --warmup 48 --lr 0.00008 --seed 9277 --eval-every 150
     --tag "${study//-/_}")
 elif [[ $study == residual-growth-control-transformer ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
@@ -352,7 +387,7 @@ if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == 
       $study == depth-growth-snn || $study == depth-growth-wide || $study == trace-transport ||
       $study == trace-group-thresholds || $study == trace-fine-group-thresholds || $study == trace-transport-control ||
       $study == trace-tap-fixed || $study == trace-tap-race ||
-      ($study == trace-read-drive-* && $study != *transformer) ||
+      ($study == trace-read-* && $study != *transformer) ||
       ($study == packed-width-* && $study != *transformer) ]]; then
   run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
     --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"

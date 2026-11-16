@@ -67,6 +67,18 @@ def score_with_options(model, window, chunk_size, **options):
     return score(variant, window, chunk_size)
 
 
+@torch.inference_mode()
+def score_with_antisymmetric_read_gains(model, window, chunk_size):
+    variant = EventLM(model.cfg).eval().to(window.device)
+    variant.load_state_dict(model.state_dict())
+    for block in variant.blocks:
+        positive, negative = block.trace.read_drive.weight.unbind(0)
+        signed = (positive - negative) * 0.5
+        positive.copy_(signed)
+        negative.copy_(-signed)
+    return score(variant, window, chunk_size)
+
+
 def probe_temporal_groups(model, window, chunk_size):
     groups = [{"delays": [], "axon_cells": 0, "held_cells": 0, "columns": []}
               for _ in model.blocks[0].widths]
@@ -190,9 +202,19 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.cfg.trace_read_drive is not None:
         weights = [block.trace.read_drive.weight for block in model.blocks]
         result["zero_trace_read_drive_bpb"] = score_without_synapses(model, window, chunk_size, weights)
-        other_source = "present" if model.cfg.trace_read_drive == "write" else "write"
+        source = model.cfg.trace_read_drive
+        other_source = "present" if source.startswith("write") else "write"
+        if source.endswith("-rails"):
+            other_source += "-rails"
+            result["antisymmetric_trace_read_gains_bpb"] = score_with_antisymmetric_read_gains(
+                model, window, chunk_size,
+            )
         result["swapped_trace_read_drive_bpb"] = score_with_options(model, window, chunk_size,
                                                                   trace_read_drive=other_source)
+        if model.cfg.trace_read_share_steering:
+            result["without_trace_read_sharing_bpb"] = score_with_options(
+                model, window, chunk_size, trace_read_share_steering=False,
+            )
     if model.cfg.trace_tap_read is not None:
         weights = [block.trace_taps.weight for block in model.blocks]
         result["zero_tap_correction_bpb"] = score_without_synapses(model, window, chunk_size, weights)

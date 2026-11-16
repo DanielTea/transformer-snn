@@ -16,7 +16,7 @@ from benchmark_decode import state_bytes
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
 from probe_event_state import added_expansion_rows
-from snnformer.event_lm import EventLM, EventLMConfig, _IntegrateFire, _route_packets, _steer_packet
+from snnformer.event_lm import EventLM, EventLMConfig, _IntegrateFire, _route_packets, _steer_packet, _TRACE_READ_DRIVE_SOURCES
 from train_event_lm import initialize_from_checkpoint, scoring_logits
 from train_lm import load_splits, random_batch
 
@@ -98,10 +98,11 @@ def main():
     growth.add_argument("--trace-write-confirm", action="store_true", help="add silent write confirmation neurons")
     growth.add_argument("--trace-integration", action="store_true", help="add silent input neurons to held charge")
     growth.add_argument("--trace-tap-read", choices=("fixed", "race"), help="add a read from an existing axon tap")
-    growth.add_argument("--trace-read-drive", choices=("write", "present"),
+    growth.add_argument("--trace-read-drive", choices=_TRACE_READ_DRIVE_SOURCES,
                         help="add silent synapses into the held-charge read neurons")
     parser.add_argument("--trace-read-drive-bits", type=int, default=EventLMConfig.trace_read_drive_bits)
     parser.add_argument("--trace-read-drive-carry", action="store_true")
+    parser.add_argument("--trace-read-share-steering", action="store_true")
     growth.add_argument("--redistribute-inhibition", action="store_true", help="add silent inhibitory transfers")
     growth.add_argument("--learn-inhibition-thresholds", action="store_true",
                         help="replace the common resting threshold with learned delay-group thresholds")
@@ -124,9 +125,9 @@ def main():
         parser.error("--delay-group-widths in this audit accompanies --hidden")
     if args.inhibition_threshold_bits is not None and not args.learn_inhibition_thresholds:
         parser.error("threshold precision requires --learn-inhibition-thresholds")
-    if args.trace_read_drive is None and (args.trace_read_drive_carry
+    if args.trace_read_drive is None and (args.trace_read_drive_carry or args.trace_read_share_steering
             or args.trace_read_drive_bits != EventLMConfig.trace_read_drive_bits):
-        parser.error("read carry and precision require --trace-read-drive")
+        parser.error("read carry, precision and steering sharing require --trace-read-drive")
 
     torch.set_num_threads(4)
     torch.manual_seed(711)
@@ -158,7 +159,8 @@ def main():
             cfg = replace(cfg, inhibition_threshold_bits=args.inhibition_threshold_bits)
         if args.trace_read_drive is not None:
             cfg = replace(cfg, trace_read_drive_bits=args.trace_read_drive_bits,
-                          trace_read_drive_carry=args.trace_read_drive_carry)
+                          trace_read_drive_carry=args.trace_read_drive_carry,
+                          trace_read_share_steering=args.trace_read_share_steering)
         grown = EventLM(cfg)
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False)
     elif args.refine_router_charge is not None:

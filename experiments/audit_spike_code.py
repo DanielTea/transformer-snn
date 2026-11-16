@@ -98,6 +98,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
     tap_winners = []
     read_changes = []
     read_charge = []
+    shared_apertures = {}
+    read_transfers = []
     verified_transfers = 0
     if integer.cfg.steering_transfer is not None:
         def check_transfers(module, inputs, output):
@@ -109,19 +111,40 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
             verified_transfers += 1
 
         handles.extend(block.steering_transfer.register_forward_hook(check_transfers) for block in integer.blocks)
+    if integer.cfg.trace_read_share_steering:
+        def check_read_transfers(module, inputs, output):
+            current, original = inputs
+            if (output.lt(0) | output.gt(module.request.cap)).any():
+                raise AssertionError("shared read aperture exceeds its pulse bounds")
+            for before, after in zip(original.split(module.widths, -1), output.split(module.widths, -1), strict=True):
+                if not torch.equal(before.sum(-1, dtype=torch.int32), after.sum(-1, dtype=torch.int32)):
+                    raise AssertionError("a delay group's spare steering exchange changed its pulse budget")
+            threshold = module.request.threshold
+            before = current.clamp(-original * threshold, original * threshold)
+            after = current.clamp(-output * threshold, output * threshold)
+            if (output.lt(original) & before.ne(after)).any():
+                raise AssertionError("a steering donor lost read charge")
+            moved = (output - original).clamp_min(0).sum(dtype=torch.int64).item()
+            recovered = (after - before).abs().sum(dtype=torch.int64).item()
+            read_transfers.append((moved, recovered))
+            shared_apertures[module] = output
+
+        handles.extend(block.trace.read_drive.steering_share.register_forward_hook(check_read_transfers)
+                       for block in integer.blocks)
     if integer.cfg.trace_read_drive is not None:
         def check_driven_read(module, inputs, output):
             base, steering, present, correction = inputs
-            if (output.abs() > steering).any():
+            aperture = (steering.clamp(max=module.emit.cap) if module.steering_share is None
+                        else shared_apertures.pop(module.steering_share))
+            if (output.abs() > aperture).any():
                 raise AssertionError("a driven trace read exceeded its steering aperture")
             read_changes.append((output - base).abs().sum(dtype=torch.int64).item())
-            source = correction if module.from_write else present
-            drive = module.weight_ticks() * source
-            aperture = steering.clamp(max=module.emit.cap) * module.emit.threshold
+            drive = module.drive_ticks(present, correction)
+            limit = aperture * module.emit.threshold
             baseline = base * module.emit.threshold
-            passed = drive.clamp(-aperture - baseline, aperture - baseline)
+            passed = drive.clamp(-limit - baseline, limit - baseline)
             magnitude = drive.abs()
-            closed = magnitude.masked_fill(steering.ne(0), 0)
+            closed = magnitude.masked_fill(aperture.ne(0), 0)
             read_charge.append((magnitude.sum(dtype=torch.int64).item(),
                                 passed.abs().sum(dtype=torch.int64).item(), closed.sum(dtype=torch.int64).item()))
 
@@ -156,6 +179,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 populations[f"block_{index}_trace_input"] = block.trace.input.emit
             if integer.cfg.trace_read_drive is not None:
                 populations[f"block_{index}_trace_read"] = block.trace.read_drive.emit
+            if integer.cfg.trace_read_share_steering:
+                populations[f"block_{index}_trace_read_requests"] = block.trace.read_drive.steering_share.request
             if integer.cfg.trace_tap_read is not None:
                 populations[f"block_{index}_tap_correction"] = block.trace_taps.emit
         for name, module in populations.items():
@@ -261,11 +286,24 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["trace_read_drive_active_weights_by_block"] = [
             block.trace.read_drive.weight.count_nonzero().item() for block in integer.blocks
         ]
+        if integer.cfg.trace_read_drive.endswith("-rails"):
+            row["trace_read_total_variation_cells_by_block"] = [
+                block.trace.read_drive.weight.sum(0, dtype=torch.int32).count_nonzero().item()
+                for block in integer.blocks
+            ]
         row["trace_read_changed_counts_per_byte_by_block"] = [count / tokens.numel() for count in read_changes]
         received, passed, closed = map(sum, zip(*read_charge, strict=True))
         row["trace_read_drive_ticks_per_byte"] = received / tokens.numel()
         row["trace_read_drive_clipped_fraction"] = (received - passed) / received if received else None
         row["trace_read_drive_closed_aperture_fraction"] = closed / received if received else None
+    if integer.cfg.trace_read_share_steering:
+        if len(read_transfers) != len(integer.blocks) or shared_apertures:
+            raise AssertionError("the native audit did not check every shared aperture")
+        moved, recovered = map(sum, zip(*read_transfers, strict=True))
+        row["trace_read_delay_groups_conserve_steering"] = True
+        row["trace_read_steering_donors_preserve_charge"] = True
+        row["trace_read_steering_pulses_moved_per_byte"] = moved / tokens.numel()
+        row["trace_read_drive_ticks_recovered_per_byte"] = recovered / tokens.numel()
     if integer.cfg.steering_transfer is not None:
         if verified_transfers != len(integer.blocks):
             raise AssertionError("the native audit did not check every steering transfer block")
@@ -312,6 +350,11 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         if integer.cfg.trace_integration:
             row["trace_input_pulses_per_byte"] = sum(
                 activity[f"block_{index}_trace_input"].abs().sum(dtype=torch.int64).item()
+                for index in range(len(integer.blocks))
+            ) / tokens.numel()
+        if integer.cfg.trace_read_share_steering:
+            row["trace_read_steering_request_pulses_per_byte"] = sum(
+                activity[f"block_{index}_trace_read_requests"].sum(dtype=torch.int64).item()
                 for index in range(len(integer.blocks))
             ) / tokens.numel()
         if integer.cfg.steering_transfer is not None:

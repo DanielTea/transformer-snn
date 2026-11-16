@@ -116,9 +116,12 @@ def main():
         if args.trace_read_drive_ablation:
             if not isinstance(model, EventLM) or model.cfg.trace_read_drive is None:
                 parser.error(f"{name}: --trace-read-drive-ablation requires a driven held-charge read")
-            source = "present" if model.cfg.trace_read_drive == "write" else "write"
+            source = model.cfg.trace_read_drive
+            alternative = "present" if source.startswith("write") else "write"
+            if source.endswith("-rails"):
+                alternative += "-rails"
             zero = EventLM(model.cfg).to(device).eval()
-            swapped = EventLM(replace(model.cfg, trace_read_drive=source)).to(device).eval()
+            swapped = EventLM(replace(model.cfg, trace_read_drive=alternative)).to(device).eval()
             zero.load_state_dict(model.state_dict())
             swapped.load_state_dict(model.state_dict())
             with torch.no_grad():
