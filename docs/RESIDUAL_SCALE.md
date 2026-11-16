@@ -127,6 +127,19 @@ added neurons affect enwik8 after each training recipe.
 [C4 mixture comparison](../results/event_lm/residual_scale/c4_mixture_cpu.json) ·
 [Paired enwik8 validation](../results/event_lm/residual_scale/mixture_effect_validation.json)
 
+## Paired SNN width validation
+
+The two mixture-trained SNNs reproduced the same hash of all
+9,830,400 continuation targets. At predictions 17–32 on 1,535
+reset enwik8 validation windows, the 14.07M SNN scores 1.83279
+bpb and the 25.79M SNN scores 1.84090 bpb. The wider model's
+change is +0.00811 bpb with a paired 95% interval of [+0.00357,
++0.01272]. The result measures width within the SNN family.
+The full-attention comparisons and complete enwik8 test
+provide the size-matched gaps.
+[Paired width validation](../results/event_lm/residual_scale/width_snn_validation.json) ·
+[Matched training-window receipt](../results/event_lm/training_mixture/windows_s9631.json)
+
 ## Reproduce the data and launches
 
 Prepare the canonical [enwik8 and PG-19 evaluation files](HANDOFF.md#datasets)
