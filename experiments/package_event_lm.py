@@ -18,9 +18,11 @@ RELEASES = {
     "v1": ("spiking-byte-lm", "spiking-byte-lm-checkpoints"),
     "v2": ("spiking-byte-lm-v2", "spiking-byte-lm-v2-checkpoints"),
     "v3": ("spiking-byte-lm-v3", "spiking-byte-lm-v3-checkpoints"),
+    "v4": ("spiking-byte-lm-v4", "spiking-byte-lm-v4-checkpoints"),
 }
 DEPTH_REFERENCE = "depth-inhibition-study/trace_s0.pt"
 CONTINUATION_REFERENCE = "long-context-continuation/trace_ctx2048_s711.pt"
+FINE_CHARGE_REFERENCE = "grown-fine-charge-study/fine_s711.pt"
 
 
 def sha256(path):
@@ -108,17 +110,18 @@ def collect_depth_release(directory):
     return entries, (record["val_bpb"], DEPTH_REFERENCE, record, record_path), measured
 
 
-def collect_continuation_release(directory):
-    catalog = RESULTS / "continuation_checkpoints.sha256"
+def collect_catalog_release(directory, catalogs, reference, audit_path):
     hashes = {}
-    for line in catalog.read_text(encoding="utf-8").splitlines():
-        digest, separator, source = line.partition("  ")
-        path = Path(source)
-        if (not separator or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest)
-                or path.is_absolute() or ".." in path.parts or path.suffix != ".pt" or source in hashes):
-            raise ValueError(f"invalid checkpoint entry in {catalog}: {line}")
-        path.relative_to("checkpoints")
-        hashes[source] = digest
+    for filename in catalogs:
+        catalog = RESULTS / filename
+        for line in catalog.read_text(encoding="utf-8").splitlines():
+            digest, separator, source = line.partition("  ")
+            path = Path(source)
+            if (not separator or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest)
+                    or path.is_absolute() or ".." in path.parts or path.suffix != ".pt" or source in hashes):
+                raise ValueError(f"invalid checkpoint entry in {catalog}: {line}")
+            path.relative_to("checkpoints")
+            hashes[source] = digest
 
     records = {}
     for path in sorted(RESULTS.rglob("*.json")):
@@ -152,11 +155,11 @@ def collect_continuation_release(directory):
             entry["parent"] = parent_path
         entries[name] = entry
 
-    source = f"checkpoints/{CONTINUATION_REFERENCE}"
+    source = f"checkpoints/{reference}"
     record, path = records[source]
-    audit = json.loads((path.parent / "native_trace_ctx2048_s711.json").read_text(encoding="utf-8"))
+    audit = json.loads((RESULTS / audit_path).read_text(encoding="utf-8"))
     measured = next(row for row in audit["models"] if row["checkpoint"] == source)
-    return entries, (record["val_bpb"], CONTINUATION_REFERENCE, record, path), measured
+    return entries, (record["val_bpb"], reference, record, path), measured
 
 
 def add_file(archive, name, length, source):
@@ -193,13 +196,21 @@ def main():
             measured = next(row for row in audit["models"] if Path(row["checkpoint"]).name == candidate[1])
         elif args.release == "v2":
             entries, candidate, measured = collect_depth_release(args.checkpoint_dir)
+        elif args.release == "v3":
+            entries, candidate, measured = collect_catalog_release(
+                args.checkpoint_dir, ("continuation_checkpoints.sha256",), CONTINUATION_REFERENCE,
+                "long_context_continuation/native_trace_ctx2048_s711.json",
+            )
         else:
-            entries, candidate, measured = collect_continuation_release(args.checkpoint_dir)
+            entries, candidate, measured = collect_catalog_release(
+                args.checkpoint_dir, ("continuation_checkpoints.sha256", "v4_checkpoints.sha256"),
+                FINE_CHARGE_REFERENCE, "grown_fine_charge/native_fine_s711.json",
+            )
         val_bpb, name, training, record_path = candidate
         args.release_dir.mkdir(parents=True, exist_ok=True)
         model_dir.mkdir(parents=True, exist_ok=True)
         bundle = args.release_dir / f"{archive_stem}.tar.gz"
-        checksum_path = "checkpoints/SHA256SUMS-v3" if args.release == "v3" else "checkpoints/SHA256SUMS"
+        checksum_path = f"checkpoints/SHA256SUMS-{args.release}" if args.release in ("v3", "v4") else "checkpoints/SHA256SUMS"
         write_archive(args.checkpoint_dir, entries, bundle, checksum_path)
         bundle_sha256 = sha256(bundle)
         (args.release_dir / f"{archive_stem}.sha256").write_text(
@@ -219,7 +230,7 @@ def main():
             "archive": {"file": bundle.name, "sha256": bundle_sha256, "bytes": bundle.stat().st_size},
             "checkpoints": dict(sorted(entries.items())),
         }
-        if args.release == "v3":
+        if args.release in ("v3", "v4"):
             manifest["model"]["cumulative_training_targets"] = (
                 training["train_target_bytes"] + training["initialization"]["training_targets"]
             )

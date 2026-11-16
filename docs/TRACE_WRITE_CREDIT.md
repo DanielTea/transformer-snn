@@ -85,3 +85,40 @@ The largest per-target gap is in the 32–127-byte group at 0.35123
 bits per byte. [Opponent-steering enwik8 record](../results/event_lm/opponent_steering/enwik8_opponent_s711.json)
 
 ![enwik8 loss gap within prefix age groups and each group's contribution](../results/figures/event_lm_prefix_age_gap.png)
+
+## Share the scan with forecast-error memory
+
+Both recurrences move a cell's charge by clipping it to a
+permitted interval. Inference now composes adjacent pairs
+recursively for both the local held-charge cells and the
+forecast-error bank. This evaluates the same causal states
+with linear total work. The earlier prefix scan remains the
+default training gradient during replay.
+
+The optional `--bank-write-credit` gradient makes each
+forecast-error read send credit to the actual write that
+moved its cell most recently. A read that follows a touch
+at equality gives credit to the earlier write.
+
+On the trained four-phase checkpoint, five interleaved Metal
+trials gave the following median timings. Both comparisons
+preserved every vocabulary count on the measured samples.
+
+| Measured operation | Original prefix scan | Paired method |
+|---|---:|---:|
+| Forward on an 8,192-byte enwik8 validation chunk | 0.350 s | 0.240 s |
+| Language forward and backward on 4,096 enwik8 training targets, changing the bank gradient only | 0.829 s | 0.347 s |
+
+The second row measures the optional bank gradient and
+excludes the optimizer and auxiliary losses. A separate
+three-step trial exercised it with the regular training
+objective and pulse tracking.
+[Forward timing and paired trials](../results/event_lm/tag_phase_address/paired_scan_timing.json) ·
+[Bank-gradient timing](../results/event_lm/tag_phase_address/bank_write_credit_timing.json) ·
+[Metal training smoke](../results/event_lm/tag_phase_address/event_correction_code_s711_bank_write_credit_smoke.json)
+
+```bash
+PYTORCH_ENABLE_MPS_FALLBACK=0 python experiments/benchmark_trace_training.py \
+  --site bank --trials 5 --checkpoint checkpoints/tag-phase-address-study/tag_phase_s711.pt \
+  --enwik8 data/enwik8 --json checkpoints/work/bank-write-credit-timing.json
+```

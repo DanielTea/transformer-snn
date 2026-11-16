@@ -225,6 +225,35 @@ class TransformerLM(nn.Module):
             nn.init.normal_(block.attn.out.weight, std=residual_std)
             nn.init.normal_(block.mlp_out.weight, std=residual_std)
 
+    @torch.no_grad()
+    def initialize_wider_feed_forward(self, prior: SNNConfig, previous: dict[str, torch.Tensor]) -> int:
+        """Load the trained feed-forward units and start new units with silent output."""
+        if replace(prior, mlp_ratio=self.cfg.mlp_ratio) != self.cfg:
+            raise ValueError("feed-forward growth needs the same Transformer backbone")
+        weights = previous.copy()
+        widths = set()
+        for index, block in enumerate(self.blocks):
+            incoming = f"blocks.{index}.mlp_in.weight"
+            outgoing = f"blocks.{index}.mlp_out.weight"
+            old_input, old_output = previous[incoming], previous[outgoing]
+            if old_output.ndim != 2:
+                raise ValueError(f"invalid SwiGLU output matrix: {outgoing}")
+            width = old_output.shape[1]
+            widths.add(width)
+            if (width >= block.mlp_out.in_features or old_output.shape[0] != block.mlp_out.out_features
+                    or old_input.shape != (2 * width, block.mlp_in.in_features)):
+                raise ValueError("the checkpoint must have a narrower SwiGLU layer at the same residual width")
+            new_input = block.mlp_in.weight.detach().clone()
+            for target, source in zip(new_input.chunk(2), old_input.chunk(2), strict=True):
+                target[:width].copy_(source)
+            new_output = torch.zeros_like(block.mlp_out.weight)
+            new_output[:, :width].copy_(old_output)
+            weights[incoming], weights[outgoing] = new_input, new_output
+        if len(widths) != 1:
+            raise ValueError("the checkpoint must use the same feed-forward width in every block")
+        self.load_state_dict(weights)
+        return widths.pop()
+
     @staticmethod
     def _init_weights(module: nn.Module) -> None:
         if isinstance(module, (nn.Linear, nn.Embedding)):

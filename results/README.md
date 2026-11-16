@@ -60,13 +60,23 @@ holds the additional seeds, and `delay_filter` holds the paired
 warm-start experiment. Their checkpoint catalogs match the paths in
 the [v2 release manifest](../models/spiking-byte-lm-v2/manifest.json).
 
-The [v3 handoff](../docs/HANDOFF.md) links the new studies and the
-native audits, full-corpus scores, and training records behind them.
-`event_lm/continuation_leaderboard.json` reports the two trained
-context lengths, 3.26M comparison, and three-seed replication
-at their respective budgets.
-`event_lm/continuation_checkpoints.sha256` pins the contents of the
-[v3 checkpoint archive](../models/spiking-byte-lm-v3/manifest.json).
+The [v4 handoff](../docs/HANDOFF.md) links the native audits,
+full-corpus scores, and exact training records.
+
+| Study | Files |
+|---|---|
+| [Grown SNN and Transformer](event_lm/grown_6510k_residual) | Warm-start parity, training curves, per-book loss, added-neuron intervention |
+| [Finer-charge reference](event_lm/grown_fine_charge) | Exact training record, both held-out scores, native audit and ablation |
+| [From-scratch width study](event_lm/scale_6510k_width) | The paired 6.51M training and evaluation records |
+| [3.26M context study](event_lm/scale_3260k_context) | Both checkpoints at 512 and 2,048 training bytes per window |
+| [49.15M-target continuation](event_lm/scale_6510k_data) | Transformer scores at the release cutoff. The matched SNN run was in progress |
+| [Three-way coincidence](event_lm/trace_coincidence) | Warm-start parity and three-step enwik8 smoke |
+
+`event_lm/continuation_leaderboard.json` groups ranks by training
+exposure, geometry, and seed. The v4 archive combines the checkpoint
+catalogs `event_lm/continuation_checkpoints.sha256` and
+`event_lm/v4_checkpoints.sha256`.
+[Archive manifest](../models/spiking-byte-lm-v4/manifest.json)
 
 Regenerate the [leaderboards and current figures](../docs/LEADERBOARD.md)
 with `python experiments/plot_event_lm_study.py` and

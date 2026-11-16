@@ -5,8 +5,8 @@ import torch
 
 from snnformer.correction_memory import _interval_scan, _write_credit_scan, correction_reads, correction_step
 from snnformer.event_lm import (
-    EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _OpponentSteering, _SpikeCorrection, _SpikeTrace,
-    _SpreadCoincidence, _steer_packet,
+    EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _IntegrateFire, _OpponentSteering,
+    _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _steer_packet,
 )
 
 
@@ -25,6 +25,16 @@ def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
         sequential_reads.append(pulse)
     torch.testing.assert_close(torch.stack(sequential_reads, 1), read)
     torch.testing.assert_close(streaming.charge, state.charge)
+
+
+def test_bank_write_credit_ignores_an_interval_that_just_touches_charge():
+    address = torch.ones((1, 3, 1, 1))
+    targets = torch.tensor([[[[1.]], [[1.]], [[3.]]]], requires_grad=True)
+    reads, state = correction_reads(address, targets, torch.zeros_like(targets), 8, write_credit=True)
+    assert reads.flatten().tolist() == [0, 1, 1]
+    assert state.charge.item() == 3
+    reads.sum().backward()
+    assert targets.grad.flatten().tolist() == [2, 0, 0]
 
 
 def test_read_ablation_uses_age_of_effective_change_and_keeps_state_intact():
@@ -137,6 +147,27 @@ def test_spike_code_prediction_uses_one_vocabulary_pass_and_integer_codes():
     assert calls == [True]
     assert counts.dtype == prediction.dtype == torch.int32
     assert prediction.abs().max() <= 2 * model.cfg.resolution
+
+
+@torch.no_grad()
+def test_corrected_forecast_adds_only_the_delivered_error_spikes():
+    torch.manual_seed(244)
+    model = EventLM(EventLMConfig(dim=8, hidden=16, route="steered_correction_code", carry=False,
+                                 memory_heads=2, memory_slots=4, memory_width=8, resolution=4,
+                                 forecast_key_channels=2, match_forecast_key=True)).to_integer()
+    tokens = torch.randint(256, (1, 256))
+    counts, prediction, observed = model(tokens, return_prediction=True)
+    delivered = []
+    handle = model.prediction_memory.register_forward_hook(lambda _m, _i, out: delivered.append(out))
+    corrected_counts, corrected, corrected_observed = model(
+        tokens, return_prediction=True, corrected_prediction=True,
+    )
+    handle.remove()
+    assert bool(delivered[0].any())
+    torch.testing.assert_close(counts, corrected_counts)
+    torch.testing.assert_close(observed, corrected_observed)
+    torch.testing.assert_close(corrected[..., :2], prediction[..., :2])
+    torch.testing.assert_close(corrected[..., 2:], prediction[..., 2:] + delivered[0].unflatten(-1, (2, 2)))
 
 
 def test_forecast_mismatch_cancels_coincident_pulses_on_both_sign_rails():
@@ -482,7 +513,10 @@ def test_opponent_steering_warm_start_and_integer_chunk_and_step_parity():
 
 
 @torch.no_grad()
-@pytest.mark.parametrize("route_options", ({}, {"trace_read_veto": True}, {"spread_coincidence": True}))
+@pytest.mark.parametrize("route_options", (
+    {}, {"trace_read_veto": True}, {"spread_coincidence": True},
+    {"residual_membrane": True, "compact_axon_state": True},
+))
 @pytest.mark.parametrize("route", ("steered", "steered_correction_code"))
 def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route, route_options):
     torch.manual_seed(97)
@@ -512,6 +546,160 @@ def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks
         assert chunk.local_prefix is None
     for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
         torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
+        if cfg.residual_membrane:
+            assert streamed.output_phase.dtype == torch.uint8
+            torch.testing.assert_close(streamed.output_phase, batched.output_phase, rtol=0, atol=0)
+        if cfg.compact_axon_state:
+            assert streamed.history.dtype == batched.history.dtype == torch.int16
+
+
+def test_signed_residual_membrane_conserves_bounded_charge():
+    neuron = _ResidualMembraneFire(cap=3, bits=2)
+    current = torch.tensor([-2, 2, 1, 1, -3, -3, 20, -20], dtype=torch.int32).reshape(1, -1, 1)
+    counts = neuron(current)
+    assert counts.flatten().tolist() == [0, 0, 0, 1, -1, -1, 3, -3]
+
+    phase = None
+    charge = 0
+    pulses = 0
+    for i, value in enumerate(current.unbind(1)):
+        emitted, phase = neuron.step(value, phase)
+        torch.testing.assert_close(emitted, counts[:, i])
+        charge += value.clamp(-12, 12).item()
+        pulses += emitted.item()
+        assert charge == 4 * pulses + phase.item() - 2
+        assert 0 <= phase.item() < 4
+
+    differentiable = current.float().requires_grad_()
+    neuron(differentiable).sum().backward()
+    torch.testing.assert_close(differentiable.grad, (current.abs() <= 12).float() / 4)
+
+
+def test_compact_axon_storage_preserves_signed_maximum_packets():
+    cfg = EventLMConfig(dim=16, hidden=8, route="steered", carry=False, resolution=16, compact_delays=True)
+    dense = EventLM(cfg).blocks[0]
+    compact = EventLM(replace(cfg, compact_axon_state=True)).blocks[0]
+    full_state, compact_state = _DelayState(), _DelayState()
+    packet = torch.tensor([[-512, 512] * 4], dtype=torch.int32)
+    for position in range(15):
+        steering = packet.abs()
+        full, *_ = dense._step_compact(packet, steering, full_state, position)
+        packed, *_ = compact._step_compact(packet, steering, compact_state, position)
+        torch.testing.assert_close(packed, full)
+        packet = -packet
+    assert compact_state.history.untyped_storage().nbytes() * 2 == full_state.history.untyped_storage().nbytes()
+
+
+def test_compact_axons_preserve_training_gradients_across_chunks():
+    torch.manual_seed(177)
+    cfg = EventLMConfig(dim=16, hidden=12, route="steered", carry=False, resolution=16,
+                        compact_delays=True, local_trace=True)
+    standard = EventLM(cfg)
+    compact = EventLM(replace(cfg, compact_axon_state=True))
+    compact.load_state_dict(standard.state_dict())
+    stream = torch.randint(256, (1, 25))
+    for model in (standard, compact):
+        _, state = model.forward_chunk(stream[:, :11])
+        assert state.local_layers[0].history.requires_grad
+        outputs, _ = model.forward_chunk(stream[:, 11:], state)
+        outputs.square().mean().backward()
+    for reference, optimized in zip(standard.parameters(), compact.parameters(), strict=True):
+        torch.testing.assert_close(reference.grad, optimized.grad, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(("router_charge_bits", "trace_start"), ((6, None), (8, None), (6, 16)))
+def test_residual_growth_preserves_counts_and_trains_the_added_neurons(router_charge_bits, trace_start):
+    torch.manual_seed(69)
+    cfg = EventLMConfig(dim=16, hidden=8, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, forecast_key_channels=2,
+                        match_forecast_key=True, compact_delays=True, activity_inhibition=True, local_trace=True)
+    parent = EventLM(cfg)
+    grown = EventLM(replace(cfg, dim=32, inhibition_by_expansion=True, compact_axon_state=True,
+                           router_charge_bits=router_charge_bits, trace_coincidence_start=trace_start))
+    grown.initialize_wider_residual(cfg, parent.state_dict())
+    stream = torch.randint(256, (1, 47))
+
+    def decode(model):
+        native = model.to_integer()
+        pulses = []
+        handles = [
+            module.register_forward_hook(lambda _m, _i, output: pulses.append(output.abs().sum()))
+            for module in native.modules() if isinstance(module, _IntegrateFire)
+        ]
+        counts = native(stream, memory_pulses=pulses)
+        for handle in handles:
+            handle.remove()
+        return counts, torch.stack(pulses).sum()
+
+    for before, after in zip(decode(parent), decode(grown), strict=True):
+        torch.testing.assert_close(after, before, rtol=0, atol=0)
+    grown(stream).square().mean().backward()
+    assert bool(grown.input.weight.grad[:, cfg.dim:].any())
+    assert all(bool(block.project.weight.grad[cfg.dim:].any()) for block in grown.blocks)
+    with pytest.raises(ValueError, match="inhibitory threshold"):
+        EventLM(replace(cfg, dim=32)).initialize_wider_residual(cfg, parent.state_dict())
+
+
+@torch.no_grad()
+def test_trace_conditioned_group_routes_three_way_matches_on_the_same_sign_rail():
+    cfg = EventLMConfig(dim=4, hidden=4, route="steered", carry=False, compact_delays=True,
+                        local_trace=True, trace_coincidence_start=2)
+    block = EventLM(cfg).blocks[0]
+    block.project.weight.zero_()
+    block.project.weight[::2, :4].fill_(1 / 64)
+    block.project.weight[1::2, 4:8].fill_(1 / 64)
+    block.project.freeze_integer()
+    present = torch.tensor([[7, -6, 4, -3]], dtype=torch.int32)
+    steering = torch.tensor([[4, 5, 3, 2]], dtype=torch.int32)
+    held_read = torch.tensor([[2, -3, -2, 2]], dtype=torch.int32)
+    silent = torch.zeros_like(present)
+    routed = block._current(silent, present, silent, steering, None, coincidence_read=held_read)
+    assert routed.tolist() == [[0, 2, -1, 3]]
+
+
+def test_tag_polarities_change_phase_without_adding_an_address_pulse():
+    bank = _SpikeCorrection(8, 4, 1, 3, 16, bind_previous=True, observed=True, forecast=True,
+                            key_channels=2, match_key=True, tag_phase_address=True)
+    address = torch.tensor([[[0, 1, 0]]] * 4 + [[[0, 0, 0]]], dtype=torch.int32)
+    tags = torch.tensor([[[5, 0, 0, 0]], [[-6, 0, 0, 0]], [[0, -6, 0, 0]],
+                         [[-6, -6, 0, 0]], [[-6, -6, 0, 0]]], dtype=torch.int32)
+    emitted = bank._phase_address(address, tags)
+    assert emitted[:4].argmax(-1).flatten().tolist() == [4, 5, 6, 7]
+    torch.testing.assert_close(emitted.sum(-1), address.sum(-1))
+
+    prediction = tags.float().requires_grad_()
+    phases = bank._phase_address(address.float(), prediction)
+    (phases * torch.arange(12)).sum().backward()
+    assert bool((prediction.grad[:4, :, :2] != 0).all())
+    assert not bool(prediction.grad[:, :, 2:].any())
+    assert not bool(prediction.grad[4].any())
+
+
+@torch.no_grad()
+def test_tag_phase_bank_matches_integer_steps_and_streaming_chunks():
+    torch.manual_seed(13)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, forecast_key_channels=2,
+                        match_forecast_key=True, learn_context_keys=True, tag_phase_address=True,
+                        compact_delays=True, compact_axon_state=True, activity_inhibition=True, local_trace=True)
+    model = EventLM(cfg).eval()
+    native = model.to_integer()
+    tokens = torch.randint(256, (2, 49))
+    expected = native(tokens)
+    torch.testing.assert_close(expected, model(tokens).to(torch.int32), rtol=0, atol=0)
+    state = None
+    for i, byte in enumerate(tokens.unbind(1)):
+        emitted, state = native.step(byte, state)
+        torch.testing.assert_close(emitted, expected[:, i], rtol=0, atol=0)
+    assert state.prediction_memory.charge.shape == (2, 2, 16, 4)
+
+    chunk = None
+    parts = []
+    for part in tokens.split((1, 19, 29), dim=1):
+        emitted, chunk = native.forward_chunk(part, chunk)
+        parts.append(emitted)
+    torch.testing.assert_close(torch.cat(parts, dim=1), expected, rtol=0, atol=0)
+    torch.testing.assert_close(chunk.correction.charge, state.prediction_memory.charge)
 
 
 @torch.no_grad()

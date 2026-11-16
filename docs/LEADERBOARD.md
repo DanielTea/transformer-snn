@@ -4,6 +4,38 @@ Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books.
 
+## 6.51M growth · 512-byte continuations · 32,768,000 training targets · seed 711
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Grown SNN, finer charge | 6,514,176 | 19,536 B | 1.95110 | 2 | **2.85083** | 1 | 2.93341 | 309,505 |
+| Grown SNN, six-bit charge | 6,514,176 | 19,536 B | 1.95646 | 3 | 2.86904 | 2 | 2.95290 | 306,923 |
+| Grown full-attention Transformer | 6,513,152 | 4 MiB | **1.84266** | 1 | 3.06318 | 3 | 3.26549 | — |
+
+## 3.26M · 512-byte continuations · 32,768,000 training targets · seed 711
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Held charge | 3,257,088 | 31,692 B | 1.96430 | 2 | **2.88668** | 1 | 2.98308 | 308,067 |
+| Signed residual membrane | 3,257,088 | 22,224 B | 1.96628 | 3 | 2.89838 | 2 | 2.99574 | 309,629 |
+| Four address phases | 3,257,088 | 25,584 B | 1.99725 | 4 | 2.90730 | 3 | 2.99722 | 311,699 |
+| Four phases, corrected forecast loss | 3,257,088 | 25,584 B | 2.00335 | 5 | 2.90802 | 4 | 2.99318 | 310,105 |
+| Full-attention Transformer | 3,256,832 | 4 MiB | **1.84280** | 1 | 3.06325 | 5 | 3.26568 | — |
+
+## 3.26M · 2,048-byte continuations · 32,768,000 training targets · seed 711
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Held charge | 3,257,088 | 31,692 B | 1.97126 | 2 | **2.87693** | 1 | 2.96339 | 306,441 |
+| Full-attention Transformer | 3,256,832 | 16 MiB | **1.85459** | 1 | 3.05282 | 2 | 3.24905 | — |
+
+## 6.51M trained from scratch · 26,214,400 training targets · seed 0
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Wide held-charge SNN | 6,514,176 | 19,536 B | 2.06640 | 2 | **2.98527** | 1 | 3.09220 | 313,057 |
+| Full-attention Transformer | 6,514,944 | 6 MiB | **2.03855** | 1 | 3.28561 | 2 | 3.57094 | — |
+
 ## 512-byte continuations · 32,768,000 training targets · seed 711
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
@@ -36,11 +68,17 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Held-charge SNN | 1,630,992 | 21,320 B | 2.00633 | 2 | **2.98979** | 1 | 3.10037 | 307,013 |
 | Full-attention Transformer | 1,630,848 | 3 MiB | **1.82812** | 1 | 3.09559 | 2 | 3.29465 | — |
 
+![Held-out next-byte loss for the grown 6.51M models](../results/figures/event_lm_grown_6510k.png)
+
+![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)
+
+[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · [Current model card](../models/spiking-byte-lm-v4/README.md)
+
 ![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)
 
 ![Held-out loss at both trained context lengths](../results/figures/event_lm_trained_context.png)
 
-[Continuation and scale source records](../results/event_lm/continuation_leaderboard.json) · [Held-charge replication](HELD_CHARGE_REPLICATION.md) · [Current model card](../models/spiking-byte-lm-v3/README.md)
+[Continuation and scale source records](../results/event_lm/continuation_leaderboard.json) · [Held-charge replication](HELD_CHARGE_REPLICATION.md)
 
 ## Depth and activity inhibition · 26,214,400 training targets · seed 0
 

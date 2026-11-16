@@ -106,57 +106,87 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
-  <p class="col">The continuation studies compare integer spike decoders with matched Transformer references at 512 and 2,048 training bytes per window. All models trained on enwik8. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for the full-attention reference at its evaluation context.</p>
-  <h3>512-byte continuations · 32,768,000 training targets · seed 711</h3>
-<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
-<tr><th scope="row">Held-charge control</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">1.98564</td><td class="num">2.98490</td></tr>
-<tr><th scope="row">Opponent steering</th><td class="num">1,631,917</td><td class="num">21,320 B</td><td class="num">1.98533</td><td class="num"><strong>2.97309</strong></td></tr>
-<tr><th scope="row">Chronological write credit</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">1.98691</td><td class="num">2.99097</td></tr>
-<tr><th scope="row">Trace read veto</th><td class="num">1,631,012</td><td class="num">21,320 B</td><td class="num">1.98405</td><td class="num">2.98763</td></tr>
-<tr><th scope="row">Spread coincidence</th><td class="num">1,631,012</td><td class="num">21,320 B</td><td class="num">1.98644</td><td class="num">2.98129</td></tr>
-<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">3,145,728 B</td><td class="num"><strong>1.79625</strong></td><td class="num">3.11887</td></tr>
+  <p class="col">The v4 comparison grows the seven-block SNN and its matched Transformer from their trained 3.26M parents to about 6.51M parameters. All models trained on enwik8. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for the full-attention reference at its evaluation context.</p>
+  <figure>
+    <a href="../results/figures/event_lm_grown_6510k.png"><img src="../results/figures/event_lm_grown_6510k.png" alt="Held-out loss for the grown 6.51M spiking and full-attention models" loading="lazy"></a>
+  </figure>
+  <h3>6.51M growth · 512-byte continuations · 32,768,000 training targets · seed 711</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Grown SNN, finer charge</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.95110</td><td class="num"><strong>2.85083</strong></td><td class="num">2.93341</td><td class="num">309,505</td></tr>
+<tr><th scope="row">Grown SNN, six-bit charge</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.95646</td><td class="num">2.86904</td><td class="num">2.95290</td><td class="num">306,923</td></tr>
+<tr><th scope="row">Grown full-attention Transformer</th><td class="num">6,513,152</td><td class="num">4,194,304 B</td><td class="num"><strong>1.84266</strong></td><td class="num">3.06318</td><td class="num">3.26549</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>3.26M · 512-byte continuations · 32,768,000 training targets · seed 711</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Held charge</th><td class="num">3,257,088</td><td class="num">31,692 B</td><td class="num">1.96430</td><td class="num"><strong>2.88668</strong></td><td class="num">2.98308</td><td class="num">308,067</td></tr>
+<tr><th scope="row">Signed residual membrane</th><td class="num">3,257,088</td><td class="num">22,224 B</td><td class="num">1.96628</td><td class="num">2.89838</td><td class="num">2.99574</td><td class="num">309,629</td></tr>
+<tr><th scope="row">Four address phases</th><td class="num">3,257,088</td><td class="num">25,584 B</td><td class="num">1.99725</td><td class="num">2.90730</td><td class="num">2.99722</td><td class="num">311,699</td></tr>
+<tr><th scope="row">Four phases, corrected forecast loss</th><td class="num">3,257,088</td><td class="num">25,584 B</td><td class="num">2.00335</td><td class="num">2.90802</td><td class="num">2.99318</td><td class="num">310,105</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">3,256,832</td><td class="num">4,194,304 B</td><td class="num"><strong>1.84280</strong></td><td class="num">3.06325</td><td class="num">3.26568</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>3.26M · 2,048-byte continuations · 32,768,000 training targets · seed 711</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Held charge</th><td class="num">3,257,088</td><td class="num">31,692 B</td><td class="num">1.97126</td><td class="num"><strong>2.87693</strong></td><td class="num">2.96339</td><td class="num">306,441</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">3,256,832</td><td class="num">16,777,216 B</td><td class="num"><strong>1.85459</strong></td><td class="num">3.05282</td><td class="num">3.24905</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>6.51M trained from scratch · 26,214,400 training targets · seed 0</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Wide held-charge SNN</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">2.06640</td><td class="num"><strong>2.98527</strong></td><td class="num">3.09220</td><td class="num">313,057</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">6,514,944</td><td class="num">6,291,456 B</td><td class="num"><strong>2.03855</strong></td><td class="num">3.28561</td><td class="num">3.57094</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>512-byte continuations · 32,768,000 training targets · seed 711</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Held-charge control</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">1.98564</td><td class="num">2.98490</td><td class="num">3.10338</td><td class="num">307,730</td></tr>
+<tr><th scope="row">Opponent steering</th><td class="num">1,631,917</td><td class="num">21,320 B</td><td class="num">1.98533</td><td class="num"><strong>2.97309</strong></td><td class="num">3.09454</td><td class="num">308,471</td></tr>
+<tr><th scope="row">Chronological write credit</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">1.98691</td><td class="num">2.99097</td><td class="num">3.10893</td><td class="num">307,270</td></tr>
+<tr><th scope="row">Trace read veto</th><td class="num">1,631,012</td><td class="num">21,320 B</td><td class="num">1.98405</td><td class="num">2.98763</td><td class="num">3.11449</td><td class="num">307,412</td></tr>
+<tr><th scope="row">Spread coincidence</th><td class="num">1,631,012</td><td class="num">21,320 B</td><td class="num">1.98644</td><td class="num">2.98129</td><td class="num">3.10337</td><td class="num">306,624</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">3,145,728 B</td><td class="num"><strong>1.79625</strong></td><td class="num">3.11887</td><td class="num">3.35801</td><td class="num">—</td></tr>
 </tbody></table></div>
 <h3>2,048-byte continuations · 32,768,000 training targets · seed 711</h3>
-<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
-<tr><th scope="row">Held charge with write credit</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">1.98884</td><td class="num"><strong>2.96180</strong></td></tr>
-<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">12,582,912 B</td><td class="num"><strong>1.81712</strong></td><td class="num">3.11395</td></tr>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Held charge with write credit</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">1.98884</td><td class="num"><strong>2.96180</strong></td><td class="num">3.07240</td><td class="num">304,447</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">12,582,912 B</td><td class="num"><strong>1.81712</strong></td><td class="num">3.11395</td><td class="num">3.33558</td><td class="num">—</td></tr>
 </tbody></table></div>
 <h3>3.26M parameter comparison · 26,214,400 training targets · seed 0</h3>
-<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
-<tr><th scope="row">Seven-block held charge</th><td class="num">3,257,088</td><td class="num">31,692 B</td><td class="num">1.99402</td><td class="num"><strong>2.89822</strong></td></tr>
-<tr><th scope="row">Full-attention Transformer</th><td class="num">3,256,832</td><td class="num">4,194,304 B</td><td class="num"><strong>1.86093</strong></td><td class="num">3.05929</td></tr>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Seven-block held charge</th><td class="num">3,257,088</td><td class="num">31,692 B</td><td class="num">1.99402</td><td class="num"><strong>2.89822</strong></td><td class="num">2.98142</td><td class="num">308,389</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">3,256,832</td><td class="num">4,194,304 B</td><td class="num"><strong>1.86093</strong></td><td class="num">3.05929</td><td class="num">3.25745</td><td class="num">—</td></tr>
 </tbody></table></div>
 <h3>Held-charge replication · 26,214,400 training targets per seed · seeds 0–2</h3>
-<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
-<tr><th scope="row">Held-charge SNN</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">2.00633</td><td class="num"><strong>2.98979</strong></td></tr>
-<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">3,145,728 B</td><td class="num"><strong>1.82812</strong></td><td class="num">3.09559</td></tr>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Held-charge SNN</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">2.00633</td><td class="num"><strong>2.98979</strong></td><td class="num">3.10037</td><td class="num">307,013</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">3,145,728 B</td><td class="num"><strong>1.82812</strong></td><td class="num">3.09559</td><td class="num">3.29465</td><td class="num">—</td></tr>
 </tbody></table></div>
 <h3>Depth and activity inhibition · 26,214,400 training targets · seed 0</h3>
-<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
-<tr><th scope="row">Three-block SNN, fixed threshold</th><td class="num">1,630,464</td><td class="num">14,556 B</td><td class="num">2.24386</td><td class="num">3.19752</td></tr>
-<tr><th scope="row">Three-block SNN, activity inhibition</th><td class="num">1,630,464</td><td class="num">14,556 B</td><td class="num">2.16389</td><td class="num">3.11971</td></tr>
-<tr><th scope="row">Five-block SNN, fixed threshold</th><td class="num">1,630,992</td><td class="num">17,620 B</td><td class="num">2.19441</td><td class="num">3.13879</td></tr>
-<tr><th scope="row">Five-block SNN, activity inhibition</th><td class="num">1,630,992</td><td class="num">17,620 B</td><td class="num">2.07523</td><td class="num">3.02885</td></tr>
-<tr><th scope="row">Five-block SNN, inhibition + held charge</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">2.00577</td><td class="num"><strong>2.98022</strong></td></tr>
-<tr><th scope="row">Local Transformer</th><td class="num">1,630,848</td><td class="num">64,512 B</td><td class="num">1.89056</td><td class="num">3.17881</td></tr>
-<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">3,145,728 B</td><td class="num"><strong>1.81449</strong></td><td class="num">3.11725</td></tr>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Three-block SNN, fixed threshold</th><td class="num">1,630,464</td><td class="num">14,556 B</td><td class="num">2.24386</td><td class="num">3.19752</td><td class="num">3.31342</td><td class="num">305,600</td></tr>
+<tr><th scope="row">Three-block SNN, activity inhibition</th><td class="num">1,630,464</td><td class="num">14,556 B</td><td class="num">2.16389</td><td class="num">3.11971</td><td class="num">3.24687</td><td class="num">304,525</td></tr>
+<tr><th scope="row">Five-block SNN, fixed threshold</th><td class="num">1,630,992</td><td class="num">17,620 B</td><td class="num">2.19441</td><td class="num">3.13879</td><td class="num">3.26220</td><td class="num">307,566</td></tr>
+<tr><th scope="row">Five-block SNN, activity inhibition</th><td class="num">1,630,992</td><td class="num">17,620 B</td><td class="num">2.07523</td><td class="num">3.02885</td><td class="num">3.15903</td><td class="num">303,469</td></tr>
+<tr><th scope="row">Five-block SNN, inhibition + held charge</th><td class="num">1,630,992</td><td class="num">21,320 B</td><td class="num">2.00577</td><td class="num"><strong>2.98022</strong></td><td class="num">3.09195</td><td class="num">308,178</td></tr>
+<tr><th scope="row">Local Transformer</th><td class="num">1,630,848</td><td class="num">64,512 B</td><td class="num">1.89056</td><td class="num">3.17881</td><td class="num">3.47472</td><td class="num">—</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">1,630,848</td><td class="num">3,145,728 B</td><td class="num"><strong>1.81449</strong></td><td class="num">3.11725</td><td class="num">3.35489</td><td class="num">—</td></tr>
 </tbody></table></div>
 <h3>Small context-tag comparison · 6,553,600 training targets per seed · three-seed mean</h3>
-<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
-<tr><th scope="row">Always-read spiking bank</th><td class="num">407,616</td><td class="num">32,696 B</td><td class="num">2.39550</td><td class="num">3.36437</td></tr>
-<tr><th scope="row">Forecast-keyed spiking bank</th><td class="num">407,616</td><td class="num">32,696 B</td><td class="num">2.43130</td><td class="num">3.37224</td></tr>
-<tr><th scope="row">Context tags, fixed thresholds</th><td class="num">407,616</td><td class="num">32,696 B</td><td class="num">2.43025</td><td class="num">3.36729</td></tr>
-<tr><th scope="row">Context tags, learned thresholds</th><td class="num">407,628</td><td class="num">32,696 B</td><td class="num">2.42716</td><td class="num">3.38277</td></tr>
-<tr><th scope="row">Local Transformer</th><td class="num">407,808</td><td class="num">31,488 B</td><td class="num"><strong>2.24107</strong></td><td class="num">3.34604</td></tr>
-<tr><th scope="row">Full-attention Transformer</th><td class="num">407,808</td><td class="num">1,179,648 B</td><td class="num">2.28026</td><td class="num"><strong>3.29995</strong></td></tr>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Always-read spiking bank</th><td class="num">407,616</td><td class="num">32,696 B</td><td class="num">2.39550</td><td class="num">3.36437</td><td class="num">—</td><td class="num">298,515</td></tr>
+<tr><th scope="row">Forecast-keyed spiking bank</th><td class="num">407,616</td><td class="num">32,696 B</td><td class="num">2.43130</td><td class="num">3.37224</td><td class="num">—</td><td class="num">294,613</td></tr>
+<tr><th scope="row">Context tags, fixed thresholds</th><td class="num">407,616</td><td class="num">32,696 B</td><td class="num">2.43025</td><td class="num">3.36729</td><td class="num">—</td><td class="num">296,319</td></tr>
+<tr><th scope="row">Context tags, learned thresholds</th><td class="num">407,628</td><td class="num">32,696 B</td><td class="num">2.42716</td><td class="num">3.38277</td><td class="num">—</td><td class="num">303,374</td></tr>
+<tr><th scope="row">Local Transformer</th><td class="num">407,808</td><td class="num">31,488 B</td><td class="num"><strong>2.24107</strong></td><td class="num">3.34604</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">407,808</td><td class="num">1,179,648 B</td><td class="num">2.28026</td><td class="num"><strong>3.29995</strong></td><td class="num">—</td><td class="num">—</td></tr>
 </tbody></table></div>
 <h3>Large context-tag comparison · 13,107,200 training targets per seed · three-seed mean</h3>
-<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th></tr></thead><tbody>
-<tr><th scope="row">Context tags, fixed thresholds</th><td class="num">815,232</td><td class="num">32,696 B</td><td class="num">2.24015</td><td class="num"><strong>3.25043</strong></td></tr>
-<tr><th scope="row">Context tags, learned thresholds</th><td class="num">815,244</td><td class="num">32,696 B</td><td class="num">2.25351</td><td class="num">3.25233</td></tr>
-<tr><th scope="row">Local Transformer</th><td class="num">815,232</td><td class="num">32,768 B</td><td class="num">2.04457</td><td class="num">3.26187</td></tr>
-<tr><th scope="row">Full-attention Transformer</th><td class="num">815,232</td><td class="num">1,572,864 B</td><td class="num"><strong>2.01841</strong></td><td class="num">3.29072</td></tr>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Context tags, fixed thresholds</th><td class="num">815,232</td><td class="num">32,696 B</td><td class="num">2.24015</td><td class="num"><strong>3.25043</strong></td><td class="num">—</td><td class="num">303,952</td></tr>
+<tr><th scope="row">Context tags, learned thresholds</th><td class="num">815,244</td><td class="num">32,696 B</td><td class="num">2.25351</td><td class="num">3.25233</td><td class="num">—</td><td class="num">303,493</td></tr>
+<tr><th scope="row">Local Transformer</th><td class="num">815,232</td><td class="num">32,768 B</td><td class="num">2.04457</td><td class="num">3.26187</td><td class="num">—</td><td class="num">—</td></tr>
+<tr><th scope="row">Full-attention Transformer</th><td class="num">815,232</td><td class="num">1,572,864 B</td><td class="num"><strong>2.01841</strong></td><td class="num">3.29072</td><td class="num">—</td><td class="num">—</td></tr>
 </tbody></table></div>
+  <figure>
+    <a href="../results/figures/event_lm_grown_prefix_age.png"><img src="../results/figures/event_lm_grown_prefix_age.png" alt="enwik8 loss gap for the grown pair by eight-byte prefix age" loading="lazy"></a>
+  </figure>
   <figure>
     <a href="../results/figures/event_lm_continuation_test.png"><img src="../results/figures/event_lm_continuation_test.png" alt="Held-out loss for integer spike models and full attention after 512-byte continuations" loading="lazy"></a>
   </figure>
@@ -178,7 +208,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v3/README.md">Model and architecture</a> · <a href="HANDOFF.md">Training handoff</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v4/README.md">Model and architecture</a> · <a href="HANDOFF.md">Training handoff</a></p>
 </section>
 
 <section id="dendrite">
