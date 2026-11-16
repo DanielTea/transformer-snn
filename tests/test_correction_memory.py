@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from snnformer.correction_memory import correction_reads, correction_step
-from snnformer.event_lm import EventLM, EventLMConfig, _SpikeCorrection
+from snnformer.event_lm import EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _SpikeCorrection, _SpikeTrace
 
 
 def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
@@ -197,3 +197,275 @@ def test_shared_thresholds_preserve_neutral_outputs_and_export_unequal_groups():
     first, state = integer.forward_chunk(tokens[:, :19])
     last, _ = integer.forward_chunk(tokens[:, 19:], state)
     torch.testing.assert_close(torch.cat((first, last), dim=1), counts, rtol=0, atol=0)
+
+
+def test_shared_output_reference_preserves_every_vocabulary_margin():
+    torch.manual_seed(81)
+    cfg = EventLMConfig(dim=16, hidden=20, route="steered_correction_code", carry=False,
+                        memory_heads=2, memory_slots=4, memory_width=8, resolution=26)
+    plain = EventLM(cfg).eval()
+    referenced = EventLM(replace(cfg, output_reference=True)).eval()
+    referenced.load_state_dict(plain.state_dict())
+    tokens = torch.randint(256, (2, 41))
+    native = referenced.to_integer()
+    with torch.no_grad():
+        before = plain.to_integer()(tokens)
+        after = native(tokens)
+        difference = before - after
+        assert torch.equal(difference, difference[..., :1].expand_as(difference))
+        assert difference.abs().amax().item() > 0
+        torch.testing.assert_close(referenced(tokens), after.to(torch.float32), rtol=0, atol=0)
+    state = None
+    streamed = []
+    for token in tokens.unbind(1):
+        output, state = native.step(token, state)
+        streamed.append(output)
+    torch.testing.assert_close(torch.stack(streamed, dim=1), after, rtol=0, atol=0)
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("marked", (False, True))
+def test_packed_delay_rings_keep_only_live_packets(marked):
+    torch.manual_seed(52)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False,
+                        memory_heads=2, memory_slots=4, memory_width=8, resolution=16, output_reference=True)
+    saved = EventLM(cfg).eval()
+    compact = EventLM(replace(cfg, compact_delays=True, departure_coincidence=marked)).eval()
+    compact.load_state_dict(saved.state_dict())
+    tokens = torch.randint(256, (2, 113))
+    native = compact.to_integer()
+    expected = native(tokens)
+    torch.testing.assert_close(compact(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    if marked:
+        assert not torch.equal(expected, saved.to_integer()(tokens))
+    else:
+        torch.testing.assert_close(expected, saved.to_integer()(tokens), rtol=0, atol=0)
+    state = None
+    for offset, token in enumerate(tokens.unbind(1)):
+        output, state = native.step(token, state)
+        torch.testing.assert_close(output, expected[:, offset], rtol=0, atol=0)
+    for block, layer in zip(compact.blocks, state.layers, strict=True):
+        counts = sum(width * delay for width, delay in zip(block.widths, block.delays, strict=True))
+        assert layer.history.shape == (2, counts * (1 + marked))
+        assert layer.history.untyped_storage().nbytes() == 2 * counts * (1 + marked) * 4
+
+
+def test_delay_choice_uses_signed_coincidence_and_skips_unavailable_taps():
+    cfg = EventLMConfig(dim=8, hidden=16, route="steered", carry=False, compact_delays=True, delay_window=4)
+    block = EventLM(cfg).to_integer().blocks[2]
+    history = torch.tensor([[[50, -2, 3], [-1, -3, -4]]], dtype=torch.int32)
+    query = torch.tensor([[2, -3]], dtype=torch.int32)
+    aperture = query.abs()
+    chosen = block._match_delay(history, query, aperture, torch.tensor([True, True, True]))
+    torch.testing.assert_close(chosen, history[..., 2], rtol=0, atol=0)
+    chosen = block._match_delay(history, query, aperture, torch.tensor([True, True, False]))
+    torch.testing.assert_close(chosen, history[..., 0], rtol=0, atol=0)
+    chosen = block._match_delay(history, torch.zeros_like(query), torch.zeros_like(aperture),
+                                torch.tensor([False, True, True]))
+    torch.testing.assert_close(chosen, history[..., 1], rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_delay_matching_preserves_native_batch_chunk_and_stream_parity():
+    torch.manual_seed(91)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False,
+                        memory_heads=2, memory_slots=4, memory_width=8, resolution=16, output_reference=True,
+                        compact_delays=True, delay_window=4)
+    model = EventLM(cfg).eval()
+    tokens = torch.randint(256, (2, 99))
+    native = model.to_integer()
+    expected = native(tokens)
+    torch.testing.assert_close(model(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for i, token in enumerate(tokens.unbind(1)):
+        output, state = native.step(token, state)
+        torch.testing.assert_close(output, expected[:, i], rtol=0, atol=0)
+    chunk_state = None
+    outputs = []
+    for chunk in tokens.split((1, 13, 2, 20, 63), dim=1):
+        counts, chunk_state = native.forward_chunk(chunk, chunk_state)
+        outputs.append(counts)
+    torch.testing.assert_close(torch.cat(outputs, dim=1), expected, rtol=0, atol=0)
+    for block, layer in zip(native.blocks, state.layers, strict=True):
+        assert layer.history.shape[-1] == sum(width * delay for width, delay in zip(block.widths, block.delays))
+
+
+@torch.no_grad()
+def test_finer_charge_keeps_firing_when_weights_lie_on_the_original_grid():
+    torch.manual_seed(89)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True, delay_window=4)
+    original = EventLM(cfg).eval()
+    for block in original.blocks:
+        for synapse in (block.expand, block.project):
+            synapse.weight.copy_(synapse.weight_ticks() / block.relay.threshold)
+    fine = EventLM(replace(cfg, router_charge_bits=8)).eval()
+    fine.load_state_dict(original.state_dict())
+    tokens = torch.randint(256, (2, 41))
+    old_native = original.to_integer()
+    fine_native = fine.to_integer()
+    torch.testing.assert_close(old_native(tokens), fine_native(tokens), rtol=0, atol=0)
+    torch.testing.assert_close(fine_native.blocks[0].project.weight, old_native.blocks[0].project.weight * 4)
+
+    fine.blocks[0].project.weight.add_(1 / 256)
+    fine_native = fine.to_integer()
+    target = fine_native(tokens)
+    assert not torch.equal(old_native(tokens), target)
+    torch.testing.assert_close(fine(tokens), target.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for position, token in enumerate(tokens.unbind(1)):
+        counts, state = fine_native.step(token, state)
+        torch.testing.assert_close(counts, target[:, position], rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_delay_correction_is_neutral_at_zero_and_matches_streaming_after_learning():
+    torch.manual_seed(43)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True)
+    fixed = EventLM(cfg).eval()
+    corrected = EventLM(replace(cfg, delay_window=4, delay_residual=True)).eval()
+    missing, unexpected = corrected.load_state_dict(fixed.state_dict(), strict=False)
+    assert missing == [f"blocks.{i}.delay_correction.gain" for i in range(cfg.depth)]
+    assert not unexpected
+    tokens = torch.randint(256, (2, 65))
+    before = fixed.to_integer()(tokens)
+    torch.testing.assert_close(corrected.to_integer()(tokens), before, rtol=0, atol=0)
+
+    for block in corrected.blocks:
+        block.delay_correction.gain.copy_(torch.tensor([0., .25, .5, 1.]))
+    native = corrected.to_integer()
+    after = native(tokens)
+    assert not torch.equal(after, before)
+    torch.testing.assert_close(corrected(tokens), after.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for position, token in enumerate(tokens.unbind(1)):
+        counts, state = native.step(token, state)
+        torch.testing.assert_close(counts, after[:, position], rtol=0, atol=0)
+
+
+def test_zero_delay_correction_gains_still_receive_emission_gradients():
+    correction = _DelayCorrection((2, 1), cap=32)
+    before = torch.tensor([[-3., 0., 2.]])
+    after = torch.tensor([[-1., 3., 0.]])
+    spikes = correction(before, after)
+    torch.testing.assert_close(spikes, torch.zeros_like(spikes), rtol=0, atol=0)
+    gradient, = torch.autograd.grad(spikes.sum(), correction.gain)
+    torch.testing.assert_close(gradient, torch.tensor([5., -2.]), rtol=0, atol=0)
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("bits", (6, 8))
+def test_population_inhibition_raises_both_firing_thresholds_and_keeps_native_parity(bits):
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True,
+                        activity_inhibition=True, router_charge_bits=bits)
+    torch.manual_seed(17)
+    model = EventLM(cfg).eval()
+    integer = model.to_integer()
+    block = integer.blocks[0]
+    incoming = torch.tensor([0, 4, 16, -16], dtype=torch.int32)[:, None].expand(-1, cfg.dim)
+    firing = block._firing_quanta(incoming, None)
+    torch.testing.assert_close(firing[:, 0], torch.tensor([4, 5, 8, 8], dtype=torch.int32))
+    current = torch.full((4, cfg.hidden), 8 * (1 << bits), dtype=torch.int32)
+    licensed = torch.tensor([8, 6, 4, 4], dtype=torch.int32)
+    torch.testing.assert_close(block.relay(-current, firing)[:, 0], -licensed)
+    torch.testing.assert_close(block.steer(current, firing)[:, 0], licensed)
+
+    tokens = torch.randint(256, (2, 60))
+    expected = integer(tokens)
+    torch.testing.assert_close(model(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for position, byte in enumerate(tokens.unbind(1)):
+        counts, state = integer.step(byte, state)
+        torch.testing.assert_close(counts, expected[:, position], rtol=0, atol=0)
+    first, chunk = integer.forward_chunk(tokens[:, :23])
+    second, _ = integer.forward_chunk(tokens[:, 23:], chunk)
+    torch.testing.assert_close(torch.cat((first, second), dim=1), expected, rtol=0, atol=0)
+
+
+def test_trace_steering_reads_old_charge_and_resists_writes_within_its_interval():
+    trace = _SpikeTrace(cap=12)
+    present = torch.tensor([5, 5, 5, 0, 4, -2], dtype=torch.int32).reshape(1, -1, 1)
+    steering = torch.tensor([0, 9, 9, 9, 1, 2], dtype=torch.int32).reshape_as(present)
+    pulses = []
+    read, charge = trace(present, steering, None, pulses)
+    assert read.flatten().tolist() == [0, 5, 5, 5, 1, 2]
+    assert charge.item() == 0
+    assert [int(count) for count in pulses] == [10, 18]
+
+
+@torch.no_grad()
+@pytest.mark.parametrize("route", ("steered", "steered_correction_code"))
+def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route):
+    torch.manual_seed(97)
+    cfg = EventLMConfig(dim=16, hidden=21, route=route, carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8 if route.endswith("code") else None,
+                        compact_delays=True, activity_inhibition=True, local_trace=True)
+    model = EventLM(cfg).eval()
+    native = model.to_integer()
+    tokens = torch.randint(256, (2, 93))
+    expected = native(tokens)
+    torch.testing.assert_close(expected, model(tokens).to(torch.int32), rtol=0, atol=0)
+    state = None
+    for i, byte in enumerate(tokens.unbind(1)):
+        counts, state = native.step(byte, state)
+        torch.testing.assert_close(counts, expected[:, i], rtol=0, atol=0)
+    chunk = None
+    cursor = 0
+    for part in tokens.split((1, 3, 13, 35, 41), dim=1):
+        scores, chunk = native.forward_chunk(part, chunk)
+        torch.testing.assert_close(scores, expected[:, cursor:cursor + part.shape[1]], rtol=0, atol=0)
+        cursor += part.shape[1]
+        assert chunk.local_prefix is None
+    for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
+        torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
+
+
+def test_delay_filter_is_neutral_at_initialization_and_preserves_constant_packets():
+    kernel = _DelayFilter(width=2, delay=4, cap=16)
+    anchor = torch.tensor([[3., -2.]])
+    halfway = torch.tensor([[8., -5.]])
+    recent = torch.tensor([[4., 2.]])
+    unchanged = kernel(anchor, [halfway, recent])
+    torch.testing.assert_close(unchanged, anchor, rtol=0, atol=0)
+    gradient, = torch.autograd.grad(unchanged.sum(), kernel.weight)
+    torch.testing.assert_close(gradient, torch.tensor([[5., 1.], [-3., 4.]]), rtol=0, atol=0)
+    with torch.no_grad():
+        kernel.weight.copy_(torch.tensor([[1., -1.], [1., 0.5]]))
+    kernel.freeze_integer()
+    integer = anchor.to(torch.int32)
+    torch.testing.assert_close(kernel(integer, [integer, integer]), integer, rtol=0, atol=0)
+    torch.testing.assert_close(kernel(integer, [halfway.to(torch.int32), recent.to(torch.int32)]),
+                               torch.tensor([[7, -3]], dtype=torch.int32), rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_delay_filter_warm_start_and_streaming_parity():
+    torch.manual_seed(61)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True, activity_inhibition=True)
+    base = EventLM(cfg).eval()
+    filtered = EventLM(replace(cfg, delay_filter=True)).eval()
+    missing, unexpected = filtered.load_state_dict(base.state_dict(), strict=False)
+    assert missing and all(".delay_filters." in name for name in missing) and not unexpected
+    tokens = torch.randint(256, (2, 73))
+    baseline = base.to_integer()(tokens)
+    torch.testing.assert_close(filtered.to_integer()(tokens), baseline, rtol=0, atol=0)
+
+    for block in filtered.blocks:
+        for kernel in block.delay_filters:
+            if kernel is not None:
+                kernel.weight.fill_(0.5)
+    native = filtered.to_integer()
+    expected = native(tokens)
+    assert not torch.equal(expected, baseline)
+    torch.testing.assert_close(filtered(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for i, byte in enumerate(tokens.unbind(1)):
+        counts, state = native.step(byte, state)
+        torch.testing.assert_close(counts, expected[:, i], rtol=0, atol=0)
+    first, chunk = native.forward_chunk(tokens[:, :3])
+    second, chunk = native.forward_chunk(tokens[:, 3:21], chunk)
+    third, _ = native.forward_chunk(tokens[:, 21:], chunk)
+    torch.testing.assert_close(torch.cat((first, second, third), dim=1), expected, rtol=0, atol=0)

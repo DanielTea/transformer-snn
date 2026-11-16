@@ -53,8 +53,16 @@ shuffled-key and read-age interventions.
 The [context tags and firing thresholds comparison](../docs/SPIKE_CODE_FORECAST.md#learned-context-keys-and-firing-thresholds)
 uses the `threshold_scale` tags for two matched model sizes, a paired
 plain router test, and the local and full-attention Transformer scores.
-Run `python experiments/plot_event_lm_study.py` to regenerate the
-[leaderboards and current figures](../docs/LEADERBOARD.md).
+The [depth and inhibition study](../docs/DEPTH_INHIBITION.md) uses
+`event_lm/depth_inhibition` and the matched controls in
+`event_lm/scale_1630k`. The `depth_inhibition_replication` directory
+holds the additional seeds, and `delay_filter` holds the paired
+warm-start experiment. Their checkpoint catalogs match the paths in
+the [v2 release manifest](../models/spiking-byte-lm-v2/manifest.json).
+
+Regenerate the [leaderboards and current figures](../docs/LEADERBOARD.md)
+with `python experiments/plot_event_lm_study.py` and
+`python experiments/plot_depth_inhibition.py`.
 
 Paths in result records identify the input corpus or excerpt. Supply
 your local paths at run time. The [reproduction guide](../docs/REPRODUCE_DENDRITE.md)

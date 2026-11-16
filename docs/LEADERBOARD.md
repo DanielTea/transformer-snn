@@ -1,10 +1,32 @@
 # Spiking byte model leaderboards
 
-Scores are three-seed means in bits per byte. Lower scores rank higher. Every row at a size uses the same enwik8 training windows and scores 4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books.
+Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 training exposure and scores 4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books.
 
-State is persistent tensor storage for one stream. The separate full-attention reference attends to a causal prefix of up to 512 bytes and reports its FP32 key and value storage at that length. Pulse counts use a native 4,096-byte enwik8 test sample.
+State is persistent tensor storage for one stream. The separate full-attention reference attends to a causal prefix of up to 512 bytes and reports its FP32 key and value storage at that length. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books.
 
-## Small comparison · 6,553,600 training targets per seed
+## Depth and activity inhibition · 26,214,400 training targets · seed 0
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Three-block SNN, fixed threshold | 1,630,464 | 14,556 B | 2.24386 | 7 | 3.19752 | 7 | 305,600 |
+| Three-block SNN, activity inhibition | 1,630,464 | 14,556 B | 2.16389 | 5 | 3.11971 | 4 | 304,525 |
+| Five-block SNN, fixed threshold | 1,630,992 | 17,620 B | 2.19441 | 6 | 3.13879 | 5 | 307,566 |
+| Five-block SNN, activity inhibition | 1,630,992 | 17,620 B | 2.07523 | 4 | 3.02885 | 2 | 303,469 |
+| Five-block SNN, inhibition + held charge | 1,630,992 | 21,320 B | 2.00577 | 3 | **2.98022** | 1 | 308,178 |
+| Local Transformer | 1,630,848 | 64,512 B | 1.89056 | 2 | 3.17881 | 6 | — |
+| Full-attention Transformer | 1,630,848 | 3 MiB | **1.81449** | 1 | 3.11725 | 3 | — |
+
+![Held-out loss for matched depth and inhibition models](../results/figures/depth_inhibition_test.png)
+
+![Validation curves and residual spike counts](../results/figures/depth_inhibition.png)
+
+[Evaluation records and ranks](../results/event_lm/depth_inhibition_leaderboard.json) · [Depth study and ablations](DEPTH_INHIBITION.md) · [Replication](DEPTH_INHIBITION.md#full-attention-replication) · [Current model card](../models/spiking-byte-lm-v2/README.md)
+
+## Earlier context-tag and threshold study
+
+Each score below is a mean over three seeds. Each group has its own training exposure.
+
+### Small comparison · 6,553,600 training targets per seed
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -15,7 +37,7 @@ State is persistent tensor storage for one stream. The separate full-attention r
 | Local Transformer | 407,808 | 31,488 B | **2.24107** | 1 | 3.34604 | 2 | — |
 | Full-attention Transformer | 407,808 | 1.125 MiB | 2.28026 | 2 | **3.29995** | 1 | — |
 
-## Large comparison · 13,107,200 training targets per seed
+### Large comparison · 13,107,200 training targets per seed
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|
