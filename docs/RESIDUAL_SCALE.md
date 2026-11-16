@@ -170,6 +170,18 @@ provide the size-matched gaps.
 [Paired width validation](../results/event_lm/residual_scale/width_snn_validation.json) ·
 [Matched training-window receipt](../results/event_lm/training_mixture/windows_s9631.json)
 
+## Early gap to the size-matched Transformer
+
+The held-out enwik8 probe scores 49,120 targets from 1,535
+reset windows. For predictions 17–32, the gap to full attention
+is 0.02615 bpb at 14.07M parameters and 0.02993 bpb at 25.79M.
+The estimated change is +0.00378 bpb with a paired 95% interval
+of [−0.00075, +0.00819]. On the separate validation windows the
+gap increases by 0.00842 bpb, with interval [+0.00387, +0.01310].
+Each interval resamples windows from the one matched run.
+[Early test record](../results/event_lm/residual_scale/early_context_test.json) ·
+[Early validation record](../results/event_lm/residual_scale/early_context_val.json)
+
 ## Reproduce the data and launches
 
 Prepare the canonical [enwik8 and PG-19 evaluation files](HANDOFF.md#datasets)

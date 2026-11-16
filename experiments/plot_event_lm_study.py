@@ -1141,7 +1141,10 @@ def plot_residual_scale(group, early, output):
                        ticks=("14.07M parameters", "25.79M parameters"),
                        note=f"enwik8 gap change {gap['change_bpb']:+.5f} bpb. The SNN uses 28,584 B at both widths.",
                        filename="event_lm_residual_scale.png")
+    plot_early_width_gap(early, output)
 
+
+def plot_early_width_gap(early, output):
     rows = early["width_gap"]["ages"][:5]
     values = [row["gap_change_bpb"] for row in rows]
     intervals = [row["paired_95_bpb"] for row in rows]
