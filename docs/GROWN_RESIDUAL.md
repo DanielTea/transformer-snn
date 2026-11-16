@@ -173,3 +173,15 @@ zero, 96.8% of those channel steps rewrote charge.
 [State intervention](../results/event_lm/scale_6510k_data/probe_trace_s1109.json) ·
 [Charge age profile](../results/event_lm/scale_6510k_data/trace_ages_s1109.json) ·
 [Expansion experiment](EXPANSION_GROWTH.md)
+
+The next matched exposure test continues these same two checkpoints
+for 4,000 more steps and 16,384,000 additional enwik8 targets.
+It uses seed 2503 and the previous window, batch, learning rate,
+and warmup. Total exposure reaches 65,536,000 targets per model.
+The runs are queued behind the expansion rerun on the local
+Metal device.
+
+```bash
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh scale-data-snn
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh scale-data-transformer
+```

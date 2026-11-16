@@ -43,6 +43,7 @@ WIDTH_6510K = "event_lm/scale_6510k_width"
 FINE_CHARGE = "event_lm/grown_fine_charge"
 SCALE_DATA = "event_lm/scale_6510k_data"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
+WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
 RESIDUAL_MEMBRANE = "event_lm/residual_membrane"
 TAG_PHASE = "event_lm/tag_phase_address"
@@ -102,6 +103,10 @@ EXPANSION_8740K = (
     ("Expanded held-charge SNN", EXPANSION, "expanded_s1801", f"{EXPANSION}/native_expanded_s1801.json", BLUE),
     ("Grown full-attention Transformer", EXPANSION, "transformer_s1801", None, ORANGE),
     ("Original-width held-charge SNN", EXPANSION, "control_s1801", f"{EXPANSION}/native_control_s1801.json", GRAY),
+)
+WRITE_CONFIRM_6510K = (
+    EXPANSION_8740K[-1],
+    ("Delayed write confirmation", WRITE_CONFIRM, "confirm_s1801", f"{WRITE_CONFIRM}/native_confirm_s1801.json", VIOLET),
 )
 SCRATCH_6510K = (
     ("Wide held-charge SNN", WIDTH_6510K, "trace_s0", f"{WIDTH_6510K}/native_trace_s0.json", BLUE),
@@ -239,6 +244,7 @@ def build_research():
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
         ("expansion_8740k", "8.74M expansion and original-width control", EXPANSION_8740K, 1801, 512, (49_152_000, 6_553_600)),
+        ("write_confirm_6510k", "6.51M delayed write confirmation", WRITE_CONFIRM_6510K, 1801, 512, (49_152_000, 6_553_600)),
         ("data_6510k", "6.51M with more training data", DATA_6510K, 1109, 512, (32_768_000, 16_384_000)),
         ("grown_6510k", "6.51M growth · 512-byte continuations", GROWN_6510K, 711, 512, continuation),
         ("trace_coincidence_6510k", "6.51M trace coincidence", TRACE_COINCIDENCE_6510K, 711, 512, continuation),

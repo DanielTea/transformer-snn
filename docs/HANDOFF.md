@@ -196,8 +196,9 @@ number of targets, and checkpoint path.
 
 | Experiment | State at handoff | Evidence |
 |---|---|---|
-| Expansion to 8.74M | Both wide arms and the original-width control scored. The steering-gradient rerun is queued | [Expansion study](EXPANSION_GROWTH.md) |
-| Delayed write confirmation | Integer parity and full continuation training complete. Held-out scoring in progress | [Write confirmation study](TRACE_WRITE_CONFIRM.md) |
+| Expansion to 8.74M | Three arms scored. The steering-gradient rerun is training | [Expansion study](EXPANSION_GROWTH.md) |
+| Delayed write confirmation | Both corpora scored. Native activity and write age measured | [Write confirmation study](TRACE_WRITE_CONFIRM.md) |
+| 65.54M cumulative-target extension | The 6.51M matched pair is queued from the 49.15M checkpoints | [Exposure study](GROWN_RESIDUAL.md#extend-training-exposure) |
 | Grown 6.51M matched pair | Trained and scored on both corpora, with SNN native parity and an added-neuron ablation | [Growth study](GROWN_RESIDUAL.md) |
 | Grown 6.51M with finer charge | Released reference. Both corpora scored with native parity | [Finer-charge study](GROWN_RESIDUAL.md#finer-synaptic-charge-at-the-same-firing-resolution) |
 | 6.51M pair from scratch | Matched 26.21M-target comparison scored and audited | [Width study](SCALE_6510K_WIDTH.md) |

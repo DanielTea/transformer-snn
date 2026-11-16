@@ -62,3 +62,20 @@ PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh trace-write-conf
 ```
 
 [Matched original-width control](EXPANSION_GROWTH.md#controlled-continuation)
+
+| Model at 55,705,600 enwik8 training targets | enwik8 bpb | PG-19 bpb | Raw PG-19 bpb | Native pulses per byte |
+|---|---:|---:|---:|---:|
+| Original write interval | 1.89057 | 2.84072 | 2.94263 | 309,545 |
+| Delayed write confirmation | 1.89069 | 2.83683 | 2.93664 | 309,026 |
+
+Delayed confirmation improved calibrated PG-19 loss by 0.00389
+bits per byte and increased enwik8 loss by 0.00012. Eleven
+conductances in blocks four through seven learned a nonzero
+value. They emitted 87 confirmation pulses per byte on the
+native test audit. On 16,384 validation bytes, the fraction
+of held-charge pulses read at least 32 bytes after the last
+write rose from 4.46% to 4.64%. Zeroing the learned conductances
+after training reduced the 65,536-target validation loss from
+1.82714 to 1.82695. The held-out comparison uses one seed.
+[Training and held-out records](../results/event_lm/trace_write_confirm) ·
+[Control's age profile](../results/event_lm/expansion_8740k/trace_ages_control_s1801.json)

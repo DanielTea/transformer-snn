@@ -12,6 +12,13 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Grown full-attention Transformer | 8,740,352 | 4 MiB | **1.79731** | 1 | 3.01533 | 3 | 3.22392 | — |
 | Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.89057 | 3 | 2.84072 | 2 | 2.94263 | 309,545 |
 
+## 6.51M delayed write confirmation · 55,705,600 training targets · seed 1801
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Original-width held-charge SNN | 6,514,176 | 19,536 B | **1.89057** | 1 | 2.84072 | 2 | 2.94263 | 309,545 |
+| Delayed write confirmation | 6,514,204 | 19,536 B | 1.89069 | 2 | **2.83683** | 1 | 2.93664 | 309,026 |
+
 ## 6.51M with more training data · 49,152,000 training targets · seed 1109
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |

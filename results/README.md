@@ -72,7 +72,7 @@ full-corpus scores, and exact training records.
 | [49.15M-target continuation](event_lm/scale_6510k_data) | Paired scores, native activity, and enwik8 validation memory interventions |
 | [Three-way coincidence](event_lm/trace_coincidence) | Warm-start parity, full held-out scores and routing ablation |
 | [8.74M expansion](event_lm/expansion_8740k) | Warm-start checks and matched continuation records |
-| [Delayed write confirmation](event_lm/trace_write_confirm) | Warm checks for the learned write extension |
+| [Delayed write confirmation](event_lm/trace_write_confirm) | Warm checks, both held-out scores, write ages and the learned-interval ablation |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
 exposure, geometry, and seed. The v4 archive combines the checkpoint

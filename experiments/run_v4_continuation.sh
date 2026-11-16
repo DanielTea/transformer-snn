@@ -6,6 +6,7 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "Usage: bash experiments/run_v4_continuation.sh STUDY [output-dir]" >&2
   echo "Studies: trace-coincidence trace-write-confirm extend-snn extend-transformer" >&2
   echo "         expansion-snn expansion-transformer expansion-control expansion-steering" >&2
+  echo "         scale-data-snn scale-data-transformer" >&2
   exit 2
 fi
 
@@ -40,6 +41,15 @@ case "$study" in
       --initialize-from checkpoints/grown-6510k-residual-study/transformer_s711.pt)
     name=transformer_s1109
     ;;
+  scale-data-snn)
+    training+=("${spiking[@]}" --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
+    name=trace_s2503
+    ;;
+  scale-data-transformer)
+    training+=(--variant transformer --dim 256 --depth 4 --heads 4 --mlp-ratio 10.2890625
+      --initialize-from checkpoints/scale-6510k-data-study/transformer_s1109.pt)
+    name=transformer_s2503
+    ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
       --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
@@ -72,6 +82,9 @@ esac
 if [[ $study == extend-* ]]; then
   training+=(--steps 4000 --warmup 128 --lr 0.0003 --seed 1109 --eval-every 400
     --tag scale_6510k_49152k_targets)
+elif [[ $study == scale-data-* ]]; then
+  training+=(--steps 4000 --warmup 128 --lr 0.0003 --seed 2503 --eval-every 400
+    --tag scale_6510k_65536k_targets)
 elif [[ $study == expansion-* || $study == trace-write-confirm ]]; then
   tag=scale_6510k_trace_write_confirm
   if [[ $study == expansion-* ]]; then
