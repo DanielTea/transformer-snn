@@ -1,5 +1,24 @@
 # Scaling the spiking residual layers
 
+## Complete enwik8 test
+
+Widening increases the size-matched gap from **0.08375 to
+0.08408 bits per byte** on 4,999,999 held-out predictions.
+The four mixture arms saw the same training windows. These
+measurements use one continuation seed.
+
+| Parameters | Spiking decoder (bpb) | Full attention (bpb) | Gap (bpb) |
+|---|---:|---:|---:|
+| 14.07M | 1.797892 | 1.714142 | 0.083750 |
+| 25.79M | 1.797869 | 1.713790 | 0.084080 |
+
+The clearest local gain is on the 335,417 targets whose
+eight-byte prefix last appeared 32–127 bytes earlier. The gap in
+that group falls from 0.20346 to 0.19044 bpb. First occurrences
+and repeats beyond 512 bytes account for most of the test targets
+and have slightly larger gaps at the wider size.
+[Full enwik8 score records](../results/event_lm/residual_scale)
+
 The v9 selected-arrival SNN and full-attention reference each saw
 121,241,600 enwik8 targets. They start this study at almost the
 same parameter count. The selected-arrival circuit projects the
