@@ -119,3 +119,23 @@ native test bytes, and its vocabulary counts matched Metal.
 bash experiments/run_v4_continuation.sh tag-read-active-start
 bash experiments/run_v4_continuation.sh tag-read-supervision
 ```
+
+| Model at 72,089,600 targets | enwik8 bpb | PG-19 bpb | Raw PG-19 bpb | Native pulses per byte |
+|---|---:|---:|---:|---:|
+| Original-width SNN | 1.87259 | 2.81227 | 2.90738 | 309,048 |
+| Active start | 1.87409 | 2.81635 | 2.91291 | 309,599 |
+| Active start with forecast-error ranking | 1.87620 | 2.83214 | 2.93471 | 309,582 |
+
+On the native 4,096-byte enwik8 test sample, the active-start arm
+rerouted 68.6% of heads and the ranking arm rerouted 61.7%. Mean
+payload age before the veto was 358 and 272 bytes respectively,
+compared with 13 bytes for the original-width control. Both
+checkpoints matched CPU single-byte decoding, CPU chunks, and
+Metal counts. Both use 19,536 bytes of stream state.
+
+Both runs raised held-out loss relative to the original-width SNN.
+On the 65,536-byte enwik8 validation probe, zeroing the gains lowered
+loss from 1.80155 to 1.80128 for active start and from 1.80758 to
+1.80723 for forecast-error ranking. The matched comparison uses
+one seed.
+[Paired training, full-corpus scores, and ablations](../results/event_lm/tag_read_competition)

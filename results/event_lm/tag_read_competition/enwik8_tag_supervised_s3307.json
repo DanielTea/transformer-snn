@@ -1,0 +1,99 @@
+{
+  "dataset": "enwik8",
+  "data_sha1": "57b8363b814821dc9d47aa4d41f58733519076b2",
+  "split": "test",
+  "protocol": "causal_warmed_windows",
+  "device": "mps",
+  "context_bytes": 8192,
+  "window_stride_bytes": 8192,
+  "unscored_history_bytes": 256,
+  "batch_size": 8,
+  "unscored_leading_bytes_per_book": 1,
+  "target_bytes": 4999999,
+  "models": [
+    {
+      "run_name": "event_correction_code_s3307_tag_read_supervision",
+      "checkpoint": "checkpoints/tag-read-supervision-study/tag_supervised_s3307.pt",
+      "parameters": 6514180,
+      "streaming_tensor_bytes": 19536,
+      "scoring": "normalized exponential of scaled output",
+      "temperature": 1.0,
+      "continuous_correction_state": true,
+      "continuous_local_trace_state": true,
+      "training_context_bytes": 512,
+      "target_bytes": 4999999,
+      "nll_nats": 6502395.108211073,
+      "bpb": 1.8761950105423562,
+      "raw_bpb": 1.8761950105423562,
+      "argmax_accuracy": 0.6167495233499046,
+      "prefix_age": {
+        "unseen": {
+          "target_bytes": 1919830,
+          "nll_nats": 2881870.1838136334,
+          "bpb": 2.165639573646466
+        },
+        "1-31": {
+          "target_bytes": 85805,
+          "nll_nats": 77960.64640334673,
+          "bpb": 1.3108028430814793
+        },
+        "32-127": {
+          "target_bytes": 335417,
+          "nll_nats": 399423.9397446983,
+          "bpb": 1.7180015833485136
+        },
+        "128-511": {
+          "target_bytes": 322155,
+          "nll_nats": 373895.5717730202,
+          "bpb": 1.6744029650549572
+        },
+        "512+": {
+          "target_bytes": 2336792,
+          "nll_nats": 2769244.7664763737,
+          "bpb": 1.70968391350329
+        }
+      },
+      "books": [
+        {
+          "book_id": 0,
+          "excerpt_file": "enwik8 test",
+          "excerpt_sha256": "86f62c0adeb6c27763f308b8913bec743626421a4d2b4010f1e177a40eef7750",
+          "source_start_raw_byte": 95000000,
+          "excerpt_bytes_used": 5000000,
+          "target_bytes": 4999999,
+          "nll_nats": 6502395.108211073,
+          "bpb": 1.8761950105423562,
+          "raw_nll_nats": 6502395.108211073,
+          "correct_bytes": 3083747,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 1919830,
+              "nll_nats": 2881870.1838136334,
+              "bpb": 2.165639573646466
+            },
+            "1-31": {
+              "target_bytes": 85805,
+              "nll_nats": 77960.64640334673,
+              "bpb": 1.3108028430814793
+            },
+            "32-127": {
+              "target_bytes": 335417,
+              "nll_nats": 399423.9397446983,
+              "bpb": 1.7180015833485136
+            },
+            "128-511": {
+              "target_bytes": 322155,
+              "nll_nats": 373895.5717730202,
+              "bpb": 1.6744029650549572
+            },
+            "512+": {
+              "target_bytes": 2336792,
+              "nll_nats": 2769244.7664763737,
+              "bpb": 1.70968391350329
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -18,9 +18,11 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.87259 | 3 | **2.81227** | 1 | 2.90738 | 309,048 |
-| Tag read competition, zero start | 6,514,180 | 19,536 B | 1.87077 | 2 | 2.81844 | 2 | 2.91860 | 309,523 |
-| Late steering | 6,514,204 | 19,536 B | 1.87323 | 4 | 2.82081 | 3 | 2.92053 | 308,536 |
-| Original-width full-attention Transformer | 6,513,152 | 4 MiB | **1.77292** | 1 | 2.95995 | 4 | 3.16079 | — |
+| Tag read competition, zero start | 6,514,180 | 19,536 B | 1.87077 | 2 | 2.81844 | 3 | 2.91860 | 309,523 |
+| Tag read competition, active start | 6,514,180 | 19,536 B | 1.87409 | 5 | 2.81635 | 2 | 2.91291 | 309,599 |
+| Tag reads with forecast-error ranking | 6,514,180 | 19,536 B | 1.87620 | 6 | 2.83214 | 5 | 2.93471 | 309,582 |
+| Late steering | 6,514,204 | 19,536 B | 1.87323 | 4 | 2.82081 | 4 | 2.92053 | 308,536 |
+| Original-width full-attention Transformer | 6,513,152 | 4 MiB | **1.77292** | 1 | 2.95995 | 6 | 3.16079 | — |
 
 ## 6.51M at 65.54M observed targets · 65,536,000 training targets · seed 2503
 

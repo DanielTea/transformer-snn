@@ -230,7 +230,7 @@ number of targets, and checkpoint path.
 |---|---|---|
 | Expansion to 8.74M | Four arms scored. Audits confirm the restored steering population | [Expansion study](EXPANSION_GROWTH.md) |
 | 13.03M residual growth | Both widths scored. The wider SNN improved PG-19 over the original-width control and full attention led on enwik8 | [Held-out comparison](GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state) |
-| Tag read competition | The first trained circuit emitted zero competition pulses. An active-gain intervention plus two active-start training arms measure older reads | [Read circuit and scores](TAG_READ_COMPETITION.md) |
+| Tag read competition | All arms scored. The active-start runs read older charge and increased held-out loss on both corpora | [Read circuit and scores](TAG_READ_COMPETITION.md) |
 | Late steering | Both corpora scored and late spikes measured. The original-width control led on both | [Feedback circuit and scores](LATE_STEERING.md) |
 | Finer router charge at fixed width | Warm counts and pulses agree with v5. The matched continuation uses the same firing resolution and pulse target | [Precision study](GROWN_RESIDUAL.md#refine-router-charge-at-fixed-width) |
 | Redistribution of inhibition | Matched continuation, both scores, native audit and transfer intervention | [Inhibition study](INHIBITION_REDISTRIBUTION.md) |

@@ -117,6 +117,9 @@ RESIDUAL_GROWTH_13030K = (
 CIRCUITS_6510K = (
     ORIGINAL_WIDTH_SNN,
     ("Tag read competition, zero start", TAG_READS, "tag_reads_s3307", f"{TAG_READS}/native_tag_reads_s3307.json", GRAY),
+    ("Tag read competition, active start", TAG_READS, "tag_active_s3307", f"{TAG_READS}/native_tag_active_s3307.json", BLUE),
+    ("Tag reads with forecast-error ranking", TAG_READS, "tag_supervised_s3307",
+     f"{TAG_READS}/native_tag_supervised_s3307.json", VIOLET),
     ("Late steering", LATE_STEERING, "late_s3307", f"{LATE_STEERING}/native_late_s3307.json", VIOLET),
     ORIGINAL_WIDTH_TRANSFORMER,
 )
