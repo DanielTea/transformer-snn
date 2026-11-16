@@ -418,6 +418,56 @@ def test_population_inhibition_raises_both_firing_thresholds_and_keeps_native_pa
     torch.testing.assert_close(torch.cat((first, second), dim=1), expected, rtol=0, atol=0)
 
 
+def test_inhibition_transfer_conserves_pair_budgets_and_starts_with_gradients():
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered", carry=False, resolution=16,
+                        activity_inhibition=True, redistribute_inhibition=True)
+    block = EventLM(cfg).blocks[0]
+    synapse = block.inhibition_redistribution.synapse
+    incoming = torch.full((1, cfg.dim), 8.0)
+    firing = block._firing_quanta(incoming, None)
+    torch.testing.assert_close(firing, torch.full_like(firing, 6), rtol=0, atol=0)
+    gradient, = torch.autograd.grad(firing[0, 0], synapse.weight)
+    torch.testing.assert_close(gradient[0], incoming[0], rtol=0, atol=0)
+
+    with torch.no_grad():
+        synapse.weight[0].fill_(0.5)
+        synapse.weight[1, 0] = -0.125
+        synapse.freeze_integer()
+        signed = torch.cat((incoming, -incoming, torch.zeros_like(incoming))).to(torch.int32)
+        firing = block._firing_quanta(signed, None)
+        groups = [group[:, 0] for group in firing.split(block.widths, dim=-1)]
+        assert torch.stack(groups, dim=-1).tolist() == [[8, 5, 7, 4], [4, 7, 5, 8], [4, 4, 4, 4]]
+
+
+@torch.no_grad()
+def test_redistributed_inhibition_warm_start_and_native_streaming():
+    torch.manual_seed(144)
+    cfg = EventLMConfig(dim=32, hidden=27, depth=3, route="steered", carry=False, resolution=16,
+                        compact_delays=True, compact_axon_state=True, activity_inhibition=True, local_trace=True)
+    parent = EventLM(cfg).eval()
+    model = EventLM(replace(cfg, redistribute_inhibition=True)).eval()
+    missing, unexpected = model.load_state_dict(parent.state_dict(), strict=False)
+    assert missing == [f"blocks.{i}.inhibition_redistribution.synapse.weight" for i in range(cfg.depth)]
+    assert not unexpected
+    tokens = torch.randint(256, (2, 61))
+    torch.testing.assert_close(model.to_integer()(tokens), parent.to_integer()(tokens), rtol=0, atol=0)
+
+    for block in model.blocks:
+        block.inhibition_redistribution.synapse.weight.uniform_(-0.5, 0.5)
+    native = model.to_integer()
+    expected = native(tokens)
+    torch.testing.assert_close(model(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    state = None
+    steps = []
+    for byte in tokens.unbind(1):
+        emitted, state = native.step(byte, state)
+        steps.append(emitted)
+    torch.testing.assert_close(torch.stack(steps, dim=1), expected, rtol=0, atol=0)
+    first, state = native.forward_chunk(tokens[:, :17])
+    second, _ = native.forward_chunk(tokens[:, 17:], state)
+    torch.testing.assert_close(torch.cat((first, second), dim=1), expected, rtol=0, atol=0)
+
+
 def test_trace_steering_reads_old_charge_and_resists_writes_within_its_interval():
     trace = _SpikeTrace(cap=12)
     present = torch.tensor([5, 5, 5, 0, 4, -2], dtype=torch.int32).reshape(1, -1, 1)

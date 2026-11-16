@@ -1,6 +1,84 @@
 {
   "unit": "bits per byte",
   "groups": {
+    "data_6510k_65536": {
+      "title": "6.51M at 65.54M observed targets",
+      "seeds": [
+        2503
+      ],
+      "training_context_bytes": 512,
+      "training_summary": "65,536,000 training targets \u00b7 seed 2503",
+      "parent_training_targets": 49152000,
+      "additional_training_targets": 16384000,
+      "rows": [
+        {
+          "model": "Six-bit grown SNN",
+          "color": "#0072b2",
+          "parameters": 6514176,
+          "state_bytes": 19536,
+          "training_targets": 65536000,
+          "scores": {
+            "enwik8": {
+              "mean": 1.8652546068135127,
+              "by_seed": [
+                1.8652546068135127
+              ],
+              "raw_bpb": 1.8652546068135127,
+              "rank": 2
+            },
+            "pg19_full": {
+              "mean": 2.812314556000239,
+              "by_seed": [
+                2.812314556000239
+              ],
+              "raw_bpb": 2.9066412914138158,
+              "rank": 1
+            }
+          },
+          "score_files": {
+            "enwik8": "event_lm/scale_6510k_next_data/enwik8_trace_s2503.json",
+            "pg19_full": "event_lm/scale_6510k_next_data/pg19_trace_s2503.json"
+          },
+          "training_record": "event_lm/scale_6510k_next_data/event_correction_code_s2503_scale_6510k_65536k_targets.json",
+          "native_audit": "event_lm/scale_6510k_next_data/native_trace_s2503.json",
+          "pulses_per_byte": {
+            "mean": 308230.14501953125
+          }
+        },
+        {
+          "model": "Grown full-attention Transformer",
+          "color": "#b64d00",
+          "parameters": 6513152,
+          "state_bytes": 4194304,
+          "training_targets": 65536000,
+          "scores": {
+            "enwik8": {
+              "mean": 1.777278324824908,
+              "by_seed": [
+                1.777278324824908
+              ],
+              "raw_bpb": 1.777278324824908,
+              "rank": 1
+            },
+            "pg19_full": {
+              "mean": 2.9807057150435208,
+              "by_seed": [
+                2.9807057150435208
+              ],
+              "raw_bpb": 3.1860448144849705,
+              "rank": 2
+            }
+          },
+          "score_files": {
+            "enwik8": "event_lm/scale_6510k_next_data/enwik8_transformer_s2503.json",
+            "pg19_full": "event_lm/scale_6510k_next_data/pg19_transformer_s2503.json"
+          },
+          "training_record": "event_lm/scale_6510k_next_data/transformer_s2503_scale_6510k_65536k_targets.json",
+          "native_audit": null,
+          "pulses_per_byte": null
+        }
+      ]
+    },
     "expansion_8740k": {
       "title": "8.74M expansion and original-width control",
       "seeds": [
@@ -32,7 +110,7 @@
                 2.837533339217911
               ],
               "raw_bpb": 2.94075465219184,
-              "rank": 1
+              "rank": 2
             }
           },
           "score_files": {
@@ -43,6 +121,40 @@
           "native_audit": "event_lm/expansion_8740k/native_expanded_s1801.json",
           "pulses_per_byte": {
             "mean": 309457.0966796875
+          }
+        },
+        {
+          "model": "Expanded SNN with active steering",
+          "color": "#77519d",
+          "parameters": 8739840,
+          "state_bytes": 26080,
+          "training_targets": 55705600,
+          "scores": {
+            "enwik8": {
+              "mean": 1.8931213830328293,
+              "by_seed": [
+                1.8931213830328293
+              ],
+              "raw_bpb": 1.8931213830328293,
+              "rank": 4
+            },
+            "pg19_full": {
+              "mean": 2.829863765240175,
+              "by_seed": [
+                2.829863765240175
+              ],
+              "raw_bpb": 2.926296750466572,
+              "rank": 1
+            }
+          },
+          "score_files": {
+            "enwik8": "event_lm/expansion_8740k/enwik8_expanded_steering_s1801.json",
+            "pg19_full": "event_lm/expansion_8740k/pg19_expanded_steering_s1801.json"
+          },
+          "training_record": "event_lm/expansion_8740k/event_correction_code_s1801_scale_8740k_expansion_steering.json",
+          "native_audit": "event_lm/expansion_8740k/native_expanded_steering_s1801.json",
+          "pulses_per_byte": {
+            "mean": 308644.75390625
           }
         },
         {
@@ -66,7 +178,7 @@
                 3.0153309149743928
               ],
               "raw_bpb": 3.2239230294849754,
-              "rank": 3
+              "rank": 4
             }
           },
           "score_files": {
@@ -98,6 +210,52 @@
                 2.840721600788596
               ],
               "raw_bpb": 2.942627235386127,
+              "rank": 3
+            }
+          },
+          "score_files": {
+            "enwik8": "event_lm/expansion_8740k/enwik8_control_s1801.json",
+            "pg19_full": "event_lm/expansion_8740k/pg19_control_s1801.json"
+          },
+          "training_record": "event_lm/expansion_8740k/event_correction_code_s1801_scale_8740k_expansion_control.json",
+          "native_audit": "event_lm/expansion_8740k/native_control_s1801.json",
+          "pulses_per_byte": {
+            "mean": 309545.181640625
+          }
+        }
+      ]
+    },
+    "inhibition_6510k": {
+      "title": "6.52M redistribution of inhibition",
+      "seeds": [
+        1801
+      ],
+      "training_context_bytes": 512,
+      "training_summary": "55,705,600 training targets \u00b7 seed 1801",
+      "parent_training_targets": 49152000,
+      "additional_training_targets": 6553600,
+      "rows": [
+        {
+          "model": "Original-width held-charge SNN",
+          "color": "#687a92",
+          "parameters": 6514176,
+          "state_bytes": 19536,
+          "training_targets": 55705600,
+          "scores": {
+            "enwik8": {
+              "mean": 1.8905651212244559,
+              "by_seed": [
+                1.8905651212244559
+              ],
+              "raw_bpb": 1.8905651212244559,
+              "rank": 2
+            },
+            "pg19_full": {
+              "mean": 2.840721600788596,
+              "by_seed": [
+                2.840721600788596
+              ],
+              "raw_bpb": 2.942627235386127,
               "rank": 2
             }
           },
@@ -109,6 +267,128 @@
           "native_audit": "event_lm/expansion_8740k/native_control_s1801.json",
           "pulses_per_byte": {
             "mean": 309545.181640625
+          }
+        },
+        {
+          "model": "Redistribution of inhibition",
+          "color": "#77519d",
+          "parameters": 6524928,
+          "state_bytes": 19536,
+          "training_targets": 55705600,
+          "scores": {
+            "enwik8": {
+              "mean": 1.8893770117423787,
+              "by_seed": [
+                1.8893770117423787
+              ],
+              "raw_bpb": 1.8893770117423787,
+              "rank": 1
+            },
+            "pg19_full": {
+              "mean": 2.8388063511393606,
+              "by_seed": [
+                2.8388063511393606
+              ],
+              "raw_bpb": 2.940203962335235,
+              "rank": 1
+            }
+          },
+          "score_files": {
+            "enwik8": "event_lm/inhibition_redistribution/enwik8_inhibition_s1801.json",
+            "pg19_full": "event_lm/inhibition_redistribution/pg19_inhibition_s1801.json"
+          },
+          "training_record": "event_lm/inhibition_redistribution/event_correction_code_s1801_scale_6510k_redistribute_inhibition.json",
+          "native_audit": "event_lm/inhibition_redistribution/native_inhibition_s1801.json",
+          "pulses_per_byte": {
+            "mean": 308919.3630371094
+          }
+        }
+      ]
+    },
+    "teacher_guidance_6510k": {
+      "title": "6.51M frozen teacher guidance and unguided control",
+      "seeds": [
+        1801
+      ],
+      "training_context_bytes": 512,
+      "training_summary": "55,705,600 training targets \u00b7 seed 1801",
+      "parent_training_targets": 49152000,
+      "additional_training_targets": 6553600,
+      "rows": [
+        {
+          "model": "Original-width held-charge SNN",
+          "color": "#687a92",
+          "parameters": 6514176,
+          "state_bytes": 19536,
+          "training_targets": 55705600,
+          "scores": {
+            "enwik8": {
+              "mean": 1.8905651212244559,
+              "by_seed": [
+                1.8905651212244559
+              ],
+              "raw_bpb": 1.8905651212244559,
+              "rank": 1
+            },
+            "pg19_full": {
+              "mean": 2.840721600788596,
+              "by_seed": [
+                2.840721600788596
+              ],
+              "raw_bpb": 2.942627235386127,
+              "rank": 1
+            }
+          },
+          "score_files": {
+            "enwik8": "event_lm/expansion_8740k/enwik8_control_s1801.json",
+            "pg19_full": "event_lm/expansion_8740k/pg19_control_s1801.json"
+          },
+          "training_record": "event_lm/expansion_8740k/event_correction_code_s1801_scale_8740k_expansion_control.json",
+          "native_audit": "event_lm/expansion_8740k/native_control_s1801.json",
+          "pulses_per_byte": {
+            "mean": 309545.181640625
+          }
+        },
+        {
+          "model": "Held-charge SNN with frozen teacher",
+          "color": "#77519d",
+          "parameters": 6514176,
+          "state_bytes": 19536,
+          "training_targets": 55705600,
+          "scores": {
+            "enwik8": {
+              "mean": 1.8953690291186822,
+              "by_seed": [
+                1.8953690291186822
+              ],
+              "raw_bpb": 1.8953690291186822,
+              "rank": 2
+            },
+            "pg19_full": {
+              "mean": 2.8478706308481083,
+              "by_seed": [
+                2.8478706308481083
+              ],
+              "raw_bpb": 2.9614790004404163,
+              "rank": 2
+            }
+          },
+          "score_files": {
+            "enwik8": "event_lm/teacher_guidance/enwik8_guided_s1801.json",
+            "pg19_full": "event_lm/teacher_guidance/pg19_guided_s1801.json"
+          },
+          "training_record": "event_lm/teacher_guidance/event_correction_code_s1801_scale_6510k_teacher_guidance.json",
+          "native_audit": "event_lm/teacher_guidance/native_guided_s1801.json",
+          "pulses_per_byte": {
+            "mean": 308918.2629394531
+          },
+          "teacher": {
+            "checkpoint": "checkpoints/scale-6510k-data-study/transformer_s1109.pt",
+            "sha256": "f5961d14b82a0de1727c8d33e9e8dc1d14e70577e156709afca98a996e54dd97",
+            "model_type": "TransformerLM",
+            "parameters": 6513152,
+            "training_targets": 49152000,
+            "run_name": "transformer_s1109_scale_6510k_49152k_targets"
           }
         }
       ]

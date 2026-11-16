@@ -106,5 +106,19 @@ repeats the original expansion from the same 49.15M checkpoint.
 [Gradient diagnostic](../results/event_lm/expansion_8740k/steering_gradient_check.json)
 
 ```bash
+export PYTORCH_ENABLE_MPS_FALLBACK=0
+mkdir -p checkpoints/work
+python experiments/audit_growth_gradients.py steering --enwik8 data/enwik8 --device mps \
+  --checkpoint checkpoints/expansion-8740k-study/expanded_s1801.pt \
+  --seed 1801 --json checkpoints/work/steering_gradient_check.json
 PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh expansion-steering
 ```
+
+The rerun activated the added steering population in all seven
+blocks. It emitted 1,277 added steering pulses per byte on the
+4,096-byte test audit and used 26,080 bytes of persistent state.
+Enwik8 loss rose from 1.88812 to 1.89312, and calibrated PG-19
+loss fell from 2.83753 to 2.82986. Raw PG-19 loss fell from
+2.94075 to 2.92630. Removing the added expansion after training
+raised the 65,536-target enwik8 validation loss by 0.00013.
+[Rerun scores and native pulse counts](../results/event_lm/expansion_8740k)

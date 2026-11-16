@@ -11,6 +11,17 @@ import sys
 from pathlib import Path
 
 
+def checked_path(recorded, directory, metadata, role, *, dry_run):
+    path = Path(recorded) if directory is None else directory / Path(recorded).name
+    expected = (metadata or {}).get("sha256")
+    if expected and not dry_run:
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        if digest != expected:
+            raise ValueError(f"{role} checkpoint checksum differs from the training record: {path}")
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("record", type=Path, help="training JSON from results/event_lm")
@@ -18,6 +29,7 @@ def main():
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"))
     parser.add_argument("--output-dir", type=Path, default=Path("checkpoints/replayed"))
     parser.add_argument("--parent-checkpoints", type=Path, help="override the directory of a recorded parent checkpoint")
+    parser.add_argument("--teacher-checkpoints", type=Path, help="override the directory of a recorded teacher checkpoint")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -33,14 +45,14 @@ def main():
         if args.device:
             options["device"] = args.device
         if parent:
-            parent_path = Path(parent) if args.parent_checkpoints is None else args.parent_checkpoints / Path(parent).name
-            initialization = record.get("initialization") or {}
-            if not args.dry_run and initialization.get("sha256"):
-                with parent_path.open("rb") as stream:
-                    digest = hashlib.file_digest(stream, "sha256").hexdigest()
-                if digest != initialization["sha256"]:
-                    raise ValueError(f"parent checkpoint checksum differs from the training record: {parent_path}")
-            options["initialize_from"] = parent_path
+            options["initialize_from"] = checked_path(
+                parent, args.parent_checkpoints, record.get("initialization"), "parent", dry_run=args.dry_run,
+            )
+        teacher = options.get("teacher_checkpoint")
+        if teacher:
+            options["teacher_checkpoint"] = checked_path(
+                teacher, args.teacher_checkpoints, record.get("teacher"), "teacher", dry_run=args.dry_run,
+            )
         command = [sys.executable, str(Path(__file__).with_name("train_event_lm.py"))]
         for name, value in options.items():
             flag = "--" + name.replace("_", "-")

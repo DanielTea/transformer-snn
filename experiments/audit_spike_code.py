@@ -82,6 +82,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
                 populations[f"block_{index}_steering"] = block.steer
             if block.activity_inhibition is not None:
                 populations[f"block_{index}_inhibition"] = block.activity_inhibition
+            if block.inhibition_redistribution is not None:
+                populations[f"block_{index}_inhibition_transfer"] = block.inhibition_redistribution.emit
             if block.opponent_steering is not None:
                 populations[f"block_{index}_write_protection"] = block.opponent_steering.emit
             if integer.cfg.trace_read_veto:

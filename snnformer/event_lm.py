@@ -81,6 +81,7 @@ class EventLMConfig:
     trace_coincidence_start: int | None = None
     trace_write_confirm: bool = False
     steering_gradient_at_zero: bool = False
+    redistribute_inhibition: bool = False
 
     @property
     def inhibition_bits(self) -> int:
@@ -258,6 +259,24 @@ class _PacketThresholds(nn.Module):
     def freeze_integer(self):
         if self.relative.is_floating_point():
             self.relative = nn.Parameter(self.quanta().to(torch.int32), requires_grad=False)
+
+
+class _InhibitionRedistribution(nn.Module):
+    """Transfer inhibitory pulses between pairs of delay groups."""
+
+    def __init__(self, dim, widths, pool):
+        super().__init__()
+        self.synapse = _Synapse(dim, len(widths) // 2, gain=0.0)
+        self.emit = _IntegrateFire(pool.cap, pool.bits, False)
+        groups = torch.arange(len(widths)).repeat_interleave(torch.tensor(widths))
+        self.register_buffer("groups", groups, persistent=False)
+
+    def forward(self, spikes, pooled):
+        limit = pooled * self.emit.threshold
+        transfer = self.emit(self.synapse(spikes).clamp(-limit, limit))
+        # Pair the first and last groups, then the two middle groups.
+        inhibition = pooled + torch.cat((transfer, -transfer.flip(-1)), dim=-1)
+        return inhibition.index_select(-1, self.groups)
 
 
 class _DelayCorrection(nn.Module):
@@ -810,6 +829,10 @@ class _DelayBlock(nn.Module):
         if cfg.activity_inhibition:
             # One pool receives one unit of charge per spike on either input rail.
             self.activity_inhibition = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
+        self.inhibition_redistribution = (
+            _InhibitionRedistribution(cfg.dim, self.widths, self.activity_inhibition)
+            if cfg.redistribute_inhibition else None
+        )
         bits = cfg.router_charge_bits
         self.expand = _Synapse(cfg.dim, cfg.hidden * (2 if self.steered else 1), gain=1.0,
                                continuous=cfg.continuous, charge_bits=bits)
@@ -833,7 +856,10 @@ class _DelayBlock(nn.Module):
         if self.activity_inhibition is None:
             return quanta
         activity = spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)
-        return _PACKET_UNITS + self.activity_inhibition(activity)
+        inhibition = self.activity_inhibition(activity)
+        if self.inhibition_redistribution is not None:
+            inhibition = self.inhibition_redistribution(spikes, inhibition)
+        return _PACKET_UNITS + inhibition
 
     def _steering_current(self, drive):
         if self.balanced:
@@ -1206,6 +1232,8 @@ class EventLM(nn.Module):
             raise ValueError("spike resolution must be a positive integer")
         if cfg.inhibition_by_expansion and not cfg.activity_inhibition:
             raise ValueError("an expansion-sized inhibitory pool needs activity inhibition")
+        if cfg.redistribute_inhibition and not cfg.activity_inhibition:
+            raise ValueError("redistributing inhibition needs activity inhibition")
         if cfg.activity_inhibition:
             if (cfg.carry or cfg.continuous or cfg.learn_packet_thresholds
                     or cfg.route not in ("steered", "steered_correction_code")):
@@ -1302,6 +1330,8 @@ class EventLM(nn.Module):
         bounds = [row_sums(self.output).amax()]
         for block in self.blocks:
             bounds.append(row_sums(block.expand).amax())
+            if block.inhibition_redistribution is not None:
+                bounds.append(row_sums(block.inhibition_redistribution.synapse).amax())
             if block.delay_filters is not None:
                 bounds.extend(2 * row_sums(kernel).amax() for kernel in block.delay_filters if kernel is not None)
             if block.trace is not None and block.trace.read_veto is not None:

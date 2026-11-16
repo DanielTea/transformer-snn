@@ -94,6 +94,9 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
             for hook in hooks:
                 hook.remove()
         result["fixed_inhibition_pulses_by_block"] = medians
+    if model.cfg.redistribute_inhibition:
+        weights = [block.inhibition_redistribution.synapse.weight for block in model.blocks]
+        result["zero_inhibition_transfer_bpb"] = score_without_synapses(model, window, chunk_size, weights)
     if model.cfg.local_trace:
         result["periodic_trace_reset_bpb"] = score(model, window, chunk_size, reset_trace=True)
     if model.prediction_memory is not None:

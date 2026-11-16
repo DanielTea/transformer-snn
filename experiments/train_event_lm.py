@@ -26,7 +26,7 @@ from common import (
     save_result,
     setup,
 )
-from snnformer import count_params
+from snnformer import SNNConfig, count_params
 from snnformer.event_lm import EventLM, EventLMConfig
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
@@ -57,6 +57,41 @@ EVENT_ROUTES = {
 def scoring_logits(output: torch.Tensor, event: bool, resolution: int = 1) -> torch.Tensor:
     """Score the signed spike evidence outside the event decoder."""
     return output.float() * (math.log(2) / (8 * resolution)) if event else output
+
+
+def load_checkpoint(path: Path, device: torch.device):
+    """Load a training checkpoint with its original floating-point parameters."""
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    if checkpoint.get("task") != "event_lm":
+        raise ValueError(f"{path}: expected a train_event_lm.py checkpoint")
+    if checkpoint.get("model_type") == "EventLM":
+        model = EventLM(EventLMConfig(**checkpoint["cfg"]))
+    else:
+        cfg = SNNConfig(**checkpoint["cfg"])
+        options = checkpoint["model_kwargs"]
+        if cfg.attn not in ("transformer", "transformer_local") or options.get("vocab", 256) != 256:
+            raise ValueError(f"{path}: expected a byte-level full or local Transformer")
+        model = make_lm(cfg, **options)
+    model.load_state_dict(checkpoint["state_dict"])
+    return model.to(device).eval(), checkpoint
+
+
+def training_exposure(checkpoint):
+    options = checkpoint["args"]
+    previous = checkpoint.get("initialization") or {}
+    return options["steps"] * options["bs"] * options["ctx"] + previous.get("training_targets", 0)
+
+
+def guided_language_loss(logits, targets, teacher_logits, weight):
+    student = logits.log_softmax(dim=-1)
+    target = targets.unsqueeze(-1)
+    hard = -student.gather(-1, target).squeeze(-1)
+    with torch.no_grad():
+        teacher = teacher_logits.log_softmax(dim=-1)
+        use_teacher = teacher.gather(-1, target).squeeze(-1) > -hard
+    divergence = (teacher.exp() * (teacher - student)).sum(-1)
+    loss = torch.where(use_teacher, (1 - weight) * hard + weight * divergence, hard)
+    return loss.mean(), hard.mean(), use_teacher.float().mean()
 
 
 @torch.inference_mode()
@@ -105,6 +140,7 @@ def build_model(args):
                             delay_residual=args.delay_residual,
                             router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
                             inhibition_by_expansion=args.inhibition_by_expansion,
+                            redistribute_inhibition=args.redistribute_inhibition,
                             local_trace=args.local_trace, trace_coincidence_start=args.trace_coincidence_start,
                             trace_write_credit=args.trace_write_credit, trace_write_confirm=args.trace_write_confirm,
                             steering_gradient_at_zero=args.steering_gradient_at_zero,
@@ -128,6 +164,7 @@ _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
 _OPTIONAL_ROUTER_PARAMETERS = (
     ".packet_thresholds.", ".delay_correction.", ".delay_filters.", ".opponent_steering.", ".trace.read_veto.",
     ".spread_coincidence.", ".trace.write_confirm.",
+    ".inhibition_redistribution.",
 )
 
 
@@ -153,8 +190,6 @@ def initialize_router(model, source, source_cfg):
 
 def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow_residual=False,
                                grow_feed_forward=False, grow_expansion=False):
-    from snnformer import SNNConfig
-
     source = torch.load(path, map_location="cpu", weights_only=True)
     if source.get("task") != "event_lm" or source.get("model_type") != type(model).__name__:
         raise ValueError("--initialize-from needs a checkpoint of the same decoder family")
@@ -182,6 +217,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace,
                                   trace_coincidence_start=model.cfg.trace_coincidence_start,
                                   inhibition_by_expansion=model.cfg.inhibition_by_expansion,
+                                  redistribute_inhibition=source_cfg.redistribute_inhibition or model.cfg.redistribute_inhibition,
                                   trace_write_credit=model.cfg.trace_write_credit,
                                   trace_write_confirm=source_cfg.trace_write_confirm or model.cfg.trace_write_confirm,
                                   steering_gradient_at_zero=model.cfg.steering_gradient_at_zero,
@@ -206,6 +242,9 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 expected.update(name for name in model.state_dict() if ".trace.write_confirm." in name)
             if model.cfg.spread_coincidence and not source_cfg.spread_coincidence:
                 expected.update(name for name in model.state_dict() if ".spread_coincidence." in name)
+            if model.cfg.redistribute_inhibition and not source_cfg.redistribute_inhibition:
+                expected.update(f"blocks.{index}.inhibition_redistribution.synapse.weight"
+                                for index in range(model.cfg.depth))
             if expected:
                 missing, unexpected = model.load_state_dict(source["state_dict"], strict=False)
                 if set(missing) != expected or unexpected:
@@ -232,12 +271,10 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
             raise ValueError("the checkpoint and Transformer must use the same geometry")
         else:
             model.load_state_dict(source["state_dict"])
-    options = source["args"]
-    previous = source.get("initialization") or {}
     return {
         "checkpoint": str(path),
         "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-        "training_targets": options["steps"] * options["bs"] * options["ctx"] + previous.get("training_targets", 0),
+        "training_targets": training_exposure(source),
         **growth,
     }
 
@@ -281,6 +318,8 @@ def main():
                         help="raise content and steering thresholds with pooled incoming spike activity")
     parser.add_argument("--inhibition-by-expansion", action="store_true",
                         help="size the inhibitory threshold from the content and steering populations")
+    parser.add_argument("--redistribute-inhibition", action="store_true",
+                        help="learn to transfer inhibitory pulses between pairs of delay groups")
     parser.add_argument("--local-trace", action="store_true",
                         help="hold each channel's charge within its steering interval across bytes")
     parser.add_argument("--trace-coincidence-start", type=int,
@@ -323,6 +362,9 @@ def main():
     parser.add_argument("--final-eval-batches", type=int, default=100)
     parser.add_argument("--validation-only", action="store_true", help="leave the test split untouched during tuning")
     parser.add_argument("--initialize-from", type=Path, help="matching model or compatible plain spike router checkpoint")
+    parser.add_argument("--teacher-checkpoint", type=Path, help="frozen byte model used only during training")
+    parser.add_argument("--teacher-weight", type=float, default=0.5,
+                        help="share of the next-byte gradient from the teacher when it predicts the target better")
     growth = parser.add_mutually_exclusive_group()
     growth.add_argument("--grow-residual", action="store_true",
                         help="start extra residual neurons silent while loading the narrower checkpoint")
@@ -347,6 +389,8 @@ def main():
         parser.error("--local-lookback needs a positive total width and a local Transformer")
     if not (math.isfinite(args.lr) and args.lr > 0 and math.isfinite(args.wd) and args.wd >= 0):
         parser.error("learning rate must be positive and weight decay must be nonnegative")
+    if not 0 < args.teacher_weight <= 1:
+        parser.error("--teacher-weight must be in (0, 1]")
     if args.freeze_router and args.initialize_from is None:
         parser.error("--freeze-router requires --initialize-from")
     if (args.grow_residual or args.grow_expansion) and (
@@ -371,7 +415,7 @@ def main():
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.compact_axon_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
-            or args.inhibition_by_expansion
+            or args.inhibition_by_expansion or args.redistribute_inhibition
             or args.trace_coincidence_start is not None or args.steering_gradient_at_zero
             or args.local_trace or args.trace_write_credit or args.trace_write_confirm or args.trace_read_veto
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
@@ -403,6 +447,18 @@ def main():
                 grow_expansion=args.grow_expansion,
             )
         model = model.to(device)
+        teacher = None
+        teacher_details = {}
+        if args.teacher_checkpoint is not None:
+            teacher_path = args.teacher_checkpoint.expanduser()
+            teacher, source = load_checkpoint(teacher_path, device)
+            teacher.requires_grad_(False)
+            with teacher_path.open("rb") as stream:
+                teacher_details["teacher"] = {
+                    "checkpoint": str(teacher_path), "sha256": hashlib.file_digest(stream, "sha256").hexdigest(),
+                    "model_type": source["model_type"], "parameters": count_params(teacher),
+                    "training_targets": training_exposure(source), "run_name": source["run_name"],
+                }
     except (OSError, RuntimeError, ValueError) as exc:
         parser.error(str(exc))
 
@@ -428,6 +484,8 @@ def main():
     parameters = count_params(model)
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"{name}: params={parameters} trainable={trainable_params}", flush=True)
+    teacher_event = isinstance(teacher, EventLM)
+    teacher_resolution = teacher.cfg.resolution if teacher_event else 1
     for step in range(1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr)
@@ -448,8 +506,16 @@ def main():
         else:
             counts = model(inputs, **forward_options)
         logits = scoring_logits(counts, event, args.spike_resolution)
-        language_loss = F.cross_entropy(logits.flatten(0, 1), labels.to(device).flatten())
-        loss = language_loss + args.code_loss_weight * code_loss if args.code_loss_weight else language_loss
+        targets = labels.to(device)
+        if teacher is None:
+            language_loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten())
+            loss = language_loss
+        else:
+            with torch.no_grad():
+                guidance = scoring_logits(teacher(inputs), teacher_event, teacher_resolution)
+            loss, language_loss, teacher_fraction = guided_language_loss(logits, targets, guidance, args.teacher_weight)
+        if args.code_loss_weight:
+            loss = loss + args.code_loss_weight * code_loss
         if pulse_counts is not None:
             pulses = torch.stack(pulse_counts).sum() / inputs.numel()
             gap = pulses / args.pulse_budget - 1.0
@@ -466,6 +532,7 @@ def main():
                               val_argmax_accuracy=metrics["argmax_accuracy"],
                               **({"train_pulses_per_byte": pulses.item(), "val_pulses_per_byte": metrics["pulses_per_byte"],
                                   "spike_price": spike_price.item()} if pulse_counts is not None else {}),
+                              **({"teacher_selected_fraction": teacher_fraction.item()} if teacher is not None else {}),
                               **({"code_loss": code_loss.item()} if args.code_loss_weight else {})))
             activity = f" pulses/byte={metrics['pulses_per_byte']:.0f}" if pulse_counts is not None else ""
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
@@ -475,12 +542,14 @@ def main():
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,
                                                             **evaluate_options)
     args_record = dict(vars(args), data=str(args.data), results_dir=None if results_dir is None else str(results_dir),
-                       initialize_from=None if args.initialize_from is None else str(args.initialize_from))
+                       initialize_from=None if args.initialize_from is None else str(args.initialize_from),
+                       teacher_checkpoint=None if args.teacher_checkpoint is None else str(args.teacher_checkpoint))
     config = asdict(cfg)
     if checkpoint is not None:
         payload = dict(format_version=1, model_type=type(model).__name__, task="event_lm", run_name=name,
                        cfg=config, model_kwargs=model_kwargs, args=args_record, initialization=initialization,
-                       state_dict={key: value.detach().cpu() for key, value in model.state_dict().items()})
+                       state_dict={key: value.detach().cpu() for key, value in model.state_dict().items()},
+                       **teacher_details)
         with _atomic_output(checkpoint, "wb", overwrite=args.force) as out:
             torch.save(payload, out)
     record = dict(args=args_record, cfg=config, device=str(device), params=parameters,
@@ -489,7 +558,7 @@ def main():
                   val_bpb=val_score["bpb"], test_bpb=test_score["bpb"] if test_score else None,
                   val=val_score, test=test_score,
                   scoring=("normalized exponential of scaled output" if event else "softmax over logits"),
-                  seconds=timer())
+                  seconds=timer(), **teacher_details)
     destination = save_result("event_lm", name, record, overwrite=args.force, directory=results_dir)
     split, metric = ("validation", val_score) if test_score is None else ("test", test_score)
     print(f"{name} {split}={metric['bpb']:.4f} bpb accuracy={metric['argmax_accuracy']:.4f} ({destination})")

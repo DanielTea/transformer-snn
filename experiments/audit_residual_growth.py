@@ -78,6 +78,7 @@ def main():
     growth.add_argument("--dim", type=int, help="grow the residual stream (default width 768)")
     growth.add_argument("--hidden", type=int, help="grow content and steering within each delay group")
     growth.add_argument("--trace-write-confirm", action="store_true", help="add silent write confirmation neurons")
+    growth.add_argument("--redistribute-inhibition", action="store_true", help="add silent inhibitory transfers")
     parser.add_argument("--router-charge-bits", type=int, choices=(6, 8))
     parser.add_argument("--trace-coincidence", action="store_true")
     parser.add_argument("--json", required=True, type=Path)
@@ -93,13 +94,15 @@ def main():
     if not isinstance(parent, EventLM) or not parent.cfg.local_trace:
         parser.error("the parent must be a held-charge EventLM")
     prior = parent.cfg
-    if ((args.hidden is not None or args.trace_write_confirm)
+    added_circuit = args.trace_write_confirm or args.redistribute_inhibition
+    if ((args.hidden is not None or added_circuit)
             and (args.router_charge_bits is not None or args.trace_coincidence)):
         parser.error("charge precision and trace coincidence options apply to residual growth")
-    if args.trace_write_confirm:
-        if prior.trace_write_confirm:
-            parser.error("the parent already has delayed write confirmation")
-        cfg = replace(prior, trace_write_confirm=True)
+    if added_circuit:
+        option = "trace_write_confirm" if args.trace_write_confirm else "redistribute_inhibition"
+        if getattr(prior, option):
+            parser.error(f"the parent already uses {option.replace('_', ' ')}")
+        cfg = replace(prior, **{option: True})
         grown = EventLM(cfg)
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False)
     elif args.hidden is None:
@@ -128,6 +131,10 @@ def main():
     if args.trace_write_confirm:
         gradient_field = "active_write_confirmation_gradients_on_512_train_targets"
         gradients = [block.trace.write_confirm.gain.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.redistribute_inhibition:
+        gradient_field = "active_inhibition_gradients_on_512_train_targets"
+        gradients = [block.inhibition_redistribution.synapse.weight.grad.count_nonzero().item()
+                     for block in grown.blocks]
     elif args.hidden is None:
         gradient_field = "active_new_projection_gradients_on_512_train_targets"
         gradients = [block.project.weight.grad[prior.dim:].count_nonzero().item() for block in grown.blocks]
@@ -150,7 +157,7 @@ def main():
         "device": str(device),
         "native_step_chunk_and_device_counts_equal": True,
         "parent_count_and_emission_parity": True,
-        "models": {"parent": parent_metrics, "candidate" if args.trace_write_confirm else "grown": grown_metrics},
+        "models": {"parent": parent_metrics, "candidate" if added_circuit else "grown": grown_metrics},
         gradient_field: gradients,
     }
     with _atomic_output(args.json, "w", overwrite=False) as stream:
