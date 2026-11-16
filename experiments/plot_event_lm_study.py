@@ -52,6 +52,7 @@ DEPTH_GROWTH = "event_lm/depth_growth"
 TRACE_INTEGRATION = "event_lm/trace_integration"
 TRACE_TAP_READ = "event_lm/trace_tap_read"
 PACKED_WIDTH = "event_lm/packed_width"
+TRACE_READ_DRIVE = "event_lm/trace_read_drive"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -167,6 +168,15 @@ PACKED_WIDTH_111411K = (
      f"{PACKED_WIDTH}/native_short_groups_s7907.json", "#7a6a50"),
     ("Present steering transfers", PACKED_WIDTH, "present_transfer_s7907",
      f"{PACKED_WIDTH}/native_present_transfer_s7907.json", "#a34073"),
+)
+TRACE_READ_DRIVE_116326K = (
+    ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
+     f"{TRACE_READ_DRIVE}/native_control_s8237.json", BLUE),
+    ("Write input, six-bit reset", TRACE_READ_DRIVE, "write_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_s8237.json", "#7a6a50"),
+    ("Write input, eight-bit carry", TRACE_READ_DRIVE, "write_carry_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_carry_s8237.json", VIOLET),
+    ("Full attention", TRACE_READ_DRIVE, "transformer_s8237", None, ORANGE),
 )
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
@@ -330,6 +340,8 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
+        ("trace_read_drive_116326k", "Driven held-charge reads",
+         TRACE_READ_DRIVE_116326K, 8237, 512, (111_411_200, 4_915_200)),
         ("packed_width_111411k", "Packed width and steering transfers",
          PACKED_WIDTH_111411K, 7907, 512, (101_580_800, 9_830_400)),
         ("trace_tap_101580k", "9.96M axon tap reads",
@@ -453,6 +465,11 @@ def write_leaderboards(data, depth, research):
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
     ]
     study_figures = {
+        "trace_read_drive_116326k": (
+            "![Held-out next-byte loss after training the driven read circuits]"
+            "(../results/figures/event_lm_trace_read_drive.png)",
+            "[Circuit, native activity, and matched controls](TRACE_READ_DRIVE.md)",
+        ),
         "packed_width_111411k": (
             "![Held-out loss at the original and wider sizes](../results/figures/event_lm_packed_width.png)",
             "![Held-out loss changes from channel placement and steering sources]"
@@ -929,6 +946,10 @@ def main():
                  subtitle="About 9.96M parameters · 101.58M enwik8 training targets · seed 6899",
                  filename="event_lm_trace_tap_read.png", precision=5)
     plot_trace_tap_training(tap_rows, output)
+    read_rows = research["groups"]["trace_read_drive_116326k"]["rows"]
+    plot_heldout(read_rows, output, title="Held-charge read circuits at matched exposure",
+                 subtitle="About 12.8M parameters · 116.33M enwik8 training targets · seed 8237",
+                 filename="event_lm_trace_read_drive.png", precision=5)
     packed_rows = research["groups"]["packed_width_111411k"]["rows"]
     narrow_snn, wide_snn, narrow_full, wide_full, delayed, short, present = packed_rows
     width_pairs = (("11-block SNN", BLUE, narrow_snn, wide_snn),

@@ -85,7 +85,7 @@ full-corpus scores, and exact training records.
 | [Held-charge inputs and group thresholds](event_lm/trace_integration) | Five matched endpoints at 91.75M targets, paired history and axon tap probes, fine-threshold offsets, and native parity |
 | [Axon tap reads](event_lm/trace_tap_read) | Four matched endpoints at 101.58M targets, warm checks, full-corpus scores, per-group winning delays, frozen-weight interventions, and packed-width parity |
 | [Packed width and steering transfers](event_lm/packed_width) | Matched 9.96M and 12.8M scores, paired validation histories, native activity, frozen interventions and integer warm starts |
-| [Held-charge reads driven by write spikes](event_lm/trace_read_drive) | Parent parity and gradient audits for the write-spike and present-spike inputs |
+| [Held-charge reads driven by write spikes](event_lm/trace_read_drive) | Matched held-out scores, fractional-charge and pulse audits, source interventions, and warm starts |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
 exposure, geometry, and seed. The v7 archive uses
@@ -94,7 +94,8 @@ The v6 archive uses `event_lm/v6_checkpoints.sha256` for its studies and
 their parent chains.
 [v7 archive manifest](../models/spiking-byte-lm-v7/manifest.json) ·
 [v6 archive manifest](../models/spiking-byte-lm-v6/manifest.json) ·
-[Packed-width checkpoint digests](event_lm/packed_width_checkpoints.sha256)
+[Packed-width checkpoint digests](event_lm/packed_width_checkpoints.sha256) ·
+[Driven read checkpoint digests](event_lm/trace_read_drive_checkpoints.sha256)
 
 Regenerate the [leaderboards and current figures](../docs/LEADERBOARD.md)
 with `python experiments/plot_event_lm_study.py` and

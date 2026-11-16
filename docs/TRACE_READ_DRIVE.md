@@ -110,6 +110,17 @@ read counts at this checkpoint.
 [Continuous validation interventions](../results/event_lm/trace_read_drive/probe_write_s8237.json) ·
 [Paired-tail interventions](../results/event_lm/trace_read_drive/write_source_ablation.json)
 
+At the same 116.33M-target exposure, ordinary reads score
+1.795773 bpb on enwik8, 2.754952 bpb on calibrated PG-19, and
+2.841358 bpb on raw PG-19. The continuation control leads the
+six-bit write arm on 14 of 16 books and scores 0.000959 bpb
+lower on the paired enwik8 tails at 32 bytes of warmup.
+[Control training](../results/event_lm/trace_read_drive/event_correction_code_s8237_trace_read_drive_control.json) ·
+[Control enwik8](../results/event_lm/trace_read_drive/enwik8_control_s8237.json) ·
+[Control PG-19](../results/event_lm/trace_read_drive/pg19_control_s8237.json) ·
+[Control validation histories](../results/event_lm/trace_read_drive/control_validation_history.json) ·
+[Checkpoint digests](../results/event_lm/trace_read_drive_checkpoints.sha256)
+
 ## Carry fractional read charge
 
 The eight-bit read uses 256 charge ticks per spike. Let $q_t$
@@ -126,6 +137,8 @@ The remainder occupies one unsigned byte per read neuron. It
 lies in $[0,255]$, so a current bounded by $\pm256a$ always
 emits within $[-a,a]$. When the weighted write current is small,
 repeated increments can cross a threshold across several bytes.
+Across any sequence, emitted charge plus the final remainder
+equals the initial remainder plus the bounded synaptic input.
 The existing signed residual-neuron scan evaluates the same
 recurrence across a chunk. For zero gains, each input current
 is a multiple of 256 and reproduces the parent's read count.
@@ -145,7 +158,13 @@ same 4,096 validation bytes. The quantity sums the absolute
 count change from the original read across cells and blocks.
 Both views match CPU integer batch, chunk, and byte-step counts
 on their audited samples.
-[Frozen precision audit](../results/event_lm/trace_read_drive/frozen_write_precision_native.json)
+
+On the same 24,576 validation targets, carrying charge reduces
+loss by 0.000246 bpb at 32 bytes of warmup and 0.000268 bpb
+at 497 bytes compared with the eight-bit reset rule. This
+probe keeps all trained master weights fixed.
+[Frozen precision audit](../results/event_lm/trace_read_drive/frozen_write_precision_native.json) ·
+[Frozen precision history scores](../results/event_lm/trace_read_drive/frozen_write_precision_history.json)
 
 ```bash
 .venv/bin/python - "$study" <<'PY'
@@ -168,6 +187,10 @@ PY
   --enwik8 data/enwik8 --activity-profile \
   --checkpoint "$study"/precision-probe/write_{fine,carry}_s8237.pt \
   --json "$study/results/frozen_write_precision_native.json"
+.venv/bin/python experiments/probe_lm_context.py --event-lm --device cpu \
+  --checkpoint "$study"/precision-probe/write_{fine,carry}_s8237.pt \
+  --data data/enwik8 --split val --histories 1 32 497 --tail-bytes 16 --tails 1536 \
+  --batch-size 32 --json "$study/results/frozen_write_precision_history.json"
 ```
 
 The follow-up uses the same parents, 1,200 updates, seed 8237,
@@ -180,3 +203,52 @@ for arm in write-carry write-fine present-carry; do
   PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh "trace-read-drive-$arm" "$study"
 done
 ```
+
+## Trained carry read
+
+All rows in the comparison use the same 116,326,400 training
+targets and seed 8237 for the continuation. Loss is measured in
+bits per byte on the full enwik8 test split and 16 complete
+PG-19 test books.
+
+| Model | enwik8 | PG-19 calibrated | PG-19 raw | State |
+|---|---:|---:|---:|---:|
+| Original held-charge read | 1.795773 | **2.754952** | **2.841358** | 28,584 B |
+| Write input, six-bit reset | 1.795816 | 2.757065 | 2.846544 | 28,584 B |
+| Write input, eight-bit carry | 1.795332 | 2.757239 | 2.848498 | 31,257 B |
+| Full attention | **1.713626** | 2.884781 | 3.080808 | 6 MiB |
+
+The carried model has lower loss than full attention on all 16
+PG-19 books. It has lower loss than the original-read SNN on
+one book. The native audit finds 746 nonzero read gains and a
+mean absolute change of 0.959961 read counts per byte. The
+steering aperture clips 92.45% of the added absolute charge on
+these 4,096 test bytes. Cells with zero steering receive 89.52%
+of the added charge. A further 2.93% is clipped at open cells.
+Integer batch and chunked decoding match the Metal output for
+the full sample. Byte-step decoding matches the first 513 bytes.
+[Carry enwik8](../results/event_lm/trace_read_drive/enwik8_write_carry_s8237.json) ·
+[Carry PG-19](../results/event_lm/trace_read_drive/pg19_write_carry_s8237.json) ·
+[Native audit](../results/event_lm/trace_read_drive/native_write_carry_s8237.json) ·
+[Matched leaderboard](LEADERBOARD.md)
+
+![Held-out loss for the continued reads and full attention](../results/figures/event_lm_trace_read_drive.png)
+
+On the paired validation tails, carry lowers loss by
+0.000770 bpb relative to the original-read control at 32 bytes
+of warmup. Full attention leads it by 0.048248 bpb there. At
+497 bytes the carried model scores 0.000438 bpb above the
+control. Zeroing the learned drive changes loss by less than
+0.000003 bpb at 32 bytes and lowers loss by 0.000171 bpb at
+497 bytes. Over 65,536 consecutive validation targets, zeroing
+the drive lowers loss from 1.735461 to 1.735136 bpb.
+[Trained carry source interventions](../results/event_lm/trace_read_drive/write_carry_source_ablation.json) ·
+[Continuous carry intervention](../results/event_lm/trace_read_drive/probe_write_carry_s8237.json) ·
+[Full-attention validation histories](../results/event_lm/trace_read_drive/transformer_validation_history.json)
+
+For enwik8 targets whose eight-byte prefix recurred 1–31 bytes
+back, carry lowers loss by 0.004176 bpb relative to ordinary
+reads. For recurrences 32–127 bytes back, carry raises loss by
+0.001532 bpb and leaves a 0.173176 bpb gap to full attention.
+[Carry test loss by prefix age](../results/event_lm/trace_read_drive/enwik8_write_carry_s8237.json) ·
+[Full-attention test loss by prefix age](../results/event_lm/trace_read_drive/enwik8_transformer_s8237.json)

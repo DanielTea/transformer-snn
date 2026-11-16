@@ -4,6 +4,19 @@ Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## Driven held-charge reads · 116,326,400 training targets · seed 8237
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Original held-charge read | 12,799,488 | 28,584 B | 1.79577 | 3 | **2.75495** | 1 | 2.84136 | 309,354 |
+| Write input, six-bit reset | 12,802,161 | 28,584 B | 1.79582 | 4 | 2.75706 | 2 | 2.84654 | 309,554 |
+| Write input, eight-bit carry | 12,802,161 | 31,257 B | 1.79533 | 2 | 2.75724 | 3 | 2.84850 | 309,331 |
+| Full attention | 12,801,024 | 6 MiB | **1.71363** | 1 | 2.88478 | 4 | 3.08081 | — |
+
+![Held-out next-byte loss after training the driven read circuits](../results/figures/event_lm_trace_read_drive.png)
+
+[Circuit, native activity, and matched controls](TRACE_READ_DRIVE.md)
+
 ## Packed width and steering transfers · 111,411,200 training targets · seed 7907
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |

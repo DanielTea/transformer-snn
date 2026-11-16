@@ -97,6 +97,7 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
     activity = {}
     tap_winners = []
     read_changes = []
+    read_charge = []
     verified_transfers = 0
     if integer.cfg.steering_transfer is not None:
         def check_transfers(module, inputs, output):
@@ -109,11 +110,20 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
 
         handles.extend(block.steering_transfer.register_forward_hook(check_transfers) for block in integer.blocks)
     if integer.cfg.trace_read_drive is not None:
-        def check_driven_read(_module, inputs, output):
-            base, steering = inputs[:2]
+        def check_driven_read(module, inputs, output):
+            base, steering, present, correction = inputs
             if (output.abs() > steering).any():
                 raise AssertionError("a driven trace read exceeded its steering aperture")
             read_changes.append((output - base).abs().sum(dtype=torch.int64).item())
+            source = correction if module.from_write else present
+            drive = module.weight_ticks() * source
+            aperture = steering.clamp(max=module.emit.cap) * module.emit.threshold
+            baseline = base * module.emit.threshold
+            passed = drive.clamp(-aperture - baseline, aperture - baseline)
+            magnitude = drive.abs()
+            closed = magnitude.masked_fill(steering.ne(0), 0)
+            read_charge.append((magnitude.sum(dtype=torch.int64).item(),
+                                passed.abs().sum(dtype=torch.int64).item(), closed.sum(dtype=torch.int64).item()))
 
         handles.extend(block.trace.read_drive.register_forward_hook(check_driven_read) for block in integer.blocks)
     if integer.cfg.trace_tap_read is not None:
@@ -252,6 +262,10 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
             block.trace.read_drive.weight.count_nonzero().item() for block in integer.blocks
         ]
         row["trace_read_changed_counts_per_byte_by_block"] = [count / tokens.numel() for count in read_changes]
+        received, passed, closed = map(sum, zip(*read_charge, strict=True))
+        row["trace_read_drive_ticks_per_byte"] = received / tokens.numel()
+        row["trace_read_drive_clipped_fraction"] = (received - passed) / received if received else None
+        row["trace_read_drive_closed_aperture_fraction"] = closed / received if received else None
     if integer.cfg.steering_transfer is not None:
         if verified_transfers != len(integer.blocks):
             raise AssertionError("the native audit did not check every steering transfer block")

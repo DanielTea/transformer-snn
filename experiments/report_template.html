@@ -106,7 +106,10 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
-  <p class="col">The packed-width study compares 9.96M and 12.8M decoders after 111.41 million enwik8 training targets. The v7 tap-read study tests whether a release spike can select its own packet from existing axon taps. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for full attention at its evaluation context. The earlier frozen-teacher arm uses additional training compute.</p>
+  <p class="col">The latest study lets write-correction spikes drive their own held-charge reads. The packed-width study compares 9.96M and 12.8M decoders at matched training exposure. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for full attention at its evaluation context. The earlier frozen-teacher arm uses additional training compute.</p>
+  <figure>
+    <a href="../results/figures/event_lm_trace_read_drive.png"><img src="../results/figures/event_lm_trace_read_drive.png" alt="Held-out loss for reset and carried held-charge reads with matched SNN and full-attention controls" loading="lazy"></a>
+  </figure>
   <figure>
     <a href="../results/figures/event_lm_packed_width.png"><img src="../results/figures/event_lm_packed_width.png" alt="Held-out loss for the 9.96M and 12.8M models at the same enwik8 training exposure" loading="lazy"></a>
   </figure>

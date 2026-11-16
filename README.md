@@ -73,6 +73,7 @@ populations from 187 to 243 channels under 32 KiB with exact
 parent counts and pulses.
 [Resume from v7](docs/HANDOFF.md#continue-from-the-v7-endpoints) ·
 [Packed-width continuation and steering transfers](docs/PACKED_WIDTH.md) ·
+[Held-charge reads driven by write spikes](docs/TRACE_READ_DRIVE.md) ·
 [Held-charge inputs and group thresholds](docs/TRACE_INTEGRATION.md) ·
 [Growth to 11 spiking blocks](docs/DEPTH_GROWTH.md) ·
 [13.03M residual-width comparison](docs/GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state)
