@@ -13,6 +13,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
+from byte_training_mixture import TrainingMixture
 from common import (
     VARIANTS,
     Timer,
@@ -350,6 +351,8 @@ def main():
     parser.add_argument("--variant", choices=(*EVENT_ROUTES, "transformer_local", "transformer"),
                         default="event")
     parser.add_argument("--data", type=Path, default=Path(os.environ.get("ENWIK8_PATH", str(DATA))))
+    parser.add_argument("--training-mixture", type=Path,
+                        help="sample training windows from a pinned byte mixture catalogue")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--seed", type=int, default=0)
@@ -561,6 +564,8 @@ def main():
         device = resolve_device(args.device)
         checkpoint = checkpoint_path(args)
         train, val, test = load_splits(args.data.expanduser())
+        mixture = (None if args.training_mixture is None
+                   else TrainingMixture(args.training_mixture.expanduser(), train, args.ctx))
         max_windows = args.eval_bs * max(args.eval_batches, args.final_eval_batches)
         if (len(val) - args.ctx - 1) // max_windows < args.ctx:
             raise ValueError("evaluation windows would overlap; reduce batch size or evaluation batches")
@@ -619,7 +624,8 @@ def main():
     for step in range(1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr)
-        inputs, labels = random_batch(train, args.bs, args.ctx, generator)
+        inputs, labels = (random_batch(train, args.bs, args.ctx, generator) if mixture is None
+                          else mixture.batch(args.bs, generator))
         inputs = inputs.to(device)
         if pulse_counts is not None:
             pulse_counts.clear()
@@ -679,14 +685,16 @@ def main():
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,
                                                             **evaluate_options)
     args_record = dict(vars(args), data=str(args.data), results_dir=None if results_dir is None else str(results_dir),
+                       training_mixture=None if args.training_mixture is None else str(args.training_mixture),
                        initialize_from=None if args.initialize_from is None else str(args.initialize_from),
                        teacher_checkpoint=None if args.teacher_checkpoint is None else str(args.teacher_checkpoint))
     config = asdict(cfg)
+    mixture_details = {} if mixture is None else {"training_mixture": mixture.receipt()}
     if checkpoint is not None:
         payload = dict(format_version=1, model_type=type(model).__name__, task="event_lm", run_name=name,
                        cfg=config, model_kwargs=model_kwargs, args=args_record, initialization=initialization,
                        state_dict={key: value.detach().cpu() for key, value in model.state_dict().items()},
-                       **teacher_details)
+                       **teacher_details, **mixture_details)
         with _atomic_output(checkpoint, "wb", overwrite=args.force) as out:
             torch.save(payload, out)
     record = dict(args=args_record, cfg=config, device=str(device), params=parameters,
@@ -695,7 +703,7 @@ def main():
                   val_bpb=val_score["bpb"], test_bpb=test_score["bpb"] if test_score else None,
                   val=val_score, test=test_score,
                   scoring=("normalized exponential of scaled output" if event else "softmax over logits"),
-                  seconds=timer(), **teacher_details)
+                  seconds=timer(), **teacher_details, **mixture_details)
     destination = save_result("event_lm", name, record, overwrite=args.force, directory=results_dir)
     split, metric = ("validation", val_score) if test_score is None else ("test", test_score)
     print(f"{name} {split}={metric['bpb']:.4f} bpb accuracy={metric['argmax_accuracy']:.4f} ({destination})")

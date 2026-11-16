@@ -26,6 +26,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("record", type=Path, help="training JSON from results/event_lm")
     parser.add_argument("--enwik8", type=Path, required=True)
+    parser.add_argument("--training-mixture", type=Path, help="override the recorded training mixture catalogue path")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"))
     parser.add_argument("--output-dir", type=Path, default=Path("checkpoints/replayed"))
     parser.add_argument("--parent-checkpoints", type=Path, help="override the directory of a recorded parent checkpoint")
@@ -44,6 +45,14 @@ def main():
                        results_dir=args.output_dir / "results", force=False)
         if args.device:
             options["device"] = args.device
+        if args.training_mixture is not None and not options.get("training_mixture"):
+            raise ValueError("the saved run trained on enwik8 only")
+        if options.get("training_mixture"):
+            catalogue = args.training_mixture or Path(options["training_mixture"])
+            expected = record["training_mixture"]["catalogue_sha256"]
+            if not args.dry_run and hashlib.sha256(catalogue.read_bytes()).hexdigest() != expected:
+                raise ValueError(f"training mixture catalogue checksum differs: {catalogue}")
+            options["training_mixture"] = catalogue
         if parent:
             options["initialize_from"] = checked_path(
                 parent, args.parent_checkpoints, record.get("initialization"), "parent", dry_run=args.dry_run,
