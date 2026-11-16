@@ -110,6 +110,23 @@ raises loss by 0.00394 bpb. The paired 95% interval is
 the wider model relies on its new neurons on this sample.
 [Paired validation and interventions](../results/event_lm/residual_scale/enwik8_only_preview.json)
 
+## Corpus effect at the wider size
+
+Both wide SNNs start from the same selected-arrival model and
+see 9,830,400 continuation targets. On the fixed 308,483-target
+C4 validation sample, the enwik8-only continuation scores 2.20845
+bpb and the mixed continuation scores 2.06397 bpb. These CPU
+scores use the prepared C4 windows and the standard readout.
+
+On the paired enwik8 validation windows, the mixture raises loss
+by 0.02945 bpb at predictions 17–32. The paired 95% interval is
+[+0.02296, +0.03608]. Silencing the mixed model's added residual
+neurons lowers loss there by 0.00679 bpb, with an interval of
+[−0.00985, −0.00371]. The fixed-weight result measures how the
+added neurons affect enwik8 after each training recipe.
+[C4 mixture comparison](../results/event_lm/residual_scale/c4_mixture_cpu.json) ·
+[Paired enwik8 validation](../results/event_lm/residual_scale/mixture_effect_validation.json)
+
 ## Reproduce the data and launches
 
 Prepare the canonical [enwik8 and PG-19 evaluation files](HANDOFF.md#datasets)
