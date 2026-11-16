@@ -15,6 +15,7 @@ import torch
 from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
+from probe_event_state import added_residual_weights, added_residual_weights_by_stage, muted_synapses
 from snnformer.event_lm import EventLM, _route_packets, _steer_packet
 from train_event_lm import load_checkpoint, scoring_logits, training_exposure
 from train_lm import ENWIK8_SHA1, load_splits
@@ -77,10 +78,17 @@ def main():
     parser.add_argument("--batch-size", type=int, default=48)
     parser.add_argument("--profile-arrivals", action="store_true",
                         help="count selected and unmatched fixed-arrival pulses by age")
+    parser.add_argument("--ablate-residual-stages", action="store_true",
+                        help="mute each stage's projections into the added neurons independently")
+    parser.add_argument("--width-gap", nargs=4, type=Path,
+                        metavar=("WIDE_SNN", "WIDE_TRANSFORMER", "NARROW_SNN", "NARROW_TRANSFORMER"),
+                        help="compare the paired SNN-to-Transformer gap at two widths")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
     if args.batch_size < 1:
         parser.error("batch size must be positive")
+    if args.width_gap and (len(set(args.width_gap)) != 4 or not set(args.width_gap) <= set(args.checkpoint)):
+        parser.error("--width-gap must list four distinct paths also supplied to --checkpoint")
     if args.json.exists():
         parser.error(f"{args.json} already exists")
 
@@ -112,12 +120,21 @@ def main():
             losses.append((str(path), actual))
         arrival = None
         muted = None
-        if isinstance(model, EventLM) and model.cfg.trace_arrival is not None:
+        silenced_residual = None
+        silenced_stages = {}
+        if isinstance(model, EventLM):
+            prior_width = (checkpoint.get("initialization") or {}).get("residual_width_before")
+            if prior_width is not None:
+                with muted_synapses(added_residual_weights(model, prior_width)):
+                    silenced_residual = score(model, windows, args.batch_size, device)
+                if args.ablate_residual_stages:
+                    for stage, weights in added_residual_weights_by_stage(model, prior_width).items():
+                        with muted_synapses(weights):
+                            silenced_stages[stage] = score(model, windows, args.batch_size, device)
             arrival = model.cfg.trace_arrival
-            with torch.no_grad():
-                for block in model.blocks:
-                    block.arrival_project.weight.zero_()
-            muted = score(model, windows, args.batch_size, device)
+            if arrival is not None:
+                with muted_synapses([block.arrival_project.weight for block in model.blocks]):
+                    muted = score(model, windows, args.batch_size, device)
         ages = []
         for low, high in CONTEXT_BINS:
             span = slice(low - 1, high)
@@ -132,6 +149,18 @@ def main():
                 change = muted[:, span] - bpb
                 row.update(muted_arrival_bpb=float(muted[:, span].mean()), muted_minus_intact_bpb=float(change.mean()),
                            muted_minus_intact_paired_95_bpb=paired_interval(change, resamples))
+            if silenced_residual is not None:
+                change = silenced_residual[:, span] - bpb
+                row.update(silenced_residual_bpb=float(silenced_residual[:, span].mean()),
+                           silenced_residual_minus_intact_bpb=float(change.mean()),
+                           silenced_residual_paired_95_bpb=paired_interval(change, resamples))
+            if silenced_stages:
+                row["residual_stage_ablation"] = {
+                    stage: {"bpb": float(stage_loss[:, span].mean()),
+                            "delta_bpb": float((stage_loss[:, span] - bpb).mean()),
+                            "paired_95_bpb": paired_interval(stage_loss[:, span] - bpb, resamples)}
+                    for stage, stage_loss in silenced_stages.items()
+                }
             ages.append(row)
         with path.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
@@ -153,6 +182,21 @@ def main():
                          "paired_95_bpb": paired_interval(difference, resamples)})
         comparisons.append({"reference": reference_path, "checkpoint": arm_path, "ages": ages})
 
+    width_gap = None
+    if args.width_gap:
+        by_path = dict([(str(args.checkpoint[0]), reference), *losses])
+        wide_snn, wide_full, narrow_snn, narrow_full = (by_path[str(path)] for path in args.width_gap)
+        wide, narrow = wide_snn - wide_full, narrow_snn - narrow_full
+        ages = []
+        for low, high in CONTEXT_BINS:
+            span = slice(low - 1, high)
+            change = wide[:, span] - narrow[:, span]
+            ages.append({"context_bytes": [low, high], "wide_gap_bpb": float(wide[:, span].mean()),
+                         "narrow_gap_bpb": float(narrow[:, span].mean()), "gap_change_bpb": float(change.mean()),
+                         "paired_95_bpb": paired_interval(change, resamples)})
+        keys = ("wide_snn", "wide_transformer", "narrow_snn", "narrow_transformer")
+        width_gap = {**dict(zip(keys, (str(path) for path in args.width_gap), strict=True)), "ages": ages}
+
     result = {
         "data_sha1": ENWIK8_SHA1, "split": args.split, "device": str(device), "positions_from": str(args.positions_from),
         "batch_size": args.batch_size, "target_start_offsets": starts.tolist(),
@@ -160,6 +204,7 @@ def main():
         "reference": str(args.checkpoint[0]),
         "bootstrap": "3000 paired resamples of complete 32-target windows, seed 5261",
         "models": models, "nonreference_comparisons": comparisons,
+        **({"width_gap": width_gap} if width_gap is not None else {}),
     }
     with _atomic_output(args.json, "w", overwrite=False) as output:
         json.dump(result, output, indent=2)

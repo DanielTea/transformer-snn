@@ -1,8 +1,64 @@
 # Spiking byte model leaderboards
 
-Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 training exposure and scores 4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books.
+Lower bits per byte rank higher. Every row in a comparison has the same number of training targets and scores 4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books.
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
+
+## Residual width on expanded training data · 131,072,000 training targets · seed 9631
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 14.07M SNN | 14,066,688 | 28,584 B | 1.79789 | 5 | 2.04156 | 4 | 2.04156 | 312,618 |
+| 25.79M SNN | 25,788,928 | 28,584 B | 1.79787 | 4 | 2.02699 | 3 | 2.02699 | 313,142 |
+| 25.79M SNN, enwik8 only | 25,788,928 | 28,584 B | 1.78054 | 3 | 2.73942 | 5 | 2.83176 | 309,020 |
+| 14.07M full attention | 14,068,224 | 6 MiB | 1.71414 | 2 | 1.98073 | 2 | 1.98073 | — |
+| 25.79M full attention | 25,790,976 | 6 MiB | **1.71379** | 1 | **1.97644** | 1 | **1.97644** | — |
+
+![Held-out loss at both residual widths](../results/figures/event_lm_residual_scale.png)
+
+![Change in the enwik8 gap during the first 32 predictions](../results/figures/event_lm_residual_scale_early_context.png)
+
+[Width experiment, corpus preparation and replay](RESIDUAL_SCALE.md)
+
+The enwik8 SNN minus Transformer gap is +0.08375 bpb at 14.07M and +0.08408 bpb at 25.79M. The change is +0.00033 bpb.
+
+The enwik8-only control uses the same number of targets and the wide SNN geometry. The other four arms received identical windows from the new mixture.
+
+### Byte transfer at the same training exposure
+
+Raw corpus loss in bits per byte uses identical 512-byte windows.
+
+| Model | WikiText-103 | C4 | enwik9 | text8 |
+|---|---:|---:|---:|---:|
+| 25.79M full attention | 2.29074 | 2.03541 | 1.68575 | 2.12108 |
+| 14.07M full attention | 2.28977 | 2.03688 | 1.68597 | 2.12029 |
+| 14.07M SNN | 2.31564 | 2.07191 | 1.77591 | 2.14140 |
+| 25.79M SNN | 2.31560 | 2.06397 | 1.77908 | 2.14096 |
+| 25.79M SNN, enwik8 only | 2.33948 | 2.20845 | 1.75987 | 2.13790 |
+
+Wikipedia windows with zero hits under the training-overlap screen.
+
+| Model | WikiText-103 | enwik9 | text8 |
+|---|---:|---:|---:|
+| 25.79M full attention | 2.29097 | 1.74967 | 2.12155 |
+| 14.07M full attention | 2.29001 | 1.74991 | 2.12076 |
+| 14.07M SNN | 2.31585 | 1.83836 | 2.14203 |
+| 25.79M SNN | 2.31582 | 1.84141 | 2.14155 |
+| 25.79M SNN, enwik8 only | 2.33972 | 1.82446 | 2.13848 |
+
+LAMBADA scores the same final words under both conditioning lengths. Exact match requires a word boundary. The gold-length columns score predictions through the last answer byte.
+
+| Model | Passage bpb | Last sentence bpb | Passage exact | Last sentence exact | Passage at gold length | Last sentence at gold length |
+|---|---:|---:|---:|---:|---:|---:|
+| 25.79M full attention | 3.31987 | 3.37001 | 0.02% | 0.02% | 0.02% | 0.02% |
+| 14.07M full attention | 3.31851 | 3.36985 | 0.02% | 0.02% | 0.02% | 0.02% |
+| 14.07M SNN | 3.43877 | 3.44861 | 0.00% | 0.00% | 0.00% | 0.00% |
+| 25.79M SNN | 3.42301 | 3.43326 | 0.00% | 0.00% | 0.00% | 0.00% |
+| 25.79M SNN, enwik8 only | 3.52373 | 3.53761 | 0.00% | 0.00% | 0.00% | 0.00% |
+
+![Transfer loss and LAMBADA final-word accuracy](../results/figures/event_lm_byte_transfer_residual_scale_131072k.png)
+
+[Protocol, provenance, and overlap counts](BYTE_TRANSFER.md) · [Exact score records](../results/event_lm/byte_transfer/residual_scale_131072k.json)
 
 ## Scheduled spike arrivals · 121,241,600 training targets · seed 9349
 

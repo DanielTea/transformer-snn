@@ -24,6 +24,8 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         trace-read-scale-snn trace-read-scale-control-snn" >&2
   echo "         trace-read-scale-transformer trace-read-scale-control-transformer" >&2
   echo "         trace-arrival-control trace-arrival-selected trace-arrival-unmatched trace-arrival-transformer" >&2
+  echo "         residual-scale-snn residual-scale-wide-snn residual-scale-enwik8-snn" >&2
+  echo "         residual-scale-transformer residual-scale-wide-transformer" >&2
   exit 2
 fi
 
@@ -276,6 +278,25 @@ case "$study" in
       --grow-feed-forward --initialize-from checkpoints/trace-read-drive-study/transformer_s8237.pt)
     name=transformer_s9349
     ;;
+  residual-scale-snn|residual-scale-wide-snn|residual-scale-enwik8-snn)
+    training+=("${spiking[@]}" --depth 11 --hidden 243 --router-charge-bits 8 --residual-correction-start 7
+      --compact-trace-state --delay-group-widths 75,75,47,46 --trace-arrival selected --trace-arrival-groups 2
+      --initialize-from checkpoints/trace-arrival-study/selected_s9349.pt)
+    if [[ $study != residual-scale-snn ]]; then
+      training+=(--dim 1408 --grow-residual)
+    fi
+    name="${study#residual-scale-}_s9631"
+    ;;
+  residual-scale-transformer|residual-scale-wide-transformer)
+    training+=(--variant transformer --dim 256 --depth 6 --heads 4
+      --initialize-from checkpoints/trace-arrival-study/transformer_s9349.pt)
+    if [[ $study == residual-scale-wide-transformer ]]; then
+      training+=(--mlp-ratio 30.703125 --grow-feed-forward)
+    else
+      training+=(--mlp-ratio 15.796875)
+    fi
+    name="${study#residual-scale-}_s9631"
+    ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
       --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
@@ -342,6 +363,12 @@ elif [[ $study == trace-read-scale-* ]]; then
 elif [[ $study == trace-arrival-* ]]; then
   training+=(--steps 1200 --warmup 48 --lr 0.00008 --seed 9349 --eval-every 150
     --tag "${study//-/_}")
+elif [[ $study == residual-scale-* ]]; then
+  training+=(--steps 2400 --warmup 96 --lr 0.00012 --seed 9631 --eval-every 240
+    --tag "${study//-/_}")
+  if [[ $study != residual-scale-enwik8-snn ]]; then
+    training+=(--training-mixture "${SNN_TRAINING_MIXTURE:-data/training-v1/prepared/catalogue.json}")
+  fi
 elif [[ $study == residual-growth-control-transformer ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
     --tag scale_6510k_residual_transformer_control)
@@ -412,6 +439,7 @@ if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == 
       $study == trace-tap-fixed || $study == trace-tap-race ||
       ($study == trace-read-* && $study != *transformer) ||
       ($study == trace-arrival-* && $study != *transformer) ||
+      ($study == residual-scale-* && $study != *transformer) ||
       ($study == packed-width-* && $study != *transformer) ]]; then
   run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
     --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"

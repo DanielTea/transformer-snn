@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import math
@@ -48,16 +49,41 @@ def fix_count(count):
     return replace
 
 
-@torch.inference_mode()
+@contextmanager
+def muted_synapses(weights):
+    with torch.no_grad():
+        originals = [weight.clone() for weight in weights]
+        try:
+            for weight in weights:
+                weight.zero_()
+            yield
+        finally:
+            for weight, original in zip(weights, originals, strict=True):
+                weight.copy_(original)
+
+
 def score_without_synapses(model, window, chunk_size, weights):
-    originals = [weight.clone() for weight in weights]
-    try:
-        for weight in weights:
-            weight.zero_()
+    with muted_synapses(weights):
         return score(model, window, chunk_size)
-    finally:
-        for weight, original in zip(weights, originals, strict=True):
-            weight.copy_(original)
+
+
+def added_residual_weights_by_stage(model, prior_width):
+    stages = {"input": [model.input, *model.delayed_input], "ordinary_residual": [], "signed_correction": [], "recall": []}
+    for block in model.blocks:
+        group = stages["signed_correction" if block.residual_correction else "ordinary_residual"]
+        group.extend(synapse for synapse in (block.project, block.memory_residual, block.arrival_project)
+                     if synapse is not None)
+    if model.prediction_memory is not None:
+        stages["recall"].append(model.recall_synapse)
+    return {
+        name: [synapse.weight[:, prior_width:] if synapse.byte_input else synapse.weight[prior_width:]
+               for synapse in synapses]
+        for name, synapses in stages.items() if synapses
+    }
+
+
+def added_residual_weights(model, prior_width):
+    return [weight for weights in added_residual_weights_by_stage(model, prior_width).values() for weight in weights]
 
 
 @torch.inference_mode()
@@ -271,12 +297,7 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.cfg.trace_coincidence_start is not None:
         result["ordinary_coincidence_bpb"] = score_with_options(model, window, chunk_size, trace_coincidence_start=None)
     if residual_width_before is not None:
-        output_synapses = [model.input, *model.delayed_input, *(block.project for block in model.blocks)]
-        output_synapses += [block.memory_residual for block in model.blocks if block.memory_residual is not None]
-        if model.prediction_memory is not None:
-            output_synapses.append(model.recall_synapse)
-        extra_outputs = [synapse.weight[:, residual_width_before:] if synapse.byte_input
-                         else synapse.weight[residual_width_before:] for synapse in output_synapses]
+        extra_outputs = added_residual_weights(model, residual_width_before)
         result["silence_added_residual_bpb"] = score_without_synapses(model, window, chunk_size, extra_outputs)
     if expansion_width_before is not None:
         new_rows = [rows for block in model.blocks

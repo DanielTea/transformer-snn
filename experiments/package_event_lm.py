@@ -24,6 +24,7 @@ RELEASES = {
     "v7": ("spiking-byte-lm-v7", "spiking-byte-lm-v7-checkpoints"),
     "v8": ("spiking-byte-lm-v8", "spiking-byte-lm-v8-checkpoints"),
     "v9": ("spiking-byte-lm-v9", "spiking-byte-lm-v9-checkpoints"),
+    "v10": ("spiking-byte-lm-v10", "spiking-byte-lm-v10-checkpoints"),
 }
 DEPTH_REFERENCE = "depth-inhibition-study/trace_s0.pt"
 CONTINUATION_REFERENCE = "long-context-continuation/trace_ctx2048_s711.pt"
@@ -38,6 +39,9 @@ V6_MANIFEST = "models/spiking-byte-lm-v6/manifest.json"
 V7_MANIFEST = "models/spiking-byte-lm-v7/manifest.json"
 V8_MANIFEST = "models/spiking-byte-lm-v8/manifest.json"
 ARRIVAL_TRANSFER = "byte_transfer/trace_arrival_s9349.json"
+V9_MANIFEST = "models/spiking-byte-lm-v9/manifest.json"
+RESIDUAL_SCALE_REFERENCE = "residual-scale-study/wide-snn_s9631.pt"
+RESIDUAL_SCALE_TRANSFER = "byte_transfer/residual_scale_131072k.json"
 
 
 def sha256(path):
@@ -204,6 +208,38 @@ def transfer_evidence(path, entries, endpoints):
             "sources": sources.relative_to(ROOT).as_posix(), "catalogue": catalogue.relative_to(ROOT).as_posix()}
 
 
+def residual_scale_mixture(training_paths):
+    folder = RESULTS / "training_mixture"
+    plan = folder / "windows_s9631.json"
+    catalogue = folder / "prepared_v1.json"
+    sources = folder / "sources_v1.json"
+    expected = json.loads(plan.read_text())
+    prepared = json.loads(catalogue.read_text())
+    if (sha256(catalogue) != expected["catalogue_sha256"]
+            or sha256(sources) != prepared["source_manifest_sha256"]):
+        raise ValueError("the residual scale study must use its pinned training mixture")
+    mixed, control = [], []
+    for path in training_paths:
+        record = json.loads(path.read_text())
+        checkpoint = record["args"]["checkpoint"]
+        if Path(checkpoint).name == "enwik8-snn_s9631.pt":
+            if record.get("training_mixture") or record["args"].get("training_mixture"):
+                raise ValueError(f"the enwik8-only control used the mixture: {path}")
+            control.append(checkpoint)
+        else:
+            if (record.get("training_mixture") != expected
+                    or sum(expected["source_targets"].values()) != record["train_target_bytes"]):
+                raise ValueError(f"the training windows differ from the matched mixture: {path}")
+            mixed.append(checkpoint)
+    if len(mixed) != 4 or len(set(mixed)) != 4 or len(control) != 1:
+        raise ValueError("the residual scale study needs four matched mixture arms and the enwik8 control")
+    return {
+        "catalogue": catalogue.relative_to(ROOT).as_posix(), "sources": sources.relative_to(ROOT).as_posix(),
+        "window_receipt": plan.relative_to(ROOT).as_posix(), "receipt": expected,
+        "mixture_checkpoints": sorted(mixed), "enwik8_only_checkpoint": control[0],
+    }
+
+
 def add_file(archive, name, length, source):
     member = tarfile.TarInfo(name)
     member.size = length
@@ -234,6 +270,7 @@ def main():
         model_dir = args.model_dir or ROOT / "models" / model_dirname
         upstream_manifest = None
         transfer = None
+        training_mixture = None
         if args.release == "v1":
             entries, candidate = collect(args.checkpoint_dir)
             audit = json.loads((RESULTS / "threshold_scale_large_activity.json").read_text(encoding="utf-8"))
@@ -274,7 +311,7 @@ def main():
                 TRACE_READ_REFERENCE, "trace_read_drive/native_write_rails_share_s8237.json",
                 upstream_manifest=upstream_manifest,
             )
-        else:
+        elif args.release == "v9":
             upstream_manifest = V8_MANIFEST
             entries, candidate, measured = collect_catalog_release(
                 args.checkpoint_dir, ("trace_arrival_checkpoints.sha256",), TRACE_ARRIVAL_REFERENCE,
@@ -282,6 +319,15 @@ def main():
             )
             endpoints = [name for name in entries if name.startswith("trace-arrival-study/")]
             transfer = transfer_evidence(RESULTS / ARRIVAL_TRANSFER, entries, endpoints)
+        else:
+            upstream_manifest = V9_MANIFEST
+            entries, candidate, measured = collect_catalog_release(
+                args.checkpoint_dir, ("residual_scale_checkpoints.sha256",), RESIDUAL_SCALE_REFERENCE,
+                "residual_scale/native_wide-snn_s9631.json", upstream_manifest=upstream_manifest,
+            )
+            endpoints = [name for name in entries if name.startswith("residual-scale-study/")]
+            transfer = transfer_evidence(RESULTS / RESIDUAL_SCALE_TRANSFER, entries, endpoints)
+            training_mixture = residual_scale_mixture(ROOT / entries[name]["training_record"] for name in endpoints)
         val_bpb, name, training, record_path = candidate
         args.release_dir.mkdir(parents=True, exist_ok=True)
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -316,6 +362,8 @@ def main():
             manifest["upstream_manifest"] = upstream_manifest
         if transfer:
             manifest["transfer_benchmarks"] = transfer
+        if training_mixture:
+            manifest["training_mixture"] = training_mixture
         (model_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         print(f"Packaged {len(entries)} checkpoints in {bundle}")
     except (OSError, ValueError, KeyError) as exc:

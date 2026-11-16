@@ -73,6 +73,14 @@ difference combines cleanup and content.
 [Prepared file and overlap catalogue](../results/event_lm/byte_transfer/prepared_v1.json) ·
 [Pinned source files and protocol](../results/event_lm/byte_transfer/sources_v1.json)
 
+For the residual-width study the added C4 and PG-19 training
+documents are also screened against probes made from the fixed
+scoring windows, including their supplied context. The original
+overlap counts still describe the parent enwik8 training split.
+C4 validation and PG-19 test are held-out in-domain evaluations
+for checkpoints trained on the expanded mixture.
+[Mixture preparation and exclusions](RESIDUAL_SCALE.md#expanded-training-data)
+
 ## Reproduce
 
 Use the project Python environment. The optional requirements install

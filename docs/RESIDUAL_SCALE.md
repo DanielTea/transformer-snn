@@ -1,0 +1,322 @@
+# Scaling the spiking residual layers
+
+## Complete enwik8 test
+
+Widening increases the size-matched gap from **0.08375 to
+0.08408 bits per byte** on 4,999,999 held-out predictions.
+The four mixture arms saw the same training windows. These
+measurements use one continuation seed.
+
+| Parameters | Spiking decoder (bpb) | Full attention (bpb) | Gap (bpb) |
+|---|---:|---:|---:|
+| 14.07M | 1.797892 | 1.714142 | 0.083750 |
+| 25.79M | 1.797869 | 1.713790 | 0.084080 |
+
+The clearest local gain is on the 335,417 targets whose
+eight-byte prefix last appeared 32–127 bytes earlier. The gap in
+that group falls from 0.20346 to 0.19044 bpb. First occurrences
+and repeats beyond 512 bytes account for most of the test targets
+and have slightly larger gaps at the wider size.
+The wide enwik8-only continuation scores **1.78054 bpb** on
+the same full test at equal training exposure. Its 0.01733 bpb
+lead over the wide mixed SNN quantifies the effect of replacing
+half the continuation targets with C4 and PG-19 text.
+[Full enwik8 score records](../results/event_lm/residual_scale)
+
+The v9 selected-arrival SNN and full-attention reference each saw
+121,241,600 enwik8 targets. They start this study at almost the
+same parameter count. The selected-arrival circuit projects the
+scheduled spikes admitted by steering into the existing residual
+firing neurons. In the previous paired test its loss at predictions
+17–32 was within 0.00001 bits per byte of the unmatched-arrival
+circuit. The two widths in this study use the same selected-arrival
+circuit. [v9 circuit comparison](FIXED_ARRIVALS.md)
+
+The wide SNN grows the residual population from 768 to 1,408
+neurons per block. Its four axon and held-charge populations and
+the tagged prediction bank keep their previous geometry. The
+eleven blocks and the input retain the trained synapses and start
+the added residual neurons with zero incoming charge. Their
+outgoing synapses can deliver gradients from the first update.
+Both widths use 28,584 bytes of persistent tensors per stream.
+Function-preserving growth has precedent. Here it is checked on
+integer spike counts, network emissions, and stream state.
+The previous 6.51M-to-13.03M experiment used the same growth
+principle on a seven-block SNN trained on enwik8 alone.
+[Net2Net](https://arxiv.org/abs/1511.05641) ·
+[Earlier width study](GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state)
+
+| Arm | Parameters | Continuation data |
+|---|---:|---|
+| 768-wide SNN | 14,066,688 | Expanded mixture |
+| 1,408-wide SNN | 25,788,928 | Expanded mixture |
+| 1,408-wide SNN | 25,788,928 | enwik8 only |
+| Original full attention | 14,068,224 | Expanded mixture |
+| Wider SwiGLU full attention | 25,790,976 | Expanded mixture |
+
+The wide Transformer increases its SwiGLU population from 2,696
+to 5,240 per block and keeps its 256-dimensional residual stream.
+The added outputs start at zero. Metal reproduces the parent's
+logits on the 4,096-byte enwik8 validation audit. The wide SNN
+reproduces the parent's native integer outputs and total pulse
+count on those bytes. Both have a gradient in the added units of
+every block.
+[Wide SNN warm audit](../results/event_lm/residual_scale/warm_snn.json) ·
+[Wide Transformer warm audit](../results/event_lm/residual_scale/warm_transformer.json)
+
+## Expanded training data
+
+| Source | Eligible stored bytes | Documents | Share of continuation targets |
+|---|---:|---:|---:|
+| Canonical enwik8 train | 90,000,000 | 1 | 50% |
+| English C4 train | 134,231,706 | 48,745 | 25% |
+| PG-19 train | 68,196,337 | 105 | 25% |
+| **Total** | **292,428,043** | | **100%** |
+
+C4 uses the first accepted whole documents up to at least 64 MiB
+from each of two pinned English training shards. PG-19 uses the
+first accepted whole books up to at least 64 MiB in a fixed
+candidate order. Its source manifest pins the object generations,
+sizes, and published checksums. The mixture draws 513-byte
+windows entirely inside individual documents, then predicts the
+512 next bytes. Training records include the byte hash of the
+ordered windows and the number of targets from each source.
+[C4 corpus study](https://aclanthology.org/2021.emnlp-main.98/) ·
+[PG-19 source](https://github.com/google-deepmind/pg19) ·
+[Pinned sources](../results/event_lm/training_mixture/sources_v1.json) ·
+[Prepared inventory](../results/event_lm/training_mixture/prepared_v1.json)
+
+The added material was screened against both held-out enwik8
+splits, the selected PG-19 calibration and test books, and the
+entire scored byte-transfer suite including LAMBADA's prompts.
+The screen used 386,405 exact 64-byte probes and 664,412
+normalized 12-word probes. It rejected 44 C4 documents and 19
+PG-19 candidates with matches. The probe lengths and strides
+define the granularity of the screen. C4 and PG-19 are held-out
+in-domain evaluations for the mixture-trained arms. The suite
+continues to use the same pinned scoring inputs.
+[Overlap counts and hashes](../results/event_lm/training_mixture/prepared_v1.json) ·
+[Transfer protocol](BYTE_TRANSFER.md)
+
+The PG-19 audit also reconstructs the exact 19,200 windows used
+by the four mixture arms and checks every position for common
+64-byte or normalized 12-word spans against the 16 test books
+and eight calibration excerpts. Across the 9,600 C4 and PG-19
+windows, both match counts are zero. One of the 9,600 enwik8
+windows shares an exact span with test book 26239. The normalized
+screen reports zero enwik8 matches at its stated length.
+[Sampled-window audit](../results/event_lm/training_mixture/pg19_sampled_overlap_s9631.json) ·
+[Audit code](../experiments/audit_mixture_pg19_overlap.py)
+
+## Comparison
+
+All arms add 9,830,400 targets in 2,400 updates of eight
+512-byte training windows. They use seed 9631, 96 warmup
+updates, and a peak learning rate of 0.00012. The SNNs use
+the same 310,000-pulse soft budget. The four mixture arms
+receive identical windows. The wide enwik8-only arm measures
+the effect of the corpus choice at the same parameter count and
+training exposure.
+[Expected mixed-window receipt](../results/event_lm/training_mixture/windows_s9631.json) ·
+[Study launcher](../experiments/run_v4_continuation.sh)
+
+The primary comparison uses complete enwik8 test loss. At each
+size, subtract the Transformer's loss from the SNN's loss. Then
+subtract the smaller models' gap from the wider models' gap. A
+negative change means the wide SNN closed part of the gap. The
+leaderboard data also stratifies the gap by how long ago the
+last matching eight-byte prefix occurred. The paired reset probe
+estimates the same change for predictions 1–32 and 17–32, with
+intervals resampled by window. The native
+audit counts pulses in the added residual neurons. A fixed-weight
+probe measures loss with those neurons silenced. PG-19 and the
+five standard transfer evaluations measure the effect on other
+corpora.
+[Paired probe](../experiments/probe_early_context.py) ·
+[Native pulse audit](../experiments/audit_spike_code.py) ·
+[Fixed-weight probe](../experiments/probe_event_state.py)
+
+## Fixed-weight validation of the enwik8 control
+
+On 1,535 reset enwik8 validation windows, the trained wide
+enwik8-only SNN scores 1.81145 bpb at predictions 17–32. Its
+v9 parent scores 1.81698 with 9,830,400 fewer training targets.
+Silencing the wide model's added neurons at fixed weights
+raises loss by 0.00394 bpb. The paired 95% interval is
+[+0.00095, +0.00687] bpb. The mute result measures how much
+the wider model relies on its new neurons on this sample.
+[Paired validation and interventions](../results/event_lm/residual_scale/enwik8_only_preview.json)
+
+## Corpus effect at the wider size
+
+Both wide SNNs start from the same selected-arrival model and
+see 9,830,400 continuation targets. On the fixed 308,483-target
+C4 validation sample, the enwik8-only continuation scores 2.20845
+bpb and the mixed continuation scores 2.06397 bpb. These CPU
+scores use the prepared C4 windows and the standard readout.
+
+On the paired enwik8 validation windows, the mixture raises loss
+by 0.02945 bpb at predictions 17–32. The paired 95% interval is
+[+0.02296, +0.03608]. Silencing the mixed model's added residual
+neurons lowers loss there by 0.00679 bpb, with an interval of
+[−0.00985, −0.00371]. The fixed-weight result measures how the
+added neurons affect enwik8 after each training recipe.
+[C4 mixture comparison](../results/event_lm/residual_scale/c4_mixture_cpu.json) ·
+[Paired enwik8 validation](../results/event_lm/residual_scale/mixture_effect_validation.json)
+
+## Where the wider neurons affect early prediction
+
+At predictions 17–32 on enwik8 validation, muting the added
+projections in the ordinary residual blocks lowers mixed-model
+loss by 0.00347 bpb. Muting the added projections in the signed
+correction blocks lowers it by 0.00243 bpb. The matched enwik8-only
+model loses 0.00467 and 0.00067 bpb under the same interventions.
+Both stages reverse direction between the training recipes. The
+joint ablation gives their combined effect at fixed weights.
+
+| Projections silenced | Mixed SNN loss change (bpb) | enwik8-only SNN loss change (bpb) |
+|---|---:|---:|
+| Ordinary blocks 1–7 | −0.00347 | +0.00467 |
+| Signed correction blocks 8–11 | −0.00243 | +0.00067 |
+| All added projections | −0.00679 | +0.00394 |
+
+The paired 95% intervals for these six changes exclude zero.
+The corresponding input-projection masks have zero measured
+effect on this sample, and the recall-projection changes are
+below 0.00002 bpb.
+[Paired per-stage records](../results/event_lm/residual_scale/residual_stage_validation.json)
+
+On the fixed C4 validation windows, the mixture-trained narrow
+SNN scores 2.07191 bpb and the wide SNN scores 2.06397 bpb.
+Muting all added projections raises the wide model's C4 loss to
+2.09396 bpb. The same intervention raises the wide enwik8-only
+model's C4 loss by 0.00518 bpb. These scores use the C4 warming
+and target windows from the byte-transfer protocol.
+[Fixed-window C4 ablations](../results/event_lm/residual_scale/residual_c4_validation.json)
+
+A second comparison gives both corpora the same preceding
+context lengths. It scores the same 16 targets per window at
+both lengths. enwik8 uses the 1,535 fixed validation tails. C4
+uses one tail starting 256 bytes into each of 241 documents long
+enough to supply the targets.
+
+| Preceding bytes | enwik8 mute change (bpb) | C4 mute change (bpb) |
+|---:|---:|---:|
+| 17 | −0.00679 [−0.00985, −0.00371] | +0.02997 [+0.02237, +0.03782] |
+| 256 | −0.00249 [−0.00576, +0.00073] | +0.02738 [+0.01946, +0.03544] |
+
+The intervals resample the paired tails. At 17 bytes, the
+effect has opposite signs across the two validation samples.
+[Matched-history ablations](../results/event_lm/residual_scale/residual_history_validation.json)
+
+## Native pulse measurements
+
+The three SNN checkpoints reproduce the Metal output counts
+on the same 4,096-byte enwik8 test sequence. Native one-byte
+steps match the batch output on the first 513 input bytes.
+Native chunks match the batch output on the full sequence.
+
+| SNN | Persistent state per stream | Emitted pulses per byte | Added residual pulses per byte |
+|---|---:|---:|---:|
+| 14.07M, mixture | 28,584 B | 312,618 | — |
+| 25.79M, mixture | 28,584 B | 313,142 | 10,287 |
+| 25.79M, enwik8 only | 28,584 B | 309,020 | 8,998 |
+
+The added residual emissions are included in the total.
+On a separate continuous enwik8 validation probe with 65,536
+targets, silencing the added outputs changes loss by −0.00147 bpb
+in the wide mixed SNN and +0.00351 bpb in the wide enwik8-only SNN.
+[Native narrow](../results/event_lm/residual_scale/native_snn_s9631.json) ·
+[Native wide](../results/event_lm/residual_scale/native_wide-snn_s9631.json) ·
+[Native enwik8 control](../results/event_lm/residual_scale/native_enwik8-snn_s9631.json) ·
+[Continuous probe, mixture](../results/event_lm/residual_scale/probe_wide-snn_s9631.json) ·
+[Continuous probe, enwik8](../results/event_lm/residual_scale/probe_enwik8-snn_s9631.json)
+
+## Paired SNN width validation
+
+The two mixture-trained SNNs reproduced the same hash of all
+9,830,400 continuation targets. At predictions 17–32 on 1,535
+reset enwik8 validation windows, the 14.07M SNN scores 1.83279
+bpb and the 25.79M SNN scores 1.84090 bpb. The wider model's
+change is +0.00811 bpb with a paired 95% interval of [+0.00357,
++0.01272]. The result measures width within the SNN family.
+The full-attention comparisons and complete enwik8 test
+provide the size-matched gaps.
+[Paired width validation](../results/event_lm/residual_scale/width_snn_validation.json) ·
+[Matched training-window receipt](../results/event_lm/training_mixture/windows_s9631.json)
+
+## Early gap to the size-matched Transformer
+
+The held-out enwik8 probe scores 49,120 targets from 1,535
+reset windows. For predictions 17–32, the gap to full attention
+is 0.02615 bpb at 14.07M parameters and 0.02993 bpb at 25.79M.
+The estimated change is +0.00378 bpb with a paired 95% interval
+of [−0.00075, +0.00819]. On the separate validation windows the
+gap increases by 0.00842 bpb, with interval [+0.00387, +0.01310].
+Each interval resamples windows from the one matched run.
+[Early test record](../results/event_lm/residual_scale/early_context_test.json) ·
+[Early validation record](../results/event_lm/residual_scale/early_context_val.json)
+
+## Complete PG-19 books
+
+The mixed SNN's PG-19 loss falls from 2.04156 bpb at 14.07M
+to 2.02699 bpb at 25.79M. Both SNNs select temperature 1.0 on
+the calibration excerpts. At 25.79M and equal training
+exposure, enwik8-only continuation scores 2.73942 bpb after
+calibration and 2.83176 bpb at temperature one. The mixture
+lowers calibrated loss on all 16 test books. Per-book gains
+range from 0.43774 to 1.06208 bpb over the enwik8-only control.
+Full attention scores 1.98073 bpb at 14.07M and 1.97644 bpb
+at 25.79M. Both select temperature 1.0. The SNN's gap shrinks
+from 0.06083 to 0.05055 bpb, and the wide Transformer leads on
+every test book.
+[PG-19 width records](../results/event_lm/residual_scale) ·
+[Training-window overlap audit](../results/event_lm/training_mixture/pg19_sampled_overlap_s9631.json)
+
+## Fixed transfer suite
+
+Widening the mixed SNN reduces C4 loss by 0.00794 bpb and
+raises enwik9 loss by 0.00317 bpb. WikiText-103 and text8
+change by less than 0.0005 bpb. At the wider size, the
+mixture improves C4 and WikiText-103 relative to enwik8-only
+training. The enwik8-only arm retains lower loss on the two
+other Wikipedia corpora. These rankings hold on the subset
+of Wikipedia windows with zero overlap hits.
+
+Muting the added projections on the 1,048,575 enwik9 targets
+lowers loss by 0.00145 bpb in the wide mixed SNN and raises it
+by 0.00472 bpb in the wide enwik8-only SNN.
+[Fixed-weight enwik9 record](../results/event_lm/residual_scale/residual_enwik9.json)
+
+Full attention leads on all four fixed text corpora and on
+LAMBADA final-word loss. The full passage lowers answer-byte
+loss relative to the last sentence in all five arms. Both
+full-attention models produce one boundary-checked correct
+word out of 5,153 in each condition. The SNNs produce zero.
+[Transfer tables](LEADERBOARD.md#byte-transfer-at-the-same-training-exposure) ·
+[Complete transfer record](../results/event_lm/byte_transfer/residual_scale_131072k.json)
+
+## Reproduce the data and launches
+
+Prepare the canonical [enwik8 and PG-19 evaluation files](HANDOFF.md#datasets)
+and the [five transfer datasets](BYTE_TRANSFER.md#reproduce) in
+an active Python environment with the benchmark dependencies.
+
+```bash
+python experiments/prepare_byte_training_mixture.py \
+  --sources data/training-v1/sources --output data/training-v1/prepared
+cmp results/event_lm/training_mixture/prepared_v1.json data/training-v1/prepared/catalogue.json
+
+study=checkpoints/residual-scale-study
+for arm in enwik8-snn wide-snn snn wide-transformer transformer; do
+  SNN_TRAIN_ONLY=1 bash experiments/run_v4_continuation.sh "residual-scale-$arm" "$study"
+done
+```
+
+The launch expects the two verified v9 parents in
+`checkpoints/trace-arrival-study`. The
+[v9 handoff](V9_HANDOFF.md#restore-and-run) gives the restore
+command and parent checksums. Omit `SNN_TRAIN_ONLY` to score
+enwik8 and PG-19 and run the native audits. Start each mixed
+replay from the exact prepared catalogue. Its checksum is
+verified by [the replay command](../experiments/replay_event_run.py).

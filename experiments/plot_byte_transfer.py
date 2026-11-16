@@ -86,8 +86,10 @@ def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png")
         raise ValueError("a comparison needs a label for each of at least two checkpoints")
     reference = models[0]["benchmarks"]
     colors = (ORANGE, GRAY, BLUE, VIOLET, "#187b62", "#9c4772")
-    fig, (corpus, words) = plt.subplots(1, 2, figsize=(12.8, 4.75), width_ratios=(1.1, 1))
-    fig.subplots_adjust(left=0.145, right=0.967, bottom=0.26, top=0.735, wspace=0.43)
+    many_arms = len(models) > 4
+    fig, (corpus, words) = plt.subplots(1, 2, figsize=(14.2 if many_arms else 12.8, 4.75), width_ratios=(1.1, 1))
+    fig.subplots_adjust(left=0.145, right=0.967, bottom=0.30 if many_arms else 0.26,
+                        top=0.735, wspace=0.62 if many_arms else 0.43)
     heading(fig, "Byte-model transfer", "Fixed English corpora and paired LAMBADA prompts")
     for axes in (corpus, words):
         style(axes, grid_axis="x")
@@ -111,9 +113,10 @@ def plot_transfer(record, labels, output, filename="event_lm_byte_transfer.png")
     corpus.axvline(0, color=MUTED, linewidth=0.85)
     corpus.set_yticks(range(len(DATASETS)), [label for _, label in DATASETS])
     corpus.invert_yaxis()
-    corpus.set_xlabel("Bits per byte relative to full attention", color=MUTED)
+    reference_label = labels[0].replace("Full attention", "full attention")
+    corpus.set_xlabel(f"Bits per byte relative to {reference_label}", color=MUTED)
     corpus.legend(loc="upper center", bbox_to_anchor=(0.5, -0.24), frameon=False,
-                  ncols=min(3, len(models) - 1), fontsize=8, labelcolor=TEXT)
+                  ncols=2 if many_arms else min(3, len(models) - 1), fontsize=8, labelcolor=TEXT)
 
     words.set_yticks(range(len(labels)), labels)
     words.invert_yaxis()

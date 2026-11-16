@@ -1,0 +1,372 @@
+{
+  "suite": "byte-transfer-v1",
+  "catalogue_sha256": "9f99702b296d3bd1c47f3c5e5744d4985ab9728024beb23bd02a87d39705af24",
+  "manifest_sha256": "13c3b641d344425b56def6350a852af4265b60de11300cd950b5342012a45cff",
+  "device": "mps",
+  "batch_size": 24,
+  "context_bytes": 512,
+  "targets_per_window": 256,
+  "lambada_examples": 5153,
+  "lambada_max_passage_bytes": 986,
+  "lambada_word_boundary_bytes": [
+    32,
+    9,
+    13,
+    10,
+    46,
+    44,
+    33,
+    63,
+    59,
+    58,
+    34,
+    40,
+    41,
+    91,
+    93,
+    123,
+    125
+  ],
+  "models": [
+    {
+      "checkpoint": "checkpoints/residual-scale-study/wide-transformer_s9631.pt",
+      "checkpoint_sha256": "406deb1fe328aa5a2c0bdd359e880b68a9896aebccf7e796b53a53425b60e399",
+      "run_name": "transformer_s9631_residual_scale_wide_transformer",
+      "model_type": "TransformerLM",
+      "attention": "transformer",
+      "parameters": 25790976,
+      "training_targets": 131072000,
+      "benchmarks": {
+        "wikitext103": {
+          "target_bytes": 1289122,
+          "nll_nats": 2046891.2271881104,
+          "bpb": 2.290737279096479,
+          "overlap_flagged_targets": 1024,
+          "without_overlap_hits": {
+            "target_bytes": 1288098,
+            "bpb": 2.2909698597104633
+          }
+        },
+        "c4": {
+          "target_bytes": 308483,
+          "nll_nats": 435219.1615638733,
+          "bpb": 2.035407222077238
+        },
+        "enwik9": {
+          "target_bytes": 1048575,
+          "nll_nats": 1225230.648071289,
+          "bpb": 1.6857489258447127,
+          "overlap_flagged_targets": 120320,
+          "without_overlap_hits": {
+            "target_bytes": 928255,
+            "bpb": 1.7496667040445308
+          }
+        },
+        "text8": {
+          "target_bytes": 1048575,
+          "nll_nats": 1541635.5094299316,
+          "bpb": 2.121078515426072,
+          "overlap_flagged_targets": 11776,
+          "without_overlap_hits": {
+            "target_bytes": 1036799,
+            "bpb": 2.1215473567004035
+          }
+        },
+        "lambada": {
+          "passage": {
+            "target_bytes": 29122,
+            "nll_nats": 67014.38883304596,
+            "bpb": 3.3198724825781243,
+            "examples": 5153,
+            "exact_matches": 1,
+            "exact_match_accuracy": 0.00019406171162429653,
+            "boundary_exact_matches": 1,
+            "boundary_exact_match_accuracy": 0.00019406171162429653
+          },
+          "last_sentence": {
+            "target_bytes": 29122,
+            "nll_nats": 68026.3713464737,
+            "bpb": 3.3700057891363464,
+            "examples": 5153,
+            "exact_matches": 1,
+            "exact_match_accuracy": 0.00019406171162429653,
+            "boundary_exact_matches": 1,
+            "boundary_exact_match_accuracy": 0.00019406171162429653
+          }
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/residual-scale-study/transformer_s9631.pt",
+      "checkpoint_sha256": "375bd860904ca9b6ea4f61d70683f02e56ef4b322921a12e24ab7ecf8adf4285",
+      "run_name": "transformer_s9631_residual_scale_transformer",
+      "model_type": "TransformerLM",
+      "attention": "transformer",
+      "parameters": 14068224,
+      "training_targets": 131072000,
+      "benchmarks": {
+        "wikitext103": {
+          "target_bytes": 1289122,
+          "nll_nats": 2046030.5170593262,
+          "bpb": 2.289774032612097,
+          "overlap_flagged_targets": 1024,
+          "without_overlap_hits": {
+            "target_bytes": 1288098,
+            "bpb": 2.29000556763947
+          }
+        },
+        "c4": {
+          "target_bytes": 308483,
+          "nll_nats": 435533.8127851486,
+          "bpb": 2.0368787642904023
+        },
+        "enwik9": {
+          "target_bytes": 1048575,
+          "nll_nats": 1225392.8197517395,
+          "bpb": 1.6859720517814922,
+          "overlap_flagged_targets": 120320,
+          "without_overlap_hits": {
+            "target_bytes": 928255,
+            "bpb": 1.7499136439705636
+          }
+        },
+        "text8": {
+          "target_bytes": 1048575,
+          "nll_nats": 1541063.7087554932,
+          "bpb": 2.1202917963097576,
+          "overlap_flagged_targets": 11776,
+          "without_overlap_hits": {
+            "target_bytes": 1036799,
+            "bpb": 2.1207637288223946
+          }
+        },
+        "lambada": {
+          "passage": {
+            "target_bytes": 29122,
+            "nll_nats": 66986.96864938736,
+            "bpb": 3.3185140950022527,
+            "examples": 5153,
+            "exact_matches": 1,
+            "exact_match_accuracy": 0.00019406171162429653,
+            "boundary_exact_matches": 1,
+            "boundary_exact_match_accuracy": 0.00019406171162429653
+          },
+          "last_sentence": {
+            "target_bytes": 29122,
+            "nll_nats": 68023.16843700409,
+            "bpb": 3.3698471179733693,
+            "examples": 5153,
+            "exact_matches": 1,
+            "exact_match_accuracy": 0.00019406171162429653,
+            "boundary_exact_matches": 1,
+            "boundary_exact_match_accuracy": 0.00019406171162429653
+          }
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/residual-scale-study/snn_s9631.pt",
+      "checkpoint_sha256": "f6b625fd886aeae4f4566303efec27610bc51d3d3047bc66d33ef5562a853737",
+      "run_name": "event_correction_code_s9631_residual_scale_snn",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 14066688,
+      "training_targets": 131072000,
+      "benchmarks": {
+        "wikitext103": {
+          "target_bytes": 1289122,
+          "nll_nats": 2069141.2682495117,
+          "bpb": 2.315637966462655,
+          "overlap_flagged_targets": 1024,
+          "without_overlap_hits": {
+            "target_bytes": 1288098,
+            "bpb": 2.315853991450518
+          }
+        },
+        "c4": {
+          "target_bytes": 308483,
+          "nll_nats": 443024.93203926086,
+          "bpb": 2.0719127875546195
+        },
+        "enwik9": {
+          "target_bytes": 1048575,
+          "nll_nats": 1290764.25907135,
+          "bpb": 1.7759141649562065,
+          "overlap_flagged_targets": 120320,
+          "without_overlap_hits": {
+            "target_bytes": 928255,
+            "bpb": 1.8383635378404228
+          }
+        },
+        "text8": {
+          "target_bytes": 1048575,
+          "nll_nats": 1556403.4524841309,
+          "bpb": 2.141397174757473,
+          "overlap_flagged_targets": 11776,
+          "without_overlap_hits": {
+            "target_bytes": 1036799,
+            "bpb": 2.1420283672683955
+          }
+        },
+        "lambada": {
+          "passage": {
+            "target_bytes": 29122,
+            "nll_nats": 69414.44653463364,
+            "bpb": 3.4387706126491326,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          },
+          "last_sentence": {
+            "target_bytes": 29122,
+            "nll_nats": 69613.15439271927,
+            "bpb": 3.448614539626875,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          }
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/residual-scale-study/wide-snn_s9631.pt",
+      "checkpoint_sha256": "dbd46b94f28d72dff163d35826761b5d40529821529f2f9407ec45ee3f283158",
+      "run_name": "event_correction_code_s9631_residual_scale_wide_snn",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 25788928,
+      "training_targets": 131072000,
+      "benchmarks": {
+        "wikitext103": {
+          "target_bytes": 1289122,
+          "nll_nats": 2069110.7765808105,
+          "bpb": 2.315603842322951,
+          "overlap_flagged_targets": 1024,
+          "without_overlap_hits": {
+            "target_bytes": 1288098,
+            "bpb": 2.31581965198647
+          }
+        },
+        "c4": {
+          "target_bytes": 308483,
+          "nll_nats": 441326.58651447296,
+          "bpb": 2.063970065698545
+        },
+        "enwik9": {
+          "target_bytes": 1048575,
+          "nll_nats": 1293068.6579055786,
+          "bpb": 1.7790847009411115,
+          "overlap_flagged_targets": 120320,
+          "without_overlap_hits": {
+            "target_bytes": 928255,
+            "bpb": 1.8414111275184997
+          }
+        },
+        "text8": {
+          "target_bytes": 1048575,
+          "nll_nats": 1556085.0594940186,
+          "bpb": 2.1409591097760563,
+          "overlap_flagged_targets": 11776,
+          "without_overlap_hits": {
+            "target_bytes": 1036799,
+            "bpb": 2.1415493701756465
+          }
+        },
+        "lambada": {
+          "passage": {
+            "target_bytes": 29122,
+            "nll_nats": 69096.34465074539,
+            "bpb": 3.4230119418716103,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          },
+          "last_sentence": {
+            "target_bytes": 29122,
+            "nll_nats": 69303.28608846664,
+            "bpb": 3.4332637578854444,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          }
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/residual-scale-study/enwik8-snn_s9631.pt",
+      "checkpoint_sha256": "1dab1e4796fb61c0fb3a24307358a60661ecaad292baac129f4e9922784df3a6",
+      "run_name": "event_correction_code_s9631_residual_scale_enwik8_snn",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 25788928,
+      "training_targets": 131072000,
+      "benchmarks": {
+        "wikitext103": {
+          "target_bytes": 1289122,
+          "nll_nats": 2090441.907485962,
+          "bpb": 2.33947614981085,
+          "overlap_flagged_targets": 1024,
+          "without_overlap_hits": {
+            "target_bytes": 1288098,
+            "bpb": 2.3397211568884435
+          }
+        },
+        "c4": {
+          "target_bytes": 308483,
+          "nll_nats": 472219.85449028015,
+          "bpb": 2.2084498733558577
+        },
+        "enwik9": {
+          "target_bytes": 1048575,
+          "nll_nats": 1279101.7043914795,
+          "bpb": 1.759868093096067,
+          "overlap_flagged_targets": 120320,
+          "without_overlap_hits": {
+            "target_bytes": 928255,
+            "bpb": 1.8244583260437837
+          }
+        },
+        "text8": {
+          "target_bytes": 1048575,
+          "nll_nats": 1553859.8144836426,
+          "bpb": 2.1378974785706277,
+          "overlap_flagged_targets": 11776,
+          "without_overlap_hits": {
+            "target_bytes": 1036799,
+            "bpb": 2.138478365272077
+          }
+        },
+        "lambada": {
+          "passage": {
+            "target_bytes": 29122,
+            "nll_nats": 71129.52224731445,
+            "bpb": 3.523734942895466,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          },
+          "last_sentence": {
+            "target_bytes": 29122,
+            "nll_nats": 71409.58324480057,
+            "bpb": 3.5376090797067987,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          }
+        }
+      }
+    }
+  ]
+}
