@@ -200,10 +200,11 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.cfg.steering_transfer is not None:
         weights = [weight for block in model.blocks for weight in block.steering_transfer.weights]
         result["zero_steering_transfer_bpb"] = score_without_synapses(model, window, chunk_size, weights)
-        if model.cfg.steering_transfer == "delayed":
-            result["present_transfer_on_delayed_weights_bpb"] = score_with_options(
-                model, window, chunk_size, steering_transfer="present",
-            )
+        source = model.cfg.steering_transfer
+        other_source = "present" if source == "delayed" else "delayed"
+        result[f"{other_source}_transfer_on_{source}_weights_bpb"] = score_with_options(
+            model, window, chunk_size, steering_transfer=other_source,
+        )
     if model.prediction_memory is not None:
         result["mute_bank_corrections_bpb"] = score_without_synapses(
             model, window, chunk_size, [model.recall_synapse.weight],

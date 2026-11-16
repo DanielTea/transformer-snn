@@ -165,6 +165,8 @@ PACKED_WIDTH_111411K = (
      f"{PACKED_WIDTH}/native_delayed_transfer_s7907.json", "#138372"),
     ("Growth in shortest groups", PACKED_WIDTH, "short_groups_s7907",
      f"{PACKED_WIDTH}/native_short_groups_s7907.json", "#7a6a50"),
+    ("Present steering transfers", PACKED_WIDTH, "present_transfer_s7907",
+     f"{PACKED_WIDTH}/native_present_transfer_s7907.json", "#a34073"),
 )
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
@@ -453,6 +455,8 @@ def write_leaderboards(data, depth, research):
     study_figures = {
         "packed_width_111411k": (
             "![Held-out loss at the original and wider sizes](../results/figures/event_lm_packed_width.png)",
+            "![Held-out loss changes from channel placement and steering sources]"
+            "(../results/figures/event_lm_packed_circuit_changes.png)",
             "![Validation loss gap as the available history grows](../results/figures/event_lm_packed_width_history.png)",
             "[Width, state budget, and steering circuit](PACKED_WIDTH.md)",
         ),
@@ -757,6 +761,35 @@ def plot_packed_width_history(output):
     save(fig, output, "event_lm_packed_width_history.png")
 
 
+def plot_packed_circuit_changes(baseline, variants, output):
+    panels = (("enwik8", "mean", "enwik8"),
+              ("pg19_full", "raw_bpb", "PG-19 raw"),
+              ("pg19_full", "mean", "PG-19 calibrated"))
+    changes = [[row["scores"][corpus][metric] - baseline["scores"][corpus][metric] for row in variants]
+               for corpus, metric, _ in panels]
+    limit = max(0.001, 1.75 * max(abs(delta) for panel in changes for delta in panel))
+    fig, axes = plt.subplots(1, 3, sharex=True, sharey=True, figsize=(11.7, 4.25))
+    fig.subplots_adjust(left=0.245, right=0.968, bottom=0.215, top=0.745, wspace=0.15)
+    heading(fig, "Loss changes from layout and steering",
+            "Compared with the even-width SNN · 111.41M enwik8 training targets · seed 7907")
+    for ax, (_, _, title), deltas in zip(axes, panels, changes, strict=True):
+        style(ax, grid_axis="x")
+        ax.set_title(title, loc="left", size=11, color=TEXT)
+        ax.axvline(0, color=GRAY, linewidth=1)
+        for index, (row, delta) in enumerate(zip(variants, deltas, strict=True)):
+            ax.hlines(index, 0, delta, color=row["color"], linewidth=2, alpha=0.52)
+            ax.scatter(delta, index, color=row["color"], s=41, edgecolors="white", linewidth=0.8, zorder=3)
+            offset, align = (6, "left") if delta >= 0 else (-6, "right")
+            ax.annotate(f"{delta:+.5f}", (delta, index), xytext=(offset, 0), textcoords="offset points",
+                        ha=align, va="center", size=8.5, color=TEXT)
+        ax.set_xlim(-limit, limit)
+    axes[0].set_yticks(range(len(variants)), [row["model"] for row in variants])
+    axes[0].set_ylim(len(variants) - 0.48, -0.52)
+    fig.text(0.035, 0.045, "Values are differences in bits per byte. Negative values indicate lower loss.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_packed_circuit_changes.png")
+
+
 def plot_trained_context(research, output):
     short = research["groups"]["continuation_512"]["rows"]
     long = research["groups"]["continuation_2048"]["rows"]
@@ -896,7 +929,8 @@ def main():
                  subtitle="About 9.96M parameters · 101.58M enwik8 training targets · seed 6899",
                  filename="event_lm_trace_tap_read.png", precision=5)
     plot_trace_tap_training(tap_rows, output)
-    narrow_snn, wide_snn, narrow_full, wide_full, *_ = research["groups"]["packed_width_111411k"]["rows"]
+    packed_rows = research["groups"]["packed_width_111411k"]["rows"]
+    narrow_snn, wide_snn, narrow_full, wide_full, delayed, short, present = packed_rows
     width_pairs = (("11-block SNN", BLUE, narrow_snn, wide_snn),
                    ("6-block full attention", ORANGE, narrow_full, wide_full))
     plot_paired_change(width_pairs, output, title="Widening both models at matched exposure",
@@ -904,6 +938,7 @@ def main():
                        ticks=("9.96M parameters", "12.8M parameters"),
                        note="SNN state grows from 29,674 to 32,616 bytes. Full attention uses 6 MiB at both sizes.",
                        filename="event_lm_packed_width.png")
+    plot_packed_circuit_changes(wide_snn, (short, delayed, present), output)
     plot_packed_width_history(output)
     plot_trained_context(research, output)
     plot_training_exposure(research, output)

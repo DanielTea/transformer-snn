@@ -147,7 +147,7 @@ training path.
 [Present warm audit](../results/event_lm/packed_width/warm_present_transfer.json) ·
 [Optimizer smoke run](../results/event_lm/packed_width/event_correction_code_s7907_packed_width_transfer_smoke.json)
 
-## Trained delayed steering transfers
+## Matched steering sources
 
 The trained delayed-transfer circuit scores 1.801870 bpb on
 enwik8 and 2.762408 bpb on calibrated PG-19. Relative to the
@@ -173,6 +173,26 @@ to 1.741448 bpb. Sending current content through those same
 weights raises loss to 1.743007 bpb. The present-input training
 arm tests how well each input can learn the rule.
 [Frozen transfer interventions](../results/event_lm/packed_width/probe_delayed_transfer_s7907.json)
+
+The present-input circuit finishes at 1.803999 bpb on enwik8
+and 2.771714 bpb on calibrated PG-19. The arriving-input
+circuit beats its present-input counterpart by 0.002129 bpb on
+enwik8 and 0.009305 bpb on calibrated PG-19, with lower loss on
+all 16 books. The even-width SNN leads both steering arms on
+enwik8. In the native audit, the present-input arm preserves
+each pair's steering count and emits 82.65 transfer pulses per
+byte within 310,478 total pulses per byte.
+[enwik8](../results/event_lm/packed_width/enwik8_present_transfer_s7907.json) ·
+[PG-19](../results/event_lm/packed_width/pg19_present_transfer_s7907.json) ·
+[Training](../results/event_lm/packed_width/event_correction_code_s7907_packed_width_present_transfer.json) ·
+[Native audit](../results/event_lm/packed_width/native_present_transfer_s7907.json)
+
+On the same 65,536 validation targets, zeroing the present-input
+transfer synapses raises loss by 0.000004 bpb. Feeding delayed
+content into those weights raises loss by 0.001447 bpb.
+[Frozen present-input interventions](../results/event_lm/packed_width/probe_present_transfer_s7907.json)
+
+![Held-out loss changes from channel placement and steering source](../results/figures/event_lm_packed_circuit_changes.png)
 
 ## Add channels to the shortest-delay groups
 
@@ -224,6 +244,12 @@ It matches the Metal counts on the full audit sample.
 [Training](../results/event_lm/packed_width/event_correction_code_s7907_packed_width_short_groups.json) ·
 [Native audit](../results/event_lm/packed_width/native_short_groups_s7907.json) ·
 [Frozen interventions](../results/event_lm/packed_width/probe_short_groups_s7907.json)
+
+On the shared validation tails, the short-group model scores
+1.816524 bpb with 32 bytes of warmup. The gap to full attention
+is 0.053883 bpb, within 0.00072 bpb of the gap at even width.
+[Paired short-group histories](../results/event_lm/packed_width/short_groups_validation_history.json) ·
+[Write spikes into the held-charge reads](TRACE_READ_DRIVE.md)
 
 ## Contribution of the wider Transformer units
 

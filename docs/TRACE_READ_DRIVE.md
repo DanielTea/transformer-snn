@@ -3,9 +3,9 @@
 The short-group SNN keeps 28,584 bytes of state per stream and
 scores 2.761530 bits per byte on calibrated PG-19. Its enwik8
 test loss is 0.08470 bits per byte above the matched full-attention
-model. The width study's paired history probe identifies a gap of
-roughly 0.055 bits per byte after only 32 bytes of warmup. This
-continuation gives each held-charge read neuron an extra input
+model. On paired validation tails, the gap reaches 0.05388 bits
+per byte after 32 bytes of warmup. This continuation gives each
+held-charge read neuron an extra input
 from the correction spikes its own cell emits when writing.
 [Short-group benchmark and history probe](PACKED_WIDTH.md)
 
