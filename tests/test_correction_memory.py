@@ -6,6 +6,7 @@ import torch
 from snnformer.correction_memory import _interval_scan, _write_credit_scan, correction_reads, correction_step
 from snnformer.event_lm import (
     EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _OpponentSteering, _SpikeCorrection, _SpikeTrace,
+    _SpreadCoincidence, _steer_packet,
 )
 
 
@@ -481,17 +482,19 @@ def test_opponent_steering_warm_start_and_integer_chunk_and_step_parity():
 
 
 @torch.no_grad()
-@pytest.mark.parametrize("read_veto", (False, True))
+@pytest.mark.parametrize("route_options", ({}, {"trace_read_veto": True}, {"spread_coincidence": True}))
 @pytest.mark.parametrize("route", ("steered", "steered_correction_code"))
-def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route, read_veto):
+def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks(route, route_options):
     torch.manual_seed(97)
     cfg = EventLMConfig(dim=16, hidden=21, route=route, carry=False, resolution=16,
                         memory_heads=2, memory_slots=4, memory_width=8 if route.endswith("code") else None,
-                        compact_delays=True, activity_inhibition=True, local_trace=True, trace_read_veto=read_veto)
+                        compact_delays=True, activity_inhibition=True, local_trace=True, **route_options)
     model = EventLM(cfg).eval()
-    if read_veto:
-        for block in model.blocks:
+    for block in model.blocks:
+        if cfg.trace_read_veto:
             block.trace.read_veto.gain.fill_(0.5)
+        if cfg.spread_coincidence:
+            block.spread_coincidence.mix.fill_(0.625)
     native = model.to_integer()
     tokens = torch.randint(256, (2, 93))
     expected = native(tokens)
@@ -509,6 +512,43 @@ def test_trace_preserves_exact_history_across_steps_and_differently_sized_chunks
         assert chunk.local_prefix is None
     for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
         torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
+
+
+@torch.no_grad()
+def test_spread_coincidence_matches_clock_slots_and_conserves_each_signed_packet():
+    spread = _SpreadCoincidence((6,), cap=128, resolution=4)
+    spread.mix.fill_(0.5)
+    spread.freeze_integer()
+    packet = torch.tensor([-17, -4, 0, 9, 12, 32], dtype=torch.int32)
+    steering = torch.tensor([0, 2, 5, 3, 11, 4], dtype=torch.int32)
+    coincident, bypass = spread(packet, steering, _steer_packet(packet, steering)[0])
+    expected = []
+    for content, window in zip(packet.tolist(), steering.tolist(), strict=True):
+        count = abs(content)
+        timed = (count + 1) // 2
+        # Place event j at the center of its equal-width sector in the clock.
+        observed = sum((2 * j - 1) * spread.clock_slots <= 2 * timed * min(window, spread.clock_slots)
+                       for j in range(1, timed + 1))
+        signed = min(count - timed, window) + observed
+        expected.append(-signed if content < 0 else signed)
+    assert coincident.tolist() == expected
+    torch.testing.assert_close(coincident + bypass, packet, rtol=0, atol=0)
+    assert bool((coincident.abs() <= packet.abs()).all())
+
+
+def test_silent_spread_coincidence_preserves_router_gradients_and_can_learn():
+    spread = _SpreadCoincidence((4, 2), cap=128, resolution=4)
+    packet = torch.tensor([-7., -4., 0., 6., 8., 12.], requires_grad=True)
+    steering = torch.tensor([0., 2., 4., 6., 3., 11.], requires_grad=True)
+    packed, _ = _steer_packet(packet, steering)
+    candidate, bypass = spread(packet, steering, packed)
+    torch.testing.assert_close(candidate, packed, rtol=0, atol=0)
+    torch.testing.assert_close(candidate + bypass, packet, rtol=0, atol=0)
+    expected = torch.autograd.grad(packed.sum(), (packet, steering), retain_graph=True)
+    dp, ds, mix = torch.autograd.grad(candidate.sum(), (packet, steering, spread.mix))
+    torch.testing.assert_close(dp, expected[0], rtol=0, atol=0)
+    torch.testing.assert_close(ds, expected[1], rtol=0, atol=0)
+    assert bool((mix != 0).all())
 
 
 def test_trace_correction_vetoes_mismatched_old_charge_without_altering_the_write():

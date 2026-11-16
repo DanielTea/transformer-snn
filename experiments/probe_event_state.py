@@ -92,6 +92,9 @@ def probe(model, window, chunk_size):
     if model.cfg.trace_read_veto:
         weights = [block.trace.read_veto.gain for block in model.blocks]
         result["zero_trace_read_veto_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.spread_coincidence:
+        weights = [block.spread_coincidence.mix for block in model.blocks]
+        result["zero_spread_coincidence_bpb"] = score_without_synapses(model, window, chunk_size, weights)
     return result
 
 

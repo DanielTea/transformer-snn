@@ -67,6 +67,7 @@ class EventLMConfig:
     trace_read_veto: bool = False
     delay_filter: bool = False
     opponent_steering: bool = False
+    spread_coincidence: bool = False
 
 
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
@@ -75,6 +76,14 @@ def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
     limit = _WEIGHT_LIMIT << (charge_bits - _CHARGE_BITS)
     ticks = (weight * (1 << charge_bits)).clamp(-limit, limit)
     return ticks.detach().round() + (ticks - ticks.detach()) if quantized else ticks
+
+
+def _unit_gain_ticks(weight):
+    ticks = _weight_ticks(weight)
+    if not ticks.is_floating_point():
+        return ticks
+    # Keep a gradient at the silent endpoint.
+    return ticks.detach().clamp(0, _TICKS) + (ticks - ticks.detach())
 
 
 class _Synapse(nn.Module):
@@ -209,12 +218,7 @@ class _DelayCorrection(nn.Module):
         self.emit = _IntegrateFire(2 * cap, _CHARGE_BITS, False)
 
     def gains(self):
-        if not self.gain.is_floating_point():
-            return self.gain
-        ticks = _weight_ticks(self.gain)
-        bounded = ticks.detach().clamp(0, _TICKS)
-        # Silence at initialization still needs a gradient to open the synapse.
-        return bounded + (ticks - ticks.detach())
+        return _unit_gain_ticks(self.gain)
 
     def freeze_integer(self):
         if self.gain.is_floating_point():
@@ -225,6 +229,47 @@ class _DelayCorrection(nn.Module):
 
     def emit_difference(self, difference):
         return self.emit(difference * self.gains().index_select(0, self.groups))
+
+
+def _even_prefix(count, slots, bits):
+    """Count evenly scheduled pulses in the first slots of a fixed clock."""
+    rounded = (count.to(torch.int32) * slots.to(torch.int32) + (1 << (bits - 1))) >> bits
+    if not count.is_floating_point():
+        return rounded
+    surrogate = count * slots / (1 << bits)
+    return rounded.to(count.dtype) + (surrogate - surrogate.detach())
+
+
+class _SpreadCoincidence(nn.Module):
+    """Redistribute part of a pulse packet across the steering clock."""
+
+    def __init__(self, widths, cap, resolution):
+        super().__init__()
+        self.clock_bits = (2 * resolution - 1).bit_length()
+        self.clock_slots = 1 << self.clock_bits
+        units = max(_TICKS, self.clock_slots)
+        if cap * units + units // 2 > torch.iinfo(torch.int32).max:
+            raise ValueError("spread coincidence would exceed the integer phase counter range")
+        self.mix = nn.Parameter(torch.zeros(len(widths)))
+        groups = torch.arange(len(widths)).repeat_interleave(torch.tensor(widths))
+        self.register_buffer("groups", groups, persistent=False)
+
+    def mix_ticks(self):
+        return _unit_gain_ticks(self.mix)
+
+    def freeze_integer(self):
+        if self.mix.is_floating_point():
+            self.mix = nn.Parameter(self.mix_ticks().to(torch.int32), requires_grad=False)
+
+    def forward(self, packet, steering, paired):
+        count = packet.abs()
+        spread = _even_prefix(count, self.mix_ticks().index_select(0, self.groups), _CHARGE_BITS)
+        aperture = steering.clamp_max(self.clock_slots)
+        timed = _even_prefix(spread, aperture, self.clock_bits)
+        packed = (count - spread).minimum(steering)
+        # Retain the original sign-rail gradients when the new route is silent.
+        selected = paired + (packed + timed - count.minimum(steering)) * packet.sign()
+        return selected, packet - selected
 
 
 class _DelayFilter(nn.Module):
@@ -659,6 +704,9 @@ class _DelayBlock(nn.Module):
         self.opponent_steering = (
             _OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits) if cfg.opponent_steering else None
         )
+        self.spread_coincidence = (
+            _SpreadCoincidence(self.widths, cap, cfg.resolution) if cfg.spread_coincidence else None
+        )
         self.delay_correction = _DelayCorrection(self.widths, cap) if cfg.delay_residual else None
         self.delay_filters = None
         if cfg.delay_filter:
@@ -785,6 +833,8 @@ class _DelayBlock(nn.Module):
             delay_routes = (_route_packets(present, delayed, "tonic") if self.route == "steered_local"
                             else split(delayed, steering, start))
             routes = split(present, steering, start) + delay_routes
+        if self.spread_coincidence is not None:
+            routes = self.spread_coincidence(present, steering, routes[0]) + routes[2:]
         if quanta is not None:
             # Route physical pulse counts first. The same synaptic charge
             # then requires fewer pulses at a higher firing threshold.
@@ -993,6 +1043,9 @@ class EventLM(nn.Module):
             raise ValueError("trace write credit needs a local charge trace")
         if cfg.trace_read_veto and not cfg.local_trace:
             raise ValueError("trace read veto needs a local charge trace")
+        if cfg.spread_coincidence and (cfg.carry or cfg.continuous
+                                       or cfg.route not in ("steered", "steered_correction_code")):
+            raise ValueError("spread coincidence needs a reset-per-byte steered spike router")
         if cfg.delay_filter and (not cfg.compact_delays or cfg.carry or cfg.continuous or cfg.delay_window != 1
                                  or cfg.departure_coincidence or cfg.local_trace):
             raise ValueError("delay filters need the fixed-delay coincidence path and reset-per-byte spike routing")
@@ -1201,7 +1254,7 @@ class EventLM(nn.Module):
         model = copy.deepcopy(self).cpu().eval()
         for submodule in model.modules():
             if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection, _DelayFilter,
-                                      _OpponentSteering)):
+                                      _OpponentSteering, _SpreadCoincidence)):
                 submodule.freeze_integer()
         return model
 
