@@ -60,7 +60,7 @@ holds the additional seeds, and `delay_filter` holds the paired
 warm-start experiment. Their checkpoint catalogs match the paths in
 the [v2 release manifest](../models/spiking-byte-lm-v2/manifest.json).
 
-The [v4 handoff](../docs/HANDOFF.md) links the native audits,
+The [v5 handoff](../docs/HANDOFF.md) links the native audits,
 full-corpus scores, and exact training records.
 
 | Study | Files |
@@ -69,14 +69,20 @@ full-corpus scores, and exact training records.
 | [Finer-charge reference](event_lm/grown_fine_charge) | Exact training record, both held-out scores, native audit and ablation |
 | [From-scratch width study](event_lm/scale_6510k_width) | The paired 6.51M training and evaluation records |
 | [3.26M context study](event_lm/scale_3260k_context) | Both checkpoints at 512 and 2,048 training bytes per window |
-| [49.15M-target continuation](event_lm/scale_6510k_data) | Transformer scores at the release cutoff. The matched SNN run was in progress |
-| [Three-way coincidence](event_lm/trace_coincidence) | Warm-start parity and three-step enwik8 smoke |
+| [49.15M-target continuation](event_lm/scale_6510k_data) | Paired scores, native activity, and enwik8 validation memory interventions |
+| [65.54M-target continuation](event_lm/scale_6510k_next_data) | Both parents for the next width study, their held-out scores, and the SNN's native audit and memory interventions |
+| [Three-way coincidence](event_lm/trace_coincidence) | Warm-start parity, full held-out scores and routing ablation |
+| [8.74M expansion](event_lm/expansion_8740k) | Warm-start checks and four matched arms, including the active-steering rerun |
+| [Delayed write confirmation](event_lm/trace_write_confirm) | Warm checks, both held-out scores, write ages and the learned-interval ablation |
+| [Redistribution of inhibition](event_lm/inhibition_redistribution) | Warm-start checks, both held-out corpora, native transfer pulses and the zero-transfer intervention |
+| [Frozen teacher guidance](event_lm/teacher_guidance) | Student training metadata, teacher digest, held-out scores, and native audits |
+| [13.03M residual growth](event_lm/residual_growth_13030k) | Warm-start parity for widened SNN and Transformer, plus the Metal training smoke |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
-exposure, geometry, and seed. The v4 archive combines the checkpoint
-catalogs `event_lm/continuation_checkpoints.sha256` and
-`event_lm/v4_checkpoints.sha256`.
-[Archive manifest](../models/spiking-byte-lm-v4/manifest.json)
+exposure, geometry, and seed. The v5 archive combines the checkpoint
+catalogs `event_lm/continuation_checkpoints.sha256`,
+`event_lm/v4_checkpoints.sha256`, and `event_lm/v5_checkpoints.sha256`.
+[Archive manifest](../models/spiking-byte-lm-v5/manifest.json)
 
 Regenerate the [leaderboards and current figures](../docs/LEADERBOARD.md)
 with `python experiments/plot_event_lm_study.py` and

@@ -98,19 +98,28 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 <header>
   <div class="eyebrow">Spiking transformer research · November 2026</div>
   <h1>ShuntFormer</h1>
-  <p class="deck">A spike-driven transformer that uses lateral and shunting inhibition for attention. The Dendrite follow-up tests address memory for variable-distance recall and a spike readout for next-byte prediction.</p>
-  <p class="col callout"><strong>Benchmark scope</strong> Next-byte prediction uses held-out real text from enwik8 and PG-19. Associative recall uses generated sequences. PyTorch runs the models on CPUs and Apple GPUs (Metal/MPS), including the simulation of spike dynamics. Energy estimates come from operation counts and assumed costs.</p>
+  <p class="deck">A byte language model built from signed spikes, fixed axons, and learned charge memory. The report also preserves the earlier ShuntFormer and Dendrite experiments.</p>
+  <p class="col callout"><strong>Benchmark scope</strong> Next-byte prediction uses held-out real text from enwik8 and PG-19. Earlier associative recall experiments use generated sequences. The models run in PyTorch on CPUs and Apple GPUs (Metal/MPS). Historical energy estimates use operation counts and assumed costs.</p>
   <canvas id="raster" aria-hidden="true"></canvas>
   <div class="strip" id="strip"></div>
 </header>
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
-  <p class="col">The v4 comparison grows the seven-block SNN and its matched Transformer from their trained 3.26M parents to about 6.51M parameters. All models trained on enwik8. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for the full-attention reference at its evaluation context.</p>
+  <p class="col">The v5 comparison follows the seven-block SNN and its full-attention reference to 65.54 million training targets at about 6.51 million parameters. All models trained on enwik8. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for the full-attention reference at its evaluation context. The frozen-teacher arm uses additional training compute.</p>
+  <figure>
+    <a href="../results/figures/event_lm_6510k_data.png"><img src="../results/figures/event_lm_6510k_data.png" alt="Held-out loss across three training exposures for the 6.51M pair" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_65536_prefix_age.png"><img src="../results/figures/event_lm_65536_prefix_age.png" alt="enwik8 loss gap by eight-byte prefix age after 65.54 million training targets" loading="lazy"></a>
+  </figure>
+  <!-- EVENT_LM_TABLES -->
+  <figure>
+    <a href="../results/figures/event_lm_expansion_8740k.png"><img src="../results/figures/event_lm_expansion_8740k.png" alt="Held-out loss for the 8.74M expansion and original-width control" loading="lazy"></a>
+  </figure>
   <figure>
     <a href="../results/figures/event_lm_grown_6510k.png"><img src="../results/figures/event_lm_grown_6510k.png" alt="Held-out loss for the grown 6.51M spiking and full-attention models" loading="lazy"></a>
   </figure>
-  <!-- EVENT_LM_TABLES -->
   <figure>
     <a href="../results/figures/event_lm_grown_prefix_age.png"><img src="../results/figures/event_lm_grown_prefix_age.png" alt="enwik8 loss gap for the grown pair by eight-byte prefix age" loading="lazy"></a>
   </figure>
@@ -135,7 +144,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v4/README.md">Model and architecture</a> · <a href="HANDOFF.md">Training handoff</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v5/README.md">Model and architecture</a> · <a href="HANDOFF.md">Training handoff</a></p>
 </section>
 
 <section id="dendrite">

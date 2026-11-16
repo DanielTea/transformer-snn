@@ -12,32 +12,15 @@ import torch
 from torch.nn import functional as F
 
 from benchmark_decode import state_bytes
-from common import _atomic_output, make_lm, resolve_device
+from common import _atomic_output, resolve_device
 from eval_stream_lm import Book, PG19_MANIFEST, load_books, score_book
-from snnformer import SNNConfig, count_params
-from snnformer.event_lm import EventLM, EventLMConfig
-from train_event_lm import scoring_logits
+from snnformer import count_params
+from snnformer.event_lm import EventLM
+from train_event_lm import load_checkpoint, scoring_logits
 from train_lm import ENWIK8_SHA1, load_splits
 
 
 _AGE_BINS = ("unseen", "1-31", "32-127", "128-511", "512+")
-
-
-def load_checkpoint(path: Path, device: torch.device):
-    """Load a training checkpoint with its original floating-point parameters."""
-    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
-    if checkpoint.get("task") != "event_lm":
-        raise ValueError(f"{path}: expected a train_event_lm.py checkpoint")
-    if checkpoint.get("model_type") == "EventLM":
-        model = EventLM(EventLMConfig(**checkpoint["cfg"]))
-    else:
-        cfg = SNNConfig(**checkpoint["cfg"])
-        options = checkpoint["model_kwargs"]
-        if cfg.attn not in ("transformer", "transformer_local") or options.get("vocab", 256) != 256:
-            raise ValueError(f"{path}: expected a byte-level full or local Transformer")
-        model = make_lm(cfg, **options)
-    model.load_state_dict(checkpoint["state_dict"])
-    return model.to(device).eval(), checkpoint
 
 
 def _prefix_ages(data, order=8):

@@ -145,6 +145,127 @@ checkpoints on 16,384,000 more enwik8 targets each. It uses
 128 warmup steps, and a peak learning rate of 0.0003.
 Each model reaches 49,152,000 cumulative targets. The SNN
 uses the same six-bit router charge and 310,000-pulse target
-as the first grown continuation. The handoff includes the
-commands and the local run status.
-[Resume the study](HANDOFF.md#pick-up-the-current-experiments)
+as the first grown continuation.
+
+| Model at 49,152,000 training targets | enwik8 bpb | PG-19 bpb | Raw PG-19 bpb | Stream state |
+|---|---:|---:|---:|---:|
+| Six-bit grown SNN | 1.89440 | 2.82683 | 2.91901 | 19,536 B |
+| Grown full-attention Transformer | 1.80629 | 3.03772 | 3.24647 | 4 MiB |
+
+The additional exposure lowered enwik8 loss by 0.06206 bits per
+byte for the SNN and 0.03637 for full attention. The gap narrowed
+from 0.11380 to 0.08811, a 22.6% reduction over this interval.
+First occurrences of eight-byte prefixes and repeats at least
+512 bytes away contribute 80.1% of the remaining gap. The
+calibrated PG-19 loss is lower for the SNN on all 16 books.
+The SNN emits 309,688 pulses per byte in the native audit.
+[Matched scores and audit](../results/event_lm/scale_6510k_data) ·
+[Exposure chart](../results/figures/event_lm_6510k_data.png) ·
+[Continuation commands](HANDOFF.md#earlier-exposure-stages)
+
+On 65,536 enwik8 validation targets, resetting the local charge
+every 512 bytes raised loss from 1.83258 to 1.84087. Muting the
+bank's correction projection raised it to 1.83320. On a
+separate 16,384-byte validation activity sample, 87.9% of
+held-charge read pulses came from cells changed in the preceding
+seven bytes. When a cell held charge and its steering count was
+zero, 96.8% of those channel steps rewrote charge.
+[State intervention](../results/event_lm/scale_6510k_data/probe_trace_s1109.json) ·
+[Charge age profile](../results/event_lm/scale_6510k_data/trace_ages_s1109.json) ·
+[Expansion experiment](EXPANSION_GROWTH.md)
+
+### 65,536,000 targets
+
+The second continuation adds 4,000 steps and 16,384,000 targets
+to each of the 49.15M checkpoints. It uses seed 2503 and retains
+the window length, batch size, learning rate, and warmup.
+
+| Model at 65,536,000 training targets | enwik8 bpb | PG-19 bpb | Raw PG-19 bpb | Stream state |
+|---|---:|---:|---:|---:|
+| Six-bit grown SNN | 1.86525 | 2.81231 | 2.90664 | 19,536 B |
+| Grown full-attention Transformer | 1.77728 | 2.98071 | 3.18604 | 4 MiB |
+
+The SNN gained 0.02914 bits per byte on enwik8 and full attention
+gained 0.02901. The gap is 0.08798, close to 0.08811 at 49.15M.
+First occurrences of eight-byte prefixes and repeats at least 512
+bytes apart account for 78.6% of the gap. On PG-19 the calibrated
+SNN loss is lower on all 16 books. The SNN emits 308,230 pulses per
+byte in the native audit. Both continuations use one seed per stage.
+[Paired held-out scores and audits](../results/event_lm/scale_6510k_next_data) ·
+[Prefix age chart](../results/figures/event_lm_65536_prefix_age.png)
+
+On the same 65,536-target validation sample used at 49.15M, replacing
+input-dependent inhibition with per-block constants raised loss from
+1.79955 to 1.84712. Resetting the held charge every 512 bytes raised
+it to 1.80872, and muting bank correction spikes raised it to 1.79993.
+On 16,384 validation bytes, 87.5% of held-charge read pulses came from
+cells that had changed within seven bytes.
+[SNN state interventions](../results/event_lm/scale_6510k_next_data/probe_trace_s2503.json) ·
+[Held-charge activity](../results/event_lm/scale_6510k_next_data/trace_ages_s2503.json)
+
+```bash
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh scale-data-snn
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh scale-data-transformer
+```
+
+Run the two validation diagnostics against the archived 65.54M SNN.
+
+```bash
+export PYTORCH_ENABLE_MPS_FALLBACK=0
+mkdir -p checkpoints/work
+snn=checkpoints/scale-6510k-next-data-study/trace_s2503.pt
+python experiments/probe_event_state.py --enwik8 data/enwik8 --checkpoint "$snn" \
+  --device mps --chunk-size 512 --targets 65536 --json checkpoints/work/probe_trace_s2503.json
+python experiments/profile_charge_trace.py --enwik8 data/enwik8 --checkpoint "$snn" \
+  --split validation --bytes 16384 --json checkpoints/work/trace_ages_s2503.json
+```
+
+## Double the residual stream at fixed persistent state
+
+The next width comparison grows the SNN's residual population
+from 768 to 1,536. Its signed content and steering populations
+retain their existing widths and delay allocations. The SNN
+has 13,028,352 trainable parameters and uses 19,536 stream
+bytes. On the 49.15M checkpoint, the initializer preserved
+every output count and all 1,293,067,588 emitted pulses over
+4,096 validation bytes. The widened model also completed three
+training batches on Metal.
+[SNN warm start and training smoke](../results/event_lm/residual_growth_13030k)
+
+The Transformer grows its feed-forward width from 1,756 to
+3,877, for 13,028,864 parameters. Its warm logits matched on
+eight 512-byte Metal validation windows, and the added output
+weights received gradients in all four blocks.
+[Transformer warm start](../results/event_lm/residual_growth_13030k/warm_transformer.json)
+
+The full comparison starts from the completed 65.54M pair
+and also continues the original-width SNN. Each arm uses
+seed 3307, 1,600 steps, 512-byte windows, and 6,553,600
+additional targets, for 72,089,600 targets per model. The v5
+archive contains both starting checkpoints. The launcher defaults
+to Metal.
+
+Widening the archived SNN preserved every output count and all
+1,288,006,522 emitted pulses on 4,096 validation bytes. All seven
+blocks received gradients in the new residual projections. The
+archived Transformer also preserved its logits and gave the new
+feed-forward outputs gradients in all four blocks.
+[65.54M SNN warm start](../results/event_lm/residual_growth_13030k/warm_residual_65m.json) ·
+[65.54M Transformer warm start](../results/event_lm/residual_growth_13030k/warm_transformer_65m.json)
+
+```bash
+export PYTORCH_ENABLE_MPS_FALLBACK=0
+mkdir -p checkpoints/work
+python experiments/audit_residual_growth.py --enwik8 data/enwik8 --device mps \
+  --parent checkpoints/scale-6510k-next-data-study/trace_s2503.pt --dim 1536 \
+  --json checkpoints/work/warm_residual_65m.json
+python experiments/audit_growth_gradients.py transformer --enwik8 data/enwik8 --device mps \
+  --checkpoint checkpoints/scale-6510k-next-data-study/transformer_s2503.pt \
+  --mlp-ratio 22.716796875 --seed 3307 --json checkpoints/work/warm_transformer_65m.json
+```
+
+```bash
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-snn
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-transformer
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-control
+```

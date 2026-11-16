@@ -19,10 +19,13 @@ RELEASES = {
     "v2": ("spiking-byte-lm-v2", "spiking-byte-lm-v2-checkpoints"),
     "v3": ("spiking-byte-lm-v3", "spiking-byte-lm-v3-checkpoints"),
     "v4": ("spiking-byte-lm-v4", "spiking-byte-lm-v4-checkpoints"),
+    "v5": ("spiking-byte-lm-v5", "spiking-byte-lm-v5-checkpoints"),
 }
 DEPTH_REFERENCE = "depth-inhibition-study/trace_s0.pt"
 CONTINUATION_REFERENCE = "long-context-continuation/trace_ctx2048_s711.pt"
 FINE_CHARGE_REFERENCE = "grown-fine-charge-study/fine_s711.pt"
+EXPOSURE_REFERENCE = "scale-6510k-next-data-study/trace_s2503.pt"
+V4_CATALOGS = ("continuation_checkpoints.sha256", "v4_checkpoints.sha256")
 
 
 def sha256(path):
@@ -153,6 +156,12 @@ def collect_catalog_release(directory, catalogs, reference, audit_path):
             if parent_digest != parent["sha256"]:
                 raise ValueError(f"parent checkpoint is missing or has the wrong hash: {parent_path}")
             entry["parent"] = parent_path
+        teacher = record.get("teacher")
+        if teacher:
+            teacher_path = teacher["checkpoint"]
+            if hashes.get(teacher_path) != teacher["sha256"]:
+                raise ValueError(f"teacher checkpoint is missing or has the wrong hash: {teacher_path}")
+            entry["teacher"] = teacher_path
         entries[name] = entry
 
     source = f"checkpoints/{reference}"
@@ -201,16 +210,21 @@ def main():
                 args.checkpoint_dir, ("continuation_checkpoints.sha256",), CONTINUATION_REFERENCE,
                 "long_context_continuation/native_trace_ctx2048_s711.json",
             )
+        elif args.release == "v4":
+            entries, candidate, measured = collect_catalog_release(
+                args.checkpoint_dir, V4_CATALOGS, FINE_CHARGE_REFERENCE, "grown_fine_charge/native_fine_s711.json",
+            )
         else:
             entries, candidate, measured = collect_catalog_release(
-                args.checkpoint_dir, ("continuation_checkpoints.sha256", "v4_checkpoints.sha256"),
-                FINE_CHARGE_REFERENCE, "grown_fine_charge/native_fine_s711.json",
+                args.checkpoint_dir, (*V4_CATALOGS, "v5_checkpoints.sha256"),
+                EXPOSURE_REFERENCE, "scale_6510k_next_data/native_trace_s2503.json",
             )
         val_bpb, name, training, record_path = candidate
         args.release_dir.mkdir(parents=True, exist_ok=True)
         model_dir.mkdir(parents=True, exist_ok=True)
         bundle = args.release_dir / f"{archive_stem}.tar.gz"
-        checksum_path = f"checkpoints/SHA256SUMS-{args.release}" if args.release in ("v3", "v4") else "checkpoints/SHA256SUMS"
+        checksum_path = (f"checkpoints/SHA256SUMS-{args.release}" if args.release in ("v3", "v4", "v5")
+                         else "checkpoints/SHA256SUMS")
         write_archive(args.checkpoint_dir, entries, bundle, checksum_path)
         bundle_sha256 = sha256(bundle)
         (args.release_dir / f"{archive_stem}.sha256").write_text(
@@ -230,7 +244,7 @@ def main():
             "archive": {"file": bundle.name, "sha256": bundle_sha256, "bytes": bundle.stat().st_size},
             "checkpoints": dict(sorted(entries.items())),
         }
-        if args.release in ("v3", "v4"):
+        if args.release in ("v3", "v4", "v5"):
             manifest["model"]["cumulative_training_targets"] = (
                 training["train_target_bytes"] + training["initialization"]["training_targets"]
             )

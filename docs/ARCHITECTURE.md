@@ -1,6 +1,6 @@
 # ShuntFormer — design notes
 
-The [v2 model card](../models/spiking-byte-lm-v2/README.md) describes the
+The [v5 model card](../models/spiking-byte-lm-v5/README.md) describes the
 current integer byte decoder. This page documents the original
 competitive-shunting attention architecture.
 

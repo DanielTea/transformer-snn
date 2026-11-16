@@ -15,7 +15,7 @@ from torch.utils._pytree import tree_leaves
 from benchmark_decode import state_bytes
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
-from snnformer.event_lm import EventLMConfig, _IntegrateFire, _PACKET_TICKS
+from snnformer.event_lm import EventLMConfig, _delay_group_widths, _IntegrateFire, _PACKET_TICKS
 from train_lm import ENWIK8_SHA1, load_splits
 
 
@@ -82,10 +82,14 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
                 populations[f"block_{index}_steering"] = block.steer
             if block.activity_inhibition is not None:
                 populations[f"block_{index}_inhibition"] = block.activity_inhibition
+            if block.inhibition_redistribution is not None:
+                populations[f"block_{index}_inhibition_transfer"] = block.inhibition_redistribution.emit
             if block.opponent_steering is not None:
                 populations[f"block_{index}_write_protection"] = block.opponent_steering.emit
             if integer.cfg.trace_read_veto:
                 populations[f"block_{index}_trace_read_veto"] = block.trace.read_veto.emit
+            if integer.cfg.trace_write_confirm:
+                populations[f"block_{index}_trace_write_confirm"] = block.trace.write_confirm.emit
         for name, module in populations.items():
             handles.append(module.register_forward_hook(
                 lambda _module, _inputs, spikes, label=name: activity.__setitem__(label, spikes),
@@ -158,6 +162,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
         ]
     if integer.cfg.trace_read_veto:
         row["trace_read_veto_gain_ticks"] = [block.trace.read_veto.gains().tolist() for block in integer.blocks]
+    if integer.cfg.trace_write_confirm:
+        row["trace_write_confirm_gain_ticks"] = [block.trace.write_confirm.gains().tolist() for block in integer.blocks]
     if integer.cfg.spread_coincidence:
         row["spread_coincidence_mix_ticks"] = [
             block.spread_coincidence.mix_ticks().tolist() for block in integer.blocks
@@ -175,12 +181,25 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
                 "mean": per_byte.mean().item(),
                 "p05_p50_p95": per_byte.quantile(quantiles).tolist(),
             }
-        prior_width = (checkpoint.get("initialization") or {}).get("residual_width_before")
+        initialization = checkpoint.get("initialization") or {}
+        prior_width = initialization.get("residual_width_before")
         if prior_width is not None:
             row["added_residual_pulses_per_byte"] = {
                 name: activity[name][..., prior_width:].abs().sum(dtype=torch.int64).item() / tokens.numel()
                 for name in ("input", *(f"block_{index}_residual" for index in range(len(integer.blocks))))
             }
+        prior_expansion = initialization.get("expansion_width_before")
+        if prior_expansion is not None:
+            added = {}
+            for index, block in enumerate(integer.blocks):
+                previous = _delay_group_widths(prior_expansion, len(block.widths))
+                for population in ("content", "steering"):
+                    name = f"block_{index}_{population}"
+                    groups = activity[name].split(block.widths, dim=-1)
+                    pulses = sum(group[..., old:].abs().sum(dtype=torch.int64).item()
+                                 for group, old in zip(groups, previous, strict=True))
+                    added[name] = pulses / tokens.numel()
+            row["added_expansion_pulses_per_byte"] = added
         if integer.cfg.route in ("steered", "steered_correction_code"):
             clock = 1 << (2 * integer.cfg.resolution - 1).bit_length()
             fractions = []

@@ -1,6 +1,6 @@
 # ShuntFormer
 
-ShuntFormer v4 is a seven-block spiking byte language model with
+ShuntFormer v5 is a seven-block spiking byte language model with
 **6,514,176 learned parameters** and **19,536 bytes of persistent
 tensor state** per stream. Its integer CPU decoder maps byte events to
 signed vocabulary spike counts. A shared inhibitory pool regulates
@@ -8,7 +8,7 @@ firing, steering spikes route charge through fixed axons and local
 memory, and an error bank checks learned context tags before delivering
 correction spikes.
 
-![Held-out loss for the grown spiking and full-attention models](results/figures/event_lm_grown_6510k.png)
+![Held-out loss as the SNN and Transformer train on more enwik8 bytes](results/figures/event_lm_6510k_data.png)
 
 ## Run the model
 
@@ -19,50 +19,53 @@ the reference weights. Greedy generation runs on CPU.
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python experiments/generate_event_lm.py models/spiking-byte-lm-v4/weights.pt \
+python experiments/generate_event_lm.py models/spiking-byte-lm-v5/weights.pt \
   --prompt 'The first chapter' --bytes 128
 ```
 
 | Where to start | What it contains |
 |---|---|
-| [v4 model card](models/spiking-byte-lm-v4/README.md) | Circuit diagram, firing and memory rules, training configuration, and the stream state layout |
+| [v5 model card](models/spiking-byte-lm-v5/README.md) | Circuit diagram, firing and memory rules, training configuration, and the stream state layout |
 | [Research handoff](docs/HANDOFF.md) | Dataset checksums, checkpoint restore, exact replay commands, and the next runs |
 | [Ranked results](docs/LEADERBOARD.md) and [browser report](docs/report.html#spiking-byte-lm) | Matched comparisons, raw and calibrated loss, pulse counts, and charts |
-| [Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v4) and [manifest](models/spiking-byte-lm-v4/manifest.json) | Reference weights, variants, Transformer baselines, parents, and SHA-256 digests |
+| [Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v5) and [manifest](models/spiking-byte-lm-v5/manifest.json) | Reference weights, variants, Transformer baselines, parents, and SHA-256 digests |
 
 ## Current benchmark
 
-The models continued from their respective trained 3.26M parents. Each
-saw **32,768,000 cumulative enwik8 training targets** with 512-byte
-windows and continuation seed 711. Scores are bits per byte on the
-full enwik8 test split and 16 pinned PG-19 test books. PG-19 temperatures
-are fitted on eight separate books.
+The two 6.51M models each saw **65,536,000 cumulative enwik8 training
+targets** in 512-byte windows, with seed 2503 for the final continuation.
+Scores are bits per byte on the full enwik8 test split and 16 pinned
+PG-19 test books. PG-19 temperatures are fitted on eight separate books.
 
 <!-- event-lm-leaderboard:start -->
 
 | Model | enwik8 | PG-19 | State |
 |---|---:|---:|---:|
-| Grown SNN, finer charge | 1.95110 | **2.85083** | 19,536 B |
-| Grown SNN, six-bit charge | 1.95646 | 2.86904 | 19,536 B |
-| Grown full-attention Transformer | **1.84266** | 3.06318 | 4 MiB |
+| Six-bit grown SNN | 1.86525 | **2.81231** | 19,536 B |
+| Grown full-attention Transformer | **1.77728** | 2.98071 | 4 MiB |
 
 <!-- event-lm-leaderboard:end -->
 
-The bundled finer-charge SNN scored lower than the matched
-Transformer on all 16 PG-19 books. The Transformer led on enwik8.
-The width-growth comparison uses one continuation seed. Pulse counts measure
-emitted spikes on a fixed text sample. Stream state excludes weights
-and temporary workspace.
-[Per-book scores and growth ablation](docs/GROWN_RESIDUAL.md) ·
+The bundled SNN leads on all 16 PG-19 books. Full attention leads
+on enwik8 by 0.08798 bits per byte. The comparison uses one
+continuation seed. The state column measures persistent tensors
+per stream.
+[Per-book scores and native pulse audit](results/event_lm/scale_6510k_next_data) ·
 [Evaluation protocol](docs/HANDOFF.md#score-checkpoints)
 
 ## Continue the research
 
-The [handoff](docs/HANDOFF.md#experiment-status) points to the finished
-runs and the next commands. The [three-way coincidence experiment](docs/TRACE_COINCIDENCE.md)
-uses current content, steering, and pre-write charge to choose the
-route into newly added residual neurons. Its warm-start parity and
-training smoke are recorded.
+The next comparison widens the residual stream from 768 to 1,536
+while holding the SNN's persistent state at 19,536 bytes. The handoff
+includes exact commands for that run, the matched Transformer, and
+the original-width control. The expansion, write confirmation, and
+inhibition studies include native audits and interventions on learned
+circuits.
+[Resume the 13.03M comparison](docs/HANDOFF.md#resume-the-1303m-comparison) ·
+[Training exposure](docs/GROWN_RESIDUAL.md#extend-training-exposure) ·
+[Expansion study](docs/EXPANSION_GROWTH.md) ·
+[Write confirmation](docs/TRACE_WRITE_CONFIRM.md) ·
+[Inhibition study](docs/INHIBITION_REDISTRIBUTION.md)
 
 Regenerate the leaderboards and figures from the checked-in results.
 

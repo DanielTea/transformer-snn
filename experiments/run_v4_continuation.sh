@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# Run a continuation from the v4 handoff and score the resulting checkpoint.
+# Train and score a continuation from the held-charge studies.
 set -euo pipefail
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
-  echo "Usage: bash experiments/run_v4_continuation.sh {trace-coincidence|extend-snn|extend-transformer} [output-dir]" >&2
+  echo "Usage: bash experiments/run_v4_continuation.sh STUDY [output-dir]" >&2
+  echo "Studies: trace-coincidence trace-write-confirm extend-snn extend-transformer" >&2
+  echo "         expansion-snn expansion-transformer expansion-control expansion-steering" >&2
+  echo "         scale-data-snn scale-data-transformer" >&2
+  echo "         residual-growth-snn residual-growth-transformer residual-growth-control" >&2
+  echo "         redistribute-inhibition teacher-guidance" >&2
   exit 2
 fi
 
@@ -38,6 +43,62 @@ case "$study" in
       --initialize-from checkpoints/grown-6510k-residual-study/transformer_s711.pt)
     name=transformer_s1109
     ;;
+  scale-data-snn)
+    training+=("${spiking[@]}" --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
+    name=trace_s2503
+    ;;
+  scale-data-transformer)
+    training+=(--variant transformer --dim 256 --depth 4 --heads 4 --mlp-ratio 10.2890625
+      --initialize-from checkpoints/scale-6510k-data-study/transformer_s1109.pt)
+    name=transformer_s2503
+    ;;
+  residual-growth-snn)
+    training+=("${spiking[@]}" --dim 1536 --grow-residual
+      --initialize-from checkpoints/scale-6510k-next-data-study/trace_s2503.pt)
+    name=residual_s3307
+    ;;
+  residual-growth-transformer)
+    training+=(--variant transformer --dim 256 --depth 4 --heads 4 --mlp-ratio 22.716796875
+      --grow-feed-forward --initialize-from checkpoints/scale-6510k-next-data-study/transformer_s2503.pt)
+    name=transformer_s3307
+    ;;
+  residual-growth-control)
+    training+=("${spiking[@]}" --initialize-from checkpoints/scale-6510k-next-data-study/trace_s2503.pt)
+    name=control_s3307
+    ;;
+  expansion-snn|expansion-steering)
+    training+=("${spiking[@]}" --hidden 256 --grow-expansion
+      --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
+    name=expanded_s1801
+    if [[ $study == expansion-steering ]]; then
+      training+=(--steering-gradient-at-zero)
+      name=expanded_steering_s1801
+    fi
+    ;;
+  expansion-transformer)
+    training+=(--variant transformer --dim 256 --depth 4 --heads 4 --mlp-ratio 14.537109375
+      --grow-feed-forward --initialize-from checkpoints/scale-6510k-data-study/transformer_s1109.pt)
+    name=transformer_s1801
+    ;;
+  expansion-control)
+    training+=("${spiking[@]}" --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
+    name=control_s1801
+    ;;
+  trace-write-confirm)
+    training+=("${spiking[@]}" --trace-write-confirm
+      --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
+    name=confirm_s1801
+    ;;
+  redistribute-inhibition)
+    training+=("${spiking[@]}" --redistribute-inhibition
+      --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
+    name=inhibition_s1801
+    ;;
+  teacher-guidance)
+    training+=("${spiking[@]}" --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt
+      --teacher-checkpoint checkpoints/scale-6510k-data-study/transformer_s1109.pt)
+    name=guided_s1801
+    ;;
   *)
     echo "Unknown continuation: $study" >&2
     exit 2
@@ -47,6 +108,22 @@ esac
 if [[ $study == extend-* ]]; then
   training+=(--steps 4000 --warmup 128 --lr 0.0003 --seed 1109 --eval-every 400
     --tag scale_6510k_49152k_targets)
+elif [[ $study == scale-data-* ]]; then
+  training+=(--steps 4000 --warmup 128 --lr 0.0003 --seed 2503 --eval-every 400
+    --tag scale_6510k_65536k_targets)
+elif [[ $study == residual-growth-* ]]; then
+  training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
+    --tag "scale_13030k_residual_${study#residual-growth-}")
+elif [[ $study == expansion-* || $study == trace-write-confirm || $study == redistribute-inhibition ||
+        $study == teacher-guidance ]]; then
+  case "$study" in
+    expansion-*) tag="scale_8740k_expansion_${study#expansion-}" ;;
+    trace-write-confirm) tag=scale_6510k_trace_write_confirm ;;
+    redistribute-inhibition) tag=scale_6510k_redistribute_inhibition ;;
+    teacher-guidance) tag=scale_6510k_teacher_guidance ;;
+  esac
+  training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 1801 --eval-every 200
+    --tag "$tag")
 fi
 
 checkpoint="$output_dir/$name.pt"
@@ -54,26 +131,44 @@ records="$output_dir/results"
 mkdir -p "$records"
 "$python_exe" -u experiments/train_event_lm.py "${training[@]}" \
   --results-dir "$records" --checkpoint "$checkpoint"
+if [[ ! -f $checkpoint ]]; then
+  printf 'Missing checkpoint %s. Restore it or use a fresh output directory.\n' "$checkpoint" >&2
+  exit 1
+fi
+
+run_report() {
+  local destination=$1
+  shift
+  if [[ -f $destination ]]; then
+    printf 'skip %s (exists)\n' "$destination"
+  else
+    "$@" --json "$destination"
+  fi
+}
 
 context=8192
-if [[ $study == extend-transformer ]]; then
+if [[ $study == *-transformer ]]; then
   context=256
 fi
 score=("$python_exe" -u experiments/eval_event_lm.py --device "$device"
   --context "$context" --history 256 --batch-size 8 --checkpoint "$checkpoint")
-"${score[@]}" --enwik8 data/enwik8 --json "$records/enwik8_$name.json"
-"${score[@]}" --books-dir data/pg19-test \
+run_report "$records/enwik8_$name.json" "${score[@]}" --enwik8 data/enwik8
+run_report "$records/pg19_$name.json" "${score[@]}" --books-dir data/pg19-test \
   --manifest results/event_lm/correction_pg19_full_book_manifest.json \
   --calibration-books data/pg19-validation \
   --calibration-manifest results/event_lm/correction_pg19_validation_manifest.json \
-  --temperatures 0.8 1.0 1.15 1.25 1.4 1.5 1.65 1.8 2.0 2.25 \
-  --json "$records/pg19_$name.json"
+  --temperatures 0.8 1.0 1.15 1.25 1.4 1.5 1.65 1.8 2.0 2.25
 
-if [[ $study != extend-transformer ]]; then
-  "$python_exe" -u experiments/audit_spike_code.py --device "$device" --split test \
-    --enwik8 data/enwik8 --activity-profile --checkpoint "$checkpoint" --json "$records/native_$name.json"
+if [[ $study != *-transformer ]]; then
+  run_report "$records/native_$name.json" "$python_exe" -u experiments/audit_spike_code.py \
+    --device "$device" --split test --enwik8 data/enwik8 --activity-profile --checkpoint "$checkpoint"
 fi
-if [[ $study == trace-coincidence ]]; then
-  "$python_exe" -u experiments/probe_event_state.py --device "$device" --enwik8 data/enwik8 \
-    --chunk-size 512 --targets 65536 --checkpoint "$checkpoint" --json "$records/probe_$name.json"
+if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == redistribute-inhibition ||
+      $study == expansion-snn || $study == expansion-steering || $study == residual-growth-snn ]]; then
+  run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
+    --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"
+fi
+if [[ $study == trace-write-confirm ]]; then
+  run_report "$records/trace_ages_$name.json" "$python_exe" -u experiments/profile_charge_trace.py \
+    --split validation --bytes 16384 --enwik8 data/enwik8 --checkpoint "$checkpoint"
 fi
