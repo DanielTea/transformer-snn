@@ -39,6 +39,7 @@ _STEERED_ROUTES = (
     *_CORRECTION_ROUTES, *_PREDICTION_ROUTES, *_PHASE_ROUTES, *_DELAY_ROUTES,
 )
 _TRACE_READ_DRIVE_SOURCES = ("write", "present", "write-rails", "present-rails")
+_TRACE_ARRIVAL_MODES = ("selected", "unmatched")
 
 
 def _delay_group_widths(channels, groups):
@@ -102,12 +103,18 @@ class EventLMConfig:
     trace_read_drive_bits: int = _CHARGE_BITS
     trace_read_drive_carry: bool = False
     trace_read_share_steering: bool = False
+    trace_arrival: str | None = None
+    trace_arrival_groups: int = 2
 
     @property
     def group_widths(self) -> tuple[int, ...]:
         if self.delay_group_widths is not None:
             return tuple(self.delay_group_widths)
         return _delay_group_widths(self.hidden, len(_STEERED_DELAYS[0]))
+
+    @property
+    def trace_arrival_width(self) -> int:
+        return sum(self.group_widths[:self.trace_arrival_groups]) if self.trace_arrival is not None else 0
 
     @property
     def inhibition_bits(self) -> int:
@@ -1211,6 +1218,10 @@ class _DelayBlock(nn.Module):
                                         quanta_per_threshold=quanta_per_threshold)
         self.project = _Synapse((4 if self.steered else 3) * cfg.hidden, cfg.dim, gain=0.65,
                                 continuous=cfg.continuous, charge_bits=bits)
+        self.trace_arrival = cfg.trace_arrival
+        self.arrival_width = cfg.trace_arrival_width
+        self.arrival_project = (_Synapse(self.arrival_width, cfg.dim, gain=0.0, charge_bits=bits)
+                                if self.trace_arrival is not None else None)
         output_bits = bits + (_PACKET_BITS if self.packet_thresholds is not None else 0)
         self.residual_membrane = cfg.residual_membrane
         if self.residual_membrane:
@@ -1337,6 +1348,7 @@ class _DelayBlock(nn.Module):
             switch = (start + 1) * (steering > 0)
             delayed = delayed + switch * (alternate - delayed)
             start = None
+        arrival = None
         if not self.steered:
             routes = (present, *_route_packets(present, delayed, self.route))
         elif departure is not None:
@@ -1349,8 +1361,13 @@ class _DelayBlock(nn.Module):
             correction = self.delay_correction(selected, replacement)
             routes = _steer_packet(present, steering) + (selected + correction, bypass)
         elif coincidence_read is not None:
-            _, bypass = _steer_packet(delayed, steering)
+            selected, bypass = _steer_packet(delayed, steering)
             routes = _steer_packet(present, steering) + (coincidence_read, bypass)
+            if self.arrival_project is not None:
+                arrival = selected[..., :self.arrival_width]
+                if self.trace_arrival == "unmatched":
+                    held = coincidence_read[..., :self.arrival_width]
+                    _, arrival = _route_packets(held, arrival, "coincidence")
         elif self.balanced:
             routes = _balanced_steer(present, steering) + _balanced_steer(delayed, steering)
         else:
@@ -1381,6 +1398,10 @@ class _DelayBlock(nn.Module):
             conditioned = F.linear(torch.cat(trace_routes, dim=-1), weights[boundary:])
             projected = torch.cat((standard, conditioned), dim=-1)
         current = residual * self.emit.threshold + projected
+        if arrival is not None:
+            if quanta is not None:
+                arrival = arrival * quanta[:self.arrival_width]
+            current = current + self.arrival_project(arrival)
         if self.memory_residual is not None:
             current = current + self.memory_residual(recall)
         return current
@@ -1635,6 +1656,13 @@ class EventLM(nn.Module):
             raise ValueError("local traces need compact fixed delays and reset-per-byte spike routing")
         if cfg.trace_tap_read is not None and (cfg.trace_tap_read not in ("fixed", "race") or not cfg.local_trace):
             raise ValueError("trace tap reads need a local trace and a fixed or race selector")
+        if cfg.trace_arrival is not None and (
+            cfg.trace_arrival not in _TRACE_ARRIVAL_MODES or not cfg.local_trace or cfg.trace_tap_read is not None
+        ):
+            raise ValueError("arrival projections need a held trace and the scheduled fixed-delay packet")
+        if (not isinstance(cfg.trace_arrival_groups, int)
+                or not 1 <= cfg.trace_arrival_groups <= len(_STEERED_DELAYS[0])):
+            raise ValueError("trace arrival groups must select a nonempty prefix of the fixed delay groups")
         if cfg.compact_trace_state and not cfg.local_trace:
             raise ValueError("compact trace state needs a local charge trace")
         if cfg.steering_transfer is not None and (
@@ -1717,7 +1745,7 @@ class EventLM(nn.Module):
                 raise ValueError("output reference needs a reset-per-byte spike router")
             if _VOCAB * output_cap * (1 << output_bits) > _FP32_EXACT:
                 raise ValueError("pooled output charge would exceed the exact FP32 integer range")
-        projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden
+        projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden + cfg.trace_arrival_width
         cap = _HIDDEN_CAP * cfg.resolution
         if cfg.trace_read_drive is not None:
             source_cap = 3 if cfg.trace_integration and cfg.trace_read_drive.startswith("write") else 2
@@ -1833,6 +1861,8 @@ class EventLM(nn.Module):
                               for weight in block.steering_transfer.weights if weight.shape[0])
             packet_units = _PACKET_UNITS if block.packet_thresholds is not None else 1
             projected = row_sums(block.project) * packet_units + block.emit.threshold
+            if block.arrival_project is not None:
+                projected = projected + row_sums(block.arrival_project) * packet_units
             if block.correction is not None:
                 bounds.append(row_sums(block.correction.encode).amax())
             if block.memory_residual is not None:
@@ -2045,6 +2075,11 @@ class EventLM(nn.Module):
             projection.index_copy_(1, projection_columns, previous[projection_name].to(projection))
             widened[expansion_name] = expansion
             widened[projection_name] = projection
+            if block.arrival_project is not None:
+                name = f"blocks.{index}.arrival_project.weight"
+                arrival = torch.zeros_like(weights[name])
+                arrival.index_copy_(1, retained[:prior.trace_arrival_width], previous[name].to(arrival))
+                widened[name] = arrival
             if block.opponent_steering is not None:
                 name = f"blocks.{index}.opponent_steering.weight"
                 opponent = torch.zeros_like(weights[name])
@@ -2088,8 +2123,9 @@ class EventLM(nn.Module):
         if self.cfg.router_charge_bits <= prior_bits:
             raise ValueError("preserving router charge requires a finer target grid")
         for block in self.blocks:
-            for synapse in (block.expand, block.project):
-                synapse.weight.copy_(_weights_on_charge_grid(synapse.weight, prior_bits))
+            for synapse in (block.expand, block.project, block.arrival_project):
+                if synapse is not None:
+                    synapse.weight.copy_(_weights_on_charge_grid(synapse.weight, prior_bits))
 
     @torch.no_grad()
     def to_integer(self):

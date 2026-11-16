@@ -1381,3 +1381,47 @@ def test_delay_filter_warm_start_and_streaming_parity():
     second, chunk = native.forward_chunk(tokens[:, 3:21], chunk)
     third, _ = native.forward_chunk(tokens[:, 21:], chunk)
     torch.testing.assert_close(torch.cat((first, second, third), dim=1), expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [("selected", [5, -5, -5, 0]), ("unmatched", [3, 0, -5, 0])],
+)
+def test_arrival_projection_keeps_unmatched_spikes_on_the_arrival_rail(mode, expected):
+    cfg = EventLMConfig(dim=4, hidden=8, depth=1, route="steered", carry=False,
+                        compact_delays=True, local_trace=True, trace_arrival=mode)
+    model = EventLM(cfg)
+    with torch.no_grad():
+        model.blocks[0].project.weight.zero_()
+        model.blocks[0].arrival_project.weight.copy_(torch.eye(4))
+    block = model.to_integer().blocks[0]
+    residual = torch.zeros(1, 4, dtype=torch.int32)
+    present = torch.zeros(1, 8, dtype=torch.int32)
+    delayed = torch.tensor([[7, -8, -6, 0, 9, 9, 9, 9]], dtype=torch.int32)
+    steering = torch.full_like(delayed, 5)
+    held = torch.tensor([[2, -5, 2, 3, 0, 0, 0, 0]], dtype=torch.int32)
+    current = block._current(residual, present, delayed, steering, None, coincidence_read=held)
+    torch.testing.assert_close(current, torch.tensor([expected], dtype=torch.int32) * block.emit.threshold)
+
+
+def test_unmatched_arrival_projects_the_same_counts_in_batch_chunk_and_stream():
+    torch.manual_seed(319)
+    model = EventLM(EventLMConfig(dim=13, hidden=24, depth=3, route="steered", carry=False,
+                                  compact_delays=True, compact_axon_state=True, local_trace=True,
+                                  trace_arrival="unmatched"))
+    with torch.no_grad():
+        for block in model.blocks:
+            block.arrival_project.weight.normal_(std=0.2)
+    native = model.to_integer()
+    tokens = torch.randint(0, 256, (2, 21))
+    expected = native(tokens)
+    chunks, state = [], None
+    for window in tokens.split(4, dim=1):
+        counts, state = native.forward_chunk(window, state)
+        chunks.append(counts)
+    steps, state = [], None
+    for token in tokens.unbind(1):
+        counts, state = native.step(token, state)
+        steps.append(counts)
+    torch.testing.assert_close(torch.cat(chunks, 1), expected, rtol=0, atol=0)
+    torch.testing.assert_close(torch.stack(steps, 1), expected, rtol=0, atol=0)

@@ -215,6 +215,11 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
             result["without_trace_read_sharing_bpb"] = score_with_options(
                 model, window, chunk_size, trace_read_share_steering=False,
             )
+    if model.cfg.trace_arrival is not None:
+        weights = [block.arrival_project.weight for block in model.blocks]
+        result["zero_trace_arrival_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+        alternative = "selected" if model.cfg.trace_arrival == "unmatched" else "unmatched"
+        result["swapped_trace_arrival_bpb"] = score_with_options(model, window, chunk_size, trace_arrival=alternative)
     if model.cfg.trace_tap_read is not None:
         weights = [block.trace_taps.weight for block in model.blocks]
         result["zero_tap_correction_bpb"] = score_without_synapses(model, window, chunk_size, weights)

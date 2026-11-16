@@ -153,6 +153,21 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         handles.extend(block.trace_taps.register_forward_hook(
             lambda _module, _inputs, output: tap_winners.append(output[2]),
         ) for block in integer.blocks)
+    arrival_activity = []
+    if integer.cfg.trace_arrival is not None:
+        def arrival_hook(quanta):
+            def count_arrival(_module, inputs, output):
+                counts = inputs[0]
+                if quanta is not None:
+                    counts = counts // quanta
+                arrival_activity.append((counts.abs().sum(dtype=torch.int64).item(),
+                                         output.count_nonzero().item()))
+            return count_arrival
+
+        for block in integer.blocks:
+            units = (block.packet_thresholds()[:block.arrival_width]
+                     if block.packet_thresholds is not None else None)
+            handles.append(block.arrival_project.register_forward_hook(arrival_hook(units)))
     if activity_profile:
         populations = {"input": integer.input_emit}
         for index, block in enumerate(integer.blocks):
@@ -312,6 +327,17 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["steering_transfer_active_weights_by_block"] = [
             sum(weight.count_nonzero().item() for weight in block.steering_transfer.weights)
             for block in integer.blocks
+        ]
+    if integer.cfg.trace_arrival is not None:
+        if len(arrival_activity) != len(integer.blocks):
+            raise AssertionError("the audit did not visit every arrival projection")
+        row["trace_arrival"] = integer.cfg.trace_arrival
+        row["trace_arrival_groups"] = integer.cfg.trace_arrival_groups
+        row["trace_arrival_routed_pulses_per_byte_by_block"] = [
+            count / tokens.numel() for count, _ in arrival_activity
+        ]
+        row["trace_arrival_nonzero_currents_per_byte_by_block"] = [
+            count / tokens.numel() for _, count in arrival_activity
         ]
     if integer.cfg.learn_inhibition_thresholds:
         row["inhibition_threshold_units_per_base"] = 1 << integer.cfg.inhibition_threshold_bits

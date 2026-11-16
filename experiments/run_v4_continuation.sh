@@ -23,6 +23,7 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         trace-read-drive-write-share trace-read-drive-present-share trace-read-drive-write-rails-share" >&2
   echo "         trace-read-scale-snn trace-read-scale-control-snn" >&2
   echo "         trace-read-scale-transformer trace-read-scale-control-transformer" >&2
+  echo "         trace-arrival-control trace-arrival-selected trace-arrival-unmatched trace-arrival-transformer" >&2
   exit 2
 fi
 
@@ -260,6 +261,21 @@ case "$study" in
       name=control_transformer_s9277
     fi
     ;;
+  trace-arrival-control|trace-arrival-selected|trace-arrival-unmatched)
+    training+=("${spiking[@]}" --depth 11 --hidden 243 --router-charge-bits 8 --residual-correction-start 7
+      --compact-trace-state --delay-group-widths 75,75,47,46
+      --initialize-from checkpoints/trace-read-drive-study/control_s8237.pt)
+    arm=${study#trace-arrival-}
+    if [[ $arm != control ]]; then
+      training+=(--trace-arrival "$arm" --trace-arrival-groups 2)
+    fi
+    name="${arm}_s9349"
+    ;;
+  trace-arrival-transformer)
+    training+=(--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 15.796875
+      --grow-feed-forward --initialize-from checkpoints/trace-read-drive-study/transformer_s8237.pt)
+    name=transformer_s9349
+    ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
       --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
@@ -323,6 +339,9 @@ elif [[ $study == trace-read-drive-* ]]; then
 elif [[ $study == trace-read-scale-* ]]; then
   training+=(--steps 1200 --warmup 48 --lr 0.00008 --seed 9277 --eval-every 150
     --tag "${study//-/_}")
+elif [[ $study == trace-arrival-* ]]; then
+  training+=(--steps 1200 --warmup 48 --lr 0.00008 --seed 9349 --eval-every 150
+    --tag "${study//-/_}")
 elif [[ $study == residual-growth-control-transformer ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
     --tag scale_6510k_residual_transformer_control)
@@ -352,6 +371,10 @@ mkdir -p "$records"
 if [[ ! -f $checkpoint ]]; then
   printf 'Missing checkpoint %s. Restore it or use a fresh output directory.\n' "$checkpoint" >&2
   exit 1
+fi
+
+if [[ ${SNN_TRAIN_ONLY:-0} == 1 ]]; then
+  exit 0
 fi
 
 run_report() {
@@ -388,6 +411,7 @@ if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == 
       $study == trace-group-thresholds || $study == trace-fine-group-thresholds || $study == trace-transport-control ||
       $study == trace-tap-fixed || $study == trace-tap-race ||
       ($study == trace-read-* && $study != *transformer) ||
+      ($study == trace-arrival-* && $study != *transformer) ||
       ($study == packed-width-* && $study != *transformer) ]]; then
   run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
     --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"
