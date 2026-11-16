@@ -98,6 +98,8 @@ def main():
     growth.add_argument("--trace-write-confirm", action="store_true", help="add silent write confirmation neurons")
     growth.add_argument("--trace-integration", action="store_true", help="add silent input neurons to held charge")
     growth.add_argument("--trace-tap-read", choices=("fixed", "race"), help="add a read from an existing axon tap")
+    growth.add_argument("--trace-read-drive", choices=("write", "present"),
+                        help="add silent synapses into the held-charge read neurons")
     growth.add_argument("--redistribute-inhibition", action="store_true", help="add silent inhibitory transfers")
     growth.add_argument("--learn-inhibition-thresholds", action="store_true",
                         help="replace the common resting threshold with learned delay-group thresholds")
@@ -131,8 +133,8 @@ def main():
     if not isinstance(parent, EventLM) or not parent.cfg.local_trace:
         parser.error("the parent must be a held-charge EventLM")
     prior = parent.cfg
-    circuit_options = ("trace_write_confirm", "trace_integration", "trace_tap_read", "redistribute_inhibition",
-                       "learn_inhibition_thresholds", "tag_read_competition", "late_steering")
+    circuit_options = ("trace_write_confirm", "trace_integration", "trace_tap_read", "trace_read_drive",
+                       "redistribute_inhibition", "learn_inhibition_thresholds", "tag_read_competition", "late_steering")
     added_circuit = next((option for option in circuit_options if getattr(args, option)), None)
     if args.steering_transfer is not None:
         if (added_circuit or args.depth is not None or args.dim is not None or prior.steering_transfer is not None
@@ -201,6 +203,9 @@ def main():
     elif args.trace_tap_read is not None:
         gradient_field = "active_tap_input_gradients_on_512_train_targets"
         gradients = [block.trace_taps.weight.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.trace_read_drive is not None:
+        gradient_field = "active_trace_read_drive_gradients_on_512_train_targets"
+        gradients = [block.trace.read_drive.weight.grad.count_nonzero().item() for block in grown.blocks]
     elif args.steering_transfer is not None:
         gradient_field = "active_steering_transfer_gradients_on_512_train_targets"
         gradients = [

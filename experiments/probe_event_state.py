@@ -186,6 +186,12 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.cfg.trace_integration:
         weights = [block.trace.input.weight for block in model.blocks]
         result["zero_trace_input_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.trace_read_drive is not None:
+        weights = [block.trace.read_drive.weight for block in model.blocks]
+        result["zero_trace_read_drive_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+        other_source = "present" if model.cfg.trace_read_drive == "write" else "write"
+        result["swapped_trace_read_drive_bpb"] = score_with_options(model, window, chunk_size,
+                                                                  trace_read_drive=other_source)
     if model.cfg.trace_tap_read is not None:
         weights = [block.trace_taps.weight for block in model.blocks]
         result["zero_tap_correction_bpb"] = score_without_synapses(model, window, chunk_size, weights)

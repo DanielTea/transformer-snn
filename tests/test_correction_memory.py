@@ -8,8 +8,8 @@ from snnformer.correction_memory import (
 )
 from snnformer.event_lm import (
     EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _IntegrateFire, _OpponentSteering,
-    _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _SteeringTransfer, _TraceTapRead,
-    _steer_packet,
+    _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _SteeringTransfer,
+    _TraceReadDrive, _TraceTapRead, _steer_packet,
 )
 
 
@@ -49,6 +49,26 @@ def test_packed_trace_stores_bounded_charge_and_preserves_cross_chunk_gradients(
     read, _ = trace(torch.zeros_like(first), steering.float().unsqueeze(1), charge, None)
     read.sum().backward()
     torch.testing.assert_close(first.grad, torch.ones_like(first))
+
+
+@pytest.mark.parametrize(("source", "expected"), (("write", (3, 0, 0, -1)), ("present", (3, -1, 0, -3))))
+def test_driven_trace_read_changes_only_the_bounded_read_emission(source, expected):
+    drive = _TraceReadDrive(4, 8, source)
+    trace = _SpikeTrace(8, read_drive=drive, compact_state=True)
+    held = torch.tensor([[4, -4, 7, 1]], dtype=torch.int8)
+    present = torch.tensor([[2, 2, -3, -7]], dtype=torch.int32)
+    steering = torch.tensor([[3, 2, 0, 4]], dtype=torch.int32)
+    with torch.no_grad():
+        drive.weight.fill_(0.5)
+        drive.freeze_integer()
+        writes = []
+        read, charge = trace(present[:, None], steering[:, None], held, writes)
+        step_read, step_charge = trace.step(present, steering, held)
+    torch.testing.assert_close(read[:, 0], torch.tensor([expected], dtype=torch.int32))
+    torch.testing.assert_close(step_read, read[:, 0])
+    torch.testing.assert_close(charge, torch.tensor([[4, 0, -3, -3]], dtype=torch.int8))
+    torch.testing.assert_close(step_charge, charge)
+    assert [count.item() for count in writes] == [18]
 
 
 def test_steering_transfer_conserves_each_pair_at_its_firing_limit():

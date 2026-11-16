@@ -97,6 +97,7 @@ class EventLMConfig:
     compact_trace_state: bool = False
     steering_transfer: str | None = None
     delay_group_widths: tuple[int, ...] | None = None
+    trace_read_drive: str | None = None
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -805,11 +806,34 @@ class _TraceInput(nn.Module):
         return self.emit(immediate * present + arriving * delayed)
 
 
+class _TraceReadDrive(nn.Module):
+    """Send one more spike input to each existing held-charge read neuron."""
+
+    def __init__(self, width, cap, source):
+        super().__init__()
+        self.from_write = source == "write"
+        self.weight = nn.Parameter(torch.zeros(width))
+        self.emit = _IntegrateFire(cap, _CHARGE_BITS, False)
+
+    def weight_ticks(self):
+        return _weight_ticks(self.weight)
+
+    def freeze_integer(self):
+        if self.weight.is_floating_point():
+            self.weight = nn.Parameter(self.weight_ticks().to(torch.int32), requires_grad=False)
+
+    def forward(self, read, steering, present, correction):
+        source = correction if self.from_write else present
+        current = read * self.emit.threshold + self.weight_ticks() * source
+        limit = steering.clamp(max=self.emit.cap) * self.emit.threshold
+        return self.emit(current.clamp(-limit, limit))
+
+
 class _SpikeTrace(nn.Module):
     """A causal charge trace with interval correction and optional input spikes."""
 
     def __init__(self, cap, *, write_credit=False, veto_widths=None, confirm_widths=None, integration_width=None,
-                 compact_state=False):
+                 compact_state=False, read_drive=None):
         super().__init__()
         self.cap = cap
         self.write_credit = write_credit
@@ -817,6 +841,7 @@ class _SpikeTrace(nn.Module):
         self.read_veto = _DelayCorrection(veto_widths, cap) if veto_widths is not None else None
         self.write_confirm = _DelayCorrection(confirm_widths, cap) if confirm_widths is not None else None
         self.input = _TraceInput(integration_width, cap) if integration_width is not None else None
+        self.read_drive = read_drive
 
     def _bounds(self, present, radius, delayed_content=None):
         lower = present - radius
@@ -830,11 +855,13 @@ class _SpikeTrace(nn.Module):
             upper = upper + torch.where(difference > 0, extension, 0)
         return lower.clamp(-self.cap, self.cap), upper.clamp(-self.cap, self.cap)
 
-    def _read(self, before, change, steering):
+    def _read(self, before, change, steering, present):
         read, _ = _steer_packet(before, steering)
         if self.read_veto is not None:
             veto = self.read_veto.emit_difference(change.abs())
             _, read = _steer_packet(read, veto)
+        if self.read_drive is not None:
+            read = self.read_drive(read, steering, present, change)
         return read
 
     def _scan(self, lower, upper, initial, present, delayed_content):
@@ -860,9 +887,11 @@ class _SpikeTrace(nn.Module):
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
         moved = before if pulses is None else before + pulses
         change = after - moved
-        read = self._read(before, change, steering)
+        read = self._read(before, change, steering, present)
         if pulse_counts is not None:
-            pulse_counts.extend((change.abs().sum(), read.abs().sum()))
+            pulse_counts.append(change.abs().sum())
+            if self.read_drive is None:
+                pulse_counts.append(read.abs().sum())
         return read, self._store(after[:, -1].clone())
 
     def step(self, present, steering, before, *, write_radius=None, delayed_content=None):
@@ -874,7 +903,7 @@ class _SpikeTrace(nn.Module):
         lower, upper = self._bounds(present, radius, delayed_content)
         moved = before if self.input is None else before + self.input(present, delayed_content)
         change = interval_spikes(moved, lower, upper)
-        return self._read(before, change, steering), self._store(moved + change)
+        return self._read(before, change, steering, present), self._store(moved + change)
 
 
 class _OpponentSteering(nn.Module):
@@ -1065,9 +1094,11 @@ class _DelayBlock(nn.Module):
             veto_widths = self.widths if cfg.trace_read_veto else None
             confirm_widths = self.widths if cfg.trace_write_confirm else None
             integration_width = cfg.hidden if cfg.trace_integration else None
+            read_drive = (_TraceReadDrive(cfg.hidden, cap, cfg.trace_read_drive)
+                          if cfg.trace_read_drive is not None else None)
             self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths,
                                      confirm_widths=confirm_widths, integration_width=integration_width,
-                                     compact_state=cfg.compact_trace_state)
+                                     compact_state=cfg.compact_trace_state, read_drive=read_drive)
         self.trace_taps = (
             _TraceTapRead(self.widths, self.local_delays, cap, cfg.resolution, cfg.trace_tap_read,
                           packet_thresholds=cfg.learn_packet_thresholds)
@@ -1557,6 +1588,10 @@ class EventLM(nn.Module):
             raise ValueError("bank write credit needs a correction bank")
         if cfg.trace_read_veto and not cfg.local_trace:
             raise ValueError("trace read veto needs a local charge trace")
+        if cfg.trace_read_drive is not None and (
+            cfg.trace_read_drive not in ("write", "present") or not cfg.local_trace
+        ):
+            raise ValueError("trace read drive needs a local charge trace and write or present spikes")
         if cfg.residual_membrane and not cfg.local_trace:
             raise ValueError("residual membranes need chunkable local trace state")
         if cfg.residual_correction_start is not None and (
@@ -1608,6 +1643,10 @@ class EventLM(nn.Module):
                 raise ValueError("pooled output charge would exceed the exact FP32 integer range")
         projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden
         cap = _HIDDEN_CAP * cfg.resolution
+        if cfg.trace_read_drive is not None:
+            source_cap = 3 if cfg.trace_integration and cfg.trace_read_drive == "write" else 2
+            if cap * (_TICKS + source_cap * _WEIGHT_LIMIT) > _FP32_EXACT:
+                raise ValueError("trace read drive would exceed the exact FP32 integer range")
         if cfg.trace_tap_read is not None:
             count_scale = 2 if cfg.learn_packet_thresholds else 1
             ticks = 2 * cap * count_scale * _TICKS
@@ -1939,6 +1978,11 @@ class EventLM(nn.Module):
                 inputs = torch.zeros_like(weights[name])
                 inputs.index_copy_(1, retained, previous[name].to(inputs))
                 widened[name] = inputs
+            if block.trace.read_drive is not None:
+                name = f"blocks.{index}.trace.read_drive.weight"
+                read = torch.zeros_like(weights[name])
+                read.index_copy_(0, retained, previous[name].to(read))
+                widened[name] = read
             if block.trace_taps is not None:
                 name = f"blocks.{index}.trace_taps.weight"
                 gains = torch.zeros_like(weights[name])
@@ -1979,7 +2023,7 @@ class EventLM(nn.Module):
         for submodule in model.modules():
             if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection, _DelayFilter,
                                       _OpponentSteering, _SpreadCoincidence, _TraceInput, _TraceTapRead,
-                                      _SteeringTransfer)):
+                                      _SteeringTransfer, _TraceReadDrive)):
                 submodule.freeze_integer()
         return model
 

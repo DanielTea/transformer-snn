@@ -96,6 +96,7 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
     handles.append(integer.output.register_forward_hook(lambda *_: vocabulary_calls.append(1)))
     activity = {}
     tap_winners = []
+    read_changes = []
     verified_transfers = 0
     if integer.cfg.steering_transfer is not None:
         def check_transfers(module, inputs, output):
@@ -107,6 +108,14 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
             verified_transfers += 1
 
         handles.extend(block.steering_transfer.register_forward_hook(check_transfers) for block in integer.blocks)
+    if integer.cfg.trace_read_drive is not None:
+        def check_driven_read(_module, inputs, output):
+            base, steering = inputs[:2]
+            if (output.abs() > steering).any():
+                raise AssertionError("a driven trace read exceeded its steering aperture")
+            read_changes.append((output - base).abs().sum(dtype=torch.int64).item())
+
+        handles.extend(block.trace.read_drive.register_forward_hook(check_driven_read) for block in integer.blocks)
     if integer.cfg.trace_tap_read is not None:
         handles.extend(block.trace_taps.register_forward_hook(
             lambda _module, _inputs, output: tap_winners.append(output[2]),
@@ -135,6 +144,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 populations[f"block_{index}_trace_write_confirm"] = block.trace.write_confirm.emit
             if integer.cfg.trace_integration:
                 populations[f"block_{index}_trace_input"] = block.trace.input.emit
+            if integer.cfg.trace_read_drive is not None:
+                populations[f"block_{index}_trace_read"] = block.trace.read_drive.emit
             if integer.cfg.trace_tap_read is not None:
                 populations[f"block_{index}_tap_correction"] = block.trace_taps.emit
         for name, module in populations.items():
@@ -230,6 +241,15 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["trace_input_nonzero_weights_by_block"] = [
             block.trace.input.weight.count_nonzero().item() for block in integer.blocks
         ]
+    if integer.cfg.trace_read_drive is not None:
+        if len(read_changes) != len(integer.blocks):
+            raise AssertionError("the native audit did not check every driven read population")
+        row["trace_read_drive"] = integer.cfg.trace_read_drive
+        row["trace_read_counts_stayed_within_aperture"] = True
+        row["trace_read_drive_active_weights_by_block"] = [
+            block.trace.read_drive.weight.count_nonzero().item() for block in integer.blocks
+        ]
+        row["trace_read_changed_counts_per_byte_by_block"] = [count / tokens.numel() for count in read_changes]
     if integer.cfg.steering_transfer is not None:
         if verified_transfers != len(integer.blocks):
             raise AssertionError("the native audit did not check every steering transfer block")

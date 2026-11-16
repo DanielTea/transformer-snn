@@ -85,6 +85,7 @@ full-corpus scores, and exact training records.
 | [Held-charge inputs and group thresholds](event_lm/trace_integration) | Five matched endpoints at 91.75M targets, paired history and axon tap probes, fine-threshold offsets, and native parity |
 | [Axon tap reads](event_lm/trace_tap_read) | Four matched endpoints at 101.58M targets, warm checks, full-corpus scores, per-group winning delays, frozen-weight interventions, and packed-width parity |
 | [Packed width and steering transfers](event_lm/packed_width) | Matched 9.96M and 12.8M scores, paired validation histories, native activity, frozen interventions and integer warm starts |
+| [Held-charge reads driven by write spikes](event_lm/trace_read_drive) | Parent parity and gradient audits for the write-spike and present-spike inputs |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
 exposure, geometry, and seed. The v7 archive uses

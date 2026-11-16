@@ -18,6 +18,7 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         trace-tap-control trace-tap-fixed trace-tap-race trace-tap-transformer" >&2
   echo "         packed-width-snn packed-width-control packed-width-transformer packed-width-control-transformer" >&2
   echo "         packed-width-present-transfer packed-width-delayed-transfer packed-width-short-groups" >&2
+  echo "         trace-read-drive-control trace-read-drive-write trace-read-drive-present trace-read-drive-transformer" >&2
   exit 2
 fi
 
@@ -204,6 +205,21 @@ case "$study" in
       name=control_transformer_s7907
     fi
     ;;
+  trace-read-drive-control|trace-read-drive-write|trace-read-drive-present)
+    training+=("${spiking[@]}" --depth 11 --hidden 243 --router-charge-bits 8 --residual-correction-start 7
+      --compact-trace-state --delay-group-widths 75,75,47,46
+      --initialize-from checkpoints/packed-width-study/short_groups_s7907.pt)
+    arm=${study#trace-read-drive-}
+    if [[ $arm != control ]]; then
+      training+=(--trace-read-drive "$arm")
+    fi
+    name="${arm}_s8237"
+    ;;
+  trace-read-drive-transformer)
+    training+=(--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 14.185546875
+      --initialize-from checkpoints/packed-width-study/transformer_s7907.pt)
+    name=transformer_s8237
+    ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
       --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
@@ -260,6 +276,9 @@ elif [[ $study == trace-tap-* ]]; then
     --tag "trace_tap_${name%_s6899}")
 elif [[ $study == packed-width-* ]]; then
   training+=(--steps 2400 --warmup 96 --lr 0.0002 --seed 7907 --eval-every 300
+    --tag "${study//-/_}")
+elif [[ $study == trace-read-drive-* ]]; then
+  training+=(--steps 1200 --warmup 48 --lr 0.00008 --seed 8237 --eval-every 150
     --tag "${study//-/_}")
 elif [[ $study == residual-growth-control-transformer ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
@@ -325,6 +344,7 @@ if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == 
       $study == depth-growth-snn || $study == depth-growth-wide || $study == trace-transport ||
       $study == trace-group-thresholds || $study == trace-fine-group-thresholds || $study == trace-transport-control ||
       $study == trace-tap-fixed || $study == trace-tap-race ||
+      ($study == trace-read-drive-* && $study != *transformer) ||
       ($study == packed-width-* && $study != *transformer) ]]; then
   run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
     --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"
