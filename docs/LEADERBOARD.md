@@ -29,6 +29,13 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Seven-block held charge | 3,257,088 | 31,692 B | 1.99402 | 2 | **2.89822** | 1 | 2.98142 | 308,389 |
 | Full-attention Transformer | 3,256,832 | 4 MiB | **1.86093** | 1 | 3.05929 | 2 | 3.25745 | — |
 
+## Held-charge replication · 26,214,400 training targets per seed · seeds 0–2
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Held-charge SNN | 1,630,992 | 21,320 B | 2.00633 | 2 | **2.98979** | 1 | 3.10037 | 307,013 |
+| Full-attention Transformer | 1,630,848 | 3 MiB | **1.82812** | 1 | 3.09559 | 2 | 3.29465 | — |
+
 ![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)
 
 ![Held-out loss at both trained context lengths](../results/figures/event_lm_trained_context.png)

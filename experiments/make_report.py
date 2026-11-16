@@ -125,8 +125,7 @@ def spiking_byte_tables():
     latest = json.loads((folder / "depth_inhibition_leaderboard.json").read_text(encoding="utf-8"))
     history = json.loads((folder / "threshold_scale_leaderboard.json").read_text(encoding="utf-8"))
     groups = [
-        (f'{group["title"]} · {group["rows"][0]["training_targets"]:,} training targets · seed {group["seed"]}',
-         group["rows"])
+        (f'{group["title"]} · {group["training_summary"]}', group["rows"])
         for group in research["groups"].values()
     ]
     for scale, rows in {**latest["groups"], **history["groups"]}.items():

@@ -12,16 +12,20 @@ training target. The Transformer uses 1,630,848 parameters and
 |---|---:|---:|---:|---:|---:|
 | 0 | 2.00577 | 1.81449 | 2.98022 | 3.11725 | 16/16 |
 | 1 | 2.00508 | 1.83666 | 2.96994 | 3.08604 | 16/16 |
+| 2 | 2.00814 | 1.83322 | 3.01923 | 3.08349 | 16/16 |
+| **Mean** | **2.00633** | **1.82812** | **2.98979** | **3.09559** | — |
 
 PG-19 scores use temperatures fitted on eight separate
-validation books. Seed 1's raw losses were 3.07107 bits per
-byte for held charge and 3.24554 for full attention. Its native
-audit measured 306,660 pulses per byte and exact CPU, MPS,
-single-byte, and chunked decoding within the audited samples.
-[Seed-0 scores](../results/event_lm/depth_inhibition) ·
-[Seed-1 Transformer scores](../results/event_lm/depth_inhibition_replication) ·
-[Seed-1 held-charge records](../results/event_lm/held_charge_replication)
+validation books. The SNN led on each of the same 16 books in
+all three seeds. At the raw output scale, average PG-19 loss was
+3.10037 for held charge and 3.29465 for full attention. Full
+attention led on enwik8 in each seed.
 
-The seed-2 SNN was training at release time. The seed-2
-Transformer checkpoint and scores are included for the paired
-comparison. [Checkpoint inventory](../models/spiking-byte-lm-v3/manifest.json)
+The native SNN audits counted 308,178, 306,660 and 306,200
+pulses per byte across the three seeds. The audited CPU, MPS,
+single-byte, and chunked spike counts matched. All six checkpoints
+are included in the release.
+[Seed-0 scores](../results/event_lm/depth_inhibition) ·
+[Transformer scores for seeds 1 and 2](../results/event_lm/depth_inhibition_replication) ·
+[Held-charge records for seeds 1 and 2](../results/event_lm/held_charge_replication) ·
+[Checkpoint inventory](../models/spiking-byte-lm-v3/manifest.json)

@@ -166,7 +166,7 @@ of targets, and model path used for each run.
 | Experiment | State at handoff | Evidence |
 |---|---|---|
 | Original held charge and inhibition | Depth controls and inhibition-only replication complete | [Depth study](DEPTH_INHIBITION.md) |
-| Held-charge replication | Seeds 0 and 1 scored and audited. Seed 2 is in progress locally. | [Per-seed results](HELD_CHARGE_REPLICATION.md) |
+| Held-charge replication | Seeds 0–2 scored and audited | [Per-seed results](HELD_CHARGE_REPLICATION.md) |
 | Opponent steering | 512-byte continuation and matched held-charge control scored and audited | [Circuit and intervention](OPPONENT_STEERING.md) |
 | Chronological write credit | Matched continuation and forward/backward timing complete | [Training rule and timing](TRACE_WRITE_CREDIT.md) |
 | Read veto | Matched continuation and gain-zeroing probe complete | [Circuit and intervention](TRACE_READ_VETO.md) |
@@ -174,35 +174,30 @@ of targets, and model path used for each run.
 | 2,048-byte continuations | Both models scored on both corpora, and the SNN passed the integer audit | [Context comparison](CONTEXT_LENGTH.md) |
 | Seven-block scaling study | Matched 3.26M runs and integer audit | [Scale comparison](SCALE_3260K.md) |
 
-The most direct open run is the held-charge seed-2 comparison.
-Once it finishes, score it with the SNN commands above and match
-it against the archived seed-2 Transformer at 512 bytes. The
-512-byte equal-exposure leaderboard shows the enwik8 gap to close.
-[Replication command](#repeat-the-held-charge-comparison) · [Paired leaderboard](LEADERBOARD.md)
+The archived 3.26M pair was trained on 512-byte windows. A matched
+2,048-byte continuation at this size remains open. The release
+includes both parent checkpoints, the 3.26M geometry, and the
+1.63M continuation protocol.
+[Scale configuration](#scale-to-326m) · [Longer-context protocol](CONTEXT_LENGTH.md#train-the-longer-context)
 
 ### Repeat the held-charge comparison
 
-Use the `spiking` array from the warm-start example and a fresh
-initialization for seed 2. The archived seed-1 SNN and the matching
-Transformer checkpoints can be scored directly. To train seed 1
-again, set `seed=1` and use a fresh output directory. Each seed
+Use the `spiking` array from the warm-start example to rerun seeds
+1 and 2 from initialization. The archived SNN and Transformer
+checkpoints for all three seeds can be scored directly. Each seed
 uses the same data and training budget as its reference.
 
 ```bash
 common=(--data data/enwik8 --device mps --ctx 512 --bs 8 --steps 6400
   --lr 0.003 --warmup 160 --eval-every 400 --eval-bs 8 --eval-batches 8
   --final-eval-batches 48 --validation-only)
-replication=checkpoints/held-charge-replication
-seed=2
-python experiments/train_event_lm.py "${common[@]}" "${spiking[@]}" \
-  --local-trace --seed "$seed" --tag held_charge_replication \
-  --results-dir "$replication/results" --checkpoint "$replication/trace_s$seed.pt"
+replication=checkpoints/work/held-charge-replication
+for seed in 1 2; do
+  python experiments/train_event_lm.py "${common[@]}" "${spiking[@]}" \
+    --local-trace --seed "$seed" --tag held_charge_replication \
+    --results-dir "$replication/results" --checkpoint "$replication/trace_s$seed.pt"
+done
 ```
-
-The script saves its checkpoint after training and final validation.
-The seed-2 job in progress at packaging time can finish in the original
-checkout. In a fresh checkout, the command above starts that seed from
-initialization.
 
 ### Scale to 3.26M
 

@@ -62,8 +62,9 @@ the [v2 release manifest](../models/spiking-byte-lm-v2/manifest.json).
 
 The [v3 handoff](../docs/HANDOFF.md) links the new studies and the
 native audits, full-corpus scores, and training records behind them.
-`event_lm/continuation_leaderboard.json` keeps the 512-byte,
-2,048-byte, and 3.26M comparisons at their own budgets.
+`event_lm/continuation_leaderboard.json` reports the two trained
+context lengths, 3.26M comparison, and three-seed replication
+at their respective budgets.
 `event_lm/continuation_checkpoints.sha256` pins the contents of the
 [v3 checkpoint archive](../models/spiking-byte-lm-v3/manifest.json).
 

@@ -137,8 +137,10 @@ def build_depth():
     return {"unit": "bits per byte", "seeds": [0], "groups": {"depth": rows}}
 
 
-def read_comparison(definitions, *, seed, context, exposure):
-    rows, test_inputs = [], {}
+def read_comparison(definitions, *, seed, context, exposure, test_inputs=None):
+    rows = []
+    if test_inputs is None:
+        test_inputs = {}
     for label, directory, suffix, audit_path, color in definitions:
         scores, sources = {}, {}
         scored_models = []
@@ -159,7 +161,8 @@ def read_comparison(definitions, *, seed, context, exposure):
             scores[corpus] = {"mean": model["bpb"], "by_seed": [model["bpb"]], "raw_bpb": model["raw_bpb"]}
             sources[corpus] = source
             scored_models.append(model)
-        if len({(row["run_name"], row["checkpoint"], row["streaming_tensor_bytes"]) for row in scored_models}) != 1:
+        if len({(row["run_name"], row["checkpoint"], row["parameters"], row["streaming_tensor_bytes"])
+                for row in scored_models}) != 1:
             raise ValueError(f"{label} mixes different checkpoints or state budgets")
 
         training_path = f'{directory}/{model["run_name"]}.json'
@@ -193,10 +196,54 @@ def build_research():
         ("continuation_2048", "2,048-byte continuations", CONTINUATION_2048, 711, 2048, (26_214_400, 6_553_600)),
         ("scale_3260k", "3.26M parameter comparison", SCALE_3260K, 0, 512, (0, 26_214_400)),
     ):
-        groups[name] = {"title": title, "seed": seed, "training_context_bytes": context,
+        groups[name] = {"title": title, "seeds": [seed], "training_context_bytes": context,
+                        "training_summary": f"{sum(exposure):,} training targets · seed {seed}",
                         "parent_training_targets": exposure[0], "additional_training_targets": exposure[1],
                         "rows": read_comparison(arms, seed=seed, context=context, exposure=exposure)}
+    groups["held_charge_replication"] = {
+        "title": "Held-charge replication",
+        "seeds": [0, 1, 2],
+        "training_context_bytes": 512,
+        "training_summary": "26,214,400 training targets per seed · seeds 0–2",
+        "parent_training_targets": 0,
+        "additional_training_targets": 26_214_400,
+        "rows": read_held_charge_replication(),
+    }
     return {"unit": "bits per byte", "groups": groups}
+
+
+def read_held_charge_replication():
+    directory = "event_lm/held_charge_replication"
+    controls = "event_lm/depth_inhibition_replication"
+    label = "Held-charge SNN"
+    per_seed, test_inputs = [], {}
+    for seed in (0, 1, 2):
+        if seed == 0:
+            arms = ((label, *TRACE[1:]), DEPTH_ARMS[-1])
+        else:
+            arms = (
+                (label, directory, f"trace_s{seed}", f"{directory}/native_trace_s{seed}.json", VIOLET),
+                ("Full-attention Transformer", controls, f"transformer_s{seed}", None, ORANGE),
+            )
+        per_seed.append(read_comparison(arms, seed=seed, context=512, exposure=(0, 26_214_400),
+                                        test_inputs=test_inputs))
+
+    rows = []
+    for runs in zip(*per_seed, strict=True):
+        first = runs[0]
+        fields = ("model", "color", "parameters", "state_bytes", "training_targets")
+        if any(any(run[field] != first[field] for field in fields) for run in runs[1:]):
+            raise ValueError(f"{first['model']} changes configuration budgets across replication seeds")
+        scores = {}
+        for corpus, _, _ in CORPORA:
+            measurements = [run["scores"][corpus] for run in runs]
+            scores[corpus] = {**summarize([score["mean"] for score in measurements]),
+                              "raw_bpb": mean(score["raw_bpb"] for score in measurements)}
+        pulses = [run["pulses_per_byte"]["mean"] for run in runs if run["pulses_per_byte"] is not None]
+        rows.append({**{field: first[field] for field in fields}, "scores": scores,
+                     "pulses_per_byte": summarize(pulses) if pulses else None, "runs": runs})
+    rank_scores(rows)
+    return rows
 
 
 def score_cell(stats):
@@ -244,7 +291,7 @@ def write_leaderboards(data, depth, research):
     for group in research["groups"].values():
         rows = group["rows"]
         paragraphs.extend([
-            f'## {group["title"]} · {rows[0]["training_targets"]:,} training targets · seed {group["seed"]}',
+            f'## {group["title"]} · {group["training_summary"]}',
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
     paragraphs.extend([
