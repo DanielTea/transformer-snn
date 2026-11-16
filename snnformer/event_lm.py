@@ -64,6 +64,7 @@ class EventLMConfig:
     activity_inhibition: bool = False
     inhibition_by_expansion: bool = False
     local_trace: bool = False
+    trace_coincidence_start: int | None = None
     trace_write_credit: bool = False
     bank_write_credit: bool = False
     trace_read_veto: bool = False
@@ -765,6 +766,7 @@ class _DelayBlock(nn.Module):
         self.delay_sizes = tuple(delay * width for delay, width in zip(self.local_delays, self.delay_widths))
         cap = _HIDDEN_CAP * cfg.resolution
         self.trace = None
+        self.trace_coincidence_start = cfg.trace_coincidence_start
         if cfg.local_trace:
             veto_widths = self.widths if cfg.trace_read_veto else None
             self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths)
@@ -912,11 +914,27 @@ class _DelayBlock(nn.Module):
             routes = split(present, steering, start) + delay_routes
         if self.spread_coincidence is not None:
             routes = self.spread_coincidence(present, steering, routes[0]) + routes[2:]
+        trace_routes = None
+        if self.trace_coincidence_start is not None:
+            # The held read already coincides with steering. Match it to
+            # the current content on its own sign rail.
+            trace_routes = _route_packets(coincidence_read, present, "coincidence") + routes[2:]
         if quanta is not None:
             # Route physical pulse counts first. The same synaptic charge
             # then requires fewer pulses at a higher firing threshold.
             routes = tuple(packet * quanta for packet in routes)
-        current = residual * self.emit.threshold + self.project(torch.cat(routes, dim=-1))
+            if trace_routes is not None:
+                trace_routes = tuple(packet * quanta for packet in trace_routes)
+        combined = torch.cat(routes, dim=-1)
+        if trace_routes is None:
+            projected = self.project(combined)
+        else:
+            weights = self.project.weight_ticks()
+            boundary = self.trace_coincidence_start
+            standard = F.linear(combined, weights[:boundary])
+            conditioned = F.linear(torch.cat(trace_routes, dim=-1), weights[boundary:])
+            projected = torch.cat((standard, conditioned), dim=-1)
+        current = residual * self.emit.threshold + projected
         if self.memory_residual is not None:
             current = current + self.memory_residual(recall)
         return current
@@ -1123,6 +1141,9 @@ class EventLM(nn.Module):
         if cfg.local_trace and (not cfg.compact_delays or cfg.carry or cfg.continuous
                                 or cfg.delay_window != 1 or cfg.departure_coincidence):
             raise ValueError("local traces need compact fixed delays and reset-per-byte spike routing")
+        if cfg.trace_coincidence_start is not None and (not cfg.local_trace
+                or not isinstance(cfg.trace_coincidence_start, int) or not 0 < cfg.trace_coincidence_start < cfg.dim):
+            raise ValueError("trace coincidence needs a local trace and two nonempty residual groups")
         if cfg.opponent_steering and not cfg.local_trace:
             raise ValueError("opponent steering needs a local charge trace")
         if cfg.trace_write_credit and not cfg.local_trace:
@@ -1352,10 +1373,16 @@ class EventLM(nn.Module):
         cfg = self.cfg
         expected = replace(prior, dim=cfg.dim, trace_write_credit=cfg.trace_write_credit,
                            bank_write_credit=cfg.bank_write_credit,
+                           trace_coincidence_start=cfg.trace_coincidence_start,
                            compact_axon_state=cfg.compact_axon_state, inhibition_by_expansion=cfg.inhibition_by_expansion,
                            router_charge_bits=cfg.router_charge_bits)
         if cfg.dim <= prior.dim or cfg.continuous or expected != cfg:
             raise ValueError("widening needs the same spiking routing and memory geometry")
+        if cfg.trace_coincidence_start != prior.trace_coincidence_start and (
+            prior.trace_coincidence_start is not None or cfg.trace_coincidence_start is None
+            or cfg.trace_coincidence_start < prior.dim
+        ):
+            raise ValueError("widening can introduce trace coincidence only in added residual neurons")
         if cfg.activity_inhibition and prior.inhibition_bits != cfg.inhibition_bits:
             raise ValueError("widening must preserve the inhibitory threshold")
         if cfg.router_charge_bits < prior.router_charge_bits:

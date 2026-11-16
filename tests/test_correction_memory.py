@@ -607,15 +607,15 @@ def test_compact_axons_preserve_training_gradients_across_chunks():
         torch.testing.assert_close(reference.grad, optimized.grad, rtol=0, atol=0)
 
 
-@pytest.mark.parametrize("router_charge_bits", (6, 8))
-def test_residual_growth_preserves_counts_and_trains_the_added_neurons(router_charge_bits):
+@pytest.mark.parametrize(("router_charge_bits", "trace_start"), ((6, None), (8, None), (6, 16)))
+def test_residual_growth_preserves_counts_and_trains_the_added_neurons(router_charge_bits, trace_start):
     torch.manual_seed(69)
     cfg = EventLMConfig(dim=16, hidden=8, route="steered_correction_code", carry=False, resolution=16,
                         memory_heads=2, memory_slots=4, memory_width=8, forecast_key_channels=2,
                         match_forecast_key=True, compact_delays=True, activity_inhibition=True, local_trace=True)
     parent = EventLM(cfg)
     grown = EventLM(replace(cfg, dim=32, inhibition_by_expansion=True, compact_axon_state=True,
-                           router_charge_bits=router_charge_bits))
+                           router_charge_bits=router_charge_bits, trace_coincidence_start=trace_start))
     grown.initialize_wider_residual(cfg, parent.state_dict())
     stream = torch.randint(256, (1, 47))
 
@@ -638,6 +638,23 @@ def test_residual_growth_preserves_counts_and_trains_the_added_neurons(router_ch
     assert all(bool(block.project.weight.grad[cfg.dim:].any()) for block in grown.blocks)
     with pytest.raises(ValueError, match="inhibitory threshold"):
         EventLM(replace(cfg, dim=32)).initialize_wider_residual(cfg, parent.state_dict())
+
+
+@torch.no_grad()
+def test_trace_conditioned_group_routes_three_way_matches_on_the_same_sign_rail():
+    cfg = EventLMConfig(dim=4, hidden=4, route="steered", carry=False, compact_delays=True,
+                        local_trace=True, trace_coincidence_start=2)
+    block = EventLM(cfg).blocks[0]
+    block.project.weight.zero_()
+    block.project.weight[::2, :4].fill_(1 / 64)
+    block.project.weight[1::2, 4:8].fill_(1 / 64)
+    block.project.freeze_integer()
+    present = torch.tensor([[7, -6, 4, -3]], dtype=torch.int32)
+    steering = torch.tensor([[4, 5, 3, 2]], dtype=torch.int32)
+    held_read = torch.tensor([[2, -3, -2, 2]], dtype=torch.int32)
+    silent = torch.zeros_like(present)
+    routed = block._current(silent, present, silent, steering, None, coincidence_read=held_read)
+    assert routed.tolist() == [[0, 2, -1, 3]]
 
 
 def test_tag_polarities_change_phase_without_adding_an_address_pulse():

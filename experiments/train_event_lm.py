@@ -105,7 +105,8 @@ def build_model(args):
                             delay_residual=args.delay_residual,
                             router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
                             inhibition_by_expansion=args.inhibition_by_expansion,
-                            local_trace=args.local_trace, trace_write_credit=args.trace_write_credit,
+                            local_trace=args.local_trace, trace_coincidence_start=args.trace_coincidence_start,
+                            trace_write_credit=args.trace_write_credit,
                             bank_write_credit=args.bank_write_credit,
                             trace_read_veto=args.trace_read_veto,
                             delay_filter=args.delay_filter,
@@ -174,6 +175,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   delay_window=model.cfg.delay_window, router_charge_bits=model.cfg.router_charge_bits,
                                   delay_residual=source_cfg.delay_residual or model.cfg.delay_residual,
                                   activity_inhibition=model.cfg.activity_inhibition, local_trace=model.cfg.local_trace,
+                                  trace_coincidence_start=model.cfg.trace_coincidence_start,
                                   inhibition_by_expansion=model.cfg.inhibition_by_expansion,
                                   trace_write_credit=model.cfg.trace_write_credit,
                                   bank_write_credit=model.cfg.bank_write_credit,
@@ -272,6 +274,8 @@ def main():
                         help="size the inhibitory threshold from the content and steering populations")
     parser.add_argument("--local-trace", action="store_true",
                         help="hold each channel's charge within its steering interval across bytes")
+    parser.add_argument("--trace-coincidence-start", type=int,
+                        help="first residual neuron whose present pulses must also match the signed held read")
     parser.add_argument("--residual-membrane", action="store_true",
                         help="retain the signed subthreshold charge at the output of each routing block")
     parser.add_argument("--trace-write-credit", action="store_true",
@@ -350,6 +354,7 @@ def main():
             or args.compact_axon_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
             or args.inhibition_by_expansion
+            or args.trace_coincidence_start is not None
             or args.local_trace or args.trace_write_credit or args.trace_read_veto
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (

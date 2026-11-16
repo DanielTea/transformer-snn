@@ -107,6 +107,8 @@ def probe(model, window, chunk_size, *, residual_width_before=None):
         result["reset_residual_membrane_bpb"] = score_with_options(model, window, chunk_size, residual_membrane=False)
     if model.cfg.tag_phase_address:
         result["one_phase_address_bpb"] = score_with_options(model, window, chunk_size, tag_phase_address=False)
+    if model.cfg.trace_coincidence_start is not None:
+        result["ordinary_coincidence_bpb"] = score_with_options(model, window, chunk_size, trace_coincidence_start=None)
     if residual_width_before is not None:
         output_synapses = [model.input, *model.delayed_input, *(block.project for block in model.blocks)]
         output_synapses += [block.memory_residual for block in model.blocks if block.memory_residual is not None]

@@ -1,0 +1,131 @@
+"""Verify spike parity and gradient flow after widening a trained EventLM."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from dataclasses import replace
+from pathlib import Path
+
+import torch
+from torch.nn import functional as F
+
+from audit_spike_code import _IntegerExecution
+from benchmark_decode import state_bytes
+from common import _atomic_output, resolve_device
+from eval_event_lm import load_checkpoint
+from snnformer.event_lm import EventLM, _IntegrateFire, _route_packets, _steer_packet
+from train_event_lm import scoring_logits
+from train_lm import load_splits, random_batch
+
+
+@torch.inference_mode()
+def measure(model, tokens, device, *, profile_coincidence):
+    native = model.to_integer()
+    emissions, memory_emissions, selected_fractions = [], [], []
+
+    def count_emissions(_module, _inputs, counts):
+        emissions.append(counts.abs().sum(dtype=torch.int64).item())
+
+    def count_coincidence(_module, inputs, outputs):
+        content, steering = inputs[:2]
+        read = outputs[0]
+        selected = _steer_packet(content, steering)[0].abs().sum(dtype=torch.int64).item()
+        confirmed = _route_packets(read, content, "coincidence")[0].abs().sum(dtype=torch.int64).item()
+        selected_fractions.append(confirmed / selected if selected else None)
+
+    handles = [module.register_forward_hook(count_emissions)
+               for module in native.modules() if isinstance(module, _IntegrateFire)]
+    if profile_coincidence:
+        handles.extend(block.trace.register_forward_hook(count_coincidence) for block in native.blocks)
+    with _IntegerExecution():
+        counts = native(tokens, memory_pulses=memory_emissions)
+        for handle in handles:
+            handle.remove()
+
+        chunks, chunk_state = [], None
+        for chunk in tokens.split(173, dim=1):
+            output, chunk_state = native.forward_chunk(chunk, chunk_state)
+            chunks.append(output)
+        torch.testing.assert_close(torch.cat(chunks, dim=1), counts, rtol=0, atol=0)
+
+        steps, state = [], None
+        for byte in tokens[:, :513].unbind(1):
+            output, state = native.step(byte, state)
+            steps.append(output)
+        torch.testing.assert_close(torch.stack(steps, dim=1), counts[:, :513], rtol=0, atol=0)
+
+    device_counts = model.to(device)(tokens.to(device)).cpu()
+    torch.testing.assert_close(device_counts, counts, rtol=0, atol=0, check_dtype=False)
+    metrics = {
+        "parameters": sum(weight.numel() for weight in model.parameters()),
+        "persistent_tensor_bytes": state_bytes(state),
+        "total_pulses": sum(emissions) + sum(value.item() for value in memory_emissions),
+    }
+    if profile_coincidence:
+        metrics["fraction_of_two_way_matches_also_confirmed"] = selected_fractions
+    return counts, metrics
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--parent", required=True, type=Path)
+    parser.add_argument("--enwik8", required=True, type=Path)
+    parser.add_argument("--device", default="cpu", choices=("cpu", "mps", "cuda"))
+    parser.add_argument("--dim", default=768, type=int)
+    parser.add_argument("--router-charge-bits", default=6, type=int, choices=(6, 8))
+    parser.add_argument("--trace-coincidence", action="store_true")
+    parser.add_argument("--json", required=True, type=Path)
+    args = parser.parse_args()
+
+    torch.set_num_threads(4)
+    torch.manual_seed(711)
+    device = resolve_device(args.device)
+    train, validation, _ = load_splits(args.enwik8)
+    sample = validation[:4096]
+    tokens = torch.tensor(sample, dtype=torch.long)[None]
+    parent, checkpoint = load_checkpoint(args.parent, torch.device("cpu"))
+    if not isinstance(parent, EventLM) or not parent.cfg.local_trace:
+        parser.error("the parent must be a held-charge EventLM")
+    prior = parent.cfg
+    cfg = replace(prior, dim=args.dim, router_charge_bits=args.router_charge_bits,
+                  compact_axon_state=True, inhibition_by_expansion=True, trace_write_credit=True,
+                  trace_coincidence_start=prior.dim if args.trace_coincidence else prior.trace_coincidence_start)
+    grown = EventLM(cfg)
+    grown.initialize_wider_residual(prior, checkpoint["state_dict"])
+    parent_counts, parent_metrics = measure(parent, tokens, device, profile_coincidence=False)
+    grown_counts, grown_metrics = measure(grown.eval(), tokens, device, profile_coincidence=args.trace_coincidence)
+    torch.testing.assert_close(parent_counts, grown_counts, rtol=0, atol=0)
+    if parent_metrics["total_pulses"] != grown_metrics["total_pulses"]:
+        raise AssertionError("widening changed the number of emitted pulses")
+
+    generator = torch.Generator().manual_seed(711)
+    inputs, labels = random_batch(train, 1, 512, generator)
+    counts = grown.train()(inputs.to(device))
+    logits = scoring_logits(counts, True, cfg.resolution)
+    F.cross_entropy(logits.flatten(0, 1), labels.to(device).flatten()).backward()
+    gradients = [block.project.weight.grad[prior.dim:].count_nonzero().item() for block in grown.blocks]
+    if not all(gradients):
+        raise AssertionError("an added residual projection received no gradient")
+
+    with args.parent.open("rb") as source:
+        parent_sha256 = hashlib.file_digest(source, "sha256").hexdigest()
+    record = {
+        "parent": str(args.parent),
+        "parent_sha256": parent_sha256,
+        "validation_sample_sha256": hashlib.sha256(sample).hexdigest(),
+        "validation_bytes": sample.size,
+        "device": str(device),
+        "native_step_chunk_and_device_counts_equal": True,
+        "parent_count_and_emission_parity": True,
+        "models": {"parent": parent_metrics, "grown": grown_metrics},
+        "active_new_projection_gradients_on_512_train_targets": gradients,
+    }
+    with _atomic_output(args.json, "w", overwrite=False) as stream:
+        json.dump(record, stream, indent=2)
+        stream.write("\n")
+
+
+if __name__ == "__main__":
+    main()
