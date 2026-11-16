@@ -559,6 +559,51 @@ def test_compact_axon_storage_preserves_signed_maximum_packets():
     assert compact_state.history.untyped_storage().nbytes() * 2 == full_state.history.untyped_storage().nbytes()
 
 
+def test_tag_polarities_change_phase_without_adding_an_address_pulse():
+    bank = _SpikeCorrection(8, 4, 1, 3, 16, bind_previous=True, observed=True, forecast=True,
+                            key_channels=2, match_key=True, tag_phase_address=True)
+    address = torch.tensor([[[0, 1, 0]]] * 4 + [[[0, 0, 0]]], dtype=torch.int32)
+    tags = torch.tensor([[[5, 0, 0, 0]], [[-6, 0, 0, 0]], [[0, -6, 0, 0]],
+                         [[-6, -6, 0, 0]], [[-6, -6, 0, 0]]], dtype=torch.int32)
+    emitted = bank._phase_address(address, tags)
+    assert emitted[:4].argmax(-1).flatten().tolist() == [4, 5, 6, 7]
+    torch.testing.assert_close(emitted.sum(-1), address.sum(-1))
+
+    prediction = tags.float().requires_grad_()
+    phases = bank._phase_address(address.float(), prediction)
+    (phases * torch.arange(12)).sum().backward()
+    assert bool((prediction.grad[:4, :, :2] != 0).all())
+    assert not bool(prediction.grad[:, :, 2:].any())
+    assert not bool(prediction.grad[4].any())
+
+
+@torch.no_grad()
+def test_tag_phase_bank_matches_integer_steps_and_streaming_chunks():
+    torch.manual_seed(13)
+    cfg = EventLMConfig(dim=16, hidden=21, route="steered_correction_code", carry=False, resolution=16,
+                        memory_heads=2, memory_slots=4, memory_width=8, forecast_key_channels=2,
+                        match_forecast_key=True, learn_context_keys=True, tag_phase_address=True,
+                        compact_delays=True, compact_axon_state=True, activity_inhibition=True, local_trace=True)
+    model = EventLM(cfg).eval()
+    native = model.to_integer()
+    tokens = torch.randint(256, (2, 49))
+    expected = native(tokens)
+    torch.testing.assert_close(expected, model(tokens).to(torch.int32), rtol=0, atol=0)
+    state = None
+    for i, byte in enumerate(tokens.unbind(1)):
+        emitted, state = native.step(byte, state)
+        torch.testing.assert_close(emitted, expected[:, i], rtol=0, atol=0)
+    assert state.prediction_memory.charge.shape == (2, 2, 16, 4)
+
+    chunk = None
+    parts = []
+    for part in tokens.split((1, 19, 29), dim=1):
+        emitted, chunk = native.forward_chunk(part, chunk)
+        parts.append(emitted)
+    torch.testing.assert_close(torch.cat(parts, dim=1), expected, rtol=0, atol=0)
+    torch.testing.assert_close(chunk.correction.charge, state.prediction_memory.charge)
+
+
 @torch.no_grad()
 def test_spread_coincidence_matches_clock_slots_and_conserves_each_signed_packet():
     spread = _SpreadCoincidence((6,), cap=128, resolution=4)

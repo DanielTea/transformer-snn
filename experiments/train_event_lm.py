@@ -110,7 +110,8 @@ def build_model(args):
                             opponent_steering=args.opponent_steering,
                             spread_coincidence=args.spread_coincidence,
                             residual_membrane=args.residual_membrane,
-                            compact_axon_state=args.compact_axon_state)
+                            compact_axon_state=args.compact_axon_state,
+                            tag_phase_address=args.tag_phase_address)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
     if args.local_lookback is not None:
@@ -166,6 +167,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router):
                                   trace_write_credit=model.cfg.trace_write_credit,
                                   trace_read_veto=source_cfg.trace_read_veto or model.cfg.trace_read_veto,
                                   residual_membrane=model.cfg.residual_membrane,
+                                  tag_phase_address=model.cfg.tag_phase_address,
                                   delay_filter=source_cfg.delay_filter or model.cfg.delay_filter,
                                   opponent_steering=source_cfg.opponent_steering or model.cfg.opponent_steering,
                                   spread_coincidence=source_cfg.spread_coincidence or model.cfg.spread_coincidence)
@@ -225,6 +227,8 @@ def main():
     parser.add_argument("--memory-width", type=int, help="total width of a prediction bank before splitting keys")
     parser.add_argument("--forecast-key-channels", type=int, default=0, help="forecast channels reserved per cell")
     parser.add_argument("--match-forecast-key", action="store_true", help="use key mismatches to inhibit reads")
+    parser.add_argument("--tag-phase-address", action="store_true",
+                        help="use signed forecast tags to time each address spike within a short clock")
     parser.add_argument("--learn-context-keys", action="store_true",
                         help="learn reserved answers to memory queries through next-byte loss")
     parser.add_argument("--learn-packet-thresholds", action="store_true",
@@ -302,7 +306,8 @@ def main():
         parser.error("--code-loss-weight must be finite and nonnegative")
     if args.code_loss_weight and (args.variant != "event_correction_code" or args.ctx < 2):
         parser.error("spike code loss needs the forecast bank and at least two input bytes")
-    if (args.forecast_key_channels or args.match_forecast_key or args.learn_context_keys) and args.variant != "event_correction_code":
+    if (args.forecast_key_channels or args.match_forecast_key or args.learn_context_keys
+            or args.tag_phase_address) and args.variant != "event_correction_code":
         parser.error("forecast keys need --variant event_correction_code")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.compact_axon_state or args.residual_membrane

@@ -59,6 +59,13 @@ def score_without_synapses(model, window, chunk_size, weights):
             weight.copy_(original)
 
 
+@torch.inference_mode()
+def score_with_options(model, window, chunk_size, **options):
+    variant = EventLM(replace(model.cfg, **options)).eval().to(window.device)
+    variant.load_state_dict(model.state_dict())
+    return score(variant, window, chunk_size)
+
+
 def probe(model, window, chunk_size):
     pools = [block.activity_inhibition for block in model.blocks if block.activity_inhibition is not None]
     series = [[] for _ in pools]
@@ -97,9 +104,9 @@ def probe(model, window, chunk_size):
         weights = [block.spread_coincidence.mix for block in model.blocks]
         result["zero_spread_coincidence_bpb"] = score_without_synapses(model, window, chunk_size, weights)
     if model.cfg.residual_membrane:
-        reset = EventLM(replace(model.cfg, residual_membrane=False)).eval().to(window.device)
-        reset.load_state_dict(model.state_dict())
-        result["reset_residual_membrane_bpb"] = score(reset, window, chunk_size)
+        result["reset_residual_membrane_bpb"] = score_with_options(model, window, chunk_size, residual_membrane=False)
+    if model.cfg.tag_phase_address:
+        result["one_phase_address_bpb"] = score_with_options(model, window, chunk_size, tag_phase_address=False)
     return result
 
 

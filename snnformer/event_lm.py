@@ -70,6 +70,7 @@ class EventLMConfig:
     spread_coincidence: bool = False
     residual_membrane: bool = False
     compact_axon_state: bool = False
+    tag_phase_address: bool = False
 
 
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
@@ -484,7 +485,7 @@ class _SpikeCorrection(nn.Module):
     """An address spike probes a bank and enables a bounded correction."""
 
     def __init__(self, dim, width, heads, slots, resolution, bind_previous, *, observed=False, forecast=False,
-                 key_channels=0, match_key=False):
+                 key_channels=0, match_key=False, tag_phase_address=False):
         super().__init__()
         if heads < 1 or slots < 2 or width < heads or width % heads:
             raise ValueError("memory needs at least two slots and a positive read width divisible by its heads")
@@ -507,6 +508,11 @@ class _SpikeCorrection(nn.Module):
         self.address = _IntegrateFire(_HIDDEN_CAP * resolution, _CHARGE_BITS - 2, False)
         self.value = _IntegrateFire(_HIDDEN_CAP * resolution, _CHARGE_BITS, False)
         self.register_buffer("slot_ids", torch.arange(slots), persistent=False)
+        phase_negative = None
+        if tag_phase_address:
+            phases = torch.arange(1 << key_channels)
+            phase_negative = ((phases[:, None] >> torch.arange(key_channels)) & 1).bool()
+        self.register_buffer("phase_negative", phase_negative, persistent=False)
 
     def _value_code(self, spikes):
         emit = self.value if self.forecast is None else self.forecast
@@ -547,6 +553,20 @@ class _SpikeCorrection(nn.Module):
         payload = error[..., self.key_channels:]
         return torch.cat((key, payload), dim=-1), torch.cat((torch.zeros_like(key), tolerance.expand_as(payload)), dim=-1)
 
+    def _phase_address(self, address, prediction):
+        if self.phase_negative is None:
+            return address
+        # Each negative tag rail delays the same address spike by its slot interval.
+        tag = prediction[..., :self.key_channels]
+        negative = (tag < 0).to(address.dtype)
+        if self.training and negative.is_floating_point():
+            surrogate = (0.5 - tag / (2 * self.forecast.cap)).clamp(0, 1)
+            negative = negative + (surrogate - surrogate.detach())
+        negative = negative.unsqueeze(-2)
+        matching = torch.where(self.phase_negative, negative, 1 - negative)
+        phase = matching.prod(-1, dtype=address.dtype)
+        return (address.unsqueeze(-1) * phase.unsqueeze(-2)).flatten(-2)
+
     def _read_payload(self, read, prediction, tolerance, address, stats=None, pulse_counts=None):
         if not self.key_channels:
             return read
@@ -577,9 +597,9 @@ class _SpikeCorrection(nn.Module):
         observation = None if observed is None else observed[:, prefix:]
         address, target, tolerance = self._events(spikes[:, prefix:], observation)
         read_tolerance = tolerance
-        prediction = None
+        prediction = None if prediction_code is None else prediction_code[:, prefix:]
+        address = self._phase_address(address, prediction)
         if prediction_code is not None:
-            prediction = prediction_code[:, prefix:]
             previous = None if state is None else state.previous_prediction
             first = torch.zeros_like(prediction[:, :1]) if previous is None else previous[:, None]
             previous = torch.cat((first, prediction[:, :-1]), dim=1)
@@ -590,6 +610,10 @@ class _SpikeCorrection(nn.Module):
             key_channels=self.key_channels, shuffle_keys=access is not None and access.shuffle_keys,
             pulse_counts=pulse_counts,
         )
+        if access is not None and access.stats is not None and self.phase_negative is not None:
+            by_phase = address.detach().unflatten(-1, (self.slots, -1))
+            for index, count in enumerate(by_phase.sum((0, 1, 2, 3), dtype=torch.int64)):
+                access.stats[f"phase_{index}_address_events"] = count
         if access is not None:
             if prediction_code is not None:
                 state.previous_prediction = prediction[:, -1].clone()
@@ -602,6 +626,7 @@ class _SpikeCorrection(nn.Module):
 
     def step(self, spikes, state, *, observed=None, prediction_code=None):
         address, target, tolerance = self._events(spikes, observed)
+        address = self._phase_address(address, prediction_code)
         read_tolerance = tolerance
         if prediction_code is not None and state is not None:
             target, tolerance = self._write_target(target, state.previous_prediction, tolerance)
@@ -1072,6 +1097,8 @@ class EventLM(nn.Module):
             raise ValueError("forecast keys need the direct forecast bank")
         if not isinstance(cfg.forecast_key_channels, int) or (cfg.match_forecast_key and cfg.forecast_key_channels < 1):
             raise ValueError("matching needs a positive integer number of forecast key channels")
+        if cfg.tag_phase_address and not cfg.match_forecast_key:
+            raise ValueError("tag phase addresses need a forecast bank with matching tags")
         if cfg.learn_context_keys and (cfg.route != "steered_correction_code" or cfg.forecast_key_channels < 1):
             raise ValueError("learned context keys need reserved channels in the direct forecast bank")
         if cfg.learn_packet_thresholds and (cfg.carry or cfg.continuous or
@@ -1164,7 +1191,7 @@ class EventLM(nn.Module):
             self.prediction_memory = _SpikeCorrection(
                 cfg.dim, width, cfg.memory_heads, cfg.memory_slots, cfg.resolution, bind_previous=True, observed=True,
                 forecast=cfg.route == "steered_correction_code", key_channels=cfg.forecast_key_channels,
-                match_key=cfg.match_forecast_key,
+                match_key=cfg.match_forecast_key, tag_phase_address=cfg.tag_phase_address,
             )
             self.recall_synapse = _Synapse(width - cfg.memory_heads * cfg.forecast_key_channels, cfg.dim, gain=0.15)
             self.recall_emit = _IntegrateFire(cap, _CHARGE_BITS, False)
