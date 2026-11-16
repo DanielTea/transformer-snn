@@ -2,8 +2,8 @@
 
 Start with the bundled 12.80M two-rail SNN for generation and
 architecture work. Restore the archive to compare its controls or
-continue training from the exact study endpoints. Both corpora were
-scored on held-out text at a matched exposure of 116,326,400 enwik8
+continue training from the exact study endpoints. All ten matched
+arms were scored on both held-out corpora at 116,326,400 enwik8
 training targets using seed 8237 for the continuation.
 [Model card and circuit](../models/spiking-byte-lm-v8/README.md) ·
 [Leaderboard](LEADERBOARD.md) · [Read experiments](TRACE_READ_DRIVE.md)

@@ -186,6 +186,8 @@ TRACE_READ_DRIVE_116326K = (
      f"{TRACE_READ_DRIVE}/native_write_share_s8237.json", "#5750a1"),
     ("Two write rails, shared steering", TRACE_READ_DRIVE, "write_rails_share_s8237",
      f"{TRACE_READ_DRIVE}/native_write_rails_share_s8237.json", "#138372"),
+    ("Present input, shared steering", TRACE_READ_DRIVE, "present_share_s8237",
+     f"{TRACE_READ_DRIVE}/native_present_share_s8237.json", "#76611e"),
     ("Full attention", TRACE_READ_DRIVE, "transformer_s8237", None, ORANGE),
 )
 TRACE_COINCIDENCE_6510K = (
@@ -451,17 +453,22 @@ def markdown_table(rows, *, include_ranks, include_raw_pg19=False):
         if include_raw_pg19:
             columns.insert(3, "PG-19 raw")
     lines = ["| " + " | ".join(columns) + " |", "|---|" + "---:|" * (len(columns) - 1)]
+    best_raw_pg19 = min(row["scores"]["pg19_full"]["raw_bpb"] for row in rows) if include_raw_pg19 else None
     for row in rows:
         enwik8, pg19 = (row["scores"][corpus] for corpus, _, _ in CORPORA)
         state = state_size(row["state_bytes"])
+        raw = ""
+        if include_raw_pg19:
+            raw_score = f'{pg19["raw_bpb"]:.5f}'
+            if pg19["raw_bpb"] == best_raw_pg19:
+                raw_score = f"**{raw_score}**"
+            raw = f" {raw_score} |"
         if include_ranks:
             pulses = row["pulses_per_byte"]
             pulse_text = f'{pulses["mean"]:,.0f}' if pulses else "—"
-            raw = f' {pg19["raw_bpb"]:.5f} |' if include_raw_pg19 else ""
             lines.append(f'| {row["model"]} | {row["parameters"]:,} | {state} | {score_cell(enwik8)} | '
                          f'{enwik8["rank"]} | {score_cell(pg19)} | {pg19["rank"]} |{raw} {pulse_text} |')
         else:
-            raw = f' {pg19["raw_bpb"]:.5f} |' if include_raw_pg19 else ""
             lines.append(f'| {row["model"]} | {score_cell(enwik8)} | {score_cell(pg19)} |{raw} {state} |')
     return "\n".join(lines)
 

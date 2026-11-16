@@ -58,7 +58,9 @@ block's inhibition neuron pools absolute incoming counts at a
 threshold of 2,048 and raises the resting router threshold of 256
 by 64 ticks per inhibitory pulse. Content and steering fire at
 16× resolution. Local counts are bounded by 512. Positive and
-negative counts encode opposing pulse trains.
+negative counts encode opposing pulse trains. Local expansion and
+projection synapses use eight fractional bits. Afferent, bank and
+vocabulary synapses use six.
 
 For content $p$ and steering $a$, the immediate path exposes
 $\operatorname{sign}(p)\min(|p|,a)$ and sends the remaining pulses

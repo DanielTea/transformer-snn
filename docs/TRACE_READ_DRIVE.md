@@ -219,7 +219,7 @@ PG-19 test books.
 
 | Model | enwik8 | PG-19 calibrated | PG-19 raw | State |
 |---|---:|---:|---:|---:|
-| Original held-charge read | 1.795773 | 2.754952 | **2.841358** | 28,584 B |
+| Original held-charge read | 1.795773 | 2.754952 | 2.841358 | 28,584 B |
 | Write input, six-bit reset | 1.795816 | 2.757065 | 2.846544 | 28,584 B |
 | Present input, six-bit reset | 1.794660 | 2.757469 | 2.848596 | 28,584 B |
 | Write input, eight-bit reset | 1.794488 | **2.753136** | 2.841921 | 28,584 B |
@@ -227,6 +227,7 @@ PG-19 test books.
 | Present input, eight-bit carry | 1.795246 | 2.756376 | 2.843614 | 31,257 B |
 | Write input, shared steering | 1.795614 | 2.761023 | 2.850012 | 31,257 B |
 | Two write rails, shared steering | 1.794636 | 2.755903 | 2.845058 | 31,257 B |
+| Present input, shared steering | 1.795723 | 2.753223 | **2.840690** | 31,257 B |
 | Full attention | **1.713626** | 2.884781 | 3.080808 | 6 MiB |
 
 The six-bit present-read checkpoint has zero effective gains
@@ -345,6 +346,15 @@ Disabling sharing on the trained weights lowered loss by 0.000278 bpb
 on 65,536 continuous validation targets.
 [Trained write-sharing audit](../results/event_lm/trace_read_drive/native_write_share_s8237.json) ·
 [Fixed-weight sharing intervention](../results/event_lm/trace_read_drive/probe_write_share_s8237.json)
+
+The present-input sharing control moves 179.98 steering pulses per
+byte and changes 8.336 read counts per byte. It has the lowest raw
+PG-19 loss in the comparison, at 2.840690 bpb. Disabling sharing
+on its trained weights lowers loss by 0.000330 bpb on the enwik8
+validation intervention.
+[Present-sharing native audit](../results/event_lm/trace_read_drive/native_present_share_s8237.json) ·
+[PG-19 scores](../results/event_lm/trace_read_drive/pg19_present_share_s8237.json) ·
+[Fixed-weight intervention](../results/event_lm/trace_read_drive/probe_present_share_s8237.json)
 
 ```bash
 study=checkpoints/trace-read-drive-study

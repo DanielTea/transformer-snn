@@ -47,6 +47,7 @@ PG-19 temperatures are fit on eight separate validation books.
 | Present input, eight-bit carry | 1.79525 | 2.75638 | 2.84361 | 31,257 B |
 | Write input, shared steering | 1.79561 | 2.76102 | 2.85001 | 31,257 B |
 | Two write rails, shared steering | 1.79464 | 2.75590 | 2.84506 | 31,257 B |
+| Present input, shared steering | 1.79572 | 2.75322 | **2.84069** | 31,257 B |
 | Full attention | **1.71363** | 2.88478 | 3.08081 | 6 MiB |
 
 <!-- event-lm-leaderboard:end -->

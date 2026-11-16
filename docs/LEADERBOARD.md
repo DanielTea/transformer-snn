@@ -8,15 +8,16 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Original held-charge read | 12,799,488 | 28,584 B | 1.79577 | 8 | 2.75495 | 2 | 2.84136 | 309,354 |
-| Write input, six-bit reset | 12,802,161 | 28,584 B | 1.79582 | 9 | 2.75706 | 5 | 2.84654 | 309,554 |
-| Present input, six-bit reset | 12,802,161 | 28,584 B | 1.79466 | 4 | 2.75747 | 7 | 2.84860 | 308,018 |
+| Original held-charge read | 12,799,488 | 28,584 B | 1.79577 | 9 | 2.75495 | 3 | 2.84136 | 309,354 |
+| Write input, six-bit reset | 12,802,161 | 28,584 B | 1.79582 | 10 | 2.75706 | 6 | 2.84654 | 309,554 |
+| Present input, six-bit reset | 12,802,161 | 28,584 B | 1.79466 | 4 | 2.75747 | 8 | 2.84860 | 308,018 |
 | Write input, eight-bit reset | 12,802,161 | 28,584 B | 1.79449 | 2 | **2.75314** | 1 | 2.84192 | 309,399 |
-| Write input, eight-bit carry | 12,802,161 | 31,257 B | 1.79533 | 6 | 2.75724 | 6 | 2.84850 | 309,331 |
-| Present input, eight-bit carry | 12,802,161 | 31,257 B | 1.79525 | 5 | 2.75638 | 4 | 2.84361 | 309,031 |
-| Write input, shared steering | 12,802,161 | 31,257 B | 1.79561 | 7 | 2.76102 | 8 | 2.85001 | 309,010 |
-| Two write rails, shared steering | 12,804,834 | 31,257 B | 1.79464 | 3 | 2.75590 | 3 | 2.84506 | 308,742 |
-| Full attention | 12,801,024 | 6 MiB | **1.71363** | 1 | 2.88478 | 9 | 3.08081 | — |
+| Write input, eight-bit carry | 12,802,161 | 31,257 B | 1.79533 | 6 | 2.75724 | 7 | 2.84850 | 309,331 |
+| Present input, eight-bit carry | 12,802,161 | 31,257 B | 1.79525 | 5 | 2.75638 | 5 | 2.84361 | 309,031 |
+| Write input, shared steering | 12,802,161 | 31,257 B | 1.79561 | 7 | 2.76102 | 9 | 2.85001 | 309,010 |
+| Two write rails, shared steering | 12,804,834 | 31,257 B | 1.79464 | 3 | 2.75590 | 4 | 2.84506 | 308,742 |
+| Present input, shared steering | 12,802,161 | 31,257 B | 1.79572 | 8 | 2.75322 | 2 | **2.84069** | 309,261 |
+| Full attention | 12,801,024 | 6 MiB | **1.71363** | 1 | 2.88478 | 10 | 3.08081 | — |
 
 ![Held-out next-byte loss after training the driven read circuits](../results/figures/event_lm_trace_read_drive.png)
 
@@ -33,7 +34,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Original full attention | 9,962,496 | 6 MiB | 1.71789 | 2 | 2.88474 | 6 | 3.08009 | — |
 | Wider full attention | 12,801,024 | 6 MiB | **1.71786** | 1 | 2.88475 | 7 | 3.08010 | — |
 | Delayed steering transfers | 12,879,678 | 32,616 B | 1.80187 | 5 | 2.76241 | 2 | 2.85741 | 308,085 |
-| Growth in shortest groups | 12,799,488 | 28,584 B | 1.80256 | 6 | **2.76153** | 1 | 2.85249 | 309,698 |
+| Growth in shortest groups | 12,799,488 | 28,584 B | 1.80256 | 6 | **2.76153** | 1 | **2.85249** | 309,698 |
 | Present steering transfers | 12,879,678 | 32,616 B | 1.80400 | 7 | 2.77171 | 4 | 2.86885 | 310,478 |
 
 ![Held-out loss at the original and wider sizes](../results/figures/event_lm_packed_width.png)
@@ -48,7 +49,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Continued SNN | 9,960,960 | 29,674 B | 1.81319 | 2 | **2.77756** | 1 | 2.87524 | 309,354 |
+| Continued SNN | 9,960,960 | 29,674 B | 1.81319 | 2 | **2.77756** | 1 | **2.87524** | 309,354 |
 | Shortest eligible tap | 9,962,312 | 29,674 B | 1.81655 | 4 | 2.78455 | 2 | 2.88665 | 308,210 |
 | Held spike race | 9,962,312 | 29,674 B | 1.81473 | 3 | 2.78521 | 3 | 2.88687 | 309,582 |
 | 6-block full attention | 9,962,496 | 6 MiB | **1.73380** | 1 | 2.89702 | 4 | 3.09548 | — |
@@ -63,7 +64,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Continued v6 SNN | 9,960,960 | 29,674 B | 1.82999 | 5 | **2.78446** | 1 | 2.88327 | 307,913 |
+| Continued v6 SNN | 9,960,960 | 29,674 B | 1.82999 | 5 | **2.78446** | 1 | **2.88327** | 307,913 |
 | Learned trace input spikes | 9,965,074 | 29,674 B | 1.82956 | 4 | 2.78972 | 3 | 2.89110 | 309,390 |
 | Coarse group thresholds | 9,961,004 | 29,674 B | 1.82918 | 2 | 2.78697 | 2 | 2.88461 | 308,616 |
 | One-tick group thresholds | 9,961,004 | 29,674 B | 1.82929 | 3 | 2.79350 | 4 | 2.89740 | 308,741 |
@@ -81,7 +82,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 11-block SNN | 9,960,960 | 29,674 B | 1.84288 | 2 | **2.79854** | 1 | 2.90068 | 309,059 |
+| 11-block SNN | 9,960,960 | 29,674 B | 1.84288 | 2 | **2.79854** | 1 | **2.90068** | 309,059 |
 | 7-block wider SNN | 9,957,868 | 19,536 B | 1.84496 | 3 | 2.80299 | 2 | 2.90845 | 307,543 |
 | 6-block full attention | 9,962,496 | 6 MiB | **1.75713** | 1 | 2.93008 | 3 | 3.12422 | — |
 
@@ -93,7 +94,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 7-block SNN, ordinary output | 6,514,176 | 19,536 B | 1.84466 | 3 | **2.80932** | 1 | 2.91443 | 309,030 |
+| 7-block SNN, ordinary output | 6,514,176 | 19,536 B | 1.84466 | 3 | **2.80932** | 1 | **2.91443** | 309,030 |
 | 7-block SNN, correction output | 6,514,176 | 19,536 B | 1.84464 | 2 | 2.86794 | 2 | 2.99541 | 305,045 |
 | 4-block full attention | 6,513,152 | 4 MiB | **1.75773** | 1 | 2.93346 | 3 | 3.12986 | — |
 
@@ -105,7 +106,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Wider residual SNN | 13,028,352 | 19,536 B | 1.87451 | 4 | **2.79672** | 1 | 2.88959 | 308,111 |
+| Wider residual SNN | 13,028,352 | 19,536 B | 1.87451 | 4 | **2.79672** | 1 | **2.88959** | 308,111 |
 | Wider full-attention Transformer | 13,028,864 | 4 MiB | **1.77285** | 1 | 2.95990 | 3 | 3.16073 | — |
 | Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.87259 | 3 | 2.81227 | 2 | 2.90738 | 309,048 |
 | Original-width full-attention Transformer | 6,513,152 | 4 MiB | 1.77292 | 2 | 2.95995 | 4 | 3.16079 | — |
@@ -114,7 +115,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.87259 | 4 | **2.81227** | 1 | 2.90738 | 309,048 |
+| Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.87259 | 4 | **2.81227** | 1 | **2.90738** | 309,048 |
 | Eight-bit router charge | 6,514,176 | 19,536 B | 1.86770 | 2 | 2.82082 | 5 | 2.92020 | 309,180 |
 | Tag read competition, zero start | 6,514,180 | 19,536 B | 1.87077 | 3 | 2.81844 | 3 | 2.91860 | 309,523 |
 | Tag read competition, active start | 6,514,180 | 19,536 B | 1.87409 | 6 | 2.81635 | 2 | 2.91291 | 309,599 |
@@ -126,7 +127,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Six-bit grown SNN | 6,514,176 | 19,536 B | 1.86525 | 2 | **2.81231** | 1 | 2.90664 | 308,230 |
+| Six-bit grown SNN | 6,514,176 | 19,536 B | 1.86525 | 2 | **2.81231** | 1 | **2.90664** | 308,230 |
 | Grown full-attention Transformer | 6,513,152 | 4 MiB | **1.77728** | 1 | 2.98071 | 2 | 3.18604 | — |
 
 ## 8.74M expansion and original-width control · 55,705,600 training targets · seed 1801
@@ -134,7 +135,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Expanded held-charge SNN | 8,739,840 | 26,080 B | 1.88812 | 2 | 2.83753 | 2 | 2.94075 | 309,457 |
-| Expanded SNN with active steering | 8,739,840 | 26,080 B | 1.89312 | 4 | **2.82986** | 1 | 2.92630 | 308,645 |
+| Expanded SNN with active steering | 8,739,840 | 26,080 B | 1.89312 | 4 | **2.82986** | 1 | **2.92630** | 308,645 |
 | Grown full-attention Transformer | 8,740,352 | 4 MiB | **1.79731** | 1 | 3.01533 | 4 | 3.22392 | — |
 | Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.89057 | 3 | 2.84072 | 3 | 2.94263 | 309,545 |
 
@@ -143,13 +144,13 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.89057 | 2 | 2.84072 | 2 | 2.94263 | 309,545 |
-| Redistribution of inhibition | 6,524,928 | 19,536 B | **1.88938** | 1 | **2.83881** | 1 | 2.94020 | 308,919 |
+| Redistribution of inhibition | 6,524,928 | 19,536 B | **1.88938** | 1 | **2.83881** | 1 | **2.94020** | 308,919 |
 
 ## 6.51M frozen teacher guidance and unguided control · 55,705,600 training targets · seed 1801
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Original-width held-charge SNN | 6,514,176 | 19,536 B | **1.89057** | 1 | **2.84072** | 1 | 2.94263 | 309,545 |
+| Original-width held-charge SNN | 6,514,176 | 19,536 B | **1.89057** | 1 | **2.84072** | 1 | **2.94263** | 309,545 |
 | Held-charge SNN with frozen teacher | 6,514,176 | 19,536 B | 1.89537 | 2 | 2.84787 | 2 | 2.96148 | 308,918 |
 
 ## 6.51M delayed write confirmation · 55,705,600 training targets · seed 1801
@@ -157,20 +158,20 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Original-width held-charge SNN | 6,514,176 | 19,536 B | **1.89057** | 1 | 2.84072 | 2 | 2.94263 | 309,545 |
-| Delayed write confirmation | 6,514,204 | 19,536 B | 1.89069 | 2 | **2.83683** | 1 | 2.93664 | 309,026 |
+| Delayed write confirmation | 6,514,204 | 19,536 B | 1.89069 | 2 | **2.83683** | 1 | **2.93664** | 309,026 |
 
 ## 6.51M with more training data · 49,152,000 training targets · seed 1109
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Six-bit grown SNN | 6,514,176 | 19,536 B | 1.89440 | 2 | **2.82683** | 1 | 2.91901 | 309,688 |
+| Six-bit grown SNN | 6,514,176 | 19,536 B | 1.89440 | 2 | **2.82683** | 1 | **2.91901** | 309,688 |
 | Grown full-attention Transformer | 6,513,152 | 4 MiB | **1.80629** | 1 | 3.03772 | 2 | 3.24647 | — |
 
 ## 6.51M growth · 512-byte continuations · 32,768,000 training targets · seed 711
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Grown SNN, finer charge | 6,514,176 | 19,536 B | 1.95110 | 2 | **2.85083** | 1 | 2.93341 | 309,505 |
+| Grown SNN, finer charge | 6,514,176 | 19,536 B | 1.95110 | 2 | **2.85083** | 1 | **2.93341** | 309,505 |
 | Grown SNN, six-bit charge | 6,514,176 | 19,536 B | 1.95646 | 3 | 2.86904 | 2 | 2.95290 | 306,923 |
 | Grown full-attention Transformer | 6,513,152 | 4 MiB | **1.84266** | 1 | 3.06318 | 3 | 3.26549 | — |
 
@@ -178,7 +179,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Grown SNN, six-bit charge | 6,514,176 | 19,536 B | 1.95646 | 2 | **2.86904** | 1 | 2.95290 | 306,923 |
+| Grown SNN, six-bit charge | 6,514,176 | 19,536 B | 1.95646 | 2 | **2.86904** | 1 | **2.95290** | 306,923 |
 | Three-way coincidence | 6,514,176 | 19,536 B | 1.95911 | 3 | 2.87132 | 2 | 2.95721 | 307,297 |
 | Grown full-attention Transformer | 6,513,152 | 4 MiB | **1.84266** | 1 | 3.06318 | 3 | 3.26549 | — |
 
@@ -186,7 +187,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Held charge | 3,257,088 | 31,692 B | 1.96430 | 2 | **2.88668** | 1 | 2.98308 | 308,067 |
+| Held charge | 3,257,088 | 31,692 B | 1.96430 | 2 | **2.88668** | 1 | **2.98308** | 308,067 |
 | Signed residual membrane | 3,257,088 | 22,224 B | 1.96628 | 3 | 2.89838 | 2 | 2.99574 | 309,629 |
 | Four address phases | 3,257,088 | 25,584 B | 1.99725 | 4 | 2.90730 | 3 | 2.99722 | 311,699 |
 | Four phases, corrected forecast loss | 3,257,088 | 25,584 B | 2.00335 | 5 | 2.90802 | 4 | 2.99318 | 310,105 |
@@ -196,14 +197,14 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Held charge | 3,257,088 | 31,692 B | 1.97126 | 2 | **2.87693** | 1 | 2.96339 | 306,441 |
+| Held charge | 3,257,088 | 31,692 B | 1.97126 | 2 | **2.87693** | 1 | **2.96339** | 306,441 |
 | Full-attention Transformer | 3,256,832 | 16 MiB | **1.85459** | 1 | 3.05282 | 2 | 3.24905 | — |
 
 ## 6.51M trained from scratch · 26,214,400 training targets · seed 0
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Wide held-charge SNN | 6,514,176 | 19,536 B | 2.06640 | 2 | **2.98527** | 1 | 3.09220 | 313,057 |
+| Wide held-charge SNN | 6,514,176 | 19,536 B | 2.06640 | 2 | **2.98527** | 1 | **3.09220** | 313,057 |
 | Full-attention Transformer | 6,514,944 | 6 MiB | **2.03855** | 1 | 3.28561 | 2 | 3.57094 | — |
 
 ## 512-byte continuations · 32,768,000 training targets · seed 711
@@ -211,7 +212,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Held-charge control | 1,630,992 | 21,320 B | 1.98564 | 4 | 2.98490 | 3 | 3.10338 | 307,730 |
-| Opponent steering | 1,631,917 | 21,320 B | 1.98533 | 3 | **2.97309** | 1 | 3.09454 | 308,471 |
+| Opponent steering | 1,631,917 | 21,320 B | 1.98533 | 3 | **2.97309** | 1 | **3.09454** | 308,471 |
 | Chronological write credit | 1,630,992 | 21,320 B | 1.98691 | 6 | 2.99097 | 5 | 3.10893 | 307,270 |
 | Trace read veto | 1,631,012 | 21,320 B | 1.98405 | 2 | 2.98763 | 4 | 3.11449 | 307,412 |
 | Spread coincidence | 1,631,012 | 21,320 B | 1.98644 | 5 | 2.98129 | 2 | 3.10337 | 306,624 |
@@ -221,21 +222,21 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Held charge with write credit | 1,630,992 | 21,320 B | 1.98884 | 2 | **2.96180** | 1 | 3.07240 | 304,447 |
+| Held charge with write credit | 1,630,992 | 21,320 B | 1.98884 | 2 | **2.96180** | 1 | **3.07240** | 304,447 |
 | Full-attention Transformer | 1,630,848 | 12 MiB | **1.81712** | 1 | 3.11395 | 2 | 3.33558 | — |
 
 ## 3.26M parameter comparison · 26,214,400 training targets · seed 0
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Seven-block held charge | 3,257,088 | 31,692 B | 1.99402 | 2 | **2.89822** | 1 | 2.98142 | 308,389 |
+| Seven-block held charge | 3,257,088 | 31,692 B | 1.99402 | 2 | **2.89822** | 1 | **2.98142** | 308,389 |
 | Full-attention Transformer | 3,256,832 | 4 MiB | **1.86093** | 1 | 3.05929 | 2 | 3.25745 | — |
 
 ## Held-charge replication · 26,214,400 training targets per seed · seeds 0–2
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Held-charge SNN | 1,630,992 | 21,320 B | 2.00633 | 2 | **2.98979** | 1 | 3.10037 | 307,013 |
+| Held-charge SNN | 1,630,992 | 21,320 B | 2.00633 | 2 | **2.98979** | 1 | **3.10037** | 307,013 |
 | Full-attention Transformer | 1,630,848 | 3 MiB | **1.82812** | 1 | 3.09559 | 2 | 3.29465 | — |
 
 ![Held-out loss after doubling residual width](../results/figures/event_lm_residual_growth_13030k.png)
