@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shlex
 import subprocess
@@ -32,7 +33,14 @@ def main():
         if args.device:
             options["device"] = args.device
         if parent:
-            options["initialize_from"] = args.parent_checkpoints / Path(parent).name
+            parent_path = args.parent_checkpoints / Path(parent).name
+            initialization = record.get("initialization") or {}
+            if not args.dry_run and initialization.get("sha256"):
+                with parent_path.open("rb") as stream:
+                    digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                if digest != initialization["sha256"]:
+                    raise ValueError(f"parent checkpoint checksum differs from the training record: {parent_path}")
+            options["initialize_from"] = parent_path
         command = [sys.executable, str(Path(__file__).with_name("train_event_lm.py"))]
         for name, value in options.items():
             flag = "--" + name.replace("_", "-")

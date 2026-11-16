@@ -1,0 +1,226 @@
+{
+ "args": {
+  "variant": "transformer",
+  "data": "data/enwik8",
+  "device": "mps",
+  "threads": 4,
+  "seed": 2,
+  "dim": 192,
+  "hidden": 288,
+  "memory_heads": 4,
+  "memory_slots": 16,
+  "memory_width": null,
+  "forecast_key_channels": 0,
+  "match_forecast_key": false,
+  "learn_context_keys": false,
+  "learn_packet_thresholds": false,
+  "output_reference": false,
+  "compact_delays": false,
+  "departure_coincidence": false,
+  "delay_window": 1,
+  "delay_residual": false,
+  "router_charge_bits": 6,
+  "activity_inhibition": false,
+  "local_trace": false,
+  "pulse_budget": null,
+  "spike_resolution": 1,
+  "depth": 4,
+  "no_carry": false,
+  "heads": 4,
+  "mlp_ratio": 3.3515625,
+  "local_window": 32,
+  "local_lookback": null,
+  "ctx": 512,
+  "bs": 8,
+  "steps": 6400,
+  "warmup": 160,
+  "lr": 0.003,
+  "wd": 0.05,
+  "eval_every": 400,
+  "eval_bs": 8,
+  "eval_batches": 8,
+  "final_eval_batches": 48,
+  "validation_only": true,
+  "initialize_from": null,
+  "freeze_router": false,
+  "code_loss_weight": 0.0,
+  "tag": "depth_pg_confirmation",
+  "results_dir": "checkpoints/depth-inhibition-replication/results",
+  "checkpoint": "checkpoints/depth-inhibition-replication/transformer_s2.pt",
+  "force": false
+ },
+ "cfg": {
+  "neuron": "ann",
+  "levels": 4,
+  "T": 1,
+  "tau": 2.0,
+  "v_th": 1.0,
+  "attn": "transformer",
+  "position_embeddings": true,
+  "address_bits": 4,
+  "memory_block": 32,
+  "memory_delay": 1,
+  "memory_relay": false,
+  "local_window": 32,
+  "temporal_carry": true,
+  "pulse_memory_cells": 0,
+  "pulse_preserve_reads": true,
+  "pulse_write_holds": [],
+  "pulse_read_bins": 2,
+  "pulse_fixed_cuts": false,
+  "pulse_global_cuts": false,
+  "charge_memory": "none",
+  "event_width": null,
+  "successor_orders": [
+   2,
+   3,
+   4,
+   5,
+   7
+  ],
+  "successor_slots": 2048,
+  "successor_spikes": true,
+  "successor_scaled_votes": false,
+  "mlp": "cdglu",
+  "mlp_ratio": 3.3515625,
+  "qk_levels": null,
+  "softmax_temp_init": 1.0,
+  "wta_k": 1,
+  "sel_alpha": 4.0,
+  "csa_compete": true,
+  "csa_normalize": true,
+  "csa_levels": 1,
+  "pre_bn": true,
+  "causal_norm": false
+ },
+ "device": "mps",
+ "params": 1630848,
+ "trainable_params": 1630848,
+ "initialization": null,
+ "data_sha1": "57b8363b814821dc9d47aa4d41f58733519076b2",
+ "train_target_bytes": 26214400,
+ "curve": [
+  {
+   "step": 400,
+   "tokens": 1638400,
+   "train_bpb": 2.843829614283675,
+   "val_bpb": 2.8391200843681106,
+   "val_argmax_accuracy": 0.439453125
+  },
+  {
+   "step": 800,
+   "tokens": 3276800,
+   "train_bpb": 2.5129631991783725,
+   "val_bpb": 2.5206092038704315,
+   "val_argmax_accuracy": 0.50006103515625
+  },
+  {
+   "step": 1200,
+   "tokens": 4915200,
+   "train_bpb": 2.3377127059665197,
+   "val_bpb": 2.3552266667062907,
+   "val_argmax_accuracy": 0.529815673828125
+  },
+  {
+   "step": 1600,
+   "tokens": 6553600,
+   "train_bpb": 2.2987383415932916,
+   "val_bpb": 2.234670999030745,
+   "val_argmax_accuracy": 0.553436279296875
+  },
+  {
+   "step": 2000,
+   "tokens": 8192000,
+   "train_bpb": 2.145092480965476,
+   "val_bpb": 2.1932293070547453,
+   "val_argmax_accuracy": 0.5555419921875
+  },
+  {
+   "step": 2400,
+   "tokens": 9830400,
+   "train_bpb": 2.2726843458487833,
+   "val_bpb": 2.1051864005811987,
+   "val_argmax_accuracy": 0.574981689453125
+  },
+  {
+   "step": 2800,
+   "tokens": 11468800,
+   "train_bpb": 1.937692066949282,
+   "val_bpb": 2.0746324357812016,
+   "val_argmax_accuracy": 0.576629638671875
+  },
+  {
+   "step": 3200,
+   "tokens": 13107200,
+   "train_bpb": 2.220846711086922,
+   "val_bpb": 2.009202001723579,
+   "val_argmax_accuracy": 0.59088134765625
+  },
+  {
+   "step": 3600,
+   "tokens": 14745600,
+   "train_bpb": 2.12522022962358,
+   "val_bpb": 1.9683531124472722,
+   "val_argmax_accuracy": 0.60150146484375
+  },
+  {
+   "step": 4000,
+   "tokens": 16384000,
+   "train_bpb": 1.869341002016876,
+   "val_bpb": 1.9420845898436436,
+   "val_argmax_accuracy": 0.60357666015625
+  },
+  {
+   "step": 4400,
+   "tokens": 18022400,
+   "train_bpb": 1.912726721384735,
+   "val_bpb": 1.9026399174138,
+   "val_argmax_accuracy": 0.60882568359375
+  },
+  {
+   "step": 4800,
+   "tokens": 19660800,
+   "train_bpb": 2.019114157312563,
+   "val_bpb": 1.874216430697029,
+   "val_argmax_accuracy": 0.615478515625
+  },
+  {
+   "step": 5200,
+   "tokens": 21299200,
+   "train_bpb": 1.8604821756709327,
+   "val_bpb": 1.8557371313379651,
+   "val_argmax_accuracy": 0.620208740234375
+  },
+  {
+   "step": 5600,
+   "tokens": 22937600,
+   "train_bpb": 1.8442174324135352,
+   "val_bpb": 1.8458752161808645,
+   "val_argmax_accuracy": 0.623016357421875
+  },
+  {
+   "step": 6000,
+   "tokens": 24576000,
+   "train_bpb": 1.8937504996538344,
+   "val_bpb": 1.8353177171923494,
+   "val_argmax_accuracy": 0.62548828125
+  },
+  {
+   "step": 6400,
+   "tokens": 26214400,
+   "train_bpb": 1.8720167080989996,
+   "val_bpb": 1.8303829544976487,
+   "val_argmax_accuracy": 0.6260986328125
+  }
+ ],
+ "val_bpb": 1.8953366884767984,
+ "test_bpb": null,
+ "val": {
+  "bpb": 1.8953366884767984,
+  "argmax_accuracy": 0.6141204833984375,
+  "target_bytes": 196608
+ },
+ "test": null,
+ "scoring": "softmax over logits",
+ "seconds": 559.4282782077789
+}

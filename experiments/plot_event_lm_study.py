@@ -29,6 +29,17 @@ COLORS = {
 CORPORA = (("enwik8", "enwik8", 4_999_999), ("pg19_full", "16 complete PG-19 books", 8_404_368))
 READ_ME_START = "<!-- event-lm-leaderboard:start -->"
 READ_ME_END = "<!-- event-lm-leaderboard:end -->"
+DEPTH = "event_lm/depth_inhibition"
+WIDTH = "event_lm/scale_1630k"
+DEPTH_ARMS = (
+    ("Three-block SNN, fixed threshold", WIDTH, "fixed", "wide_fixed", GRAY),
+    ("Three-block SNN, activity inhibition", DEPTH, "wide_inhibited", "wide_inhibited", BLUE),
+    ("Five-block SNN, fixed threshold", DEPTH, "deep_fixed", "deep_fixed", GRAY),
+    ("Five-block SNN, activity inhibition", DEPTH, "deep_inhibited", "deep_inhibited", BLUE),
+    ("Local Transformer", WIDTH, "transformer_local", None, ORANGE),
+    ("Full-attention Transformer", WIDTH, "transformer", None, ORANGE),
+)
+TRACE = ("Five-block SNN, inhibition + held charge", DEPTH, "deep_trace", "deep_trace", VIOLET)
 
 
 def summarize(values):
@@ -83,12 +94,62 @@ def build():
         exposures = {row["training_targets"] for row in rows}
         if len(exposures) != 1:
             raise ValueError(f"{scale} contains unequal training exposure")
-        for corpus, _, _ in CORPORA:
-            ordered = sorted(rows, key=lambda row: row["scores"][corpus]["mean"])
-            for rank, row in enumerate(ordered, start=1):
-                row["scores"][corpus]["rank"] = rank
+        rank_scores(rows)
         leaderboard["groups"][scale] = rows
     return leaderboard
+
+
+def rank_scores(rows):
+    for corpus, _, _ in CORPORA:
+        ordered = sorted(rows, key=lambda row: row["scores"][corpus]["mean"])
+        for rank, row in enumerate(ordered, start=1):
+            row["scores"][corpus]["rank"] = rank
+
+
+def build_depth():
+    definitions = list(DEPTH_ARMS)
+    trace_files = [f"{DEPTH}/{prefix}_deep_trace.json" for prefix in ("enwik8", "pg19", "native")]
+    if all((RESULTS / path).is_file() for path in trace_files):
+        definitions.insert(4, TRACE)
+
+    rows, test_inputs = [], {}
+    for label, directory, suffix, audit, color in definitions:
+        scores, sources = {}, {}
+        scored_models = []
+        for corpus, dataset, targets in CORPORA:
+            prefix = "pg19" if corpus == "pg19_full" else corpus
+            source = f"{directory}/{prefix}_{suffix}.json"
+            record = read_result(source)
+            (model,) = record["models"]
+            books = [(book["book_id"], book["excerpt_sha256"], book["target_bytes"]) for book in model["books"]]
+            if (record["split"] != "test" or record["target_bytes"] != targets or model["target_bytes"] != targets
+                    or books != test_inputs.setdefault(corpus, books)):
+                raise ValueError(f"{source} does not match the complete {dataset} test inputs")
+            scores[corpus] = {"mean": model["bpb"], "by_seed": [model["bpb"]], "raw_bpb": model["raw_bpb"]}
+            sources[corpus] = source
+            scored_models.append(model)
+        if len({(row["run_name"], row["checkpoint"], row["streaming_tensor_bytes"]) for row in scored_models}) != 1:
+            raise ValueError(f"{label} mixes different checkpoints or state budgets")
+
+        training_path = f'{directory}/{model["run_name"]}.json'
+        training = read_result(training_path)
+        if training["args"]["seed"] != 0 or training["train_target_bytes"] != 26_214_400:
+            raise ValueError(f"{training_path} does not match the depth comparison budget")
+        pulses = None
+        audit_path = f"{DEPTH}/native_{audit}.json" if audit else None
+        if audit_path:
+            native = read_result(audit_path)
+            (measurement,) = native["models"]
+            if (native["input_bytes"] != 4096 or native["split"] != "test"
+                    or measurement["checkpoint"] != model["checkpoint"]):
+                raise ValueError(f"{audit_path} does not match the evaluated model and audit input size")
+            pulses = {"mean": measurement["total_pulses_per_byte"]}
+        rows.append({"model": label, "color": color, "parameters": model["parameters"],
+                     "state_bytes": model["streaming_tensor_bytes"], "training_targets": training["train_target_bytes"],
+                     "scores": scores, "score_files": sources, "training_record": training_path,
+                     "native_audit": audit_path, "pulses_per_byte": pulses})
+    rank_scores(rows)
+    return {"unit": "bits per byte", "seeds": [0], "groups": {"depth": rows}}
 
 
 def score_cell(stats):
@@ -121,19 +182,29 @@ def markdown_table(rows, *, include_ranks):
     return "\n".join(lines)
 
 
-def write_leaderboards(data):
+def write_leaderboards(data, depth):
+    latest = depth["groups"]["depth"]
     paragraphs = [
         "# Spiking byte model leaderboards",
-        "Scores are three-seed means in bits per byte. Lower scores rank higher. "
-        "Every row at a size uses the same enwik8 training windows and scores "
+        "Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 training exposure and scores "
         "4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books.",
         "State is persistent tensor storage for one stream. The separate full-attention "
         "reference attends to a causal prefix of up to 512 bytes and reports its FP32 key "
-        "and value storage at that length. Pulse counts use a native 4,096-byte enwik8 test sample.",
+        "and value storage at that length. Pulse counts use a native 4,096-byte enwik8 test sample. "
+        "Each PG-19 temperature is fitted on eight separate validation books.",
+        "## Depth and activity inhibition · 26,214,400 training targets · seed 0",
+        markdown_table(latest, include_ranks=True),
+        "![Held-out loss for matched depth and inhibition models](../results/figures/depth_inhibition_test.png)",
+        "![Validation curves and residual spike counts](../results/figures/depth_inhibition.png)",
+        "[Evaluation records and ranks](../results/event_lm/depth_inhibition_leaderboard.json) · "
+        "[Depth study and ablations](DEPTH_INHIBITION.md) · [Replication](DEPTH_INHIBITION.md#full-attention-replication) · "
+        "[Current model card](../models/spiking-byte-lm-v2/README.md)",
+        "## Earlier context-tag and threshold study",
+        "Each score below is a mean over three seeds. Each group has its own training exposure.",
     ]
     for scale, rows in data["groups"].items():
         paragraphs.extend([
-            f'## {scale.capitalize()} comparison · {rows[0]["training_targets"]:,} training targets per seed',
+            f'### {scale.capitalize()} comparison · {rows[0]["training_targets"]:,} training targets per seed',
             markdown_table(rows, include_ranks=True),
         ])
     paragraphs.extend([
@@ -150,7 +221,7 @@ def write_leaderboards(data):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    table = markdown_table(data["groups"]["large"], include_ranks=False)
+    table = markdown_table(latest, include_ranks=False)
     readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
 
 
@@ -211,15 +282,42 @@ def plot_pulses(data, output):
     save(fig, output, "event_lm_pulse_tradeoff.png")
 
 
+def plot_depth_scores(data, output):
+    rows = data["groups"]["depth"]
+    fig, axes = plt.subplots(1, 2, figsize=(12.2, 4.7), sharey=True)
+    fig.subplots_adjust(left=0.32, right=0.973, bottom=0.22, top=0.756, wspace=0.18)
+    heading(fig, "Held-out loss after increasing spiking depth",
+            "1.63M parameters · 26.2M enwik8 training targets · seed 0")
+    for ax, (corpus, name, _) in zip(axes, CORPORA, strict=True):
+        style(ax, grid_axis="x")
+        ax.set_title(name, fontsize=11, loc="left", color=TEXT)
+        ax.set_xlabel("Bits per byte", color=MUTED, labelpad=8)
+        for y, row in enumerate(rows):
+            bpb = row["scores"][corpus]["mean"]
+            ax.scatter(bpb, y, color=row["color"], s=44, edgecolors="white", linewidth=0.8, zorder=3)
+            ax.annotate(f"{bpb:.3f}", (bpb, y), xytext=(7, 0), textcoords="offset points",
+                        va="center", size=8.5, color=TEXT)
+        ax.set_yticks(range(len(rows)), [row["model"] for row in rows])
+        ax.set_ylim(len(rows) - 0.45, -0.55)
+        ax.margins(x=0.25)
+    fig.text(0.035, 0.043, "Lower is better. PG-19 uses temperatures fitted on separate validation books.",
+             color=MUTED, size=9)
+    save(fig, output, "depth_inhibition_test.png")
+
+
 def main():
     data = build()
+    depth = build_depth()
     summary = RESULTS / "event_lm/threshold_scale_leaderboard.json"
     summary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    write_leaderboards(data)
+    summary = RESULTS / "event_lm/depth_inhibition_leaderboard.json"
+    summary.write_text(json.dumps(depth, indent=2) + "\n", encoding="utf-8")
+    write_leaderboards(data, depth)
     output = RESULTS / "figures"
     output.mkdir(parents=True, exist_ok=True)
     plot_loss(data, output)
     plot_pulses(data, output)
+    plot_depth_scores(depth, output)
 
 
 if __name__ == "__main__":

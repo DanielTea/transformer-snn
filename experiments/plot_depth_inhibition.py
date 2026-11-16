@@ -26,7 +26,9 @@ def main():
     heading(fig, "Learning curves and residual spike counts",
             "1.63M parameters · seed 0 · 26.2M enwik8 training targets")
 
-    models = (*MODELS, TRACE) if args.include_trace else MODELS
+    trace_ready = all((RESULTS / path).is_file() for path in
+                      (f"{TRACE[1]}.json", f"{STUDY}/native_{TRACE[2]}.json"))
+    models = (*MODELS, TRACE) if args.include_trace or trace_ready else MODELS
     for label, record, audit, color, line in models:
         run = read_result(f"{record}.json")
         curve = run["curve"]

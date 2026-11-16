@@ -106,15 +106,21 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
-  <p class="col">Integer spike decoders and matched Transformer references were trained on enwik8 at two sizes. The tables show three-seed mean bits per byte on the complete enwik8 test split and 16 complete PG-19 books. Full attention uses up to 512 bytes per evaluation window. State is persistent tensor storage per stream, including the FP32 keys and values for the full-attention reference.</p>
+  <p class="col">The current depth study compares integer spike decoders with matched Transformer references. All models trained on enwik8. The tables score the complete enwik8 test split and 16 complete PG-19 books in bits per byte. Full attention uses up to 512 bytes per evaluation window. State is persistent tensor storage per stream, including the FP32 keys and values for the full-attention reference.</p>
   <!-- EVENT_LM_TABLES -->
+  <figure>
+    <a href="../results/figures/depth_inhibition_test.png"><img src="../results/figures/depth_inhibition_test.png" alt="Held-out next-byte loss for the depth and inhibition comparison" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/depth_inhibition.png"><img src="../results/figures/depth_inhibition.png" alt="Validation loss and residual spike counts for the depth study" loading="lazy"></a>
+  </figure>
   <figure>
     <a href="../results/figures/event_lm_loss.png"><img src="../results/figures/event_lm_loss.png" alt="Next-byte loss by model, size, and test corpus across three seeds" loading="lazy"></a>
   </figure>
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm/README.md">Model, architecture and training handoff</a> · <a href="SPIKE_CODE_FORECAST.md#learned-context-keys-and-firing-thresholds">Interventions and per-seed records</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v2/README.md">Model, architecture and training handoff</a> · <a href="DEPTH_INHIBITION.md">Depth study and interventions</a></p>
 </section>
 
 <section id="dendrite">

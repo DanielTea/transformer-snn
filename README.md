@@ -1,10 +1,10 @@
 # ShuntFormer
 
-The current release is a spiking byte language model with coincidence-routed
-delay groups and a bounded correction memory. Native CPU inference uses
-integer synapses and emits one population of signed vocabulary spikes per
-byte. The fixed-threshold model has 815,232 parameters and uses 32,696 bytes
-of streaming tensor state.
+ShuntFormer v2 predicts the next byte with five spiking blocks. Each
+block has a shared inhibitory pool and holds local charge across bytes.
+A bounded memory recalls past forecast errors. The 1,630,992-parameter
+reference uses 21,320 bytes of persistent tensor state per stream. The
+integer CPU decoder emits a signed spike count for each candidate byte.
 
 ## Run the current model
 
@@ -14,54 +14,61 @@ From the repository root, use Python 3.11 or 3.12.
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python experiments/generate_event_lm.py models/spiking-byte-lm/weights.pt \
+python experiments/generate_event_lm.py models/spiking-byte-lm-v2/weights.pt \
   --prompt 'The first chapter' --bytes 128
 ```
 
-The checkout includes one checkpoint selected by enwik8 validation loss.
-The [checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v1)
-contains every seed in the two-size comparison, both Transformer references,
-and the parent checkpoints for the paired router test.
+The checkout contains the reference weights. The v2 release archive adds
+the depth and routing studies, matched Transformer checkpoints, and the
+parents needed to replay the continuation experiments.
+[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v2) ·
+[Checksums and configurations](models/spiking-byte-lm-v2/manifest.json)
 
-[Model card, architecture and training handoff](models/spiking-byte-lm/README.md) ·
-[Leaderboards and charts](docs/LEADERBOARD.md) ·
-[Per-seed results and interventions](docs/SPIKE_CODE_FORECAST.md#learned-context-keys-and-firing-thresholds) ·
-[Browser report](docs/report.html#spiking-byte-lm)
-
-[Spike activity and compact delay experiments](docs/SPIKE_ROUTER_FOLLOWUP.md) ·
-[Short-context routing and scaling experiments](docs/LOCAL_SPIKE_ROUTING.md) ·
-[Activity inhibition and held-charge experiments](docs/DEPTH_INHIBITION.md)
+| Start here | Contents |
+|---|---|
+| [Model card](models/spiking-byte-lm-v2/README.md) | Architecture diagram, firing and memory rules, exact state layout |
+| [Research handoff](docs/HANDOFF.md) | Data setup, training replay, warm start, scoring and open experiments |
+| [Leaderboards](docs/LEADERBOARD.md) and [browser report](docs/report.html#spiking-byte-lm) | Ranked results, learning curves and native spike activity |
+| [Depth study](docs/DEPTH_INHIBITION.md) | Matched controls, ablations and source records |
+| [v1 model card](models/spiking-byte-lm/README.md) | Earlier two-size, three-seed study |
 
 ## Current benchmark
 
-Three-seed means in bits per byte. Each model in this comparison has about
-815,000 parameters and saw 13,107,200 enwik8 training targets. The test
-scores cover the complete enwik8 test split and 16 complete PG-19 books.
-Full attention saw a causal prefix of up to 512 bytes per scored window
-and reports the FP32 key and value storage at that length.
+This matched seed-0 comparison uses about 1.63 million parameters and
+26,214,400 enwik8 training targets per model. The table reports bits per
+byte over the full enwik8 test split and 16 complete PG-19 books. Lower
+is better. Full attention sees up to 512 bytes per scoring window and
+reports its FP32 key and value storage at that length.
 
 <!-- event-lm-leaderboard:start -->
 
 | Model | enwik8 | PG-19 | State |
 |---|---:|---:|---:|
-| Context tags, fixed thresholds | 2.24015 | **3.25043** | 32,696 B |
-| Context tags, learned thresholds | 2.25351 | 3.25233 | 32,696 B |
-| Local Transformer | 2.04457 | 3.26187 | 32,768 B |
-| Full-attention Transformer | **2.01841** | 3.29072 | 1.5 MiB |
+| Three-block SNN, fixed threshold | 2.24386 | 3.19752 | 14,556 B |
+| Three-block SNN, activity inhibition | 2.16389 | 3.11971 | 14,556 B |
+| Five-block SNN, fixed threshold | 2.19441 | 3.13879 | 17,620 B |
+| Five-block SNN, activity inhibition | 2.07523 | 3.02885 | 17,620 B |
+| Five-block SNN, inhibition + held charge | 2.00577 | **2.98022** | 21,320 B |
+| Local Transformer | 1.89056 | 3.17881 | 64,512 B |
+| Full-attention Transformer | **1.81449** | 3.11725 | 3 MiB |
 
 <!-- event-lm-leaderboard:end -->
 
-The fixed-threshold spiking bank led on mean PG-19 loss. Its advantage
-over the local Transformer came from one seed. Both Transformer
-references led on enwik8. The [matched leaderboard](docs/LEADERBOARD.md)
-includes the smaller models and the native pulse counts.
+The bundled held-charge model led full attention on all 16 PG-19 books
+in seed 0. The inhibition-only control also led on PG-19 in all three
+matched seeds. Full attention led on enwik8 in each comparison.
+[Scores and ranks](docs/LEADERBOARD.md) · [Replication](docs/DEPTH_INHIBITION.md#full-attention-replication)
 
-![Held-out loss across the two matched sizes and corpora](results/figures/event_lm_loss.png)
+![Held-out next-byte loss for matched depth and inhibition models](results/figures/depth_inhibition_test.png)
 
 Regenerate the current leaderboards, charts, and browser report from the
-checked-in JSON results with
-`python experiments/plot_event_lm_study.py` and
-`python experiments/make_report.py docs/report.html`.
+checked-in JSON results.
+
+```bash
+python experiments/plot_event_lm_study.py
+python experiments/plot_depth_inhibition.py
+python experiments/make_report.py docs/report.html
+```
 
 ## Earlier research
 
