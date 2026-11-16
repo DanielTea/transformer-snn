@@ -96,6 +96,59 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
     handles.append(integer.output.register_forward_hook(lambda *_: vocabulary_calls.append(1)))
     activity = {}
     tap_winners = []
+    read_changes = []
+    read_charge = []
+    shared_apertures = {}
+    read_transfers = []
+    verified_transfers = 0
+    if integer.cfg.steering_transfer is not None:
+        def check_transfers(module, inputs, output):
+            nonlocal verified_transfers
+            before = inputs[0].index_select(-1, module.paired_channels).unflatten(-1, (-1, 2))
+            after = output.index_select(-1, module.paired_channels).unflatten(-1, (-1, 2))
+            if not torch.equal(before.sum(-1, dtype=torch.int32), after.sum(-1, dtype=torch.int32)):
+                raise AssertionError("a steering transfer changed the pulse count of a pair")
+            verified_transfers += 1
+
+        handles.extend(block.steering_transfer.register_forward_hook(check_transfers) for block in integer.blocks)
+    if integer.cfg.trace_read_share_steering:
+        def check_read_transfers(module, inputs, output):
+            current, original = inputs
+            if (output.lt(0) | output.gt(module.request.cap)).any():
+                raise AssertionError("shared read aperture exceeds its pulse bounds")
+            for before, after in zip(original.split(module.widths, -1), output.split(module.widths, -1), strict=True):
+                if not torch.equal(before.sum(-1, dtype=torch.int32), after.sum(-1, dtype=torch.int32)):
+                    raise AssertionError("a delay group's spare steering exchange changed its pulse budget")
+            threshold = module.request.threshold
+            before = current.clamp(-original * threshold, original * threshold)
+            after = current.clamp(-output * threshold, output * threshold)
+            if (output.lt(original) & before.ne(after)).any():
+                raise AssertionError("a steering donor lost read charge")
+            moved = (output - original).clamp_min(0).sum(dtype=torch.int64).item()
+            recovered = (after - before).abs().sum(dtype=torch.int64).item()
+            read_transfers.append((moved, recovered))
+            shared_apertures[module] = output
+
+        handles.extend(block.trace.read_drive.steering_share.register_forward_hook(check_read_transfers)
+                       for block in integer.blocks)
+    if integer.cfg.trace_read_drive is not None:
+        def check_driven_read(module, inputs, output):
+            base, steering, present, correction = inputs
+            aperture = (steering.clamp(max=module.emit.cap) if module.steering_share is None
+                        else shared_apertures.pop(module.steering_share))
+            if (output.abs() > aperture).any():
+                raise AssertionError("a driven trace read exceeded its steering aperture")
+            read_changes.append((output - base).abs().sum(dtype=torch.int64).item())
+            drive = module.drive_ticks(present, correction)
+            limit = aperture * module.emit.threshold
+            baseline = base * module.emit.threshold
+            passed = drive.clamp(-limit - baseline, limit - baseline)
+            magnitude = drive.abs()
+            closed = magnitude.masked_fill(aperture.ne(0), 0)
+            read_charge.append((magnitude.sum(dtype=torch.int64).item(),
+                                passed.abs().sum(dtype=torch.int64).item(), closed.sum(dtype=torch.int64).item()))
+
+        handles.extend(block.trace.read_drive.register_forward_hook(check_driven_read) for block in integer.blocks)
     if integer.cfg.trace_tap_read is not None:
         handles.extend(block.trace_taps.register_forward_hook(
             lambda _module, _inputs, output: tap_winners.append(output[2]),
@@ -111,6 +164,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 populations[f"block_{index}_inhibition"] = block.activity_inhibition
             if block.inhibition_redistribution is not None:
                 populations[f"block_{index}_inhibition_transfer"] = block.inhibition_redistribution.emit
+            if block.steering_transfer is not None:
+                populations[f"block_{index}_steering_transfer"] = block.steering_transfer.emit
             if block.late_steering is not None:
                 populations[f"block_{index}_late_steering"] = block.late_steering.emit
                 populations[f"block_{index}_late_residual"] = block.late_emit
@@ -122,6 +177,10 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 populations[f"block_{index}_trace_write_confirm"] = block.trace.write_confirm.emit
             if integer.cfg.trace_integration:
                 populations[f"block_{index}_trace_input"] = block.trace.input.emit
+            if integer.cfg.trace_read_drive is not None:
+                populations[f"block_{index}_trace_read"] = block.trace.read_drive.emit
+            if integer.cfg.trace_read_share_steering:
+                populations[f"block_{index}_trace_read_requests"] = block.trace.read_drive.steering_share.request
             if integer.cfg.trace_tap_read is not None:
                 populations[f"block_{index}_tap_correction"] = block.trace_taps.emit
         for name, module in populations.items():
@@ -201,6 +260,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["delay_correction_gain_ticks"] = [block.delay_correction.gains().tolist() for block in integer.blocks]
     if integer.cfg.router_charge_bits != EventLMConfig.router_charge_bits:
         row["router_charge_bits"] = integer.cfg.router_charge_bits
+    if integer.cfg.delay_group_widths is not None:
+        row["delay_group_widths"] = integer.cfg.group_widths
     if integer.cfg.local_trace:
         row["native_batch_matches_chunk_on_prefix"] = tokens.numel()
     if integer.cfg.opponent_steering:
@@ -214,6 +275,43 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
     if integer.cfg.trace_integration:
         row["trace_input_nonzero_weights_by_block"] = [
             block.trace.input.weight.count_nonzero().item() for block in integer.blocks
+        ]
+    if integer.cfg.trace_read_drive is not None:
+        if len(read_changes) != len(integer.blocks):
+            raise AssertionError("the native audit did not check every driven read population")
+        row["trace_read_drive"] = integer.cfg.trace_read_drive
+        row["trace_read_drive_bits"] = integer.cfg.trace_read_drive_bits
+        row["trace_read_drive_carry"] = integer.cfg.trace_read_drive_carry
+        row["trace_read_counts_stayed_within_aperture"] = True
+        row["trace_read_drive_active_weights_by_block"] = [
+            block.trace.read_drive.weight.count_nonzero().item() for block in integer.blocks
+        ]
+        if integer.cfg.trace_read_drive.endswith("-rails"):
+            row["trace_read_total_variation_cells_by_block"] = [
+                block.trace.read_drive.weight.sum(0, dtype=torch.int32).count_nonzero().item()
+                for block in integer.blocks
+            ]
+        row["trace_read_changed_counts_per_byte_by_block"] = [count / tokens.numel() for count in read_changes]
+        received, passed, closed = map(sum, zip(*read_charge, strict=True))
+        row["trace_read_drive_ticks_per_byte"] = received / tokens.numel()
+        row["trace_read_drive_clipped_fraction"] = (received - passed) / received if received else None
+        row["trace_read_drive_closed_aperture_fraction"] = closed / received if received else None
+    if integer.cfg.trace_read_share_steering:
+        if len(read_transfers) != len(integer.blocks) or shared_apertures:
+            raise AssertionError("the native audit did not check every shared aperture")
+        moved, recovered = map(sum, zip(*read_transfers, strict=True))
+        row["trace_read_delay_groups_conserve_steering"] = True
+        row["trace_read_steering_donors_preserve_charge"] = True
+        row["trace_read_steering_pulses_moved_per_byte"] = moved / tokens.numel()
+        row["trace_read_drive_ticks_recovered_per_byte"] = recovered / tokens.numel()
+    if integer.cfg.steering_transfer is not None:
+        if verified_transfers != len(integer.blocks):
+            raise AssertionError("the native audit did not check every steering transfer block")
+        row["steering_transfer"] = integer.cfg.steering_transfer
+        row["steering_pairs_conserve_pulses"] = True
+        row["steering_transfer_active_weights_by_block"] = [
+            sum(weight.count_nonzero().item() for weight in block.steering_transfer.weights)
+            for block in integer.blocks
         ]
     if integer.cfg.learn_inhibition_thresholds:
         row["inhibition_threshold_units_per_base"] = 1 << integer.cfg.inhibition_threshold_bits
@@ -254,6 +352,16 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 activity[f"block_{index}_trace_input"].abs().sum(dtype=torch.int64).item()
                 for index in range(len(integer.blocks))
             ) / tokens.numel()
+        if integer.cfg.trace_read_share_steering:
+            row["trace_read_steering_request_pulses_per_byte"] = sum(
+                activity[f"block_{index}_trace_read_requests"].sum(dtype=torch.int64).item()
+                for index in range(len(integer.blocks))
+            ) / tokens.numel()
+        if integer.cfg.steering_transfer is not None:
+            row["steering_transfer_pulses_per_byte"] = sum(
+                activity[f"block_{index}_steering_transfer"].abs().sum(dtype=torch.int64).item()
+                for index in range(len(integer.blocks))
+            ) / tokens.numel()
         if tap_winners:
             row["trace_tap_correction_pulses_per_byte"] = sum(
                 activity[f"block_{index}_tap_correction"].abs().sum(dtype=torch.int64).item()
@@ -273,11 +381,12 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 name: activity[name][..., prior_width:].abs().sum(dtype=torch.int64).item() / tokens.numel()
                 for name in ("input", *(f"block_{index}_residual" for index in range(len(integer.blocks))))
             }
-        prior_expansion = initialization.get("expansion_width_before")
+        prior_expansion = initialization.get("expansion_groups_before", initialization.get("expansion_width_before"))
         if prior_expansion is not None:
             added = {}
             for index, block in enumerate(integer.blocks):
-                previous = _delay_group_widths(prior_expansion, len(block.widths))
+                previous = (_delay_group_widths(prior_expansion, len(block.widths))
+                            if isinstance(prior_expansion, int) else tuple(prior_expansion))
                 for population in ("content", "steering"):
                     name = f"block_{index}_{population}"
                     groups = activity[name].split(block.widths, dim=-1)

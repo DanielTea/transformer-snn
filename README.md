@@ -1,83 +1,86 @@
 # ShuntFormer
 
-ShuntFormer v7 packages the 11-block integer spiking byte decoder
-trained through **101,580,800 enwik8 targets**. The SNN uses
-**29,674 bytes of persistent tensor state** per stream.
-Inhibitory and steering neurons route signed counts through fixed
-axons and held charge. The last four blocks forward arriving counts
-and emit signed corrections. A tagged error bank inhibits mismatched
-reads before the vocabulary neurons fire.
+ShuntFormer is an integer spiking byte language model. The v8
+checkpoint has **12.80M parameters**, 11 spiking blocks and
+**31,257 bytes of persistent tensor state** per stream. Each
+block routes counts through fixed axons and held charge. A cell's
+positive and negative write corrections drive its read through
+learned conductances. Neighboring cells can lend spare steering
+pulses within their delay group. A tagged error bank inhibits
+mismatched reads before the vocabulary neurons fire.
 
-The newest experimental circuit derives a release spike's timing from
-the mismatch between held charge and each candidate on an existing
-axon ring. The first release selects its own spike packet. The
-selector and its shortest-tap control both use the original rings.
-[Architecture](models/spiking-byte-lm-v7/README.md) · [Tap read experiment](docs/TRACE_TAP_READ.md)
+[Model card and circuit diagram](models/spiking-byte-lm-v8/README.md) ·
+[Research handoff](docs/V8_HANDOFF.md) · [Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v8)
 
-![Held-out loss for three spiking decoders and the matched full-attention reference](results/figures/event_lm_trace_tap_read.png)
+![Held-out loss for the spiking read circuits and matched full-attention reference](results/figures/event_lm_trace_read_drive.png)
 
-## Run the model
+## Run the bundled model
 
-Use Python 3.12 from the repository root. The checkout includes the
-reference weights. Greedy generation runs on CPU.
+From the repository root, set up Python 3.12 and run greedy
+generation with the native CPU integer decoder.
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python experiments/generate_event_lm.py models/spiking-byte-lm-v7/weights.pt \
+python experiments/generate_event_lm.py models/spiking-byte-lm-v8/weights.pt \
   --prompt 'The first chapter' --bytes 128
 ```
 
-| Where to start | What it contains |
-|---|---|
-| [v7 model card](models/spiking-byte-lm-v7/README.md) | End-to-end circuit, integer firing and memory rules, architecture and stream state |
-| [Research handoff](docs/HANDOFF.md) | Dataset checksums, checkpoint restore, exact replay commands, and the next runs |
-| [Ranked results](docs/LEADERBOARD.md) and [browser report](docs/report.html#spiking-byte-lm) | Matched comparisons, raw and calibrated loss, pulse counts, and charts |
-| [Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v7) and [manifest](models/spiking-byte-lm-v7/manifest.json) | 11 verified checkpoints, including both studies and their replay parents |
+## Matched benchmark
 
-## Current benchmark
-
-Each model below has about 9.96M parameters and saw **101,580,800
-cumulative enwik8 training targets** in 512-byte windows, with seed
-6899 for the final continuation. Scores are bits per byte on the full
-enwik8 test split and 16 pinned PG-19 test books. PG-19 temperatures
-are fitted on eight separate books.
+Every row below saw **116,326,400 cumulative enwik8 training
+targets** in 512-byte windows. The continuation used seed 8237
+and models have about 12.8M parameters. Scores are bits per byte
+on the full enwik8 test split and 16 pinned PG-19 test books.
+PG-19 temperatures are fit on eight separate validation books.
 
 <!-- event-lm-leaderboard:start -->
 
-| Model | enwik8 | PG-19 | State |
-|---|---:|---:|---:|
-| Continued SNN | 1.81319 | **2.77756** | 29,674 B |
-| Shortest eligible tap | 1.81655 | 2.78455 | 29,674 B |
-| Held spike race | 1.81473 | 2.78521 | 29,674 B |
-| 6-block full attention | **1.73380** | 2.89702 | 6 MiB |
+| Model | enwik8 | PG-19 calibrated | PG-19 raw | State |
+|---|---:|---:|---:|---:|
+| Original held-charge read | 1.79577 | 2.75495 | 2.84136 | 28,584 B |
+| Write input, six-bit reset | 1.79582 | 2.75706 | 2.84654 | 28,584 B |
+| Present input, six-bit reset | 1.79466 | 2.75747 | 2.84860 | 28,584 B |
+| Write input, eight-bit reset | 1.79449 | **2.75314** | 2.84192 | 28,584 B |
+| Write input, eight-bit carry | 1.79533 | 2.75724 | 2.84850 | 31,257 B |
+| Present input, eight-bit carry | 1.79525 | 2.75638 | 2.84361 | 31,257 B |
+| Write input, shared steering | 1.79561 | 2.76102 | 2.85001 | 31,257 B |
+| Two write rails, shared steering | 1.79464 | 2.75590 | 2.84506 | 31,257 B |
+| Present input, shared steering | 1.79572 | 2.75322 | **2.84069** | 31,257 B |
+| Full attention | **1.71363** | 2.88478 | 3.08081 | 6 MiB |
 
 <!-- event-lm-leaderboard:end -->
 
-The bundled continued SNN leads the spiking arms on both test
-sets and leads full attention on all 16 PG-19 books. Full
-attention leads on enwik8.
+The bundled two-rail model scores **1.79464 bpb on enwik8** and
+**2.75590 bpb on calibrated PG-19**. The matched full-attention
+control scores **1.71363** and **2.88478 bpb** respectively.
+Zeroing the bundled read drive raises loss by 0.00035 bpb on
+the 65,536-target validation intervention.
+[Ranked results](docs/LEADERBOARD.md) · [Browser report](docs/report.html#spiking-byte-lm) ·
+[Read circuit experiments](docs/TRACE_READ_DRIVE.md)
 
-State measures persistent tensors per stream, with a 512-byte
-evaluation context for full attention. The result records include
-the raw PG-19 scores and per-book losses.
-[Full-corpus records and native pulse audits](results/event_lm/trace_tap_read) ·
-[Evaluation protocol](docs/HANDOFF.md#score-checkpoints)
+State counts persistent tensors per stream. The full-attention
+reference uses a 512-byte evaluation context. The result records
+include raw and calibrated PG-19 scores, per-book losses,
+and native pulse measurements.
+[Evaluation protocol](docs/V8_HANDOFF.md#evaluation) · [Result file guide](results/README.md)
 
-## Continue the research
+## Resume the research
 
-Restore the v7 archive to replay any arm or start a new continuation
-from its trained weights. A warm-start audit expands the local
-populations from 187 to 243 channels under 32 KiB with exact
-parent counts and pulses.
-[Resume from v7](docs/HANDOFF.md#continue-from-the-v7-endpoints) ·
-[Packed width audit](docs/TRACE_TAP_READ.md#expand-within-32-kib) ·
-[Held-charge inputs and group thresholds](docs/TRACE_INTEGRATION.md) ·
-[Growth to 11 spiking blocks](docs/DEPTH_GROWTH.md) ·
-[13.03M residual-width comparison](docs/GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state)
+Restore the v8 archive for the exact continuation checkpoints,
+matched full-attention baseline and replay parents. Each endpoint
+links to its full training arguments, dataset checksum and
+parent checkpoint hash. The handoff gives commands to rescore,
+replay and train the 25.6M comparison. The widened SNN passed a
+warm-start audit and one optimizer update at the same 31,257-byte
+state budget.
+[Restore and continue](docs/V8_HANDOFF.md#restore-checkpoints) ·
+[Exact manifest](models/spiking-byte-lm-v8/manifest.json) ·
+[Packed-width experiments](docs/PACKED_WIDTH.md)
 
-Regenerate the leaderboards and figures from the checked-in results.
+Regenerate the leaderboards, scientific figures and browser report
+from the checked-in records.
 
 ```bash
 python experiments/plot_event_lm_study.py
@@ -85,6 +88,5 @@ python experiments/plot_depth_inhibition.py
 python experiments/make_report.py docs/report.html
 ```
 
-[Source map](docs/HANDOFF.md#source-and-release-map) ·
-[Historical ShuntFormer and Dendrite experiments](docs/SHUNTFORMER_HISTORY.md) ·
-[Result file guide](results/README.md)
+[Source map](docs/V8_HANDOFF.md#source-map) ·
+[Historical ShuntFormer and Dendrite experiments](docs/SHUNTFORMER_HISTORY.md)

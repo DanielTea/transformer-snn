@@ -28,6 +28,7 @@ def score(model, window, chunk_size, *, reset_trace=False):
         if reset_trace and state is not None:
             for layer in state.local_layers:
                 layer.trace_charge = None
+                layer.trace_read_phase = None
         counts, state = model.forward_chunk(section[:, :-1], state)
         logits = scoring_logits(counts, True, model.cfg.resolution)
         losses.append(F.cross_entropy(logits.flatten(0, 1), section[:, 1:].flatten(), reduction="sum").item())
@@ -66,8 +67,42 @@ def score_with_options(model, window, chunk_size, **options):
     return score(variant, window, chunk_size)
 
 
-def added_expansion_rows(block, previous_width, weight):
-    before = _delay_group_widths(previous_width, len(block.widths))
+@torch.inference_mode()
+def score_with_antisymmetric_read_gains(model, window, chunk_size):
+    variant = EventLM(model.cfg).eval().to(window.device)
+    variant.load_state_dict(model.state_dict())
+    for block in variant.blocks:
+        positive, negative = block.trace.read_drive.weight.unbind(0)
+        signed = (positive - negative) * 0.5
+        positive.copy_(signed)
+        negative.copy_(-signed)
+    return score(variant, window, chunk_size)
+
+
+def probe_temporal_groups(model, window, chunk_size):
+    groups = [{"delays": [], "axon_cells": 0, "held_cells": 0, "columns": []}
+              for _ in model.blocks[0].widths]
+    hidden = model.cfg.hidden
+    for block in model.blocks:
+        offset = 0
+        for width, delay, group in zip(block.widths, block.local_delays, groups, strict=True):
+            group["delays"].append(delay)
+            group["axon_cells"] += delay * width
+            group["held_cells"] += width
+            for route in (2, 3):
+                first = route * hidden + offset
+                group["columns"].append(block.project.weight[:, first:first + width])
+            offset += width
+
+    intact = score(model, window, chunk_size)
+    for group in groups:
+        columns = group.pop("columns")
+        group["muted_bpb"] = score_without_synapses(model, window, chunk_size, columns)
+    return {"intact_bpb": intact, "muted_temporal_groups": groups}
+
+
+def added_expansion_rows(block, previous, weight):
+    before = _delay_group_widths(previous, len(block.widths)) if isinstance(previous, int) else tuple(previous)
     return [group[width:] for group, width in zip(weight.split(block.widths * 2), before * 2, strict=True)]
 
 
@@ -164,11 +199,35 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.cfg.trace_integration:
         weights = [block.trace.input.weight for block in model.blocks]
         result["zero_trace_input_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.trace_read_drive is not None:
+        weights = [block.trace.read_drive.weight for block in model.blocks]
+        result["zero_trace_read_drive_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+        source = model.cfg.trace_read_drive
+        other_source = "present" if source.startswith("write") else "write"
+        if source.endswith("-rails"):
+            other_source += "-rails"
+            result["antisymmetric_trace_read_gains_bpb"] = score_with_antisymmetric_read_gains(
+                model, window, chunk_size,
+            )
+        result["swapped_trace_read_drive_bpb"] = score_with_options(model, window, chunk_size,
+                                                                  trace_read_drive=other_source)
+        if model.cfg.trace_read_share_steering:
+            result["without_trace_read_sharing_bpb"] = score_with_options(
+                model, window, chunk_size, trace_read_share_steering=False,
+            )
     if model.cfg.trace_tap_read is not None:
         weights = [block.trace_taps.weight for block in model.blocks]
         result["zero_tap_correction_bpb"] = score_without_synapses(model, window, chunk_size, weights)
         if model.cfg.trace_tap_read == "race":
             result["fixed_tap_on_race_weights_bpb"] = score_with_options(model, window, chunk_size, trace_tap_read="fixed")
+    if model.cfg.steering_transfer is not None:
+        weights = [weight for block in model.blocks for weight in block.steering_transfer.weights]
+        result["zero_steering_transfer_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+        source = model.cfg.steering_transfer
+        other_source = "present" if source == "delayed" else "delayed"
+        result[f"{other_source}_transfer_on_{source}_weights_bpb"] = score_with_options(
+            model, window, chunk_size, steering_transfer=other_source,
+        )
     if model.prediction_memory is not None:
         result["mute_bank_corrections_bpb"] = score_without_synapses(
             model, window, chunk_size, [model.recall_synapse.weight],
@@ -236,6 +295,8 @@ def main():
                               help="intervene on all read competition conductances and score the validation text")
     intervention.add_argument("--trace-input-gains", type=float, nargs="+",
                               help="scale the trained trace input synapses and score the validation text")
+    intervention.add_argument("--temporal-groups", action="store_true",
+                              help="mute the held-read and arriving bypass projections for one delay group at a time")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
     if min(args.targets, args.chunk_size) < 1:
@@ -255,6 +316,8 @@ def main():
     if args.trace_input_gains is not None and (not model.cfg.trace_integration
             or any(not math.isfinite(gain) or gain < 0 for gain in args.trace_input_gains)):
         parser.error("trace input gain interventions require a trained trace input and finite nonnegative gains")
+    if args.temporal_groups and not model.cfg.local_trace:
+        parser.error("temporal group interventions require the held-charge router")
     _, validation, _ = load_splits(args.enwik8)
     if args.targets >= len(validation):
         parser.error("the requested targets exceed the validation split")
@@ -268,9 +331,12 @@ def main():
         metrics = {"trace_input_gain_sweep": probe_trace_input_gains(
             model, window, args.chunk_size, args.trace_input_gains,
         )}
+    elif args.temporal_groups:
+        metrics = probe_temporal_groups(model, window, args.chunk_size)
     else:
+        previous_expansion = initialization.get("expansion_groups_before", initialization.get("expansion_width_before"))
         metrics = probe(model, window, args.chunk_size, residual_width_before=initialization.get("residual_width_before"),
-                        expansion_width_before=initialization.get("expansion_width_before"),
+                        expansion_width_before=previous_expansion,
                         depth_before=initialization.get("depth_before"))
     record = {
         "checkpoint": str(args.checkpoint),

@@ -1,5 +1,9 @@
 # ShuntFormer v7 research handoff
 
+The current release is v8. Its handoff restores the wider SNN,
+the driven-read controls, and their replay parents.
+[Current handoff](V8_HANDOFF.md) · [Current model card](../models/spiking-byte-lm-v8/README.md)
+
 The checkout includes an 11-block SNN trained through 101,580,800
 cumulative enwik8 targets. The v7 archive restores four matched
 endpoints at that exposure, all five endpoints at 91,750,400 targets,

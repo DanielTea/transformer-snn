@@ -51,6 +51,8 @@ FINER_ROUTER = "event_lm/finer_router_charge"
 DEPTH_GROWTH = "event_lm/depth_growth"
 TRACE_INTEGRATION = "event_lm/trace_integration"
 TRACE_TAP_READ = "event_lm/trace_tap_read"
+PACKED_WIDTH = "event_lm/packed_width"
+TRACE_READ_DRIVE = "event_lm/trace_read_drive"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -154,6 +156,39 @@ TRACE_TAP_101580K = (
     ("Shortest eligible tap", TRACE_TAP_READ, "fixed_s6899", f"{TRACE_TAP_READ}/native_fixed_s6899.json", "#138372"),
     ("Held spike race", TRACE_TAP_READ, "race_s6899", f"{TRACE_TAP_READ}/native_race_s6899.json", VIOLET),
     ("6-block full attention", TRACE_TAP_READ, "transformer_s6899", None, ORANGE),
+)
+PACKED_WIDTH_111411K = (
+    ("187-channel SNN", PACKED_WIDTH, "control_s7907", f"{PACKED_WIDTH}/native_control_s7907.json", BLUE),
+    ("243-channel SNN", PACKED_WIDTH, "wide_s7907", f"{PACKED_WIDTH}/native_wide_s7907.json", VIOLET),
+    ("Original full attention", PACKED_WIDTH, "control_transformer_s7907", None, ORANGE),
+    ("Wider full attention", PACKED_WIDTH, "transformer_s7907", None, "#a34073"),
+    ("Delayed steering transfers", PACKED_WIDTH, "delayed_transfer_s7907",
+     f"{PACKED_WIDTH}/native_delayed_transfer_s7907.json", "#138372"),
+    ("Growth in shortest groups", PACKED_WIDTH, "short_groups_s7907",
+     f"{PACKED_WIDTH}/native_short_groups_s7907.json", "#7a6a50"),
+    ("Present steering transfers", PACKED_WIDTH, "present_transfer_s7907",
+     f"{PACKED_WIDTH}/native_present_transfer_s7907.json", "#a34073"),
+)
+TRACE_READ_DRIVE_116326K = (
+    ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
+     f"{TRACE_READ_DRIVE}/native_control_s8237.json", BLUE),
+    ("Write input, six-bit reset", TRACE_READ_DRIVE, "write_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_s8237.json", "#7a6a50"),
+    ("Present input, six-bit reset", TRACE_READ_DRIVE, "present_s8237",
+     f"{TRACE_READ_DRIVE}/native_present_s8237.json", GRAY),
+    ("Write input, eight-bit reset", TRACE_READ_DRIVE, "write_fine_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_fine_s8237.json", "#138372"),
+    ("Write input, eight-bit carry", TRACE_READ_DRIVE, "write_carry_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_carry_s8237.json", VIOLET),
+    ("Present input, eight-bit carry", TRACE_READ_DRIVE, "present_carry_s8237",
+     f"{TRACE_READ_DRIVE}/native_present_carry_s8237.json", "#ad4772"),
+    ("Write input, shared steering", TRACE_READ_DRIVE, "write_share_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_share_s8237.json", "#5750a1"),
+    ("Two write rails, shared steering", TRACE_READ_DRIVE, "write_rails_share_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_rails_share_s8237.json", "#138372"),
+    ("Present input, shared steering", TRACE_READ_DRIVE, "present_share_s8237",
+     f"{TRACE_READ_DRIVE}/native_present_share_s8237.json", "#76611e"),
+    ("Full attention", TRACE_READ_DRIVE, "transformer_s8237", None, ORANGE),
 )
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
@@ -317,6 +352,10 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
+        ("trace_read_drive_116326k", "Driven held-charge reads",
+         TRACE_READ_DRIVE_116326K, 8237, 512, (111_411_200, 4_915_200)),
+        ("packed_width_111411k", "Packed width and steering transfers",
+         PACKED_WIDTH_111411K, 7907, 512, (101_580_800, 9_830_400)),
         ("trace_tap_101580k", "9.96M axon tap reads",
          TRACE_TAP_101580K, 6899, 512, (91_750_400, 9_830_400)),
         ("trace_integration_91750k", "9.96M trace inputs and group thresholds",
@@ -404,24 +443,33 @@ def state_size(state):
 
 
 def markdown_table(rows, *, include_ranks, include_raw_pg19=False):
+    pg19_label = "PG-19 calibrated" if include_raw_pg19 else "PG-19"
     if include_ranks:
-        columns = ["Model", "Parameters", "State", "enwik8", "Rank", "PG-19", "Rank", "Pulses/byte"]
+        columns = ["Model", "Parameters", "State", "enwik8", "Rank", pg19_label, "Rank", "Pulses/byte"]
         if include_raw_pg19:
             columns.insert(7, "PG-19 raw")
     else:
-        columns = ["Model", "enwik8", "PG-19", "State"]
+        columns = ["Model", "enwik8", pg19_label, "State"]
+        if include_raw_pg19:
+            columns.insert(3, "PG-19 raw")
     lines = ["| " + " | ".join(columns) + " |", "|---|" + "---:|" * (len(columns) - 1)]
+    best_raw_pg19 = min(row["scores"]["pg19_full"]["raw_bpb"] for row in rows) if include_raw_pg19 else None
     for row in rows:
         enwik8, pg19 = (row["scores"][corpus] for corpus, _, _ in CORPORA)
         state = state_size(row["state_bytes"])
+        raw = ""
+        if include_raw_pg19:
+            raw_score = f'{pg19["raw_bpb"]:.5f}'
+            if pg19["raw_bpb"] == best_raw_pg19:
+                raw_score = f"**{raw_score}**"
+            raw = f" {raw_score} |"
         if include_ranks:
             pulses = row["pulses_per_byte"]
             pulse_text = f'{pulses["mean"]:,.0f}' if pulses else "—"
-            raw = f' {pg19["raw_bpb"]:.5f} |' if include_raw_pg19 else ""
             lines.append(f'| {row["model"]} | {row["parameters"]:,} | {state} | {score_cell(enwik8)} | '
                          f'{enwik8["rank"]} | {score_cell(pg19)} | {pg19["rank"]} |{raw} {pulse_text} |')
         else:
-            lines.append(f'| {row["model"]} | {score_cell(enwik8)} | {score_cell(pg19)} | {state} |')
+            lines.append(f'| {row["model"]} | {score_cell(enwik8)} | {score_cell(pg19)} |{raw} {state} |')
     return "\n".join(lines)
 
 
@@ -438,6 +486,20 @@ def write_leaderboards(data, depth, research):
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
     ]
     study_figures = {
+        "trace_read_drive_116326k": (
+            "![Held-out next-byte loss after training the driven read circuits]"
+            "(../results/figures/event_lm_trace_read_drive.png)",
+            "![Spare steering capacity and the effect of write polarity on read counts]"
+            "(../results/figures/event_lm_read_steering.png)",
+            "[Circuit, native activity, and matched controls](TRACE_READ_DRIVE.md)",
+        ),
+        "packed_width_111411k": (
+            "![Held-out loss at the original and wider sizes](../results/figures/event_lm_packed_width.png)",
+            "![Held-out loss changes from channel placement and steering sources]"
+            "(../results/figures/event_lm_packed_circuit_changes.png)",
+            "![Validation loss gap as the available history grows](../results/figures/event_lm_packed_width_history.png)",
+            "[Width, state budget, and steering circuit](PACKED_WIDTH.md)",
+        ),
         "trace_tap_101580k": (
             "![Held-out loss for the spike race, shortest tap, and matched controls](../results/figures/event_lm_trace_tap_read.png)",
             "![Validation loss and pulse counts during the tap comparison](../results/figures/event_lm_trace_tap_training.png)",
@@ -474,7 +536,7 @@ def write_leaderboards(data, depth, research):
         "![Held-out next-byte loss for the grown 6.51M models](../results/figures/event_lm_grown_6510k.png)",
         "![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)",
         "[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · "
-        "[Current model card](../models/spiking-byte-lm-v7/README.md) · [Depth growth study](DEPTH_GROWTH.md)",
+        "[Current model card](../models/spiking-byte-lm-v8/README.md) · [Depth growth study](DEPTH_GROWTH.md)",
         "![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)",
         "![Held-out loss at both trained context lengths](../results/figures/event_lm_trained_context.png)",
         "[Continuation and scale source records](../results/event_lm/continuation_leaderboard.json) · "
@@ -508,7 +570,8 @@ def write_leaderboards(data, depth, research):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    table = markdown_table(research["groups"]["trace_tap_101580k"]["rows"], include_ranks=False)
+    table = markdown_table(research["groups"]["trace_read_drive_116326k"]["rows"],
+                           include_ranks=False, include_raw_pg19=True)
     readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
 
 
@@ -569,8 +632,8 @@ def plot_pulses(data, output):
     save(fig, output, "event_lm_pulse_tradeoff.png")
 
 
-def plot_heldout(rows, output, *, title, subtitle, filename, precision=3):
-    fig, axes = plt.subplots(1, 2, figsize=(12.2, 4.7), sharey=True)
+def plot_heldout(rows, output, *, title, subtitle, filename, precision=3, height=4.7):
+    fig, axes = plt.subplots(1, 2, figsize=(12.2, height), sharey=True)
     fig.subplots_adjust(left=0.32, right=0.973, bottom=0.22, top=0.756, wspace=0.18)
     heading(fig, title, subtitle)
     for ax, (corpus, name, _) in zip(axes, CORPORA, strict=True):
@@ -707,6 +770,105 @@ def plot_group_thresholds(output):
     fig.text(0.035, 0.045, "Offsets apply before spikes from the shared inhibitory pool arrive.",
              color=MUTED, size=9)
     save(fig, output, "event_lm_fine_group_thresholds.png")
+
+
+def plot_packed_width_history(output):
+    parent, control, wide = (read_result(f"{PACKED_WIDTH}/{name}_validation_history.json")
+                             for name in ("parent", "control", "wide"))
+    for key in ("data_sha1", "split", "target_bytes", "tail_bytes", "tail_starts"):
+        if parent[key] != control[key] or parent[key] != wide[key]:
+            raise ValueError("all checkpoints must score the same validation tails")
+    fig, ax = plt.subplots(figsize=(9.6, 4.45))
+    fig.subplots_adjust(left=0.11, right=0.966, bottom=0.21, top=0.75)
+    heading(fig, "The enwik8 gap grows with context",
+            f'{parent["target_bytes"]:,} matched validation targets · {parent["tail_bytes"]}-byte scored tails')
+    style(ax)
+    pairs = ((parent, "9.96M v7 pair · 101.58M targets", GRAY, "^--"),
+             (control, "9.96M pair · 111.41M targets", BLUE, "s:"),
+             (wide, "12.8M pair · 111.41M targets", VIOLET, "o-"))
+    histories = [row["history_bytes"] for row in parent["models"][0]["histories"]]
+    for record, name, color, line in pairs:
+        snn, attention = (model["histories"] for model in record["models"])
+        if any(histories != [row["history_bytes"] for row in model] for model in (snn, attention)):
+            raise ValueError("history comparisons must use matching warmup lengths")
+        gap = [spike["bpb"] - full["bpb"] for spike, full in zip(snn, attention, strict=True)]
+        ax.plot(histories, gap, line, color=color, label=name, markerfacecolor="white")
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(histories, [str(history) for history in histories])
+    ax.set_xlabel("Warmup bytes before each scored tail", color=MUTED, labelpad=8)
+    ax.set_ylabel("SNN loss minus full attention, bits per byte", color=MUTED, labelpad=7)
+    ax.axhline(0, linewidth=0.9, color=GRAY, alpha=0.7)
+    ax.legend(frameon=False, labelcolor=TEXT)
+    save(fig, output, "event_lm_packed_width_history.png")
+
+
+def plot_packed_circuit_changes(baseline, variants, output):
+    panels = (("enwik8", "mean", "enwik8"),
+              ("pg19_full", "raw_bpb", "PG-19 raw"),
+              ("pg19_full", "mean", "PG-19 calibrated"))
+    changes = [[row["scores"][corpus][metric] - baseline["scores"][corpus][metric] for row in variants]
+               for corpus, metric, _ in panels]
+    limit = max(0.001, 1.75 * max(abs(delta) for panel in changes for delta in panel))
+    fig, axes = plt.subplots(1, 3, sharex=True, sharey=True, figsize=(11.7, 4.25))
+    fig.subplots_adjust(left=0.245, right=0.968, bottom=0.215, top=0.745, wspace=0.15)
+    heading(fig, "Loss changes from layout and steering",
+            "Compared with the even-width SNN · 111.41M enwik8 training targets · seed 7907")
+    for ax, (_, _, title), deltas in zip(axes, panels, changes, strict=True):
+        style(ax, grid_axis="x")
+        ax.set_title(title, loc="left", size=11, color=TEXT)
+        ax.axvline(0, color=GRAY, linewidth=1)
+        for index, (row, delta) in enumerate(zip(variants, deltas, strict=True)):
+            ax.hlines(index, 0, delta, color=row["color"], linewidth=2, alpha=0.52)
+            ax.scatter(delta, index, color=row["color"], s=41, edgecolors="white", linewidth=0.8, zorder=3)
+            offset, align = (6, "left") if delta >= 0 else (-6, "right")
+            ax.annotate(f"{delta:+.5f}", (delta, index), xytext=(offset, 0), textcoords="offset points",
+                        ha=align, va="center", size=8.5, color=TEXT)
+        ax.set_xlim(-limit, limit)
+    axes[0].set_yticks(range(len(variants)), [row["model"] for row in variants])
+    axes[0].set_ylim(len(variants) - 0.48, -0.52)
+    fig.text(0.035, 0.045, "Values are differences in bits per byte. Negative values indicate lower loss.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_packed_circuit_changes.png")
+
+
+def plot_read_steering(output):
+    headroom = read_result(f"{TRACE_READ_DRIVE}/write_carry_validation_headroom.json")["totals"]
+    signed = read_result(f"{TRACE_READ_DRIVE}/native_frozen_write_share_s8237.json")
+    equal = read_result(f"{TRACE_READ_DRIVE}/native_frozen_write_equal_rails_share_s8237.json")
+    for key in ("input_sha256", "input_bytes", "input_offset", "split"):
+        if signed[key] != equal[key]:
+            raise ValueError("frozen read steering audits must use the same validation bytes")
+    carried, equal_rails = equal["models"]
+    reach = [100 * headroom[key] / headroom["blocked_ticks"] for key in (
+        "pair_recoverable_ticks", "four_cell_upper_bound_ticks", "delay_group_upper_bound_ticks",
+    )]
+    changes = [sum(row["trace_read_changed_counts_per_byte_by_block"]) for row in (
+        carried, signed["models"][0], equal_rails,
+    )]
+    panels = (
+        ("Spare steering · 16,384 bytes", ("Adjacent pairs", "Blocks of four", "Full delay groups"),
+         reach, "Percent of blocked charge", ".1f", "%"),
+        ("Frozen read counts · 4,096 bytes", ("Original carry", "Signed sharing", "Equal gains on both rails"),
+         changes, "Absolute count change per byte", ".3f", ""),
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(12.4, 4.4))
+    fig.subplots_adjust(left=0.17, right=0.972, bottom=0.215, top=0.747, wspace=0.61)
+    heading(fig, "Spare steering and write polarity", "Native counts on enwik8 validation text")
+    for ax, (title, labels, values, xlabel, precision, unit) in zip(axes, panels, strict=True):
+        style(ax, grid_axis="x")
+        ax.set_title(title, fontsize=11, loc="left", color=TEXT)
+        ax.barh(range(3), values, color=[BLUE, VIOLET, "#138372"], height=0.43)
+        for index, value in enumerate(values):
+            ax.annotate(f"{value:{precision}}{unit}", (value, index), xytext=(5, 0),
+                        textcoords="offset points", va="center", size=9, color=TEXT)
+        ax.set_yticks(range(3), labels)
+        ax.set_ylim(2.55, -0.55)
+        ax.set_xlim(0, 1.24 * max(values))
+        ax.set_xlabel(xlabel, color=MUTED, labelpad=7)
+    axes[0].set_xticks(range(0, 101, 25))
+    fig.text(0.035, 0.045, "Four-cell and delay-group values are capacity bounds. Frozen variants use one trained checkpoint.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_read_steering.png")
 
 
 def plot_trained_context(research, output):
@@ -848,6 +1010,23 @@ def main():
                  subtitle="About 9.96M parameters · 101.58M enwik8 training targets · seed 6899",
                  filename="event_lm_trace_tap_read.png", precision=5)
     plot_trace_tap_training(tap_rows, output)
+    read_rows = research["groups"]["trace_read_drive_116326k"]["rows"]
+    plot_heldout(read_rows, output, title="Held-charge read circuits at matched exposure",
+                 subtitle="About 12.8M parameters · 116.33M enwik8 training targets · seed 8237",
+                 filename="event_lm_trace_read_drive.png", precision=5,
+                 height=4.7 + 0.32 * (len(read_rows) - 4))
+    plot_read_steering(output)
+    packed_rows = research["groups"]["packed_width_111411k"]["rows"]
+    narrow_snn, wide_snn, narrow_full, wide_full, delayed, short, present = packed_rows
+    width_pairs = (("11-block SNN", BLUE, narrow_snn, wide_snn),
+                   ("6-block full attention", ORANGE, narrow_full, wide_full))
+    plot_paired_change(width_pairs, output, title="Widening both models at matched exposure",
+                       subtitle="111.41M enwik8 training targets · seed 7907",
+                       ticks=("9.96M parameters", "12.8M parameters"),
+                       note="SNN state grows from 29,674 to 32,616 bytes. Full attention uses 6 MiB at both sizes.",
+                       filename="event_lm_packed_width.png")
+    plot_packed_circuit_changes(wide_snn, (short, delayed, present), output)
+    plot_packed_width_history(output)
     plot_trained_context(research, output)
     plot_training_exposure(research, output)
     plot_prefix_age_gap(f"{OPPONENT}/enwik8_opponent_s711.json", f"{CREDIT}/enwik8_transformer_s711.json", output,

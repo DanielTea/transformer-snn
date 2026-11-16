@@ -8,7 +8,9 @@ from snnformer.correction_memory import (
 )
 from snnformer.event_lm import (
     EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _IntegrateFire, _OpponentSteering,
-    _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _TraceTapRead, _steer_packet,
+    _ReadSteeringShare,
+    _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _SteeringTransfer,
+    _TraceReadDrive, _TraceTapRead, _steer_packet,
 )
 
 
@@ -48,6 +50,131 @@ def test_packed_trace_stores_bounded_charge_and_preserves_cross_chunk_gradients(
     read, _ = trace(torch.zeros_like(first), steering.float().unsqueeze(1), charge, None)
     read.sum().backward()
     torch.testing.assert_close(first.grad, torch.ones_like(first))
+
+
+@pytest.mark.parametrize(("source", "expected"), (("write", (3, 0, 0, -1)), ("present", (3, -1, 0, -3))))
+def test_driven_trace_read_changes_only_the_bounded_read_emission(source, expected):
+    drive = _TraceReadDrive(4, 8, source)
+    trace = _SpikeTrace(8, read_drive=drive, compact_state=True)
+    held = torch.tensor([[4, -4, 7, 1]], dtype=torch.int8)
+    present = torch.tensor([[2, 2, -3, -7]], dtype=torch.int32)
+    steering = torch.tensor([[3, 2, 0, 4]], dtype=torch.int32)
+    with torch.no_grad():
+        drive.weight.fill_(0.5)
+        drive.freeze_integer()
+        writes = []
+        read, charge = trace(present[:, None], steering[:, None], held, writes)
+        step_read, step_charge = trace.step(present, steering, held)
+    torch.testing.assert_close(read[:, 0], torch.tensor([expected], dtype=torch.int32))
+    torch.testing.assert_close(step_read, read[:, 0])
+    torch.testing.assert_close(charge, torch.tensor([[4, 0, -3, -3]], dtype=torch.int8))
+    torch.testing.assert_close(step_charge, charge)
+    assert [count.item() for count in writes] == [18]
+
+
+def test_driven_read_retains_subthreshold_charge_across_chunks_and_bytes():
+    drive = _TraceReadDrive(1, 64, "write", bits=8, carry=True)
+    with torch.no_grad():
+        drive.weight.fill_(1 / 256)
+        drive.freeze_integer()
+    correction = torch.tensor([[[80], [80], [80], [-80], [-80], [0]]], dtype=torch.int32)
+    steering = torch.tensor([[[1], [1], [0], [1], [1], [1]]], dtype=torch.int32)
+    read = torch.zeros_like(correction)
+    expected = torch.tensor([[[0], [1], [0], [-1], [0], [0]]], dtype=torch.int32)
+    torch.testing.assert_close(drive(read, steering, read, correction), expected)
+
+    for segment in (1, 3):
+        state = _DelayState()
+        chunks = []
+        for start in range(0, read.shape[1], segment):
+            index = slice(start, start + segment) if segment > 1 else start
+            counts = drive(read[:, index], steering[:, index], read[:, index], correction[:, index], state=state)
+            chunks.append(counts if segment > 1 else counts[:, None])
+        torch.testing.assert_close(torch.cat(chunks, dim=1), expected)
+        torch.testing.assert_close(state.trace_read_phase, torch.tensor([[128]], dtype=torch.uint8))
+
+
+def test_read_steering_sharing_preserves_each_group_and_keeps_donors_readable():
+    share = _ReadSteeringShare((4, 3), 8, 8)
+    aperture = torch.tensor([[0, 4, 0, 3, 5, 0, 0]], dtype=torch.int32)
+    current = torch.tensor([[80, 270, -700, -256, 1024, 160, 600]], dtype=torch.int32)
+    requests = []
+    handle = share.request.register_forward_hook(lambda _module, _inputs, output: requests.append(output))
+    try:
+        assigned = share(current, aperture)
+    finally:
+        handle.remove()
+    torch.testing.assert_close(requests[0], torch.tensor([[1, 0, 3, 0, 0, 1, 3]], dtype=torch.int32))
+    torch.testing.assert_close(assigned, torch.tensor([[1, 2, 3, 1, 4, 1, 0]], dtype=torch.int32))
+    torch.testing.assert_close(share(current.float(), aperture.float()), assigned.float())
+
+
+def test_separate_read_gains_convert_opposite_writes_into_a_spike():
+    options = dict(bits=8, carry=True, steering_widths=(2,))
+    signed = _TraceReadDrive(2, 64, "write", **options)
+    separate = _TraceReadDrive(2, 64, "write-rails", **options)
+    with torch.no_grad():
+        for driver in (signed, separate):
+            driver.weight.fill_(1 / 256)
+            driver.freeze_integer()
+    correction = torch.tensor([[[80, 0], [-80, 0], [80, 0], [-80, 0]]], dtype=torch.int32)
+    read = torch.zeros_like(correction)
+    aperture = torch.tensor([[[0, 1]]], dtype=torch.int32).expand_as(read)
+    torch.testing.assert_close(signed(read, aperture, read, correction), read)
+    expected = torch.tensor([[[0, 0], [1, 0], [0, 0], [0, 0]]], dtype=torch.int32)
+    torch.testing.assert_close(separate(read, aperture, read, correction), expected)
+
+
+def test_steering_transfer_conserves_each_pair_at_its_firing_limit():
+    circuit = _SteeringTransfer((3, 2), 32, 4, "delayed")
+    with torch.no_grad():
+        for weight in circuit.weights:
+            weight[0, 0] = 1.0
+        circuit.freeze_integer()
+    steering = torch.tensor([[3, 6, 4, 8, 1], [4, 4, 2, 1, 8]], dtype=torch.int32)
+    arriving = torch.tensor([[10, 0, 0, -10, 0], [-10, 0, 0, 10, 0]], dtype=torch.int32)
+    ceiling = torch.full_like(steering[:, :1], 16)
+    emitted = []
+    handle = circuit.emit.register_forward_hook(lambda _module, _inputs, counts: emitted.append(counts))
+    redistributed = circuit(steering, torch.zeros_like(arriving), arriving, ceiling)
+    handle.remove()
+    torch.testing.assert_close(emitted[0], torch.tensor([[5, -7], [-4, 7]], dtype=torch.int32))
+    torch.testing.assert_close(redistributed, torch.tensor([[8, 1, 4, 1, 8], [0, 8, 2, 8, 1]], dtype=torch.int32))
+
+
+def test_steering_transfer_survives_expansion_and_native_streaming():
+    torch.manual_seed(712)
+    cfg = EventLMConfig(dim=24, hidden=11, depth=3, route="steered", carry=False,
+                        local_trace=True, compact_delays=True, compact_axon_state=True,
+                        trace_write_credit=True, activity_inhibition=True, resolution=4)
+    parent = EventLM(cfg).eval()
+    cfg = replace(cfg, hidden=14, compact_trace_state=True, steering_transfer="delayed",
+                  delay_group_widths=(5, 3, 4, 2))
+    model = EventLM(cfg).eval()
+    model.initialize_wider_expansion(parent.cfg, parent.state_dict())
+    tokens = torch.randint(256, (2, 37))
+    with torch.no_grad():
+        torch.testing.assert_close(model.to_integer()(tokens), parent.to_integer()(tokens), rtol=0, atol=0)
+        for block in model.blocks:
+            for weight in block.steering_transfer.weights:
+                weight.normal_(std=0.35)
+        native = model.to_integer()
+        counts = native(tokens)
+        torch.testing.assert_close(model(tokens), counts, rtol=0, atol=0, check_dtype=False)
+        widened = EventLM(replace(cfg, hidden=18, delay_group_widths=(6, 4, 4, 4))).eval()
+        widened.initialize_wider_expansion(cfg, model.state_dict())
+        torch.testing.assert_close(widened.to_integer()(tokens), counts, rtol=0, atol=0)
+
+        pieces, state = [], None
+        for section in tokens.split((1, 2, 5, 6, 23), dim=1):
+            output, state = native.forward_chunk(section, state)
+            pieces.append(output)
+        torch.testing.assert_close(torch.cat(pieces, dim=1), counts, rtol=0, atol=0)
+        pieces, state = [], None
+        for byte in tokens.unbind(1):
+            output, state = native.step(byte, state)
+            pieces.append(output)
+        torch.testing.assert_close(torch.stack(pieces, dim=1), counts, rtol=0, atol=0)
 
 
 @pytest.mark.parametrize("mode", ("fixed", "race"))

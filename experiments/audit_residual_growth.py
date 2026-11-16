@@ -16,7 +16,7 @@ from benchmark_decode import state_bytes
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
 from probe_event_state import added_expansion_rows
-from snnformer.event_lm import EventLM, _IntegrateFire, _route_packets, _steer_packet
+from snnformer.event_lm import EventLM, EventLMConfig, _IntegrateFire, _route_packets, _steer_packet, _TRACE_READ_DRIVE_SOURCES
 from train_event_lm import initialize_from_checkpoint, scoring_logits
 from train_lm import load_splits, random_batch
 
@@ -75,6 +75,8 @@ def measure(model, tokens, device, *, profile_coincidence, prior_depth=None):
         "persistent_tensor_bytes": state_bytes(state),
         "total_pulses": sum(emissions) + sum(value.item() for value in memory_emissions),
     }
+    if model.cfg.delay_group_widths is not None:
+        metrics["delay_group_widths"] = model.cfg.group_widths
     if profile_coincidence:
         metrics["fraction_of_two_way_matches_also_confirmed"] = selected_fractions
     if prior_depth is not None:
@@ -96,6 +98,11 @@ def main():
     growth.add_argument("--trace-write-confirm", action="store_true", help="add silent write confirmation neurons")
     growth.add_argument("--trace-integration", action="store_true", help="add silent input neurons to held charge")
     growth.add_argument("--trace-tap-read", choices=("fixed", "race"), help="add a read from an existing axon tap")
+    growth.add_argument("--trace-read-drive", choices=_TRACE_READ_DRIVE_SOURCES,
+                        help="add silent synapses into the held-charge read neurons")
+    parser.add_argument("--trace-read-drive-bits", type=int, default=EventLMConfig.trace_read_drive_bits)
+    parser.add_argument("--trace-read-drive-carry", action="store_true")
+    parser.add_argument("--trace-read-share-steering", action="store_true")
     growth.add_argument("--redistribute-inhibition", action="store_true", help="add silent inhibitory transfers")
     growth.add_argument("--learn-inhibition-thresholds", action="store_true",
                         help="replace the common resting threshold with learned delay-group thresholds")
@@ -106,13 +113,21 @@ def main():
     parser.add_argument("--inhibition-threshold-bits", type=int)
     parser.add_argument("--compact-trace-state", action="store_true",
                         help="pack the trace tensors while growing the expansion")
+    parser.add_argument("--delay-group-widths", help="four comma-separated widths for expansion growth")
+    parser.add_argument("--steering-transfer", choices=("present", "delayed"),
+                        help="add silent transfers alone or while widening the expansion")
     parser.add_argument("--trace-coincidence", action="store_true")
     parser.add_argument("--json", required=True, type=Path)
     args = parser.parse_args()
     if args.compact_trace_state and args.hidden is None:
         parser.error("--compact-trace-state in this audit accompanies --hidden")
+    if args.delay_group_widths is not None and args.hidden is None:
+        parser.error("--delay-group-widths in this audit accompanies --hidden")
     if args.inhibition_threshold_bits is not None and not args.learn_inhibition_thresholds:
         parser.error("threshold precision requires --learn-inhibition-thresholds")
+    if args.trace_read_drive is None and (args.trace_read_drive_carry or args.trace_read_share_steering
+            or args.trace_read_drive_bits != EventLMConfig.trace_read_drive_bits):
+        parser.error("read carry, precision and steering sharing require --trace-read-drive")
 
     torch.set_num_threads(4)
     torch.manual_seed(711)
@@ -124,9 +139,15 @@ def main():
     if not isinstance(parent, EventLM) or not parent.cfg.local_trace:
         parser.error("the parent must be a held-charge EventLM")
     prior = parent.cfg
-    circuit_options = ("trace_write_confirm", "trace_integration", "trace_tap_read", "redistribute_inhibition",
-                       "learn_inhibition_thresholds", "tag_read_competition", "late_steering")
+    circuit_options = ("trace_write_confirm", "trace_integration", "trace_tap_read", "trace_read_drive",
+                       "redistribute_inhibition", "learn_inhibition_thresholds", "tag_read_competition", "late_steering")
     added_circuit = next((option for option in circuit_options if getattr(args, option)), None)
+    if args.steering_transfer is not None:
+        if (added_circuit or args.depth is not None or args.dim is not None or prior.steering_transfer is not None
+                or args.refine_router_charge is not None):
+            parser.error("adding steering transfers can accompany expansion growth")
+        if args.hidden is None:
+            added_circuit = "steering_transfer"
     if ((args.depth is not None or args.hidden is not None or added_circuit)
             and (args.router_charge_bits is not None or args.trace_coincidence)):
         parser.error("charge precision and trace coincidence options apply to residual growth")
@@ -136,6 +157,10 @@ def main():
         cfg = replace(prior, **{added_circuit: getattr(args, added_circuit)})
         if args.inhibition_threshold_bits is not None:
             cfg = replace(cfg, inhibition_threshold_bits=args.inhibition_threshold_bits)
+        if args.trace_read_drive is not None:
+            cfg = replace(cfg, trace_read_drive_bits=args.trace_read_drive_bits,
+                          trace_read_drive_carry=args.trace_read_drive_carry,
+                          trace_read_share_steering=args.trace_read_share_steering)
         grown = EventLM(cfg)
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False)
     elif args.refine_router_charge is not None:
@@ -158,7 +183,9 @@ def main():
         grown = EventLM(cfg)
         grown.initialize_wider_residual(prior, checkpoint["state_dict"])
     else:
-        cfg = replace(prior, hidden=args.hidden, compact_trace_state=prior.compact_trace_state or args.compact_trace_state)
+        groups = None if args.delay_group_widths is None else tuple(map(int, args.delay_group_widths.split(",")))
+        cfg = replace(prior, hidden=args.hidden, compact_trace_state=prior.compact_trace_state or args.compact_trace_state,
+                      steering_transfer=args.steering_transfer or prior.steering_transfer, delay_group_widths=groups)
         grown = EventLM(cfg)
         grown.initialize_wider_expansion(prior, checkpoint["state_dict"])
     parent_counts, parent_metrics = measure(parent, tokens, device, profile_coincidence=False)
@@ -186,6 +213,15 @@ def main():
     elif args.trace_tap_read is not None:
         gradient_field = "active_tap_input_gradients_on_512_train_targets"
         gradients = [block.trace_taps.weight.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.trace_read_drive is not None:
+        gradient_field = "active_trace_read_drive_gradients_on_512_train_targets"
+        gradients = [block.trace.read_drive.weight.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.steering_transfer is not None:
+        gradient_field = "active_steering_transfer_gradients_on_512_train_targets"
+        gradients = [
+            sum(weight.grad.count_nonzero().item() for weight in block.steering_transfer.weights if weight.numel())
+            for block in grown.blocks
+        ]
     elif args.redistribute_inhibition:
         gradient_field = "active_inhibition_gradients_on_512_train_targets"
         gradients = [block.inhibition_redistribution.synapse.weight.grad.count_nonzero().item()
@@ -214,7 +250,9 @@ def main():
     else:
         gradient_field = "active_new_expansion_gradients_on_512_train_targets"
         gradients = [
-            sum(rows.count_nonzero().item() for rows in added_expansion_rows(block, prior.hidden, block.expand.weight.grad))
+            sum(rows.count_nonzero().item() for rows in added_expansion_rows(
+                block, prior.group_widths, block.expand.weight.grad,
+            ))
             for block in grown.blocks
         ]
     if not all(gradients):

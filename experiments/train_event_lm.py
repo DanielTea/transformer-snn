@@ -27,7 +27,7 @@ from common import (
     setup,
 )
 from snnformer import SNNConfig, count_params
-from snnformer.event_lm import EventLM, EventLMConfig
+from snnformer.event_lm import EventLM, EventLMConfig, _TRACE_READ_DRIVE_SOURCES
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
 
@@ -129,6 +129,7 @@ def evaluate(model, data, *, context, batches, batch_size, device, event, pulse_
 def build_model(args):
     model_kwargs = dict(vocab=256, dim=args.dim, heads=args.heads, depth=args.depth, ctx=args.ctx)
     if args.variant in EVENT_ROUTES:
+        groups = None if args.delay_group_widths is None else tuple(map(int, args.delay_group_widths.split(",")))
         cfg = EventLMConfig(dim=args.dim, hidden=args.hidden, depth=args.depth, route=EVENT_ROUTES[args.variant],
                             carry=not args.no_carry, continuous=args.variant == "event_continuous",
                             memory_heads=args.memory_heads, memory_slots=args.memory_slots,
@@ -147,6 +148,12 @@ def build_model(args):
                             local_trace=args.local_trace, trace_coincidence_start=args.trace_coincidence_start,
                             trace_write_credit=args.trace_write_credit, trace_write_confirm=args.trace_write_confirm,
                             trace_integration=args.trace_integration, trace_tap_read=args.trace_tap_read,
+                            trace_read_drive=args.trace_read_drive,
+                            trace_read_drive_bits=args.trace_read_drive_bits,
+                            trace_read_drive_carry=args.trace_read_drive_carry,
+                            trace_read_share_steering=args.trace_read_share_steering,
+                            steering_transfer=args.steering_transfer,
+                            delay_group_widths=groups,
                             steering_gradient_at_zero=args.steering_gradient_at_zero,
                             late_steering=args.late_steering,
                             bank_write_credit=args.bank_write_credit,
@@ -170,8 +177,8 @@ def build_model(args):
 _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
 _OPTIONAL_ROUTER_PARAMETERS = (
     ".packet_thresholds.", ".delay_correction.", ".delay_filters.", ".opponent_steering.", ".trace.read_veto.",
-    ".spread_coincidence.", ".trace.write_confirm.", ".trace.input.", ".trace_taps.",
-    ".inhibition_redistribution.", ".inhibition_thresholds.", ".late_steering.",
+    ".spread_coincidence.", ".trace.write_confirm.", ".trace.input.", ".trace.read_drive.", ".trace_taps.",
+    ".inhibition_redistribution.", ".inhibition_thresholds.", ".late_steering.", ".steering_transfer.",
 )
 
 
@@ -180,7 +187,8 @@ def initialize_router(model, source, source_cfg):
     if source_cfg.route != "steered":
         raise ValueError("--initialize-from needs a matching spiking configuration or a plain router checkpoint")
     fields = ("dim", "hidden", "depth", "carry", "continuous", "resolution")
-    if any(getattr(source_cfg, name) != getattr(model.cfg, name) for name in fields):
+    if (any(getattr(source_cfg, name) != getattr(model.cfg, name) for name in fields)
+            or source_cfg.group_widths != model.cfg.group_widths):
         raise ValueError("the checkpoint and model must use the same local router settings")
     if model.cfg.route != "steered" and model.prediction_memory is None:
         raise ValueError("router initialization supports the plain router and post-router banks")
@@ -213,6 +221,8 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
         elif grow_expansion:
             model.initialize_wider_expansion(prior, source["state_dict"])
             growth["expansion_width_before"] = prior.hidden
+            if prior.delay_group_widths is not None:
+                growth["expansion_groups_before"] = prior.group_widths
         else:
             model.initialize_deeper(prior, source["state_dict"])
             growth["depth_before"] = prior.depth
@@ -238,6 +248,11 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   trace_write_confirm=source_cfg.trace_write_confirm or model.cfg.trace_write_confirm,
                                   trace_integration=source_cfg.trace_integration or model.cfg.trace_integration,
                                   trace_tap_read=model.cfg.trace_tap_read,
+                                  trace_read_drive=source_cfg.trace_read_drive or model.cfg.trace_read_drive,
+                                  trace_read_drive_bits=model.cfg.trace_read_drive_bits,
+                                  trace_read_drive_carry=model.cfg.trace_read_drive_carry,
+                                  trace_read_share_steering=model.cfg.trace_read_share_steering,
+                                  steering_transfer=source_cfg.steering_transfer or model.cfg.steering_transfer,
                                   steering_gradient_at_zero=model.cfg.steering_gradient_at_zero,
                                   late_steering=source_cfg.late_steering or model.cfg.late_steering,
                                   bank_write_credit=model.cfg.bank_write_credit,
@@ -265,6 +280,10 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 expected.update(name for name in model.state_dict() if ".trace.input." in name)
             if model.cfg.trace_tap_read is not None and source_cfg.trace_tap_read is None:
                 expected.update(name for name in model.state_dict() if ".trace_taps." in name)
+            if model.cfg.trace_read_drive is not None and source_cfg.trace_read_drive is None:
+                expected.update(f"blocks.{index}.trace.read_drive.weight" for index in range(model.cfg.depth))
+            if model.cfg.steering_transfer is not None and source_cfg.steering_transfer is None:
+                expected.update(name for name in model.state_dict() if ".steering_transfer." in name)
             if model.cfg.spread_coincidence and not source_cfg.spread_coincidence:
                 expected.update(name for name in model.state_dict() if ".spread_coincidence." in name)
             if model.cfg.redistribute_inhibition and not source_cfg.redistribute_inhibition:
@@ -329,6 +348,7 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--dim", type=int, default=96)
     parser.add_argument("--hidden", type=int, default=288, help="event feed-forward width")
+    parser.add_argument("--delay-group-widths", help="four comma-separated axon group widths that sum to --hidden")
     parser.add_argument("--memory-heads", type=int, default=4)
     parser.add_argument("--memory-slots", type=int, default=16)
     parser.add_argument("--memory-width", type=int, help="total width of a prediction bank before splitting keys")
@@ -390,6 +410,16 @@ def main():
                         help="integrate learned current and arriving spikes before correcting held charge")
     parser.add_argument("--trace-tap-read", choices=("fixed", "race"),
                         help="read the shortest candidate tap or let held spikes race among recent taps")
+    parser.add_argument("--trace-read-drive", choices=_TRACE_READ_DRIVE_SOURCES,
+                        help="choose the read input and whether to learn independent gains for its two rails")
+    parser.add_argument("--trace-read-drive-bits", type=int, default=EventLMConfig.trace_read_drive_bits,
+                        help="fixed-point charge precision of the driven read neurons")
+    parser.add_argument("--trace-read-drive-carry", action="store_true",
+                        help="retain the driven read neuron's fractional charge across bytes")
+    parser.add_argument("--trace-read-share-steering", action="store_true",
+                        help="match blocked read charge to spare steering pulses within each delay group")
+    parser.add_argument("--steering-transfer", choices=("present", "delayed"),
+                        help="move steering pulses within each pair in response to present or arriving content")
     parser.add_argument("--steering-gradient-at-zero", action="store_true",
                         help="use the right training derivative for steering at zero synaptic charge")
     parser.add_argument("--late-steering", action="store_true",
@@ -490,6 +520,8 @@ def main():
         parser.error("bank read ranking weight must be finite and nonnegative")
     if args.bank_read_rank_weight and (not args.tag_read_competition or args.ctx < 2):
         parser.error("bank read ranking needs --tag-read-competition and at least two input bytes")
+    if args.delay_group_widths is not None and args.variant not in EVENT_ROUTES:
+        parser.error("custom delay groups need a spiking decoder")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.compact_axon_state or args.compact_trace_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
@@ -497,7 +529,9 @@ def main():
             or args.inhibition_threshold_bits != EventLMConfig.inhibition_threshold_bits
             or args.trace_coincidence_start is not None or args.steering_gradient_at_zero or args.late_steering
             or args.local_trace or args.trace_write_credit or args.trace_write_confirm or args.trace_read_veto
-            or args.trace_integration or args.trace_tap_read is not None
+            or args.trace_integration or args.trace_tap_read is not None or args.steering_transfer is not None
+            or args.trace_read_drive is not None or args.trace_read_drive_carry or args.trace_read_share_steering
+            or args.trace_read_drive_bits != EventLMConfig.trace_read_drive_bits
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"

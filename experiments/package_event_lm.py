@@ -22,6 +22,7 @@ RELEASES = {
     "v5": ("spiking-byte-lm-v5", "spiking-byte-lm-v5-checkpoints"),
     "v6": ("spiking-byte-lm-v6", "spiking-byte-lm-v6-checkpoints"),
     "v7": ("spiking-byte-lm-v7", "spiking-byte-lm-v7-checkpoints"),
+    "v8": ("spiking-byte-lm-v8", "spiking-byte-lm-v8-checkpoints"),
 }
 DEPTH_REFERENCE = "depth-inhibition-study/trace_s0.pt"
 CONTINUATION_REFERENCE = "long-context-continuation/trace_ctx2048_s711.pt"
@@ -29,8 +30,10 @@ FINE_CHARGE_REFERENCE = "grown-fine-charge-study/fine_s711.pt"
 EXPOSURE_REFERENCE = "scale-6510k-next-data-study/trace_s2503.pt"
 DEPTH_GROWTH_REFERENCE = "depth-growth-study/depth_s4603.pt"
 TRACE_TAP_REFERENCE = "trace-tap-study/control_s6899.pt"
+TRACE_READ_REFERENCE = "trace-read-drive-study/write_rails_share_s8237.pt"
 V4_CATALOGS = ("continuation_checkpoints.sha256", "v4_checkpoints.sha256")
 V6_MANIFEST = "models/spiking-byte-lm-v6/manifest.json"
+V7_MANIFEST = "models/spiking-byte-lm-v7/manifest.json"
 
 
 def sha256(path):
@@ -235,11 +238,20 @@ def main():
                 args.checkpoint_dir, ("v6_checkpoints.sha256",),
                 DEPTH_GROWTH_REFERENCE, "depth_growth/native_depth_s4603.json",
             )
-        else:
+        elif args.release == "v7":
             upstream_manifest = V6_MANIFEST
             entries, candidate, measured = collect_catalog_release(
                 args.checkpoint_dir, ("trace_integration_checkpoints.sha256", "v7_checkpoints.sha256"),
                 TRACE_TAP_REFERENCE, "trace_tap_read/native_control_s6899.json", upstream_manifest=upstream_manifest,
+            )
+        else:
+            upstream_manifest = V7_MANIFEST
+            entries, candidate, measured = collect_catalog_release(
+                args.checkpoint_dir,
+                ("v8_supporting_checkpoints.sha256", "packed_width_checkpoints.sha256",
+                 "trace_read_drive_checkpoints.sha256"),
+                TRACE_READ_REFERENCE, "trace_read_drive/native_write_rails_share_s8237.json",
+                upstream_manifest=upstream_manifest,
             )
         val_bpb, name, training, record_path = candidate
         args.release_dir.mkdir(parents=True, exist_ok=True)
