@@ -88,7 +88,8 @@ The primary comparison uses complete enwik8 test loss. At each
 size, subtract the Transformer's loss from the SNN's loss. Then
 subtract the smaller models' gap from the wider models' gap. A
 negative change means the wide SNN closed part of the gap. The
-paired reset probe estimates the same change for predictions
+leaderboard data also stratifies the gap by how long ago the
+last matching eight-byte prefix occurred. The paired reset probe estimates the same change for predictions
 1–32 and 17–32, with intervals resampled by window. The native
 audit counts pulses in the added residual neurons. A fixed-weight
 probe measures loss with those neurons silenced. PG-19 and the

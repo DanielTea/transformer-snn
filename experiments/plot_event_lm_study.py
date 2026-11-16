@@ -370,12 +370,27 @@ def read_comparison(definitions, *, seed, context, exposure, test_inputs=None):
     return rows
 
 
+def width_gap_by_prefix_age(narrow, wide, narrow_full, wide_full):
+    age_scores = [read_result(row["score_files"]["enwik8"])["models"][0]["prefix_age"]
+                  for row in (narrow, wide, narrow_full, wide_full)]
+    report = {}
+    for age in age_scores[0]:
+        a, b, c, d = (row[age] for row in age_scores)
+        targets = {row["target_bytes"] for row in (a, b, c, d)}
+        if len(targets) != 1:
+            raise ValueError(f"prefix age {age} must have the same targets at both widths")
+        small_gap, large_gap = a["bpb"] - c["bpb"], b["bpb"] - d["bpb"]
+        report[age] = {"target_bytes": a["target_bytes"], "narrow_gap_bpb": small_gap, "wide_gap_bpb": large_gap,
+                       "change_bpb": large_gap - small_gap}
+    return report
+
+
 def build_research():
     groups = {}
     if (RESULTS / RESIDUAL_SCALE_CHECKPOINTS).is_file():
         rows = read_comparison(RESIDUAL_SCALE_ARMS, seed=9631, context=512, exposure=(121_241_600, 9_830_400))
         mixture = residual_scale_mixture(RESULTS / row["training_record"] for row in rows)
-        narrow, wide, enwik8_only, _, _ = rows
+        narrow, wide, enwik8_only, narrow_full, wide_full = rows
         enwik8 = [row["scores"]["enwik8"]["mean"] for row in rows]
         narrow_gap, wide_gap = enwik8[0] - enwik8[3], enwik8[1] - enwik8[4]
         if ([row["parameters"] for row in rows] != [14_066_688, 25_788_928, 25_788_928, 14_068_224, 25_790_976]
@@ -389,6 +404,7 @@ def build_research():
             "early_context_records": {split: f"{RESIDUAL_SCALE}/early_context_{split}.json" for split in ("val", "test")},
             "enwik8_width_gap": {"narrow_bpb": narrow_gap, "wide_bpb": wide_gap,
                                  "change_bpb": wide_gap - narrow_gap, "mixture_minus_enwik8_bpb": enwik8[1] - enwik8[2]},
+            "enwik8_width_gap_by_prefix_age": width_gap_by_prefix_age(narrow, wide, narrow_full, wide_full),
         }
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
