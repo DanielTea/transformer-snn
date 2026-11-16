@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from statistics import mean, stdev
 
+from plot_byte_transfer import plot_transfer, read_transfer, transfer_tables
 from plot_dendrite import BLUE, GRAY, MUTED, ORANGE, RESULTS, TEXT, VIOLET, heading, plt, read_result, save, style
 
 
@@ -53,6 +54,9 @@ TRACE_INTEGRATION = "event_lm/trace_integration"
 TRACE_TAP_READ = "event_lm/trace_tap_read"
 PACKED_WIDTH = "event_lm/packed_width"
 TRACE_READ_DRIVE = "event_lm/trace_read_drive"
+TRACE_ARRIVAL = "event_lm/trace_arrival"
+ARRIVAL_GROUP = "trace_arrival_121241k"
+ARRIVAL_TRANSFER = "event_lm/byte_transfer/trace_arrival_s9349.json"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -168,6 +172,12 @@ PACKED_WIDTH_111411K = (
      f"{PACKED_WIDTH}/native_short_groups_s7907.json", "#7a6a50"),
     ("Present steering transfers", PACKED_WIDTH, "present_transfer_s7907",
      f"{PACKED_WIDTH}/native_present_transfer_s7907.json", "#a34073"),
+)
+TRACE_ARRIVAL_121241K = (
+    ("Ordinary SNN", TRACE_ARRIVAL, "control_s9349", f"{TRACE_ARRIVAL}/native_control_s9349.json", GRAY),
+    ("Selected arrivals", TRACE_ARRIVAL, "selected_s9349", f"{TRACE_ARRIVAL}/native_selected_s9349.json", BLUE),
+    ("Unmatched arrivals", TRACE_ARRIVAL, "unmatched_s9349", f"{TRACE_ARRIVAL}/native_unmatched_s9349.json", VIOLET),
+    ("Full attention", TRACE_ARRIVAL, "transformer_s9349", None, ORANGE),
 )
 TRACE_READ_DRIVE_116326K = (
     ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
@@ -352,6 +362,7 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
+        (ARRIVAL_GROUP, "Scheduled spike arrivals", TRACE_ARRIVAL_121241K, 9349, 512, (116_326_400, 4_915_200)),
         ("trace_read_drive_116326k", "Driven held-charge reads",
          TRACE_READ_DRIVE_116326K, 8237, 512, (111_411_200, 4_915_200)),
         ("packed_width_111411k", "Packed width and steering transfers",
@@ -396,6 +407,14 @@ def build_research():
         "additional_training_targets": 26_214_400,
         "rows": read_held_charge_replication(),
     }
+    for name, group in groups.items():
+        transfer_path = f"event_lm/byte_transfer/{name}.json"
+        if (RESULTS / transfer_path).is_file():
+            group["transfer_record"] = transfer_path
+    groups[ARRIVAL_GROUP].update(
+        transfer_record=ARRIVAL_TRANSFER,
+        early_context_records={split: f"{TRACE_ARRIVAL}/early_context_{split}.json" for split in ("val", "test")},
+    )
     return {"unit": "bits per byte", "groups": groups}
 
 
@@ -473,7 +492,7 @@ def markdown_table(rows, *, include_ranks, include_raw_pg19=False):
     return "\n".join(lines)
 
 
-def write_leaderboards(data, depth, research):
+def write_leaderboards(data, depth, research, transfers):
     latest = depth["groups"]["depth"]
     paragraphs = [
         "# Spiking byte model leaderboards",
@@ -486,6 +505,12 @@ def write_leaderboards(data, depth, research):
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
     ]
     study_figures = {
+        ARRIVAL_GROUP: (
+            "![Held-out enwik8 and PG-19 loss for the arrival study](../results/figures/event_lm_trace_arrival.png)",
+            "![Paired enwik8 loss gap during the first 32 predictions after reset]"
+            "(../results/figures/event_lm_arrival_early_context.png)",
+            "[Arrival circuit, ablations and replay](FIXED_ARRIVALS.md)",
+        ),
         "trace_read_drive_116326k": (
             "![Held-out next-byte loss after training the driven read circuits]"
             "(../results/figures/event_lm_trace_read_drive.png)",
@@ -527,6 +552,22 @@ def write_leaderboards(data, depth, research):
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
         paragraphs.extend(study_figures.get(name, ()))
+        if name in transfers:
+            transfer, labels, figure = transfers[name]
+            corpus, screened, words = transfer_tables(transfer, labels)
+            paragraphs.extend([
+                "### Byte transfer at the same training exposure",
+                "Raw corpus loss in bits per byte uses identical 512-byte windows.",
+                corpus,
+                "Wikipedia windows with zero hits under the training-overlap screen.",
+                screened,
+                "LAMBADA scores the same final words under both conditioning lengths. Exact match requires a word "
+                "boundary. The gold-length columns score predictions through the last answer byte.",
+                words,
+                f"![Transfer loss and LAMBADA final-word accuracy](../results/figures/{figure})",
+                "[Protocol, provenance, and overlap counts](BYTE_TRANSFER.md) · "
+                f"[Exact score records](../results/{group['transfer_record']})",
+            ])
     paragraphs.extend([
         "![Held-out loss after doubling residual width](../results/figures/event_lm_residual_growth_13030k.png)",
         "![Held-out loss after changing the spike circuits at 6.51M parameters](../results/figures/event_lm_6510k_circuits.png)",
@@ -536,7 +577,7 @@ def write_leaderboards(data, depth, research):
         "![Held-out next-byte loss for the grown 6.51M models](../results/figures/event_lm_grown_6510k.png)",
         "![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)",
         "[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · "
-        "[Current model card](../models/spiking-byte-lm-v8/README.md) · [Depth growth study](DEPTH_GROWTH.md)",
+        "[Current model card](../models/spiking-byte-lm-v9/README.md) · [Depth growth study](DEPTH_GROWTH.md)",
         "![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)",
         "![Held-out loss at both trained context lengths](../results/figures/event_lm_trained_context.png)",
         "[Continuation and scale source records](../results/event_lm/continuation_leaderboard.json) · "
@@ -570,7 +611,7 @@ def write_leaderboards(data, depth, research):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    table = markdown_table(research["groups"]["trace_read_drive_116326k"]["rows"],
+    table = markdown_table(research["groups"][ARRIVAL_GROUP]["rows"],
                            include_ranks=False, include_raw_pg19=True)
     readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
 
@@ -959,17 +1000,90 @@ def plot_prefix_age_gap(spiking_source, attention_source, output, *, subtitle, f
     save(fig, output, filename)
 
 
+def plot_arrival_early_context(record, run_labels, output):
+    reference, *arms = record["models"]
+    if record["split"] != "test" or reference["checkpoint"] != record["reference"]:
+        raise ValueError("the early-context chart expects a paired enwik8 test record")
+    fig, ax = plt.subplots(figsize=(9.4, 4.85))
+    fig.subplots_adjust(left=0.11, right=0.96, bottom=0.245, top=0.735)
+    heading(fig, "The first 32 predictions after reset",
+            f"{record['target_bytes']:,} paired enwik8 test targets · 121.24M training targets · seed 9349")
+    style(ax)
+    ages = [(1, 4), (5, 8), (9, 16), (17, 24), (25, 32)]
+    centers = [(first + last) / 2 for first, last in ages]
+    ax.axhline(0, color=MUTED, linewidth=0.85)
+    for model, offset, marker in zip(arms, (-0.30, 0, 0.30), ("s", "^", "o"), strict=True):
+        label, color, _ = run_labels[model["run_name"]]
+        bins = {tuple(row["context_bytes"]): row for row in model["ages"]}
+        gaps = [bins[age]["delta_vs_reference_bpb"] for age in ages]
+        bounds = [bins[age]["paired_95_bpb"] for age in ages]
+        errors = [[max(0, gap - interval[0]) for gap, interval in zip(gaps, bounds, strict=True)],
+                  [max(0, interval[1] - gap) for gap, interval in zip(gaps, bounds, strict=True)]]
+        positions = [center + offset for center in centers]
+        ax.errorbar(positions, gaps, yerr=errors, color=color, marker=marker, markersize=4,
+                    linewidth=1.5, capsize=3, label=label)
+    ax.set_xticks(centers, [f"{a}–{b}" for a, b in ages])
+    ax.set_xlabel("Bytes observed", color=MUTED)
+    ax.set_ylabel("Loss relative to full attention (bpb)", color=MUTED)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.25), frameon=False, ncols=3, labelcolor=TEXT)
+    fig.text(0.035, 0.035, "Whiskers show 95% intervals from resampling paired windows. The reference is at zero.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_arrival_early_context.png")
+
+
+def labels_for_runs(group, record):
+    run_labels = {Path(row["training_record"]).stem: (row["model"], row["color"], row["training_targets"])
+                  for row in group["rows"]}
+    models = record["models"]
+    if (set(run_labels) != {model["run_name"] for model in models}
+            or len(models) != len(run_labels)
+            or any(run_labels[model["run_name"]][2] != model["training_targets"] for model in models)):
+        raise ValueError("the report must score the matched training runs")
+    return run_labels
+
+
+def read_transfers(research):
+    reports = {}
+    for name, group in research["groups"].items():
+        if path := group.get("transfer_record"):
+            transfer = read_transfer(RESULTS / path)
+            if transfer["models"][0]["attention"] != "transformer":
+                raise ValueError(f"{path} must report the full-attention reference first")
+            runs = labels_for_runs(group, transfer)
+            labels = [runs[model["run_name"]][0] for model in transfer["models"]]
+            filename = f"event_lm_byte_transfer_{Path(path).stem}.png"
+            reports[name] = (transfer, labels, filename)
+    return reports
+
+
+def read_arrival_early_context(group, transfer):
+    catalog = (RESULTS / "event_lm/trace_arrival_checkpoints.sha256").read_text().splitlines()
+    checkpoints = dict(line.split("  ", 1)[::-1] for line in catalog)
+    for model in transfer["models"]:
+        if checkpoints[model["checkpoint"]] != model["checkpoint_sha256"]:
+            raise ValueError("the transfer record must score the catalogued arrival checkpoints")
+    records = {split: read_result(path) for split, path in group["early_context_records"].items()}
+    for split, record in records.items():
+        run_labels = labels_for_runs(group, record)
+        if (record["split"] != split or run_labels[record["models"][0]["run_name"]][0] != "Full attention"
+                or any(checkpoints[model["checkpoint"]] != model["sha256"] for model in record["models"])):
+            raise ValueError("the early-context record must score the catalogued arrival checkpoints")
+    return records["test"], run_labels
+
+
 def main():
     data = build()
     depth = build_depth()
     research = build_research()
+    transfers = read_transfers(research)
+    early, run_labels = read_arrival_early_context(research["groups"][ARRIVAL_GROUP], transfers[ARRIVAL_GROUP][0])
     summary = RESULTS / "event_lm/threshold_scale_leaderboard.json"
     summary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     summary = RESULTS / "event_lm/depth_inhibition_leaderboard.json"
     summary.write_text(json.dumps(depth, indent=2) + "\n", encoding="utf-8")
     summary = RESULTS / "event_lm/continuation_leaderboard.json"
     summary.write_text(json.dumps(research, indent=2) + "\n", encoding="utf-8")
-    write_leaderboards(data, depth, research)
+    write_leaderboards(data, depth, research, transfers)
     output = RESULTS / "figures"
     output.mkdir(parents=True, exist_ok=True)
     plot_loss(data, output)
@@ -1016,6 +1130,12 @@ def main():
                  filename="event_lm_trace_read_drive.png", precision=5,
                  height=4.7 + 0.32 * (len(read_rows) - 4))
     plot_read_steering(output)
+    plot_heldout(research["groups"][ARRIVAL_GROUP]["rows"], output, title="Scheduled spike arrivals",
+                 subtitle="12.8–14.1M parameters · 121.24M enwik8 training targets · seed 9349",
+                 filename="event_lm_trace_arrival.png", precision=5)
+    plot_arrival_early_context(early, run_labels, output)
+    for transfer, labels, filename in transfers.values():
+        plot_transfer(transfer, labels, output, filename)
     packed_rows = research["groups"]["packed_width_111411k"]["rows"]
     narrow_snn, wide_snn, narrow_full, wide_full, delayed, short, present = packed_rows
     width_pairs = (("11-block SNN", BLUE, narrow_snn, wide_snn),

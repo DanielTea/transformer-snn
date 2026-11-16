@@ -12,6 +12,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from plot_byte_transfer import read_transfer, transfer_table_rows
 from summarize import LABELS
 
 RESULTS = Path(__file__).resolve().parents[1] / "results"
@@ -125,16 +126,16 @@ def spiking_byte_tables():
     latest = json.loads((folder / "depth_inhibition_leaderboard.json").read_text(encoding="utf-8"))
     history = json.loads((folder / "threshold_scale_leaderboard.json").read_text(encoding="utf-8"))
     groups = [
-        (f'{group["title"]} · {group["training_summary"]}', group["rows"])
+        (f'{group["title"]} · {group["training_summary"]}', group["rows"], group.get("transfer_record"))
         for group in research["groups"].values()
     ]
     for scale, rows in {**latest["groups"], **history["groups"]}.items():
         exposure = rows[0]["training_targets"]
         title = (f"Depth and activity inhibition · {exposure:,} training targets · seed 0" if scale == "depth"
                  else f"{scale.capitalize()} context-tag comparison · {exposure:,} training targets per seed · three-seed mean")
-        groups.append((title, rows))
+        groups.append((title, rows, None))
     sections = []
-    for title, rows in groups:
+    for title, rows, transfer_path in groups:
         sections.append(f"<h3>{html.escape(title)}</h3>")
         sections.append('<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th>'
                         '<th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th>'
@@ -153,6 +154,25 @@ def spiking_byte_tables():
             body = "".join(f'<td class="num">{value}</td>' for value in cells)
             sections.append(f'<tr><th scope="row">{html.escape(row["model"])}</th>{body}</tr>')
         sections.append("</tbody></table></div>")
+        if transfer_path:
+            record = read_transfer(RESULTS / transfer_path)
+            labels = {Path(row["training_record"]).stem: row["model"] for row in rows}
+            sections.append(byte_transfer_tables(record, [labels[model["run_name"]] for model in record["models"]]))
+    return "\n".join(sections)
+
+
+def byte_transfer_tables(record, labels):
+    sections = []
+    for title, headers, rows in transfer_table_rows(record, labels):
+        columns = "".join(f'<th scope="col">{html.escape(header)}</th>' for header in headers)
+        sections.append(f'<div class="tablewrap"><table><caption>{html.escape(title)}</caption>'
+                        f'<thead><tr>{columns}</tr></thead><tbody>')
+        for label, *values in rows:
+            cells = "".join(f'<td class="num">{html.escape(value)}</td>' for value in values)
+            sections.append(f'<tr><th scope="row">{html.escape(label)}</th>{cells}</tr>')
+        sections.append("</tbody></table></div>")
+    sections.append('<p class="col cap">LAMBADA exact match requires a word boundary. The gold-length columns '
+                    'score predictions through the last answer byte.</p>')
     return "\n".join(sections)
 
 

@@ -1,0 +1,304 @@
+{
+  "suite": "byte-transfer-v1",
+  "catalogue_sha256": "9f99702b296d3bd1c47f3c5e5744d4985ab9728024beb23bd02a87d39705af24",
+  "manifest_sha256": "13c3b641d344425b56def6350a852af4265b60de11300cd950b5342012a45cff",
+  "device": "mps",
+  "batch_size": 24,
+  "context_bytes": 512,
+  "targets_per_window": 256,
+  "lambada_examples": 5153,
+  "lambada_max_passage_bytes": 986,
+  "lambada_word_boundary_bytes": [
+    32,
+    9,
+    13,
+    10,
+    46,
+    44,
+    33,
+    63,
+    59,
+    58,
+    34,
+    40,
+    41,
+    91,
+    93,
+    123,
+    125
+  ],
+  "models": [
+    {
+      "checkpoint": "checkpoints/trace-arrival-study/transformer_s9349.pt",
+      "checkpoint_sha256": "b0177b77ea0eae6068db8d29b2020ee56dd341c4325c8fe8312087a4406376d4",
+      "run_name": "transformer_s9349_trace_arrival_transformer",
+      "model_type": "TransformerLM",
+      "attention": "transformer",
+      "parameters": 14068224,
+      "training_targets": 121241600,
+      "benchmarks": {
+        "wikitext103": {
+          "target_bytes": 1289122,
+          "nll_nats": 2082216.4149627686,
+          "bpb": 2.3302707547651673,
+          "overlap_flagged_targets": 1024,
+          "without_overlap_hits": {
+            "target_bytes": 1288098,
+            "bpb": 2.330543166723125
+          }
+        },
+        "c4": {
+          "target_bytes": 308483,
+          "nll_nats": 465138.03485393524,
+          "bpb": 2.1753300383249976
+        },
+        "enwik9": {
+          "target_bytes": 1048575,
+          "nll_nats": 1222200.291873932,
+          "bpb": 1.6815795723334672,
+          "overlap_flagged_targets": 120320,
+          "without_overlap_hits": {
+            "target_bytes": 928255,
+            "bpb": 1.746445921638653
+          }
+        },
+        "text8": {
+          "target_bytes": 1048575,
+          "nll_nats": 1563247.949508667,
+          "bpb": 2.1508142616751256,
+          "overlap_flagged_targets": 11776,
+          "without_overlap_hits": {
+            "target_bytes": 1036799,
+            "bpb": 2.1513244200815587
+          }
+        },
+        "lambada": {
+          "passage": {
+            "target_bytes": 29122,
+            "nll_nats": 68467.80125379562,
+            "bpb": 3.391874092762245,
+            "examples": 5153,
+            "exact_matches": 1,
+            "exact_match_accuracy": 0.00019406171162429653,
+            "boundary_exact_matches": 1,
+            "boundary_exact_match_accuracy": 0.00019406171162429653
+          },
+          "last_sentence": {
+            "target_bytes": 29122,
+            "nll_nats": 69493.09279251099,
+            "bpb": 3.44266672439366,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          }
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/trace-arrival-study/control_s9349.pt",
+      "checkpoint_sha256": "7b4a8ba12d346224df875251f42abc6578d0e5eda9163c7ee2e1a8e4d1c27f3e",
+      "run_name": "event_correction_code_s9349_trace_arrival_control",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 12799488,
+      "training_targets": 121241600,
+      "benchmarks": {
+        "wikitext103": {
+          "target_bytes": 1289122,
+          "nll_nats": 2096890.8333435059,
+          "bpb": 2.346693335890786,
+          "overlap_flagged_targets": 1024,
+          "without_overlap_hits": {
+            "target_bytes": 1288098,
+            "bpb": 2.346953593236968
+          }
+        },
+        "c4": {
+          "target_bytes": 308483,
+          "nll_nats": 473835.249587059,
+          "bpb": 2.2160046575585506
+        },
+        "enwik9": {
+          "target_bytes": 1048575,
+          "nll_nats": 1285080.5676651,
+          "bpb": 1.76809418698063,
+          "overlap_flagged_targets": 120320,
+          "without_overlap_hits": {
+            "target_bytes": 928255,
+            "bpb": 1.832736786109778
+          }
+        },
+        "text8": {
+          "target_bytes": 1048575,
+          "nll_nats": 1556041.302154541,
+          "bpb": 2.1408989056927368,
+          "overlap_flagged_targets": 11776,
+          "without_overlap_hits": {
+            "target_bytes": 1036799,
+            "bpb": 2.1415481527708606
+          }
+        },
+        "lambada": {
+          "passage": {
+            "target_bytes": 29122,
+            "nll_nats": 71321.54432058334,
+            "bpb": 3.5332476581226566,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          },
+          "last_sentence": {
+            "target_bytes": 29122,
+            "nll_nats": 71736.52925014496,
+            "bpb": 3.55380588557689,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          }
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/trace-arrival-study/selected_s9349.pt",
+      "checkpoint_sha256": "1d76ab702637e0f5b969ef1f17eafef1aaaa47687e2bb8744f4aed5063e389d5",
+      "run_name": "event_correction_code_s9349_trace_arrival_selected",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 14066688,
+      "training_targets": 121241600,
+      "benchmarks": {
+        "wikitext103": {
+          "target_bytes": 1289122,
+          "nll_nats": 2091451.4039611816,
+          "bpb": 2.3406059075518506,
+          "overlap_flagged_targets": 1024,
+          "without_overlap_hits": {
+            "target_bytes": 1288098,
+            "bpb": 2.3408614674540313
+          }
+        },
+        "c4": {
+          "target_bytes": 308483,
+          "nll_nats": 473900.5569934845,
+          "bpb": 2.216310083372561
+        },
+        "enwik9": {
+          "target_bytes": 1048575,
+          "nll_nats": 1284506.0951538086,
+          "bpb": 1.7673037917841325,
+          "overlap_flagged_targets": 120320,
+          "without_overlap_hits": {
+            "target_bytes": 928255,
+            "bpb": 1.831680722445208
+          }
+        },
+        "text8": {
+          "target_bytes": 1048575,
+          "nll_nats": 1556276.8061981201,
+          "bpb": 2.1412229268793768,
+          "overlap_flagged_targets": 11776,
+          "without_overlap_hits": {
+            "target_bytes": 1036799,
+            "bpb": 2.141884263014875
+          }
+        },
+        "lambada": {
+          "passage": {
+            "target_bytes": 29122,
+            "nll_nats": 71343.82720518112,
+            "bpb": 3.534351545462328,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          },
+          "last_sentence": {
+            "target_bytes": 29122,
+            "nll_nats": 71774.85481357574,
+            "bpb": 3.5557045223566743,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          }
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/trace-arrival-study/unmatched_s9349.pt",
+      "checkpoint_sha256": "f90a63cafe53eef19ec9e029f26b74e8269e947e408aeabff8c1a77d85ea5349",
+      "run_name": "event_correction_code_s9349_trace_arrival_unmatched",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 14066688,
+      "training_targets": 121241600,
+      "benchmarks": {
+        "wikitext103": {
+          "target_bytes": 1289122,
+          "nll_nats": 2095463.8055419922,
+          "bpb": 2.3450963063369854,
+          "overlap_flagged_targets": 1024,
+          "without_overlap_hits": {
+            "target_bytes": 1288098,
+            "bpb": 2.345360572997655
+          }
+        },
+        "c4": {
+          "target_bytes": 308483,
+          "nll_nats": 473542.40654945374,
+          "bpb": 2.2146351065683434
+        },
+        "enwik9": {
+          "target_bytes": 1048575,
+          "nll_nats": 1285176.1231384277,
+          "bpb": 1.7682256581748694,
+          "overlap_flagged_targets": 120320,
+          "without_overlap_hits": {
+            "target_bytes": 928255,
+            "bpb": 1.8325746066154556
+          }
+        },
+        "text8": {
+          "target_bytes": 1048575,
+          "nll_nats": 1554550.5466003418,
+          "bpb": 2.1388478310006827,
+          "overlap_flagged_targets": 11776,
+          "without_overlap_hits": {
+            "target_bytes": 1036799,
+            "bpb": 2.1394787605258636
+          }
+        },
+        "lambada": {
+          "passage": {
+            "target_bytes": 29122,
+            "nll_nats": 71246.94984865189,
+            "bpb": 3.5295522706240905,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          },
+          "last_sentence": {
+            "target_bytes": 29122,
+            "nll_nats": 71627.89064025879,
+            "bpb": 3.5484239618171265,
+            "examples": 5153,
+            "exact_matches": 0,
+            "exact_match_accuracy": 0.0,
+            "boundary_exact_matches": 0,
+            "boundary_exact_match_accuracy": 0.0
+          }
+        }
+      }
+    }
+  ]
+}

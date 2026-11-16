@@ -23,6 +23,7 @@ RELEASES = {
     "v6": ("spiking-byte-lm-v6", "spiking-byte-lm-v6-checkpoints"),
     "v7": ("spiking-byte-lm-v7", "spiking-byte-lm-v7-checkpoints"),
     "v8": ("spiking-byte-lm-v8", "spiking-byte-lm-v8-checkpoints"),
+    "v9": ("spiking-byte-lm-v9", "spiking-byte-lm-v9-checkpoints"),
 }
 DEPTH_REFERENCE = "depth-inhibition-study/trace_s0.pt"
 CONTINUATION_REFERENCE = "long-context-continuation/trace_ctx2048_s711.pt"
@@ -31,9 +32,12 @@ EXPOSURE_REFERENCE = "scale-6510k-next-data-study/trace_s2503.pt"
 DEPTH_GROWTH_REFERENCE = "depth-growth-study/depth_s4603.pt"
 TRACE_TAP_REFERENCE = "trace-tap-study/control_s6899.pt"
 TRACE_READ_REFERENCE = "trace-read-drive-study/write_rails_share_s8237.pt"
+TRACE_ARRIVAL_REFERENCE = "trace-arrival-study/unmatched_s9349.pt"
 V4_CATALOGS = ("continuation_checkpoints.sha256", "v4_checkpoints.sha256")
 V6_MANIFEST = "models/spiking-byte-lm-v6/manifest.json"
 V7_MANIFEST = "models/spiking-byte-lm-v7/manifest.json"
+V8_MANIFEST = "models/spiking-byte-lm-v8/manifest.json"
+ARRIVAL_TRANSFER = "byte_transfer/trace_arrival_s9349.json"
 
 
 def sha256(path):
@@ -184,6 +188,22 @@ def collect_catalog_release(directory, catalogs, reference, audit_path, *, upstr
     return entries, (record["val_bpb"], reference, record, path), measured
 
 
+def transfer_evidence(path, entries, endpoints):
+    record = json.loads(path.read_text(encoding="utf-8"))
+    evaluated = {Path(row["checkpoint"]).relative_to("checkpoints").as_posix(): row["checkpoint_sha256"]
+                 for row in record["models"]}
+    if evaluated != {name: entries[name]["sha256"] for name in endpoints}:
+        raise ValueError(f"{path} must score the released study endpoints")
+    if any(set(row["benchmarks"]) != {"wikitext103", "c4", "enwik9", "text8", "lambada"} for row in record["models"]):
+        raise ValueError(f"{path} is missing a standard transfer benchmark")
+    sources = RESULTS / "byte_transfer/sources_v1.json"
+    catalogue = RESULTS / "byte_transfer/prepared_v1.json"
+    if (sha256(sources) != record["manifest_sha256"] or sha256(catalogue) != record["catalogue_sha256"]):
+        raise ValueError(f"{path} uses a different transfer corpus")
+    return {"suite": record["suite"], "record": path.relative_to(ROOT).as_posix(), "sha256": sha256(path),
+            "sources": sources.relative_to(ROOT).as_posix(), "catalogue": catalogue.relative_to(ROOT).as_posix()}
+
+
 def add_file(archive, name, length, source):
     member = tarfile.TarInfo(name)
     member.size = length
@@ -213,6 +233,7 @@ def main():
         model_dirname, archive_stem = RELEASES[args.release]
         model_dir = args.model_dir or ROOT / "models" / model_dirname
         upstream_manifest = None
+        transfer = None
         if args.release == "v1":
             entries, candidate = collect(args.checkpoint_dir)
             audit = json.loads((RESULTS / "threshold_scale_large_activity.json").read_text(encoding="utf-8"))
@@ -244,7 +265,7 @@ def main():
                 args.checkpoint_dir, ("trace_integration_checkpoints.sha256", "v7_checkpoints.sha256"),
                 TRACE_TAP_REFERENCE, "trace_tap_read/native_control_s6899.json", upstream_manifest=upstream_manifest,
             )
-        else:
+        elif args.release == "v8":
             upstream_manifest = V7_MANIFEST
             entries, candidate, measured = collect_catalog_release(
                 args.checkpoint_dir,
@@ -253,6 +274,14 @@ def main():
                 TRACE_READ_REFERENCE, "trace_read_drive/native_write_rails_share_s8237.json",
                 upstream_manifest=upstream_manifest,
             )
+        else:
+            upstream_manifest = V8_MANIFEST
+            entries, candidate, measured = collect_catalog_release(
+                args.checkpoint_dir, ("trace_arrival_checkpoints.sha256",), TRACE_ARRIVAL_REFERENCE,
+                "trace_arrival/native_unmatched_s9349.json", upstream_manifest=upstream_manifest,
+            )
+            endpoints = [name for name in entries if name.startswith("trace-arrival-study/")]
+            transfer = transfer_evidence(RESULTS / ARRIVAL_TRANSFER, entries, endpoints)
         val_bpb, name, training, record_path = candidate
         args.release_dir.mkdir(parents=True, exist_ok=True)
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -285,6 +314,8 @@ def main():
             manifest["archive"]["contents_checksums"] = checksum_path
         if upstream_manifest:
             manifest["upstream_manifest"] = upstream_manifest
+        if transfer:
+            manifest["transfer_benchmarks"] = transfer
         (model_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         print(f"Packaged {len(entries)} checkpoints in {bundle}")
     except (OSError, ValueError, KeyError) as exc:

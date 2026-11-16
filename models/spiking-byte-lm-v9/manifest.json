@@ -1,0 +1,126 @@
+{
+  "release": "spiking-byte-lm-v9",
+  "model": {
+    "file": "weights.pt",
+    "source_checkpoint": "trace-arrival-study/unmatched_s9349.pt",
+    "sha256": "f90a63cafe53eef19ec9e029f26b74e8269e947e408aeabff8c1a77d85ea5349",
+    "architecture": {
+      "dim": 768,
+      "hidden": 243,
+      "depth": 11,
+      "route": "steered_correction_code",
+      "carry": false,
+      "continuous": false,
+      "memory_heads": 4,
+      "memory_slots": 14,
+      "resolution": 16,
+      "memory_width": 32,
+      "forecast_key_channels": 2,
+      "match_forecast_key": true,
+      "learn_context_keys": true,
+      "learn_packet_thresholds": false,
+      "output_reference": false,
+      "compact_delays": true,
+      "departure_coincidence": false,
+      "delay_window": 1,
+      "delay_residual": false,
+      "router_charge_bits": 8,
+      "activity_inhibition": true,
+      "inhibition_by_expansion": true,
+      "local_trace": true,
+      "trace_write_credit": true,
+      "bank_write_credit": false,
+      "trace_read_veto": false,
+      "delay_filter": false,
+      "opponent_steering": false,
+      "spread_coincidence": false,
+      "residual_membrane": false,
+      "compact_axon_state": true,
+      "tag_phase_address": false,
+      "trace_coincidence_start": null,
+      "trace_write_confirm": false,
+      "steering_gradient_at_zero": false,
+      "redistribute_inhibition": false,
+      "tag_read_competition": false,
+      "late_steering": false,
+      "residual_correction_start": 7,
+      "trace_integration": false,
+      "learn_inhibition_thresholds": false,
+      "inhibition_threshold_bits": 2,
+      "trace_tap_read": null,
+      "compact_trace_state": true,
+      "steering_transfer": null,
+      "delay_group_widths": [
+        75,
+        75,
+        47,
+        46
+      ],
+      "trace_read_drive": null,
+      "trace_read_drive_bits": 6,
+      "trace_read_drive_carry": false,
+      "trace_read_share_steering": false,
+      "trace_arrival": "unmatched",
+      "trace_arrival_groups": 2
+    },
+    "parameters": 14066688,
+    "streaming_tensor_bytes": 28584,
+    "training_targets": 4915200,
+    "seed": 9349,
+    "validation_bpb": 1.839079382642543,
+    "training_record": "results/event_lm/trace_arrival/event_correction_code_s9349_trace_arrival_unmatched.json",
+    "cumulative_training_targets": 121241600
+  },
+  "archive": {
+    "file": "spiking-byte-lm-v9-checkpoints.tar.gz",
+    "sha256": "e9a26240ec38763054104160d7dd4c49782d570fd7958f3b7eadc5dc167a2fa2",
+    "bytes": 293565644,
+    "contents_checksums": "checkpoints/SHA256SUMS-v9"
+  },
+  "checkpoints": {
+    "trace-arrival-study/control_s9349.pt": {
+      "bytes": 51209426,
+      "sha256": "7b4a8ba12d346224df875251f42abc6578d0e5eda9163c7ee2e1a8e4d1c27f3e",
+      "training_record": "results/event_lm/trace_arrival/event_correction_code_s9349_trace_arrival_control.json",
+      "parent": "checkpoints/trace-read-drive-study/control_s8237.pt"
+    },
+    "trace-arrival-study/selected_s9349.pt": {
+      "bytes": 56281649,
+      "sha256": "1d76ab702637e0f5b969ef1f17eafef1aaaa47687e2bb8744f4aed5063e389d5",
+      "training_record": "results/event_lm/trace_arrival/event_correction_code_s9349_trace_arrival_selected.json",
+      "parent": "checkpoints/trace-read-drive-study/control_s8237.pt"
+    },
+    "trace-arrival-study/transformer_s9349.pt": {
+      "bytes": 56554503,
+      "sha256": "b0177b77ea0eae6068db8d29b2020ee56dd341c4325c8fe8312087a4406376d4",
+      "training_record": "results/event_lm/trace_arrival/transformer_s9349_trace_arrival_transformer.json",
+      "parent": "checkpoints/trace-read-drive-study/transformer_s8237.pt"
+    },
+    "trace-arrival-study/unmatched_s9349.pt": {
+      "bytes": 56281649,
+      "sha256": "f90a63cafe53eef19ec9e029f26b74e8269e947e408aeabff8c1a77d85ea5349",
+      "training_record": "results/event_lm/trace_arrival/event_correction_code_s9349_trace_arrival_unmatched.json",
+      "parent": "checkpoints/trace-read-drive-study/control_s8237.pt"
+    },
+    "trace-read-drive-study/control_s8237.pt": {
+      "bytes": 51209234,
+      "sha256": "4dddf31f430eaa811d64f86fdeb5a48d044ec1d001f13003e627d9ffac266edf",
+      "training_record": "results/event_lm/trace_read_drive/event_correction_code_s8237_trace_read_drive_control.json",
+      "parent": "checkpoints/packed-width-study/short_groups_s7907.pt"
+    },
+    "trace-read-drive-study/transformer_s8237.pt": {
+      "bytes": 51485575,
+      "sha256": "f310fcd9a3fbabf9120ec6004527144e6ded819b25c0d071c7c856edbb19ecea",
+      "training_record": "results/event_lm/trace_read_drive/transformer_s8237_trace_read_drive_transformer.json",
+      "parent": "checkpoints/packed-width-study/transformer_s7907.pt"
+    }
+  },
+  "upstream_manifest": "models/spiking-byte-lm-v8/manifest.json",
+  "transfer_benchmarks": {
+    "suite": "byte-transfer-v1",
+    "record": "results/event_lm/byte_transfer/trace_arrival_s9349.json",
+    "sha256": "c0881df5168992c13279c7a8952baca076ce30f70e262f03168f1926e3c9a758",
+    "sources": "results/event_lm/byte_transfer/sources_v1.json",
+    "catalogue": "results/event_lm/byte_transfer/prepared_v1.json"
+  }
+}

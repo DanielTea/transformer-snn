@@ -4,6 +4,54 @@ Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## Scheduled spike arrivals · 121,241,600 training targets · seed 9349
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Ordinary SNN | 12,799,488 | 28,584 B | 1.79102 | 2 | 2.75679 | 2 | 2.84618 | 309,983 |
+| Selected arrivals | 14,066,688 | 28,584 B | 1.79114 | 3 | **2.75550** | 1 | **2.84606** | 308,644 |
+| Unmatched arrivals | 14,066,688 | 28,584 B | 1.79163 | 4 | 2.76087 | 3 | 2.85319 | 310,042 |
+| Full attention | 14,068,224 | 6 MiB | **1.70963** | 1 | 2.88426 | 4 | 3.08064 | — |
+
+![Held-out enwik8 and PG-19 loss for the arrival study](../results/figures/event_lm_trace_arrival.png)
+
+![Paired enwik8 loss gap during the first 32 predictions after reset](../results/figures/event_lm_arrival_early_context.png)
+
+[Arrival circuit, ablations and replay](FIXED_ARRIVALS.md)
+
+### Byte transfer at the same training exposure
+
+Raw corpus loss in bits per byte uses identical 512-byte windows.
+
+| Model | WikiText-103 | C4 | enwik9 | text8 |
+|---|---:|---:|---:|---:|
+| Full attention | 2.33027 | 2.17533 | 1.68158 | 2.15081 |
+| Ordinary SNN | 2.34669 | 2.21600 | 1.76809 | 2.14090 |
+| Selected arrivals | 2.34061 | 2.21631 | 1.76730 | 2.14122 |
+| Unmatched arrivals | 2.34510 | 2.21464 | 1.76823 | 2.13885 |
+
+Wikipedia windows with zero hits under the training-overlap screen.
+
+| Model | WikiText-103 | enwik9 | text8 |
+|---|---:|---:|---:|
+| Full attention | 2.33054 | 1.74645 | 2.15132 |
+| Ordinary SNN | 2.34695 | 1.83274 | 2.14155 |
+| Selected arrivals | 2.34086 | 1.83168 | 2.14188 |
+| Unmatched arrivals | 2.34536 | 1.83257 | 2.13948 |
+
+LAMBADA scores the same final words under both conditioning lengths. Exact match requires a word boundary. The gold-length columns score predictions through the last answer byte.
+
+| Model | Passage bpb | Last sentence bpb | Passage exact | Last sentence exact | Passage at gold length | Last sentence at gold length |
+|---|---:|---:|---:|---:|---:|---:|
+| Full attention | 3.39187 | 3.44267 | 0.02% | 0.00% | 0.02% | 0.00% |
+| Ordinary SNN | 3.53325 | 3.55381 | 0.00% | 0.00% | 0.00% | 0.00% |
+| Selected arrivals | 3.53435 | 3.55570 | 0.00% | 0.00% | 0.00% | 0.00% |
+| Unmatched arrivals | 3.52955 | 3.54842 | 0.00% | 0.00% | 0.00% | 0.00% |
+
+![Transfer loss and LAMBADA final-word accuracy](../results/figures/event_lm_byte_transfer_trace_arrival_s9349.png)
+
+[Protocol, provenance, and overlap counts](BYTE_TRANSFER.md) · [Exact score records](../results/event_lm/byte_transfer/trace_arrival_s9349.json)
+
 ## Driven held-charge reads · 116,326,400 training targets · seed 8237
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
@@ -253,7 +301,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 ![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)
 
-[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · [Current model card](../models/spiking-byte-lm-v8/README.md) · [Depth growth study](DEPTH_GROWTH.md)
+[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · [Current model card](../models/spiking-byte-lm-v9/README.md) · [Depth growth study](DEPTH_GROWTH.md)
 
 ![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)
 
