@@ -15,6 +15,8 @@ import torch.nn.functional as F
 
 from common import make_lm, resolve_device
 from snnformer import SNNConfig, count_params
+from snnformer.event_lm import EventLM
+from train_event_lm import load_checkpoint as load_event_checkpoint, scoring_logits
 from train_lm import DATA, ENWIK8_SHA1, load_splits
 
 
@@ -48,10 +50,13 @@ def score(model, data, starts, history, tail_bytes, batch_size, device):
     # each condition, while the unscored context begins at different offsets.
     offsets = np.arange(-history, tail_bytes)
     nll = 0.0
+    resolution = model.cfg.resolution if isinstance(model, EventLM) else None
     for index in range(0, len(starts), batch_size):
         positions = starts[index : index + batch_size, None] + offsets
         window = torch.as_tensor(data[positions], device=device, dtype=torch.long)
         logits = model(window[:, :-1])[:, -tail_bytes:]
+        if resolution is not None:
+            logits = scoring_logits(logits, True, resolution)
         targets = window[:, history:]
         nll += F.cross_entropy(logits.flatten(0, 1), targets.flatten(), reduction="sum").item()
     return nll / (len(starts) * tail_bytes * math.log(2))
@@ -59,7 +64,9 @@ def score(model, data, starts, history, tail_bytes, batch_size, device):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", required=True, type=Path, nargs="+", help="checkpoint(s) from train_lm.py")
+    parser.add_argument("--checkpoint", required=True, type=Path, nargs="+")
+    parser.add_argument("--event-lm", action="store_true",
+                        help="load checkpoints from train_event_lm.py instead of train_lm.py")
     parser.add_argument("--data", type=Path, default=Path(os.environ.get("ENWIK8_PATH", str(DATA))))
     parser.add_argument("--split", choices=("val", "test"), default="test")
     parser.add_argument("--histories", type=int, nargs="+", default=[32, 128, 256, 1024],
@@ -93,7 +100,11 @@ def main():
     for requested_path in args.checkpoint:
         path = requested_path.expanduser()
         try:
-            model, name = load_model(path, device)
+            if args.event_lm:
+                model, metadata = load_event_checkpoint(path, device)
+                name = metadata["run_name"]
+            else:
+                model, name = load_model(path, device)
         except (OSError, ValueError, KeyError, RuntimeError) as exc:
             parser.error(str(exc))
         positions = getattr(model, "pos", None)
@@ -104,7 +115,7 @@ def main():
             bpb = score(model, data, starts, history, args.tail_bytes, args.batch_size, device)
             row = {"history_bytes": history, "bpb": bpb}
             description = f"{name} | history {history:4d} | {bpb:.4f} bpb"
-            if args.memory_ablation and model.cfg.attn == "transformer_event":
+            if args.memory_ablation and getattr(model.cfg, "attn", None) == "transformer_event":
                 with memory_disabled(model):
                     ablated = score(model, data, starts, history, args.tail_bytes, args.batch_size, device)
                 row["memory_disabled_bpb"] = ablated

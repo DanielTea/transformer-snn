@@ -95,6 +95,11 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                for module in integer.modules() if isinstance(module, _IntegrateFire)]
     handles.append(integer.output.register_forward_hook(lambda *_: vocabulary_calls.append(1)))
     activity = {}
+    tap_winners = []
+    if integer.cfg.trace_tap_read is not None:
+        handles.extend(block.trace_taps.register_forward_hook(
+            lambda _module, _inputs, output: tap_winners.append(output[2]),
+        ) for block in integer.blocks)
     if activity_profile:
         populations = {"input": integer.input_emit}
         for index, block in enumerate(integer.blocks):
@@ -115,6 +120,10 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 populations[f"block_{index}_trace_read_veto"] = block.trace.read_veto.emit
             if integer.cfg.trace_write_confirm:
                 populations[f"block_{index}_trace_write_confirm"] = block.trace.write_confirm.emit
+            if integer.cfg.trace_integration:
+                populations[f"block_{index}_trace_input"] = block.trace.input.emit
+            if integer.cfg.trace_tap_read is not None:
+                populations[f"block_{index}_tap_correction"] = block.trace_taps.emit
         for name, module in populations.items():
             handles.append(module.register_forward_hook(
                 lambda _module, _inputs, spikes, label=name: activity.__setitem__(label, spikes),
@@ -202,6 +211,34 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["trace_read_veto_gain_ticks"] = [block.trace.read_veto.gains().tolist() for block in integer.blocks]
     if integer.cfg.trace_write_confirm:
         row["trace_write_confirm_gain_ticks"] = [block.trace.write_confirm.gains().tolist() for block in integer.blocks]
+    if integer.cfg.trace_integration:
+        row["trace_input_nonzero_weights_by_block"] = [
+            block.trace.input.weight.count_nonzero().item() for block in integer.blocks
+        ]
+    if integer.cfg.learn_inhibition_thresholds:
+        row["inhibition_threshold_units_per_base"] = 1 << integer.cfg.inhibition_threshold_bits
+        row["inhibition_threshold_quanta_by_block"] = [
+            block.inhibition_thresholds.quanta().tolist() for block in integer.blocks
+        ]
+    if tap_winners:
+        row["trace_tap_read"] = integer.cfg.trace_tap_read
+        row["trace_tap_release_pulses_per_byte"] = sum(
+            winners.ge(0).sum(dtype=torch.int64).item() for winners in tap_winners
+        ) / tokens.numel()
+        counts_by_block = []
+        for block, winners in zip(integer.blocks, tap_winners, strict=True):
+            counts_by_group = []
+            for delay, count, selected in zip(block.local_delays, block.trace_taps.choices,
+                                              winners.unbind(dim=-1), strict=True):
+                if count > 1:
+                    wins_by_delay = {str(delay - tap): selected.eq(tap).sum(dtype=torch.int64).item()
+                                     for tap in range(count)}
+                    counts_by_group.append({"anchor_delay": delay, "wins_by_delay": wins_by_delay})
+            counts_by_block.append(counts_by_group)
+        row["trace_tap_counts_by_block"] = counts_by_block
+        row["trace_tap_active_weights_by_block"] = [
+            block.trace_taps.weight.count_nonzero().item() for block in integer.blocks
+        ]
     if integer.cfg.spread_coincidence:
         row["spread_coincidence_mix_ticks"] = [
             block.spread_coincidence.mix_ticks().tolist() for block in integer.blocks
@@ -212,6 +249,16 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["delay_filter_nonzero_weights"] = sum(int(weight.count_nonzero()) for weight in weights)
     if activity:
         row["activity_profile"] = {}
+        if integer.cfg.trace_integration:
+            row["trace_input_pulses_per_byte"] = sum(
+                activity[f"block_{index}_trace_input"].abs().sum(dtype=torch.int64).item()
+                for index in range(len(integer.blocks))
+            ) / tokens.numel()
+        if tap_winners:
+            row["trace_tap_correction_pulses_per_byte"] = sum(
+                activity[f"block_{index}_tap_correction"].abs().sum(dtype=torch.int64).item()
+                for index in range(len(integer.blocks))
+            ) / tokens.numel()
         quantiles = torch.tensor([0.05, 0.5, 0.95])
         for name, packets in activity.items():
             per_byte = packets.abs().float().mean(-1).flatten()

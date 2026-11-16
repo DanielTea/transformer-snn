@@ -49,6 +49,8 @@ TAG_READS = "event_lm/tag_read_competition"
 LATE_STEERING = "event_lm/late_steering"
 FINER_ROUTER = "event_lm/finer_router_charge"
 DEPTH_GROWTH = "event_lm/depth_growth"
+TRACE_INTEGRATION = "event_lm/trace_integration"
+TRACE_TAP_READ = "event_lm/trace_tap_read"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -137,6 +139,21 @@ RESIDUAL_OUTPUT_81920K = (
     ("7-block SNN, correction output", DEPTH_GROWTH, "corrections_s4603",
      f"{DEPTH_GROWTH}/native_corrections_s4603.json", VIOLET),
     ("4-block full attention", DEPTH_GROWTH, "control_transformer_s4603", None, ORANGE),
+)
+TRACE_INTEGRATION_91750K = (
+    ("Continued v6 SNN", TRACE_INTEGRATION, "control_s5801", f"{TRACE_INTEGRATION}/native_control_s5801.json", BLUE),
+    ("Learned trace input spikes", TRACE_INTEGRATION, "transport_s5801", f"{TRACE_INTEGRATION}/native_transport_s5801.json", VIOLET),
+    ("Coarse group thresholds", TRACE_INTEGRATION, "thresholds_s5801",
+     f"{TRACE_INTEGRATION}/native_thresholds_s5801.json", "#138372"),
+    ("One-tick group thresholds", TRACE_INTEGRATION, "fine_thresholds_s5801",
+     f"{TRACE_INTEGRATION}/native_fine_thresholds_s5801.json", "#ad4772"),
+    ("6-block full attention", TRACE_INTEGRATION, "transformer_s5801", None, ORANGE),
+)
+TRACE_TAP_101580K = (
+    ("Continued SNN", TRACE_TAP_READ, "control_s6899", f"{TRACE_TAP_READ}/native_control_s6899.json", BLUE),
+    ("Shortest eligible tap", TRACE_TAP_READ, "fixed_s6899", f"{TRACE_TAP_READ}/native_fixed_s6899.json", "#138372"),
+    ("Held spike race", TRACE_TAP_READ, "race_s6899", f"{TRACE_TAP_READ}/native_race_s6899.json", VIOLET),
+    ("6-block full attention", TRACE_TAP_READ, "transformer_s6899", None, ORANGE),
 )
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
@@ -300,6 +317,10 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
+        ("trace_tap_101580k", "9.96M axon tap reads",
+         TRACE_TAP_101580K, 6899, 512, (91_750_400, 9_830_400)),
+        ("trace_integration_91750k", "9.96M trace inputs and group thresholds",
+         TRACE_INTEGRATION_91750K, 5801, 512, (81_920_000, 9_830_400)),
         ("growth_9960k", "9.96M depth and width growth", GROWTH_81920K, 4603, 512, (72_089_600, 9_830_400)),
         ("residual_output_6510k", "6.51M signed residual output", RESIDUAL_OUTPUT_81920K, 4603, 512,
          (72_089_600, 9_830_400)),
@@ -416,7 +437,18 @@ def write_leaderboards(data, depth, research):
         "Each PG-19 temperature is fitted on eight separate validation books. "
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
     ]
-    growth_figures = {
+    study_figures = {
+        "trace_tap_101580k": (
+            "![Held-out loss for the spike race, shortest tap, and matched controls](../results/figures/event_lm_trace_tap_read.png)",
+            "![Validation loss and pulse counts during the tap comparison](../results/figures/event_lm_trace_tap_training.png)",
+            "[Timing circuit and interventions](TRACE_TAP_READ.md)",
+        ),
+        "trace_integration_91750k": (
+            "![Held-out loss for trace inputs, group thresholds, and matched controls](../results/figures/event_lm_trace_integration.png)",
+            "![Native resting-threshold offsets learned by each delay group](../results/figures/event_lm_fine_group_thresholds.png)",
+            "![Gap in held-out loss by available history at the v6 weights](../results/figures/event_lm_validation_history.png)",
+            "[Circuit and interventions](TRACE_INTEGRATION.md)",
+        ),
         "growth_9960k": (
             "![Held-out loss for deeper and wider SNNs and full attention](../results/figures/event_lm_growth_9960k.png)",
             "![enwik8 loss gap by prefix age for the 11-block SNN](../results/figures/event_lm_growth_9960k_prefix_age.png)",
@@ -432,7 +464,7 @@ def write_leaderboards(data, depth, research):
             f'## {group["title"]} · {group["training_summary"]}',
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
-        paragraphs.extend(growth_figures.get(name, ()))
+        paragraphs.extend(study_figures.get(name, ()))
     paragraphs.extend([
         "![Held-out loss after doubling residual width](../results/figures/event_lm_residual_growth_13030k.png)",
         "![Held-out loss after changing the spike circuits at 6.51M parameters](../results/figures/event_lm_6510k_circuits.png)",
@@ -442,7 +474,7 @@ def write_leaderboards(data, depth, research):
         "![Held-out next-byte loss for the grown 6.51M models](../results/figures/event_lm_grown_6510k.png)",
         "![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)",
         "[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · "
-        "[Current model card](../models/spiking-byte-lm-v6/README.md) · [Depth growth study](DEPTH_GROWTH.md)",
+        "[Current model card](../models/spiking-byte-lm-v7/README.md) · [Depth growth study](DEPTH_GROWTH.md)",
         "![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)",
         "![Held-out loss at both trained context lengths](../results/figures/event_lm_trained_context.png)",
         "[Continuation and scale source records](../results/event_lm/continuation_leaderboard.json) · "
@@ -476,7 +508,7 @@ def write_leaderboards(data, depth, research):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    table = markdown_table(research["groups"]["growth_9960k"]["rows"], include_ranks=False)
+    table = markdown_table(research["groups"]["trace_tap_101580k"]["rows"], include_ranks=False)
     readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
 
 
@@ -591,6 +623,90 @@ def plot_residual_emissions(output):
     fig.legend(loc="lower center", bbox_to_anchor=(0.6, 0.09), ncol=2, frameon=False, labelcolor=TEXT)
     fig.text(0.036, 0.043, "Forwarded pulses still drive downstream synapses.", color=MUTED, size=9)
     save(fig, output, "event_lm_residual_emissions.png")
+
+
+def plot_trace_tap_training(rows, output):
+    fig, (loss, activity) = plt.subplots(1, 2, figsize=(11.6, 4.65))
+    fig.subplots_adjust(left=0.1, right=0.966, bottom=0.27, top=0.755, wspace=0.34)
+    heading(fig, "Training the tap read circuits", "32,768 shared enwik8 validation targets per evaluation · seed 6899")
+    for ax, title, ylabel in ((loss, "Validation loss", "Bits per byte"),
+                              (activity, "Validation activity", "Thousands of pulses per byte")):
+        style(ax)
+        ax.set_title(title, loc="left", color=TEXT, size=11)
+        ax.set_xlabel("Additional training targets, millions", color=MUTED, labelpad=7)
+        ax.set_ylabel(ylabel, color=MUTED, labelpad=7)
+    for row in rows:
+        curve = read_result(row["training_record"])["curve"]
+        x = [point["tokens"] / 1_000_000 for point in curve]
+        line = dict(color=row["color"], marker="o", markersize=3.5, linewidth=1.45)
+        loss.plot(x, [point["val_bpb"] for point in curve], label=row["model"], **line)
+        if row["pulses_per_byte"] is not None:
+            activity.plot(x, [point["val_pulses_per_byte"] / 1000 for point in curve], **line)
+    activity.axhline(310, color=GRAY, linestyle="--", linewidth=1)
+    handles, labels = loss.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.075),
+               ncol=4, frameon=False, fontsize=9, labelcolor=TEXT)
+    fig.text(0.035, 0.034, "The dashed line marks the SNN training target.", color=MUTED, size=9)
+    save(fig, output, "event_lm_trace_tap_training.png")
+
+
+def plot_validation_history(output):
+    record = read_result(f"{TRACE_INTEGRATION}/v6_validation_history.json")
+    snn, attention = (model["histories"] for model in record["models"])
+    histories = [row["history_bytes"] for row in snn]
+    if histories != [row["history_bytes"] for row in attention]:
+        raise ValueError("history comparisons must use matching warmup lengths")
+    snn_loss = [row["bpb"] for row in snn]
+    attention_loss = [row["bpb"] for row in attention]
+
+    fig, (score, gap) = plt.subplots(1, 2, figsize=(11.3, 4.6))
+    fig.subplots_adjust(left=0.09, right=0.967, bottom=0.21, top=0.76, wspace=0.31)
+    heading(fig, "Next-byte loss by available history",
+            f'{record["target_bytes"]:,} matched enwik8 validation targets · 16-byte tails')
+    for ax in (score, gap):
+        style(ax)
+        ax.set_xscale("log", base=2)
+        ax.set_xticks(histories, [str(history) for history in histories])
+        ax.set_xlabel("Warmup bytes before each scored tail", color=MUTED, labelpad=8)
+    score.set_title("Held-out loss", loc="left", color=TEXT, fontsize=11)
+    score.set_ylabel("Bits per byte", color=MUTED, labelpad=7)
+    score.plot(histories, snn_loss, "o-", color=VIOLET, label="11-block SNN")
+    score.plot(histories, attention_loss, "o-", color=ORANGE, label="Full attention")
+    score.legend(frameon=False, labelcolor=TEXT)
+    gap.set_title("SNN minus full attention", loc="left", color=TEXT, fontsize=11)
+    gap.set_ylabel("Additional bits per byte", color=MUTED, labelpad=7)
+    gap.plot(histories, [a - b for a, b in zip(snn_loss, attention_loss, strict=True)], "o-", color=BLUE)
+    gap.set_ylim(0, None)
+    save(fig, output, "event_lm_validation_history.png")
+
+
+def plot_group_thresholds(output):
+    audit = read_result(f"{TRACE_INTEGRATION}/native_fine_thresholds_s5801.json")["models"][0]
+    base = audit["inhibition_threshold_units_per_base"]
+    offsets = [[units - base for units in row] for row in audit["inhibition_threshold_quanta_by_block"]]
+    values = [offset for row in offsets for offset in row]
+    low, high = min(0, min(values)), max(1, max(values))
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.7))
+    fig.subplots_adjust(left=0.13, right=0.94, bottom=0.18, top=0.77)
+    heading(fig, "Learned firing thresholds by delay group",
+            f"{sum(value != 0 for value in values)} of {len(values)} groups changed at one-tick resolution")
+    style(ax, grid_axis="x")
+    ax.grid(False)
+    heat = ax.imshow(offsets, vmin=low, vmax=high, cmap="Blues", aspect="auto")
+    for block, row in enumerate(offsets):
+        for group, value in enumerate(row):
+            color = "white" if value > low + 0.62 * (high - low) else TEXT
+            ax.text(group, block, f"{value:+d}" if value else "0", ha="center", va="center", color=color, fontsize=9)
+    ax.set_yticks(range(len(offsets)), range(1, len(offsets) + 1))
+    ax.set_xticks(range(len(offsets[0])), range(1, len(offsets[0]) + 1))
+    ax.set_xlabel("Delay group", color=MUTED, labelpad=7)
+    ax.set_ylabel("Spiking block", color=MUTED, labelpad=7)
+    colorbar = fig.colorbar(heat, ax=ax, pad=0.04)
+    colorbar.set_label("Offset in charge ticks", color=MUTED)
+    fig.text(0.035, 0.045, "Offsets apply before spikes from the shared inhibitory pool arrive.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_fine_group_thresholds.png")
 
 
 def plot_trained_context(research, output):
@@ -721,6 +837,17 @@ def main():
                  subtitle="About 6.51M parameters · 81.92M enwik8 training targets · seed 4603",
                  filename="event_lm_residual_output.png", precision=5)
     plot_residual_emissions(output)
+    plot_validation_history(output)
+    plot_group_thresholds(output)
+    plot_heldout(research["groups"]["trace_integration_91750k"]["rows"], output,
+                 title="Integrating charge and learning group thresholds",
+                 subtitle="About 9.96M parameters · 91.75M enwik8 training targets · seed 5801",
+                 filename="event_lm_trace_integration.png", precision=5)
+    tap_rows = research["groups"]["trace_tap_101580k"]["rows"]
+    plot_heldout(tap_rows, output, title="Reading the axons by spike timing",
+                 subtitle="About 9.96M parameters · 101.58M enwik8 training targets · seed 6899",
+                 filename="event_lm_trace_tap_read.png", precision=5)
+    plot_trace_tap_training(tap_rows, output)
     plot_trained_context(research, output)
     plot_training_exposure(research, output)
     plot_prefix_age_gap(f"{OPPONENT}/enwik8_opponent_s711.json", f"{CREDIT}/enwik8_transformer_s711.json", output,

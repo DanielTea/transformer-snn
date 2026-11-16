@@ -1,7 +1,8 @@
 # ShuntFormer — design notes
 
-The [v6 model card](../models/spiking-byte-lm-v6/README.md) describes
-the current integer byte decoder and its signed correction blocks.
+The [v7 model card](../models/spiking-byte-lm-v7/README.md) describes
+the current integer byte decoder, its signed correction blocks, and
+the optional axon tap read circuit.
 This page documents the original competitive-shunting attention
 architecture.
 

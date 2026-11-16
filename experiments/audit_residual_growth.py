@@ -24,7 +24,7 @@ from train_lm import load_splits, random_batch
 @torch.no_grad()
 def measure(model, tokens, device, *, profile_coincidence, prior_depth=None):
     native = model.to_integer()
-    emissions, memory_emissions, selected_fractions, added_inhibition = [], [], [], []
+    emissions, memory_emissions, selected_fractions, added_inhibition, tap_releases = [], [], [], [], []
 
     def count_emissions(_module, _inputs, counts):
         emissions.append(counts.abs().sum(dtype=torch.int64).item())
@@ -46,6 +46,11 @@ def measure(model, tokens, device, *, profile_coincidence, prior_depth=None):
 
         handles.extend(block.activity_inhibition.register_forward_hook(count_added_inhibition)
                        for block in native.blocks[prior_depth:] if block.activity_inhibition is not None)
+    if native.cfg.trace_tap_read is not None:
+        def count_tap_releases(_module, _inputs, output):
+            tap_releases.append(output[2].ge(0).sum(dtype=torch.int64).item())
+
+        handles.extend(block.trace_taps.register_forward_hook(count_tap_releases) for block in native.blocks)
     with _IntegerExecution():
         counts = native(tokens, memory_pulses=memory_emissions)
         for handle in handles:
@@ -74,6 +79,8 @@ def measure(model, tokens, device, *, profile_coincidence, prior_depth=None):
         metrics["fraction_of_two_way_matches_also_confirmed"] = selected_fractions
     if prior_depth is not None:
         metrics["added_inhibition_pulses_by_block"] = added_inhibition
+    if tap_releases:
+        metrics["tap_release_pulses_by_block"] = tap_releases
     return counts, metrics
 
 
@@ -87,14 +94,25 @@ def main():
     growth.add_argument("--hidden", type=int, help="grow content and steering within each delay group")
     growth.add_argument("--depth", type=int, help="append silent residual correction blocks to this depth")
     growth.add_argument("--trace-write-confirm", action="store_true", help="add silent write confirmation neurons")
+    growth.add_argument("--trace-integration", action="store_true", help="add silent input neurons to held charge")
+    growth.add_argument("--trace-tap-read", choices=("fixed", "race"), help="add a read from an existing axon tap")
     growth.add_argument("--redistribute-inhibition", action="store_true", help="add silent inhibitory transfers")
+    growth.add_argument("--learn-inhibition-thresholds", action="store_true",
+                        help="replace the common resting threshold with learned delay-group thresholds")
     growth.add_argument("--tag-read-competition", action="store_true", help="add silent tag read inhibition")
     growth.add_argument("--late-steering", action="store_true", help="add silent feedback steering")
     growth.add_argument("--refine-router-charge", type=int, choices=(8,), help="refine charge at a fixed width")
     parser.add_argument("--router-charge-bits", type=int, choices=(6, 8))
+    parser.add_argument("--inhibition-threshold-bits", type=int)
+    parser.add_argument("--compact-trace-state", action="store_true",
+                        help="pack the trace tensors while growing the expansion")
     parser.add_argument("--trace-coincidence", action="store_true")
     parser.add_argument("--json", required=True, type=Path)
     args = parser.parse_args()
+    if args.compact_trace_state and args.hidden is None:
+        parser.error("--compact-trace-state in this audit accompanies --hidden")
+    if args.inhibition_threshold_bits is not None and not args.learn_inhibition_thresholds:
+        parser.error("threshold precision requires --learn-inhibition-thresholds")
 
     torch.set_num_threads(4)
     torch.manual_seed(711)
@@ -106,7 +124,8 @@ def main():
     if not isinstance(parent, EventLM) or not parent.cfg.local_trace:
         parser.error("the parent must be a held-charge EventLM")
     prior = parent.cfg
-    circuit_options = ("trace_write_confirm", "redistribute_inhibition", "tag_read_competition", "late_steering")
+    circuit_options = ("trace_write_confirm", "trace_integration", "trace_tap_read", "redistribute_inhibition",
+                       "learn_inhibition_thresholds", "tag_read_competition", "late_steering")
     added_circuit = next((option for option in circuit_options if getattr(args, option)), None)
     if ((args.depth is not None or args.hidden is not None or added_circuit)
             and (args.router_charge_bits is not None or args.trace_coincidence)):
@@ -114,7 +133,9 @@ def main():
     if added_circuit:
         if getattr(prior, added_circuit):
             parser.error(f"the parent already uses {added_circuit.replace('_', ' ')}")
-        cfg = replace(prior, **{added_circuit: True})
+        cfg = replace(prior, **{added_circuit: getattr(args, added_circuit)})
+        if args.inhibition_threshold_bits is not None:
+            cfg = replace(cfg, inhibition_threshold_bits=args.inhibition_threshold_bits)
         grown = EventLM(cfg)
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False)
     elif args.refine_router_charge is not None:
@@ -137,7 +158,7 @@ def main():
         grown = EventLM(cfg)
         grown.initialize_wider_residual(prior, checkpoint["state_dict"])
     else:
-        cfg = replace(prior, hidden=args.hidden)
+        cfg = replace(prior, hidden=args.hidden, compact_trace_state=prior.compact_trace_state or args.compact_trace_state)
         grown = EventLM(cfg)
         grown.initialize_wider_expansion(prior, checkpoint["state_dict"])
     parent_counts, parent_metrics = measure(parent, tokens, device, profile_coincidence=False)
@@ -145,8 +166,11 @@ def main():
                                           prior_depth=prior.depth if args.depth is not None else None)
     torch.testing.assert_close(parent_counts, grown_counts, rtol=0, atol=0)
     pulse_delta = grown_metrics["total_pulses"] - parent_metrics["total_pulses"]
-    if pulse_delta != sum(grown_metrics.get("added_inhibition_pulses_by_block", [])):
-        raise AssertionError("an added routing branch emitted at initialization")
+    known_pulses = sum(grown_metrics.get("added_inhibition_pulses_by_block", []))
+    if args.trace_tap_read is not None:
+        known_pulses += sum(grown_metrics["tap_release_pulses_by_block"])
+    if pulse_delta != known_pulses:
+        raise AssertionError(f"expected {known_pulses} additional pulses at initialization, observed {pulse_delta}")
 
     generator = torch.Generator().manual_seed(711)
     inputs, labels = random_batch(train, 1, 512, generator)
@@ -156,10 +180,19 @@ def main():
     if args.trace_write_confirm:
         gradient_field = "active_write_confirmation_gradients_on_512_train_targets"
         gradients = [block.trace.write_confirm.gain.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.trace_integration:
+        gradient_field = "active_trace_input_gradients_on_512_train_targets"
+        gradients = [block.trace.input.weight.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.trace_tap_read is not None:
+        gradient_field = "active_tap_input_gradients_on_512_train_targets"
+        gradients = [block.trace_taps.weight.grad.count_nonzero().item() for block in grown.blocks]
     elif args.redistribute_inhibition:
         gradient_field = "active_inhibition_gradients_on_512_train_targets"
         gradients = [block.inhibition_redistribution.synapse.weight.grad.count_nonzero().item()
                      for block in grown.blocks]
+    elif args.learn_inhibition_thresholds:
+        gradient_field = "active_threshold_gradients_on_512_train_targets"
+        gradients = [block.inhibition_thresholds.relative.grad.count_nonzero().item() for block in grown.blocks]
     elif args.tag_read_competition:
         gradient_field = "active_read_competition_heads_on_512_train_targets"
         gradients = grown.prediction_memory.read_inhibition.gain.grad.ne(0).int().tolist()
@@ -197,7 +230,8 @@ def main():
         "device": str(device),
         "native_step_chunk_and_device_counts_equal": True,
         "parent_count_and_emission_parity": pulse_delta == 0,
-        **({"parent_counts_equal": True, "additional_pulses": pulse_delta} if args.depth is not None else {}),
+        **({"parent_counts_equal": True, "additional_pulses": pulse_delta}
+           if args.depth is not None or args.trace_tap_read is not None else {}),
         "models": {"parent": parent_metrics, "candidate" if added_circuit else "grown": grown_metrics},
         gradient_field: gradients,
     }

@@ -3,11 +3,163 @@ from dataclasses import replace
 import pytest
 import torch
 
-from snnformer.correction_memory import CorrectionState, _interval_scan, _write_credit_scan, correction_reads, correction_step
+from snnformer.correction_memory import (
+    CorrectionState, _interval_scan, _scan_translated_charge, _write_credit_scan, correction_reads, correction_step,
+)
 from snnformer.event_lm import (
     EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _IntegrateFire, _OpponentSteering,
-    _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _steer_packet,
+    _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _TraceTapRead, _steer_packet,
 )
+
+
+def test_held_tap_race_uses_the_winners_full_packet_and_counts_one_release():
+    tap = _TraceTapRead((2,), (4,), 8, 1, "race", packet_thresholds=False).eval()
+    with torch.no_grad():
+        tap.weight.fill_(0.25)
+        tap.freeze_integer()
+        candidates = torch.tensor([[[0, 2, 1, 3], [2, 0, -4, -2]]], dtype=torch.int32)
+        anchor = candidates[..., 0]
+        read = torch.tensor([[2, -2]], dtype=torch.int32)
+        steering = torch.tensor([[3, 2]], dtype=torch.int32)
+        pulses = []
+        held, delayed, winners = tap((candidates,), anchor, read, steering, 4, pulse_counts=pulses)
+        torch.testing.assert_close(winners, torch.tensor([[2]]))
+        torch.testing.assert_close(delayed, candidates[..., 2])
+        torch.testing.assert_close(held, torch.tensor([[3, -6]], dtype=torch.int32))
+        assert pulses[0].item() == 1
+        held, delayed, winners = tap((candidates,), anchor, read, steering, 3)
+        torch.testing.assert_close(held, read)
+        torch.testing.assert_close(delayed, anchor)
+        assert winners.item() == -1
+
+
+def test_packed_trace_stores_bounded_charge_and_preserves_cross_chunk_gradients():
+    trace = _SpikeTrace(512, write_credit=True, compact_state=True)
+    present = torch.tensor([[510, -510]], dtype=torch.int32)
+    steering = torch.full_like(present, 512)
+    _, charge = trace.step(present, torch.zeros_like(steering), None)
+    assert charge.dtype == torch.int16
+    read, _ = trace.step(torch.zeros_like(present), steering, charge)
+    torch.testing.assert_close(read, present)
+
+    first = present.float().unsqueeze(1).requires_grad_()
+    _, charge = trace(first, torch.zeros_like(first), None, None)
+    assert charge.dtype == torch.float32
+    read, _ = trace(torch.zeros_like(first), steering.float().unsqueeze(1), charge, None)
+    read.sum().backward()
+    torch.testing.assert_close(first.grad, torch.ones_like(first))
+
+
+@pytest.mark.parametrize("mode", ("fixed", "race"))
+def test_held_tap_reads_stream_through_short_chunks_at_identical_counts(mode):
+    torch.manual_seed(676)
+    base = EventLMConfig(dim=24, hidden=16, depth=3, route="steered_correction_code", carry=False,
+                         local_trace=True, compact_delays=True, compact_axon_state=True,
+                         trace_write_credit=True, activity_inhibition=True, resolution=4)
+    parent = EventLM(base).eval()
+    model = EventLM(replace(base, trace_tap_read=mode)).eval()
+    missing, unexpected = model.load_state_dict(parent.state_dict(), strict=False)
+    assert not unexpected
+    assert missing == [f"blocks.{index}.trace_taps.weight" for index in range(base.depth)]
+    tokens = torch.randint(256, (2, 47))
+    with torch.no_grad():
+        torch.testing.assert_close(model.to_integer()(tokens), parent.to_integer()(tokens), rtol=0, atol=0)
+        for block in model.blocks:
+            block.trace_taps.weight.fill_(0.125)
+        native = model.to_integer()
+        counts = native(tokens)
+        torch.testing.assert_close(model(tokens), counts, rtol=0, atol=0, check_dtype=False)
+        steps, state = [], None
+        for byte in tokens.unbind(1):
+            result, state = native.step(byte, state)
+            steps.append(result)
+        chunks, state = [], None
+        for chunk in tokens.split((1, 2, 5, 6, 33), dim=1):
+            result, state = native.forward_chunk(chunk, state)
+            chunks.append(result)
+        torch.testing.assert_close(torch.stack(steps, dim=1), counts, rtol=0, atol=0)
+        torch.testing.assert_close(torch.cat(chunks, dim=1), counts, rtol=0, atol=0)
+        assert state.position == tokens.shape[1]
+
+
+def test_translated_charge_gradient_stops_at_the_last_actual_correction():
+    pulses = torch.tensor([[[1.], [2.], [4.], [-1.], [2.]]], requires_grad=True)
+    lower = torch.full_like(pulses, -4)
+    upper = torch.full_like(pulses, 4, requires_grad=True)
+    initial = torch.zeros(1, 1, requires_grad=True)
+    after = _scan_translated_charge(lower, upper, initial, pulses, 4, write_credit=True)
+    torch.testing.assert_close(after.flatten(), torch.tensor([1., 3., 4., 3., 4.]))
+    after.sum().backward()
+    torch.testing.assert_close(pulses.grad.flatten(), torch.tensor([2., 1., 0., 1., 0.]))
+    torch.testing.assert_close(upper.grad.flatten(), torch.tensor([0., 0., 2., 0., 1.]))
+    torch.testing.assert_close(initial.grad, torch.tensor([[2.]]))
+
+
+@pytest.mark.parametrize("bits", [2, 8])
+def test_learned_group_thresholds_share_the_activity_pool_and_keep_the_firing_floor(bits):
+    cfg = EventLMConfig(dim=8, hidden=4, depth=1, route="steered", carry=False,
+                        activity_inhibition=True, learn_inhibition_thresholds=True, router_charge_bits=8,
+                        inhibition_threshold_bits=bits)
+    model = EventLM(cfg)
+    with torch.no_grad():
+        model.blocks[0].inhibition_thresholds.relative.copy_(torch.tensor([0.5, 1.0, 1.5, 2.0]))
+    block = model.to_integer().blocks[0]
+    spikes = torch.tensor([[0] * 8, [4] + [0] * 7], dtype=torch.int32)
+    expected = torch.tensor([[4, 4, 6, 8], [4, 6, 8, 10]], dtype=torch.int32) << (bits - 2)
+    torch.testing.assert_close(block._firing_quanta(spikes, None), expected, rtol=0, atol=0)
+
+
+def test_one_threshold_tick_changes_integer_firing_at_the_half_threshold():
+    fire = _IntegrateFire(512, 8, False, quanta_per_threshold=256)
+    current = torch.tensor([128, 128, -128, -128], dtype=torch.int32)
+    thresholds = torch.tensor([256, 257, 256, 257], dtype=torch.int32)
+    expected = torch.tensor([1, 0, -1, 0], dtype=torch.int32)
+    torch.testing.assert_close(fire(current, thresholds), expected, rtol=0, atol=0)
+
+
+def test_translated_charge_rebases_before_float32_loses_integer_precision():
+    pulses = torch.full((1, 32780, 1), 512.0, dtype=torch.float32)
+    pulses[:, -4:, 0] = torch.tensor([511., -1., -1., -1.])
+    lower = torch.full_like(pulses, -512.)
+    upper = torch.full_like(pulses, 512.)
+    after = _scan_translated_charge(lower, upper, torch.zeros(1, 1), pulses, 512)
+    assert torch.all(after[:, :-3] == 512)
+    torch.testing.assert_close(after.flatten()[-3:], torch.tensor([511., 510., 509.]), rtol=0, atol=0)
+
+
+def test_trace_input_preserves_native_step_and_chunk_semantics():
+    torch.manual_seed(924)
+    parent_cfg = EventLMConfig(dim=24, hidden=16, depth=3, route="steered_correction_code", carry=False,
+                               local_trace=True, compact_delays=True, activity_inhibition=True, resolution=4)
+    parent = EventLM(parent_cfg).eval()
+    model = EventLM(replace(parent_cfg, trace_integration=True)).eval()
+    missing, unexpected = model.load_state_dict(parent.state_dict(), strict=False)
+    assert not unexpected
+    assert missing == [f"blocks.{index}.trace.input.weight" for index in range(parent_cfg.depth)]
+    tokens = torch.randint(256, (2, 37))
+    old_counts = parent.to_integer()(tokens)
+    torch.testing.assert_close(model.to_integer()(tokens), old_counts, rtol=0, atol=0)
+
+    with torch.no_grad():
+        for block in model.blocks:
+            block.trace.input.weight[0].fill_(0.25)
+            block.trace.input.weight[1].fill_(-0.125)
+        native = model.to_integer()
+        counts = native(tokens)
+        assert not torch.equal(counts, old_counts)
+        torch.testing.assert_close(model(tokens), counts, rtol=0, atol=0, check_dtype=False)
+        steps, state = [], None
+        for byte in tokens.unbind(1):
+            step_counts, state = native.step(byte, state)
+            steps.append(step_counts)
+        chunks, chunk_state = [], None
+        for chunk in tokens.split(7, dim=1):
+            chunk_counts, chunk_state = native.forward_chunk(chunk, chunk_state)
+            chunks.append(chunk_counts)
+        torch.testing.assert_close(torch.stack(steps, dim=1), counts, rtol=0, atol=0)
+        torch.testing.assert_close(torch.cat(chunks, dim=1), counts, rtol=0, atol=0)
+        for step_state, batched_state in zip(state.layers, chunk_state.local_layers, strict=True):
+            torch.testing.assert_close(step_state.trace_charge, batched_state.trace_charge, rtol=0, atol=0)
 
 
 def test_depth_growth_preserves_counts_and_active_residuals_match_ordinary_firing():

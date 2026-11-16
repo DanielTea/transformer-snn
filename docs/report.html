@@ -106,7 +106,22 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
-  <p class="col">The v6 comparison tests depth, width, and signed residual output after 81.92 million enwik8 training targets. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for full attention at its evaluation context. The earlier frozen-teacher arm uses additional training compute.</p>
+  <p class="col">The v7 comparison tests whether a release spike can select its own packet from existing axon taps after 101.58 million enwik8 training targets. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for full attention at its evaluation context. The earlier frozen-teacher arm uses additional training compute.</p>
+  <figure>
+    <a href="../results/figures/event_lm_trace_tap_read.png"><img src="../results/figures/event_lm_trace_tap_read.png" alt="Held-out loss for spike timing, shortest eligible tap, and the continued controls" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_trace_tap_training.png"><img src="../results/figures/event_lm_trace_tap_training.png" alt="Validation loss and counted SNN pulses during the tap comparison" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_trace_integration.png"><img src="../results/figures/event_lm_trace_integration.png" alt="Held-out loss for trace inputs, group thresholds, and matched controls at 91.75 million targets" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_fine_group_thresholds.png"><img src="../results/figures/event_lm_fine_group_thresholds.png" alt="Integer firing-threshold offsets learned by each delay group" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_validation_history.png"><img src="../results/figures/event_lm_validation_history.png" alt="Loss gap by the number of bytes available before each matched validation tail" loading="lazy"></a>
+  </figure>
   <figure>
     <a href="../results/figures/event_lm_growth_9960k.png"><img src="../results/figures/event_lm_growth_9960k.png" alt="Held-out loss for the deeper and wider SNNs and full attention" loading="lazy"></a>
   </figure>
@@ -125,7 +140,22 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_65536_prefix_age.png"><img src="../results/figures/event_lm_65536_prefix_age.png" alt="enwik8 loss gap by eight-byte prefix age after 65.54 million training targets" loading="lazy"></a>
   </figure>
-  <h3>9.96M depth and width growth · 81,920,000 training targets · seed 4603</h3>
+  <h3>9.96M axon tap reads · 101,580,800 training targets · seed 6899</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Continued SNN</th><td class="num">9,960,960</td><td class="num">29,674 B</td><td class="num">1.81319</td><td class="num"><strong>2.77756</strong></td><td class="num">2.87524</td><td class="num">309,354</td></tr>
+<tr><th scope="row">Shortest eligible tap</th><td class="num">9,962,312</td><td class="num">29,674 B</td><td class="num">1.81655</td><td class="num">2.78455</td><td class="num">2.88665</td><td class="num">308,210</td></tr>
+<tr><th scope="row">Held spike race</th><td class="num">9,962,312</td><td class="num">29,674 B</td><td class="num">1.81473</td><td class="num">2.78521</td><td class="num">2.88687</td><td class="num">309,582</td></tr>
+<tr><th scope="row">6-block full attention</th><td class="num">9,962,496</td><td class="num">6,291,456 B</td><td class="num"><strong>1.73380</strong></td><td class="num">2.89702</td><td class="num">3.09548</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>9.96M trace inputs and group thresholds · 91,750,400 training targets · seed 5801</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Continued v6 SNN</th><td class="num">9,960,960</td><td class="num">29,674 B</td><td class="num">1.82999</td><td class="num"><strong>2.78446</strong></td><td class="num">2.88327</td><td class="num">307,913</td></tr>
+<tr><th scope="row">Learned trace input spikes</th><td class="num">9,965,074</td><td class="num">29,674 B</td><td class="num">1.82956</td><td class="num">2.78972</td><td class="num">2.89110</td><td class="num">309,390</td></tr>
+<tr><th scope="row">Coarse group thresholds</th><td class="num">9,961,004</td><td class="num">29,674 B</td><td class="num">1.82918</td><td class="num">2.78697</td><td class="num">2.88461</td><td class="num">308,616</td></tr>
+<tr><th scope="row">One-tick group thresholds</th><td class="num">9,961,004</td><td class="num">29,674 B</td><td class="num">1.82929</td><td class="num">2.79350</td><td class="num">2.89740</td><td class="num">308,741</td></tr>
+<tr><th scope="row">6-block full attention</th><td class="num">9,962,496</td><td class="num">6,291,456 B</td><td class="num"><strong>1.74475</strong></td><td class="num">2.90840</td><td class="num">3.10229</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>9.96M depth and width growth · 81,920,000 training targets · seed 4603</h3>
 <div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
 <tr><th scope="row">11-block SNN</th><td class="num">9,960,960</td><td class="num">29,674 B</td><td class="num">1.84288</td><td class="num"><strong>2.79854</strong></td><td class="num">2.90068</td><td class="num">309,059</td></tr>
 <tr><th scope="row">7-block wider SNN</th><td class="num">9,957,868</td><td class="num">19,536 B</td><td class="num">1.84496</td><td class="num">2.80299</td><td class="num">2.90845</td><td class="num">307,543</td></tr>
@@ -302,7 +332,7 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_pulse_tradeoff.png"><img src="../results/figures/event_lm_pulse_tradeoff.png" alt="Pulse count and language modeling loss for the spiking banks" loading="lazy"></a>
   </figure>
-  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v6/README.md">Model and architecture</a> · <a href="HANDOFF.md">Training handoff</a></p>
+  <p class="col"><a href="LEADERBOARD.md">Ranked results</a> · <a href="../models/spiking-byte-lm-v7/README.md">Model and architecture</a> · <a href="HANDOFF.md">Training handoff</a></p>
 </section>
 
 <section id="dendrite">

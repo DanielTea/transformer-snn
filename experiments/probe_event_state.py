@@ -94,6 +94,37 @@ def probe_tag_read_gains(model, checkpoint_path, window, chunk_size, gains):
     return metrics
 
 
+@torch.inference_mode()
+def probe_trace_input_gains(model, window, chunk_size, gains):
+    prefix = window[:, :min(4096, window.shape[1] - 1)].cpu()
+    weights = [block.trace.input.weight for block in model.blocks]
+    originals = [weight.clone() for weight in weights]
+    rows = []
+    try:
+        for gain in gains:
+            for weight, original in zip(weights, originals, strict=True):
+                weight.copy_(original * gain)
+            loss = score(model, window, chunk_size)
+            native = model.to_integer()
+            emissions = []
+
+            def count_pulses(_module, _inputs, pulses):
+                emissions.append(pulses.abs().sum(dtype=torch.int64).item())
+
+            handles = [block.trace.input.emit.register_forward_hook(count_pulses) for block in native.blocks]
+            try:
+                native(prefix)
+            finally:
+                for handle in handles:
+                    handle.remove()
+            rows.append({"gain_factor": gain, "validation_bpb": loss,
+                         "native_input_pulses_per_byte": sum(emissions) / prefix.numel()})
+    finally:
+        for weight, original in zip(weights, originals, strict=True):
+            weight.copy_(original)
+    return {"pulse_sample_bytes": prefix.numel(), "rows": rows}
+
+
 def probe(model, window, chunk_size, *, residual_width_before=None, expansion_width_before=None, depth_before=None):
     pools = [block.activity_inhibition for block in model.blocks if block.activity_inhibition is not None]
     series = [[] for _ in pools]
@@ -120,8 +151,24 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.cfg.redistribute_inhibition:
         weights = [block.inhibition_redistribution.synapse.weight for block in model.blocks]
         result["zero_inhibition_transfer_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.learn_inhibition_thresholds:
+        thresholds = [block.inhibition_thresholds for block in model.blocks]
+        hooks = [module.register_forward_hook(fix_count(module.quanta_per_threshold)) for module in thresholds]
+        try:
+            result["fixed_group_thresholds_bpb"] = score(model, window, chunk_size)
+        finally:
+            for hook in hooks:
+                hook.remove()
     if model.cfg.local_trace:
         result["periodic_trace_reset_bpb"] = score(model, window, chunk_size, reset_trace=True)
+    if model.cfg.trace_integration:
+        weights = [block.trace.input.weight for block in model.blocks]
+        result["zero_trace_input_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.trace_tap_read is not None:
+        weights = [block.trace_taps.weight for block in model.blocks]
+        result["zero_tap_correction_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+        if model.cfg.trace_tap_read == "race":
+            result["fixed_tap_on_race_weights_bpb"] = score_with_options(model, window, chunk_size, trace_tap_read="fixed")
     if model.prediction_memory is not None:
         result["mute_bank_corrections_bpb"] = score_without_synapses(
             model, window, chunk_size, [model.recall_synapse.weight],
@@ -133,8 +180,10 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
         weights = [block.late_steering.gain for block in model.blocks]
         result["zero_late_steering_bpb"] = score_without_synapses(model, window, chunk_size, weights)
     if model.cfg.router_charge_bits > EventLMConfig.router_charge_bits:
+        charge_bits = EventLMConfig.router_charge_bits
         result["six_bit_router_bpb"] = score_with_options(
-            model, window, chunk_size, router_charge_bits=EventLMConfig.router_charge_bits,
+            model, window, chunk_size, router_charge_bits=charge_bits,
+            inhibition_threshold_bits=min(model.cfg.inhibition_threshold_bits, charge_bits),
         )
     if model.cfg.delay_filter:
         weights = [kernel.weight for block in model.blocks for kernel in block.delay_filters if kernel is not None]
@@ -182,8 +231,11 @@ def main():
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu")
     parser.add_argument("--targets", type=int, default=32_768)
     parser.add_argument("--chunk-size", type=int, default=64)
-    parser.add_argument("--tag-read-gains", type=float, nargs="+",
-                        help="intervene on all read competition conductances and score the validation text")
+    intervention = parser.add_mutually_exclusive_group()
+    intervention.add_argument("--tag-read-gains", type=float, nargs="+",
+                              help="intervene on all read competition conductances and score the validation text")
+    intervention.add_argument("--trace-input-gains", type=float, nargs="+",
+                              help="scale the trained trace input synapses and score the validation text")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
     if min(args.targets, args.chunk_size) < 1:
@@ -200,19 +252,26 @@ def main():
     if args.tag_read_gains is not None and (not model.cfg.match_forecast_key
             or any(not 0 <= gain <= 1 for gain in args.tag_read_gains)):
         parser.error("tag read gain interventions require forecast tags and gains in [0, 1]")
+    if args.trace_input_gains is not None and (not model.cfg.trace_integration
+            or any(not math.isfinite(gain) or gain < 0 for gain in args.trace_input_gains)):
+        parser.error("trace input gain interventions require a trained trace input and finite nonnegative gains")
     _, validation, _ = load_splits(args.enwik8)
     if args.targets >= len(validation):
         parser.error("the requested targets exceed the validation split")
     sample = validation[:args.targets + 1]
     window = torch.from_numpy(sample.copy()).to(device=device, dtype=torch.long)[None]
     initialization = checkpoint.get("initialization") or {}
-    if args.tag_read_gains is None:
+    if args.tag_read_gains is not None:
+        metrics = {"tag_read_gain_sweep": probe_tag_read_gains(model, args.checkpoint, window,
+                                                              args.chunk_size, args.tag_read_gains)}
+    elif args.trace_input_gains is not None:
+        metrics = {"trace_input_gain_sweep": probe_trace_input_gains(
+            model, window, args.chunk_size, args.trace_input_gains,
+        )}
+    else:
         metrics = probe(model, window, args.chunk_size, residual_width_before=initialization.get("residual_width_before"),
                         expansion_width_before=initialization.get("expansion_width_before"),
                         depth_before=initialization.get("depth_before"))
-    else:
-        metrics = {"tag_read_gain_sweep": probe_tag_read_gains(model, args.checkpoint, window,
-                                                              args.chunk_size, args.tag_read_gains)}
     record = {
         "checkpoint": str(args.checkpoint),
         "checkpoint_sha256": hashlib.sha256(args.checkpoint.read_bytes()).hexdigest(),

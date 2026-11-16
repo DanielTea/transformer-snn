@@ -21,13 +21,16 @@ RELEASES = {
     "v4": ("spiking-byte-lm-v4", "spiking-byte-lm-v4-checkpoints"),
     "v5": ("spiking-byte-lm-v5", "spiking-byte-lm-v5-checkpoints"),
     "v6": ("spiking-byte-lm-v6", "spiking-byte-lm-v6-checkpoints"),
+    "v7": ("spiking-byte-lm-v7", "spiking-byte-lm-v7-checkpoints"),
 }
 DEPTH_REFERENCE = "depth-inhibition-study/trace_s0.pt"
 CONTINUATION_REFERENCE = "long-context-continuation/trace_ctx2048_s711.pt"
 FINE_CHARGE_REFERENCE = "grown-fine-charge-study/fine_s711.pt"
 EXPOSURE_REFERENCE = "scale-6510k-next-data-study/trace_s2503.pt"
 DEPTH_GROWTH_REFERENCE = "depth-growth-study/depth_s4603.pt"
+TRACE_TAP_REFERENCE = "trace-tap-study/control_s6899.pt"
 V4_CATALOGS = ("continuation_checkpoints.sha256", "v4_checkpoints.sha256")
+V6_MANIFEST = "models/spiking-byte-lm-v6/manifest.json"
 
 
 def sha256(path):
@@ -115,7 +118,7 @@ def collect_depth_release(directory):
     return entries, (record["val_bpb"], DEPTH_REFERENCE, record, record_path), measured
 
 
-def collect_catalog_release(directory, catalogs, reference, audit_path):
+def collect_catalog_release(directory, catalogs, reference, audit_path, *, upstream_manifest=None):
     hashes = {}
     for filename in catalogs:
         catalog = RESULTS / filename
@@ -127,6 +130,11 @@ def collect_catalog_release(directory, catalogs, reference, audit_path):
                 raise ValueError(f"invalid checkpoint entry in {catalog}: {line}")
             path.relative_to("checkpoints")
             hashes[source] = digest
+
+    upstream_hashes = {}
+    if upstream_manifest:
+        upstream = json.loads((ROOT / upstream_manifest).read_text(encoding="utf-8"))
+        upstream_hashes = {f"checkpoints/{name}": entry["sha256"] for name, entry in upstream["checkpoints"].items()}
 
     records = {}
     for path in sorted(RESULTS.rglob("*.json")):
@@ -154,7 +162,7 @@ def collect_catalog_release(directory, catalogs, reference, audit_path):
             if parent_path == "models/spiking-byte-lm-v2/weights.pt":
                 parent_digest = sha256(ROOT / parent_path)
             else:
-                parent_digest = hashes.get(parent_path)
+                parent_digest = hashes.get(parent_path, upstream_hashes.get(parent_path))
             if parent_digest != parent["sha256"]:
                 raise ValueError(f"parent checkpoint is missing or has the wrong hash: {parent_path}")
             entry["parent"] = parent_path
@@ -201,6 +209,7 @@ def main():
     try:
         model_dirname, archive_stem = RELEASES[args.release]
         model_dir = args.model_dir or ROOT / "models" / model_dirname
+        upstream_manifest = None
         if args.release == "v1":
             entries, candidate = collect(args.checkpoint_dir)
             audit = json.loads((RESULTS / "threshold_scale_large_activity.json").read_text(encoding="utf-8"))
@@ -221,10 +230,16 @@ def main():
                 args.checkpoint_dir, (*V4_CATALOGS, "v5_checkpoints.sha256"),
                 EXPOSURE_REFERENCE, "scale_6510k_next_data/native_trace_s2503.json",
             )
-        else:
+        elif args.release == "v6":
             entries, candidate, measured = collect_catalog_release(
                 args.checkpoint_dir, ("v6_checkpoints.sha256",),
                 DEPTH_GROWTH_REFERENCE, "depth_growth/native_depth_s4603.json",
+            )
+        else:
+            upstream_manifest = V6_MANIFEST
+            entries, candidate, measured = collect_catalog_release(
+                args.checkpoint_dir, ("trace_integration_checkpoints.sha256", "v7_checkpoints.sha256"),
+                TRACE_TAP_REFERENCE, "trace_tap_read/native_control_s6899.json", upstream_manifest=upstream_manifest,
             )
         val_bpb, name, training, record_path = candidate
         args.release_dir.mkdir(parents=True, exist_ok=True)
@@ -256,6 +271,8 @@ def main():
                 training["train_target_bytes"] + training["initialization"]["training_targets"]
             )
             manifest["archive"]["contents_checksums"] = checksum_path
+        if upstream_manifest:
+            manifest["upstream_manifest"] = upstream_manifest
         (model_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         print(f"Packaged {len(entries)} checkpoints in {bundle}")
     except (OSError, ValueError, KeyError) as exc:

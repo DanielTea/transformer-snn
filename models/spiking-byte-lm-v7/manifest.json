@@ -1,0 +1,134 @@
+{
+  "release": "spiking-byte-lm-v7",
+  "model": {
+    "file": "weights.pt",
+    "source_checkpoint": "trace-tap-study/control_s6899.pt",
+    "sha256": "9f95866847d9bddbf8901e2c4fb20f36afa7f7a151124d573622cf50b4ab316b",
+    "architecture": {
+      "dim": 768,
+      "hidden": 187,
+      "depth": 11,
+      "route": "steered_correction_code",
+      "carry": false,
+      "continuous": false,
+      "memory_heads": 4,
+      "memory_slots": 14,
+      "resolution": 16,
+      "memory_width": 32,
+      "forecast_key_channels": 2,
+      "match_forecast_key": true,
+      "learn_context_keys": true,
+      "learn_packet_thresholds": false,
+      "output_reference": false,
+      "compact_delays": true,
+      "departure_coincidence": false,
+      "delay_window": 1,
+      "delay_residual": false,
+      "router_charge_bits": 8,
+      "activity_inhibition": true,
+      "inhibition_by_expansion": true,
+      "local_trace": true,
+      "trace_write_credit": true,
+      "bank_write_credit": false,
+      "trace_read_veto": false,
+      "delay_filter": false,
+      "opponent_steering": false,
+      "spread_coincidence": false,
+      "residual_membrane": false,
+      "compact_axon_state": true,
+      "tag_phase_address": false,
+      "trace_coincidence_start": null,
+      "trace_write_confirm": false,
+      "steering_gradient_at_zero": false,
+      "redistribute_inhibition": false,
+      "tag_read_competition": false,
+      "late_steering": false,
+      "residual_correction_start": 7,
+      "trace_integration": false,
+      "learn_inhibition_thresholds": false,
+      "inhibition_threshold_bits": 2
+    },
+    "parameters": 9960960,
+    "streaming_tensor_bytes": 29674,
+    "training_targets": 9830400,
+    "seed": 6899,
+    "validation_bpb": 1.8607913503155777,
+    "training_record": "results/event_lm/trace_tap_read/event_correction_code_s6899_trace_tap_control.json",
+    "cumulative_training_targets": 101580800
+  },
+  "archive": {
+    "file": "spiking-byte-lm-v7-checkpoints.tar.gz",
+    "sha256": "75233bcdb3ed568dcec70c06475360b9a4a6e2756cd4c2667e6c988a01366905",
+    "bytes": 407534491,
+    "contents_checksums": "checkpoints/SHA256SUMS-v7"
+  },
+  "checkpoints": {
+    "depth-growth-study/depth_s4603.pt": {
+      "bytes": 39854802,
+      "sha256": "4e9718308cb29f3fb5384cfe4fafe475f64422391ddad47c990bed124af492dd",
+      "training_record": "results/event_lm/depth_growth/event_correction_code_s4603_depth_growth_snn.json",
+      "parent": "checkpoints/finer-router-charge-study/fine_charge_s3307.pt"
+    },
+    "depth-growth-study/transformer_s4603.pt": {
+      "bytes": 40131271,
+      "sha256": "c5c9472af91a1f572138dcd0f482a8346d2cbedbf4a536d536e453e817f376d8",
+      "training_record": "results/event_lm/depth_growth/transformer_s4603_depth_growth_transformer.json",
+      "parent": "checkpoints/scale-6510k-short-control-study/control_transformer_s3307.pt"
+    },
+    "trace-tap-study/control_s6899.pt": {
+      "bytes": 39854930,
+      "sha256": "9f95866847d9bddbf8901e2c4fb20f36afa7f7a151124d573622cf50b4ab316b",
+      "training_record": "results/event_lm/trace_tap_read/event_correction_code_s6899_trace_tap_control.json",
+      "parent": "checkpoints/trace-transport-study/control_s5801.pt"
+    },
+    "trace-tap-study/fixed_s6899.pt": {
+      "bytes": 39863281,
+      "sha256": "023c8321d587ba69f6c8944a3687581961da0e9bfff551f7f3e2322f317ce00f",
+      "training_record": "results/event_lm/trace_tap_read/event_correction_code_s6899_trace_tap_fixed.json",
+      "parent": "checkpoints/trace-transport-study/control_s5801.pt"
+    },
+    "trace-tap-study/race_s6899.pt": {
+      "bytes": 39863281,
+      "sha256": "b9ff4b157c17ec77838acdde9cb37b14855a6fb781058a8a3669c33b8cd5a96b",
+      "training_record": "results/event_lm/trace_tap_read/event_correction_code_s6899_trace_tap_race.json",
+      "parent": "checkpoints/trace-transport-study/control_s5801.pt"
+    },
+    "trace-tap-study/transformer_s6899.pt": {
+      "bytes": 40131271,
+      "sha256": "a547a6f13baaec0e5dbbf797a5bc39accbca92fee20885cf36830174a927f7f6",
+      "training_record": "results/event_lm/trace_tap_read/transformer_s6899_trace_tap_transformer.json",
+      "parent": "checkpoints/trace-transport-study/transformer_s5801.pt"
+    },
+    "trace-transport-study/control_s5801.pt": {
+      "bytes": 39854802,
+      "sha256": "4ec4fa70dd3791b8f0892cd7f1beba0c2fc52d2373a1b772c539306be665c6d6",
+      "training_record": "results/event_lm/trace_integration/event_correction_code_s5801_trace_transport_control.json",
+      "parent": "checkpoints/depth-growth-study/depth_s4603.pt"
+    },
+    "trace-transport-study/fine_thresholds_s5801.pt": {
+      "bytes": 39858545,
+      "sha256": "21fb2cfc859c8b0ada1fd04435aceebb37c2e44bff5f7fabfc5c4a8101657ebd",
+      "training_record": "results/event_lm/trace_integration/event_correction_code_s5801_trace_transport_fine_thresholds.json",
+      "parent": "checkpoints/depth-growth-study/depth_s4603.pt"
+    },
+    "trace-transport-study/thresholds_s5801.pt": {
+      "bytes": 39858481,
+      "sha256": "b1aa53d4df85e5fe8ebe412b7e483c02af7da5b510b4ca4546220bad04d55886",
+      "training_record": "results/event_lm/trace_integration/event_correction_code_s5801_trace_transport_thresholds.json",
+      "parent": "checkpoints/depth-growth-study/depth_s4603.pt"
+    },
+    "trace-transport-study/transformer_s5801.pt": {
+      "bytes": 40131143,
+      "sha256": "f84d3e5547664b1887416ccb022e194acaad201e3c70f5900166cf3f5d9896b9",
+      "training_record": "results/event_lm/trace_integration/transformer_s5801_trace_transport_transformer.json",
+      "parent": "checkpoints/depth-growth-study/transformer_s4603.pt"
+    },
+    "trace-transport-study/transport_s5801.pt": {
+      "bytes": 39874545,
+      "sha256": "187cb5117c490103cc40c3827243d4786667f0a654333c35de41d4816251e5ef",
+      "training_record": "results/event_lm/trace_integration/event_correction_code_s5801_trace_transport_transport.json",
+      "parent": "checkpoints/depth-growth-study/depth_s4603.pt"
+    }
+  },
+  "upstream_manifest": "models/spiking-byte-lm-v6/manifest.json"
+}

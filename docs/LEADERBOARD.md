@@ -4,6 +4,39 @@ Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## 9.96M axon tap reads · 101,580,800 training targets · seed 6899
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Continued SNN | 9,960,960 | 29,674 B | 1.81319 | 2 | **2.77756** | 1 | 2.87524 | 309,354 |
+| Shortest eligible tap | 9,962,312 | 29,674 B | 1.81655 | 4 | 2.78455 | 2 | 2.88665 | 308,210 |
+| Held spike race | 9,962,312 | 29,674 B | 1.81473 | 3 | 2.78521 | 3 | 2.88687 | 309,582 |
+| 6-block full attention | 9,962,496 | 6 MiB | **1.73380** | 1 | 2.89702 | 4 | 3.09548 | — |
+
+![Held-out loss for the spike race, shortest tap, and matched controls](../results/figures/event_lm_trace_tap_read.png)
+
+![Validation loss and pulse counts during the tap comparison](../results/figures/event_lm_trace_tap_training.png)
+
+[Timing circuit and interventions](TRACE_TAP_READ.md)
+
+## 9.96M trace inputs and group thresholds · 91,750,400 training targets · seed 5801
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Continued v6 SNN | 9,960,960 | 29,674 B | 1.82999 | 5 | **2.78446** | 1 | 2.88327 | 307,913 |
+| Learned trace input spikes | 9,965,074 | 29,674 B | 1.82956 | 4 | 2.78972 | 3 | 2.89110 | 309,390 |
+| Coarse group thresholds | 9,961,004 | 29,674 B | 1.82918 | 2 | 2.78697 | 2 | 2.88461 | 308,616 |
+| One-tick group thresholds | 9,961,004 | 29,674 B | 1.82929 | 3 | 2.79350 | 4 | 2.89740 | 308,741 |
+| 6-block full attention | 9,962,496 | 6 MiB | **1.74475** | 1 | 2.90840 | 5 | 3.10229 | — |
+
+![Held-out loss for trace inputs, group thresholds, and matched controls](../results/figures/event_lm_trace_integration.png)
+
+![Native resting-threshold offsets learned by each delay group](../results/figures/event_lm_fine_group_thresholds.png)
+
+![Gap in held-out loss by available history at the v6 weights](../results/figures/event_lm_validation_history.png)
+
+[Circuit and interventions](TRACE_INTEGRATION.md)
+
 ## 9.96M depth and width growth · 81,920,000 training targets · seed 4603
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
@@ -179,7 +212,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 ![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)
 
-[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · [Current model card](../models/spiking-byte-lm-v6/README.md) · [Depth growth study](DEPTH_GROWTH.md)
+[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · [Current model card](../models/spiking-byte-lm-v7/README.md) · [Depth growth study](DEPTH_GROWTH.md)
 
 ![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)
 
