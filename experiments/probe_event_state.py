@@ -1,4 +1,4 @@
-"""Intervene on inhibition, held charge, or delay filters in a trained spike decoder."""
+"""Intervene on inhibition and local memory in a trained spike decoder."""
 
 from __future__ import annotations
 
@@ -46,6 +46,18 @@ def fix_count(count):
     return replace
 
 
+@torch.inference_mode()
+def score_without_synapses(model, window, chunk_size, weights):
+    originals = [weight.clone() for weight in weights]
+    try:
+        for weight in weights:
+            weight.zero_()
+        return score(model, window, chunk_size)
+    finally:
+        for weight, original in zip(weights, originals, strict=True):
+            weight.copy_(original)
+
+
 def probe(model, window, chunk_size):
     pools = [block.activity_inhibition for block in model.blocks if block.activity_inhibition is not None]
     series = [[] for _ in pools]
@@ -73,15 +85,10 @@ def probe(model, window, chunk_size):
         result["periodic_trace_reset_bpb"] = score(model, window, chunk_size, reset_trace=True)
     if model.cfg.delay_filter:
         weights = [kernel.weight for block in model.blocks for kernel in block.delay_filters if kernel is not None]
-        originals = [weight.detach().clone() for weight in weights]
-        with torch.no_grad():
-            try:
-                for weight in weights:
-                    weight.zero_()
-                result["zero_delay_filter_bpb"] = score(model, window, chunk_size)
-            finally:
-                for weight, original in zip(weights, originals, strict=True):
-                    weight.copy_(original)
+        result["zero_delay_filter_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.opponent_steering:
+        weights = [block.opponent_steering.weight for block in model.blocks]
+        result["zero_opponent_steering_bpb"] = score_without_synapses(model, window, chunk_size, weights)
     return result
 
 

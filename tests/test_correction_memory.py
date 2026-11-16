@@ -4,7 +4,9 @@ import pytest
 import torch
 
 from snnformer.correction_memory import correction_reads, correction_step
-from snnformer.event_lm import EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _SpikeCorrection, _SpikeTrace
+from snnformer.event_lm import (
+    EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _OpponentSteering, _SpikeCorrection, _SpikeTrace,
+)
 
 
 def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
@@ -393,6 +395,64 @@ def test_trace_steering_reads_old_charge_and_resists_writes_within_its_interval(
     assert read.flatten().tolist() == [0, 5, 5, 5, 1, 2]
     assert charge.item() == 0
     assert [int(count) for count in pulses] == [10, 18]
+
+
+def test_opponent_steering_protects_charge_through_a_silent_read():
+    trace = _SpikeTrace(cap=12)
+    opponent = _OpponentSteering(width=1, cap=12, charge_bits=6)
+    current = torch.tensor([0., -384., 512.]).reshape(1, 3, 1)
+    protection = opponent(current, None)
+    torch.testing.assert_close(protection, torch.zeros_like(protection), rtol=0, atol=0)
+    gradient, = torch.autograd.grad(protection.sum(), opponent.weight)
+    torch.testing.assert_close(gradient, torch.tensor([6.]), rtol=0, atol=0)
+
+    with torch.no_grad():
+        opponent.weight.fill_(1)
+    opponent.freeze_integer()
+    protection = opponent(current.to(torch.int32), None)
+    assert protection.flatten().tolist() == [0, 6, 0]
+    present = torch.tensor([5, 0, 5], dtype=torch.int32).reshape_as(protection)
+    steering = torch.tensor([0, 0, 8], dtype=torch.int32).reshape_as(protection)
+    original, _ = trace(present, steering, None, None)
+    protected, state = trace(present, steering, None, None, write_radius=steering + protection)
+    assert original.flatten().tolist() == [0, 0, 0]
+    assert protected.flatten().tolist() == [0, 0, 5]
+    assert state.item() == 5
+
+
+@torch.no_grad()
+def test_opponent_steering_warm_start_and_integer_chunk_and_step_parity():
+    torch.manual_seed(71)
+    cfg = EventLMConfig(dim=16, hidden=21, depth=4, route="steered_correction_code", carry=False,
+                        resolution=16, memory_heads=2, memory_slots=4, memory_width=8, compact_delays=True,
+                        activity_inhibition=True, local_trace=True)
+    base_master = EventLM(cfg).eval()
+    model = EventLM(replace(cfg, opponent_steering=True)).eval()
+    missing, unexpected = model.load_state_dict(base_master.state_dict(), strict=False)
+    assert not unexpected and set(missing) == {f"blocks.{i}.opponent_steering.weight" for i in range(cfg.depth)}
+    tokens = torch.randint(256, (2, 67))
+    base = base_master.to_integer()
+    original = base(tokens)
+    torch.testing.assert_close(model.to_integer()(tokens), original, rtol=0, atol=0)
+
+    for block in model.blocks:
+        block.opponent_steering.weight.fill_(0.85)
+    native = model.to_integer()
+    expected = native(tokens)
+    assert not torch.equal(expected, original)
+    torch.testing.assert_close(model(tokens), expected.to(torch.float32), rtol=0, atol=0)
+    state = None
+    for i, byte in enumerate(tokens.unbind(1)):
+        count, state = native.step(byte, state)
+        torch.testing.assert_close(count, expected[:, i], rtol=0, atol=0)
+    chunk = None
+    parts = []
+    for part in tokens.split((1, 13, 42, 11), dim=1):
+        count, chunk = native.forward_chunk(part, chunk)
+        parts.append(count)
+    torch.testing.assert_close(torch.cat(parts, dim=1), expected, rtol=0, atol=0)
+    for streamed, batched in zip(state.layers, chunk.local_layers, strict=True):
+        torch.testing.assert_close(streamed.trace_charge, batched.trace_charge, rtol=0, atol=0)
 
 
 @torch.no_grad()

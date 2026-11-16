@@ -62,6 +62,7 @@ class EventLMConfig:
     activity_inhibition: bool = False
     local_trace: bool = False
     delay_filter: bool = False
+    opponent_steering: bool = False
 
 
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
@@ -541,13 +542,13 @@ class _SpikeTrace(nn.Module):
         super().__init__()
         self.cap = cap
 
-    def _bounds(self, present, steering):
-        return (present - steering).clamp_min(-self.cap), (present + steering).clamp_max(self.cap)
+    def _bounds(self, present, radius):
+        return (present - radius).clamp_min(-self.cap), (present + radius).clamp_max(self.cap)
 
-    def forward(self, present, steering, initial, pulse_counts):
+    def forward(self, present, steering, initial, pulse_counts, *, write_radius=None):
         if initial is None:
             initial = torch.zeros_like(present[:, 0])
-        lower, upper = self._bounds(present, steering)
+        lower, upper = self._bounds(present, steering if write_radius is None else write_radius)
         after = _interval_scan(lower, upper, initial)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
         read, _ = _steer_packet(before, steering)
@@ -555,12 +556,36 @@ class _SpikeTrace(nn.Module):
             pulse_counts.extend(((after - before).abs().sum(), read.abs().sum()))
         return read, after[:, -1].clone()
 
-    def step(self, present, steering, before):
+    def step(self, present, steering, before, *, write_radius=None):
         if before is None:
             before = torch.zeros_like(present)
-        lower, upper = self._bounds(present, steering)
+        lower, upper = self._bounds(present, steering if write_radius is None else write_radius)
         read, _ = _steer_packet(before, steering)
         return read, before + interval_spikes(before, lower, upper)
+
+
+class _OpponentSteering(nn.Module):
+    """Use the opposite synaptic current to emit write-protection spikes."""
+
+    def __init__(self, width, cap, charge_bits):
+        super().__init__()
+        self.weight = nn.Parameter(torch.zeros(width))
+        self.current_limit = cap << charge_bits
+        self.emit = _IntegrateFire(cap, charge_bits + _CHARGE_BITS, False)
+
+    def gain_ticks(self):
+        if not self.weight.is_floating_point():
+            return self.weight
+        ticks = _weight_ticks(self.weight)
+        return ticks.detach().clamp_min(0) + (ticks - ticks.detach())
+
+    def freeze_integer(self):
+        if self.weight.is_floating_point():
+            self.weight = nn.Parameter(self.gain_ticks().to(torch.int32), requires_grad=False)
+
+    def forward(self, current, quanta):
+        opposite = (-current).clamp(0, self.current_limit)
+        return self.emit(opposite * self.gain_ticks(), quanta)
 
 
 class _DelayBlock(nn.Module):
@@ -607,6 +632,9 @@ class _DelayBlock(nn.Module):
         self.delay_sizes = tuple(delay * width for delay, width in zip(self.local_delays, self.delay_widths))
         cap = _HIDDEN_CAP * cfg.resolution
         self.trace = _SpikeTrace(cap) if cfg.local_trace else None
+        self.opponent_steering = (
+            _OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits) if cfg.opponent_steering else None
+        )
         self.delay_correction = _DelayCorrection(self.widths, cap) if cfg.delay_residual else None
         self.delay_filters = None
         if cfg.delay_filter:
@@ -637,6 +665,11 @@ class _DelayBlock(nn.Module):
             return quanta
         activity = spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)
         return _PACKET_UNITS + self.activity_inhibition(activity)
+
+    def _trace_radius(self, steering, current, quanta):
+        if self.opponent_steering is None:
+            return steering
+        return steering + self.opponent_steering(current, quanta)
 
     def _departure_packets(self, present, steering):
         if not self.departure_coincidence:
@@ -754,7 +787,8 @@ class _DelayBlock(nn.Module):
         coincidence_read = None
         if self.trace is not None:
             initial = None if local_state is None else local_state.trace_charge
-            coincidence_read, trace_charge = self.trace(present, steering, initial, pulse_counts)
+            radius = self._trace_radius(steering, steer_drive, firing_quanta)
+            coincidence_read, trace_charge = self.trace(present, steering, initial, pulse_counts, write_radius=radius)
             if local_state is not None:
                 local_state.trace_charge = trace_charge
         packets, departure = self._departure_packets(present, steering)
@@ -833,7 +867,9 @@ class _DelayBlock(nn.Module):
         present, state.relay_phase = self.relay.step(drive, state.relay_phase, firing_quanta)
         coincidence_read = None
         if self.trace is not None:
-            coincidence_read, state.trace_charge = self.trace.step(present, steering, state.trace_charge)
+            radius = self._trace_radius(steering, steer_drive, firing_quanta)
+            coincidence_read, state.trace_charge = self.trace.step(present, steering, state.trace_charge,
+                                                                  write_radius=radius)
         packets, departure = self._departure_packets(present, steering)
         alternate = recall = anchor = None
         if self.compact_delays:
@@ -927,6 +963,8 @@ class EventLM(nn.Module):
         if cfg.local_trace and (not cfg.compact_delays or cfg.carry or cfg.continuous
                                 or cfg.delay_window != 1 or cfg.departure_coincidence):
             raise ValueError("local traces need compact fixed delays and reset-per-byte spike routing")
+        if cfg.opponent_steering and not cfg.local_trace:
+            raise ValueError("opponent steering needs a local charge trace")
         if cfg.delay_filter and (not cfg.compact_delays or cfg.carry or cfg.continuous or cfg.delay_window != 1
                                  or cfg.departure_coincidence or cfg.local_trace):
             raise ValueError("delay filters need the fixed-delay coincidence path and reset-per-byte spike routing")
@@ -953,6 +991,8 @@ class EventLM(nn.Module):
                 raise ValueError("pooled output charge would exceed the exact FP32 integer range")
         projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden
         cap = _HIDDEN_CAP * cfg.resolution
+        if cfg.opponent_steering and (cap * _WEIGHT_LIMIT) << cfg.router_charge_bits > _FP32_EXACT:
+            raise ValueError("opponent steering charge would exceed the exact FP32 integer range")
         # The additional read projection is bounded by one delay group's width.
         if cfg.route in _CORRECTION_ROUTES and cfg.route != "steered_correction":
             projection_width += cfg.hidden // len(_STEERED_DELAYS[0])
@@ -1130,7 +1170,8 @@ class EventLM(nn.Module):
             raise ValueError("the continuous control has no integer export")
         model = copy.deepcopy(self).cpu().eval()
         for submodule in model.modules():
-            if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection, _DelayFilter)):
+            if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection, _DelayFilter,
+                                      _OpponentSteering)):
                 submodule.freeze_integer()
         return model
 
