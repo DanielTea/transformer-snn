@@ -41,8 +41,26 @@ PYTORCH_ENABLE_MPS_FALLBACK=0 python experiments/benchmark_trace_training.py \
   --batch-size 8 --context 512 --trials 6 --json checkpoints/trace-training-pair.json
 ```
 
+## Paired next-byte scores
+
 The next-byte quality comparison uses the same starting weights, seed
 711, optimizer settings, and 6,553,600 additional enwik8 targets as
 the control in the opponent-steering study. Each arm uses the same
-pulse target. Training time and held-out loss will be evaluated
-separately. [Matched control protocol](OPPONENT_STEERING.md#paired-continuation)
+pulse target. [Matched control protocol](OPPONENT_STEERING.md#paired-continuation)
+
+| Training rule | enwik8 bits/byte | PG-19 bits/byte | Native pulses/byte |
+|---|---:|---:|---:|
+| Original trace gradient | 1.98564 | 2.98490 | 307,730 |
+| Credit for actual trace writes | 1.98691 | 2.99097 | 307,270 |
+
+With the same number of training targets, held-out loss rose by
+0.00127 bits per byte on enwik8 and 0.00607 on PG-19 in this seed.
+The final enwik8 validation score was 0.00098 lower. Native CPU
+inference and MPS still matched exactly in the 4,096-byte audit.
+The matched read-veto trial uses the same faster gradient in both
+arms. The longer-context continuation also uses it to keep the
+training workload feasible locally.
+[enwik8 score](../results/event_lm/trace_write_credit/enwik8_write_credit_s711.json) ·
+[PG-19 score](../results/event_lm/trace_write_credit/pg19_write_credit_s711.json) ·
+[Native audit](../results/event_lm/trace_write_credit/native_write_credit_s711.json) ·
+[Read-veto design](TRACE_READ_VETO.md) · [Longer-context comparison](CONTEXT_LENGTH.md)

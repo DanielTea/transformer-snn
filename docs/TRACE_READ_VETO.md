@@ -13,6 +13,20 @@ veto neuron receives the magnitude of this correction through a
 nonnegative quantized synapse. Its spikes remove overlapping pulse
 slots from the old charge's coincident read.
 
+```mermaid
+flowchart LR
+    Charge["Old held charge"] --> Coincidence["Read coincidence"]
+    Steering["Steering spikes"] --> Coincidence
+    Steering --> Interval["Content interval"]
+    Content["Content spikes"] --> Interval
+    Charge --> Correction["Correction spikes"]
+    Interval --> Correction
+    Correction --> Store["Move held charge"]
+    Correction --> Veto["Inhibit incompatible read"]
+    Coincidence --> Read["Delivered read spikes"]
+    Veto --> Read
+```
+
 $$
 v = \operatorname{IF}(\gamma |\Delta m|)
 \qquad
