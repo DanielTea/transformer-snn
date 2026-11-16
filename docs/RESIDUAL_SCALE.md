@@ -41,7 +41,10 @@ outgoing synapses can deliver gradients from the first update.
 Both widths use 28,584 bytes of persistent tensors per stream.
 Function-preserving growth has precedent. Here it is checked on
 integer spike counts, network emissions, and stream state.
-[Net2Net](https://arxiv.org/abs/1511.05641)
+The previous 6.51M-to-13.03M experiment used the same growth
+principle on a seven-block SNN trained on enwik8 alone.
+[Net2Net](https://arxiv.org/abs/1511.05641) ·
+[Earlier width study](GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state)
 
 | Arm | Parameters | Continuation data |
 |---|---:|---|
@@ -112,8 +115,9 @@ size, subtract the Transformer's loss from the SNN's loss. Then
 subtract the smaller models' gap from the wider models' gap. A
 negative change means the wide SNN closed part of the gap. The
 leaderboard data also stratifies the gap by how long ago the
-last matching eight-byte prefix occurred. The paired reset probe estimates the same change for predictions
-1–32 and 17–32, with intervals resampled by window. The native
+last matching eight-byte prefix occurred. The paired reset probe
+estimates the same change for predictions 1–32 and 17–32, with
+intervals resampled by window. The native
 audit counts pulses in the added residual neurons. A fixed-weight
 probe measures loss with those neurons silenced. PG-19 and the
 five standard transfer evaluations measure the effect on other
@@ -194,6 +198,29 @@ enough to supply the targets.
 The intervals resample the paired tails. At 17 bytes, the
 effect has opposite signs across the two validation samples.
 [Matched-history ablations](../results/event_lm/residual_scale/residual_history_validation.json)
+
+## Native pulse measurements
+
+The three SNN checkpoints reproduce the Metal output counts
+on the same 4,096-byte enwik8 test sequence. Native one-byte
+steps match the batch output on the first 513 input bytes.
+Native chunks match the batch output on the full sequence.
+
+| SNN | Persistent state per stream | Emitted pulses per byte | Added residual pulses per byte |
+|---|---:|---:|---:|
+| 14.07M, mixture | 28,584 B | 312,618 | — |
+| 25.79M, mixture | 28,584 B | 313,142 | 10,287 |
+| 25.79M, enwik8 only | 28,584 B | 309,020 | 8,998 |
+
+The added residual emissions are included in the total.
+On a separate continuous enwik8 validation probe with 65,536
+targets, silencing the added outputs changes loss by −0.00147 bpb
+in the wide mixed SNN and +0.00351 bpb in the wide enwik8-only SNN.
+[Native narrow](../results/event_lm/residual_scale/native_snn_s9631.json) ·
+[Native wide](../results/event_lm/residual_scale/native_wide-snn_s9631.json) ·
+[Native enwik8 control](../results/event_lm/residual_scale/native_enwik8-snn_s9631.json) ·
+[Continuous probe, mixture](../results/event_lm/residual_scale/probe_wide-snn_s9631.json) ·
+[Continuous probe, enwik8](../results/event_lm/residual_scale/probe_enwik8-snn_s9631.json)
 
 ## Paired SNN width validation
 
