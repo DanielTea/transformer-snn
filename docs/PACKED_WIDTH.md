@@ -147,6 +147,33 @@ training path.
 [Present warm audit](../results/event_lm/packed_width/warm_present_transfer.json) ·
 [Optimizer smoke run](../results/event_lm/packed_width/event_correction_code_s7907_packed_width_transfer_smoke.json)
 
+## Trained delayed steering transfers
+
+The trained delayed-transfer circuit scores 1.801870 bpb on
+enwik8 and 2.762408 bpb on calibrated PG-19. Relative to the
+even-width SNN at the same exposure, enwik8 loss rises by
+0.001067 bpb and calibrated PG-19 loss falls by 0.003217 bpb,
+with gains on 12 of the 16 books. Both models use temperature
+1.25. The delayed model's raw PG-19 loss rises by 0.001528 bpb
+to 2.857407.
+[enwik8](../results/event_lm/packed_width/enwik8_delayed_transfer_s7907.json) ·
+[PG-19](../results/event_lm/packed_width/pg19_delayed_transfer_s7907.json) ·
+[Training](../results/event_lm/packed_width/event_correction_code_s7907_packed_width_delayed_transfer.json)
+
+The native decoder matches every Metal output count on 4,096
+enwik8 test bytes and preserves each pair's steering count at
+every inspected byte and block. It counts 106.21 transfer
+pulses per byte within 308,085 total pulses per byte. Persistent
+tensor state remains 32,616 bytes.
+[Trained native audit](../results/event_lm/packed_width/native_delayed_transfer_s7907.json)
+
+On 65,536 validation targets, the intact delayed model scores
+1.741251 bpb. Setting its transfer synapses to zero raises loss
+to 1.741448 bpb. Sending current content through those same
+weights raises loss to 1.743007 bpb. The present-input training
+arm tests how well each input can learn the rule.
+[Frozen transfer interventions](../results/event_lm/packed_width/probe_delayed_transfer_s7907.json)
+
 ## Add channels to the shortest-delay groups
 
 On 65,536 validation targets, the v7 SNN scored 1.74428 bpb.
