@@ -29,7 +29,8 @@ and the parent checkpoints for the paired router test.
 [Browser report](docs/report.html#spiking-byte-lm)
 
 [Spike activity and compact delay experiments](docs/SPIKE_ROUTER_FOLLOWUP.md) ·
-[Short-context routing and scaling experiments](docs/LOCAL_SPIKE_ROUTING.md)
+[Short-context routing and scaling experiments](docs/LOCAL_SPIKE_ROUTING.md) ·
+[Activity inhibition and held-charge experiments](docs/DEPTH_INHIBITION.md)
 
 ## Current benchmark
 
