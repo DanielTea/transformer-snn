@@ -8,12 +8,15 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Continued v6 SNN | 9,960,960 | 29,674 B | 1.82999 | 4 | **2.78446** | 1 | 2.88327 | 307,913 |
-| Learned trace input spikes | 9,965,074 | 29,674 B | 1.82956 | 3 | 2.78972 | 3 | 2.89110 | 309,390 |
+| Continued v6 SNN | 9,960,960 | 29,674 B | 1.82999 | 5 | **2.78446** | 1 | 2.88327 | 307,913 |
+| Learned trace input spikes | 9,965,074 | 29,674 B | 1.82956 | 4 | 2.78972 | 3 | 2.89110 | 309,390 |
 | Coarse group thresholds | 9,961,004 | 29,674 B | 1.82918 | 2 | 2.78697 | 2 | 2.88461 | 308,616 |
-| 6-block full attention | 9,962,496 | 6 MiB | **1.74475** | 1 | 2.90840 | 4 | 3.10229 | — |
+| One-tick group thresholds | 9,961,004 | 29,674 B | 1.82929 | 3 | 2.79350 | 4 | 2.89740 | 308,741 |
+| 6-block full attention | 9,962,496 | 6 MiB | **1.74475** | 1 | 2.90840 | 5 | 3.10229 | — |
 
 ![Held-out loss for trace inputs, group thresholds, and matched controls](../results/figures/event_lm_trace_integration.png)
+
+![Native resting-threshold offsets learned by each delay group](../results/figures/event_lm_fine_group_thresholds.png)
 
 ![Gap in held-out loss by available history at the v6 weights](../results/figures/event_lm_validation_history.png)
 

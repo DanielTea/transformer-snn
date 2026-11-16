@@ -175,8 +175,10 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
         weights = [block.late_steering.gain for block in model.blocks]
         result["zero_late_steering_bpb"] = score_without_synapses(model, window, chunk_size, weights)
     if model.cfg.router_charge_bits > EventLMConfig.router_charge_bits:
+        charge_bits = EventLMConfig.router_charge_bits
         result["six_bit_router_bpb"] = score_with_options(
-            model, window, chunk_size, router_charge_bits=EventLMConfig.router_charge_bits,
+            model, window, chunk_size, router_charge_bits=charge_bits,
+            inhibition_threshold_bits=min(model.cfg.inhibition_threshold_bits, charge_bits),
         )
     if model.cfg.delay_filter:
         weights = [kernel.weight for block in model.blocks for kernel in block.delay_filters if kernel is not None]

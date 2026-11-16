@@ -124,11 +124,12 @@ eight separate books.
 | Continued v6 SNN | 1.82999 | **2.78446** | **2.88327** | 307,913 |
 | Learned trace input spikes | 1.82956 | 2.78972 | 2.89110 | 309,390 |
 | Coarse group thresholds | 1.82918 | 2.78697 | 2.88461 | 308,616 |
+| One-tick group thresholds | 1.82929 | 2.79350 | 2.89740 | 308,741 |
 | Continued full attention | **1.74475** | 2.90840 | 3.10229 | — |
 
 The ordinary SNN and full attention gained 0.01289 and 0.01238 bpb
 respectively on enwik8 from the extra training. Their enwik8 gap is
-0.08524 bpb. The three SNNs above lead on each of the 16 PG-19 books.
+0.08524 bpb. The four SNNs lead on each of the 16 PG-19 books.
 Trace input changed test enwik8 loss by −0.00043 bpb and PG-19 loss by
 +0.00525 bpb relative to the ordinary SNN. The results use one matched
 continuation seed.
@@ -141,6 +142,19 @@ the same validation loss. These observations motivated the one-tick
 threshold grid.
 [Coarse threshold audit](../results/event_lm/trace_integration/native_thresholds_s5801.json) ·
 [Fixed-threshold intervention](../results/event_lm/trace_integration/probe_thresholds_s5801.json)
+
+The one-tick grid produces an integer offset in 42 of the 44 delay
+groups. The active offsets raise the base threshold by one to 14
+charge ticks. The remaining two groups use the v6 base of 256 ticks.
+The fine model lowers enwik8 loss by 0.00070 bpb relative to the
+ordinary SNN and raises calibrated PG-19 loss by 0.00903 bpb. The
+enwik8 gap to full attention is 0.08454 bpb. On the trained fine
+weights, restoring the common base raises validation loss by
+0.00034 bpb on 65,536 targets. On the paired history tails, its loss
+at 32 warmup bytes is 0.00083 bpb higher than the ordinary SNN.
+[Learned threshold offsets](../results/figures/event_lm_fine_group_thresholds.png) ·
+[Fine threshold ablation](../results/event_lm/trace_integration/probe_fine_thresholds_s5801.json) ·
+[Fine threshold history probe](../results/event_lm/trace_integration/fine_thresholds_validation_history.json)
 
 ## What the trace-input circuit used
 
@@ -174,7 +188,35 @@ counts use their first 4,096 input bytes. These are frozen-weight
 interventions.
 [Gain sweep](../results/event_lm/trace_integration/gain_trace_input_s5801.json)
 
+## Select among arrivals in the existing axons
+
+On 16,384 validation bytes, the continued v6 model supplied 474,943
+nonzero held-charge queries across the groups with multiple available
+taps. Each candidate exposes its signed spikes through the current
+steering aperture. The closest of up to four valid taps reduced total
+pulse mismatch by 34.0% relative to the normal fixed tap and by
+10.5% relative to the best fixed tap for each group on this sample.
+It beat the shortest tap on 179,732 active queries. This measures
+agreement between spike packets on real text.
+[Tap comparisons by delay group](../results/event_lm/trace_integration/tap_choices_control_s5801.json)
+
+The next decoder test can use the mismatch counts to delay each
+candidate's firing. The first candidate to fire would deliver its
+own spike packet. Computing the held trace with the ordinary axons
+before selecting an arrival preserves the parallel interval update
+and gives the selector the pre-write charge. A zero-initialized
+signed correction from the selected packet to the ordinary packet
+can preserve the starting predictions. The fixed-tap and adaptive arms
+would share their parameter and pulse budgets, with the short-history
+probe measuring where next-byte loss changes.
+
 ## Reproduce
+
+The five trained endpoints live under `checkpoints/trace-transport-study/`
+in the experiment checkout. Their digests bind the saved weights to
+this comparison. The commands below replay the runs from the two v6
+parents in fresh output directories.
+[Checkpoint checksums](../results/event_lm/trace_integration_checkpoints.sha256)
 
 ```bash
 export PYTORCH_ENABLE_MPS_FALLBACK=0
@@ -189,4 +231,7 @@ python experiments/probe_event_state.py --device mps --enwik8 data/enwik8 --targ
   --chunk-size 512 --trace-input-gains 0 1 2 4 8 \
   --checkpoint checkpoints/work/trace-transport/transport_s5801.pt \
   --json checkpoints/work/trace_input_gain.json
+python experiments/profile_charge_trace.py --enwik8 data/enwik8 --split validation --bytes 16384 \
+  --compare-recent-taps --checkpoint checkpoints/work/trace-transport-control/control_s5801.pt \
+  --json checkpoints/work/tap_choices_control.json
 ```

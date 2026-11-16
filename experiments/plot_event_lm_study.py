@@ -144,6 +144,8 @@ TRACE_INTEGRATION_91750K = (
     ("Learned trace input spikes", TRACE_INTEGRATION, "transport_s5801", f"{TRACE_INTEGRATION}/native_transport_s5801.json", VIOLET),
     ("Coarse group thresholds", TRACE_INTEGRATION, "thresholds_s5801",
      f"{TRACE_INTEGRATION}/native_thresholds_s5801.json", "#138372"),
+    ("One-tick group thresholds", TRACE_INTEGRATION, "fine_thresholds_s5801",
+     f"{TRACE_INTEGRATION}/native_fine_thresholds_s5801.json", "#ad4772"),
     ("6-block full attention", TRACE_INTEGRATION, "transformer_s5801", None, ORANGE),
 )
 TRACE_COINCIDENCE_6510K = (
@@ -429,6 +431,7 @@ def write_leaderboards(data, depth, research):
     study_figures = {
         "trace_integration_91750k": (
             "![Held-out loss for trace inputs, group thresholds, and matched controls](../results/figures/event_lm_trace_integration.png)",
+            "![Native resting-threshold offsets learned by each delay group](../results/figures/event_lm_fine_group_thresholds.png)",
             "![Gap in held-out loss by available history at the v6 weights](../results/figures/event_lm_validation_history.png)",
             "[Circuit and interventions](TRACE_INTEGRATION.md)",
         ),
@@ -638,6 +641,35 @@ def plot_validation_history(output):
     save(fig, output, "event_lm_validation_history.png")
 
 
+def plot_group_thresholds(output):
+    audit = read_result(f"{TRACE_INTEGRATION}/native_fine_thresholds_s5801.json")["models"][0]
+    base = audit["inhibition_threshold_units_per_base"]
+    offsets = [[units - base for units in row] for row in audit["inhibition_threshold_quanta_by_block"]]
+    values = [offset for row in offsets for offset in row]
+    low, high = min(0, min(values)), max(1, max(values))
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.7))
+    fig.subplots_adjust(left=0.13, right=0.94, bottom=0.18, top=0.77)
+    heading(fig, "Learned firing thresholds by delay group",
+            f"{sum(value != 0 for value in values)} of {len(values)} groups changed at one-tick resolution")
+    style(ax, grid_axis="x")
+    ax.grid(False)
+    heat = ax.imshow(offsets, vmin=low, vmax=high, cmap="Blues", aspect="auto")
+    for block, row in enumerate(offsets):
+        for group, value in enumerate(row):
+            color = "white" if value > low + 0.62 * (high - low) else TEXT
+            ax.text(group, block, f"{value:+d}" if value else "0", ha="center", va="center", color=color, fontsize=9)
+    ax.set_yticks(range(len(offsets)), range(1, len(offsets) + 1))
+    ax.set_xticks(range(len(offsets[0])), range(1, len(offsets[0]) + 1))
+    ax.set_xlabel("Delay group", color=MUTED, labelpad=7)
+    ax.set_ylabel("Spiking block", color=MUTED, labelpad=7)
+    colorbar = fig.colorbar(heat, ax=ax, pad=0.04)
+    colorbar.set_label("Offset in charge ticks", color=MUTED)
+    fig.text(0.035, 0.045, "Offsets apply before spikes from the shared inhibitory pool arrive.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_fine_group_thresholds.png")
+
+
 def plot_trained_context(research, output):
     short = research["groups"]["continuation_512"]["rows"]
     long = research["groups"]["continuation_2048"]["rows"]
@@ -767,6 +799,7 @@ def main():
                  filename="event_lm_residual_output.png", precision=5)
     plot_residual_emissions(output)
     plot_validation_history(output)
+    plot_group_thresholds(output)
     plot_heldout(research["groups"]["trace_integration_91750k"]["rows"], output,
                  title="Integrating charge and learning group thresholds",
                  subtitle="About 9.96M parameters · 91.75M enwik8 training targets · seed 5801",

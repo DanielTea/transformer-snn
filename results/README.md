@@ -82,7 +82,7 @@ full-corpus scores, and exact training records.
 | [Late steering](event_lm/late_steering) | Warm identity, held-out scores, native feedback pulses, and zero-gain intervention |
 | [Finer router charge at fixed width](event_lm/finer_router_charge) | Warm-start parity, full-corpus scores, eight-bit native pulse audit, and six-bit intervention |
 | [Depth growth with signed residual corrections](event_lm/depth_growth) | Six matched endpoints at 81.92M targets, both held-out corpora, warm starts, native parity, interventions and CPU timing |
-| [Held-charge inputs and group thresholds](event_lm/trace_integration) | Paired enwik8 history probe, warm-start spike parity, and continuations from v6 under the same pulse target |
+| [Held-charge inputs and group thresholds](event_lm/trace_integration) | Five matched endpoints at 91.75M targets, paired history and axon tap probes, fine-threshold offsets, and native parity |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
 exposure, geometry, and seed. The v6 archive uses
