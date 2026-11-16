@@ -62,6 +62,19 @@ to measure how their activity affects validation loss.
 [SNN Metal smoke](../results/event_lm/grown_6510k_residual/event_correction_code_s711_grown_residual_smoke.json) ·
 [Transformer Metal smoke](../results/event_lm/grown_6510k_residual/transformer_s711_grown_ffn_smoke.json)
 
+| Continuation | enwik8 bpb | PG-19 bpb | PG-19 raw bpb |
+|---|---:|---:|---:|
+| Grown 6.51M SNN | 1.95646 | Scoring | Scoring |
+| Grown 6.51M Transformer | 1.84266 | 3.06318 | 3.26549 |
+
+The wider SNN reduced enwik8 loss by 0.00784 bits per byte
+relative to the matched 3.26M SNN continuation. The wider
+Transformer led enwik8 by 0.11380 bits per byte. On a separate
+262,144-target validation probe, silencing the added residual
+neurons raised loss from 1.87218 to 1.88876. That intervention
+preserved the trained weights in the original neurons.
+[Held-out records and added-neuron intervention](../results/event_lm/grown_6510k_residual)
+
 Run from the repository root in Bash with the `spiking` array
 from the handoff. Both released 3.26M parents are required.
 [Training and checkpoint setup](HANDOFF.md#train-and-continue)
@@ -101,3 +114,14 @@ pulses in total. The finer, wider model uses 19,536 bytes of
 state. Its paired training run adds `--router-charge-bits 8`
 to the grown SNN command and uses a separate output path.
 [Finer-grid initialization audit](../results/event_lm/grown_6510k_residual/warm_fine_charge.json)
+
+## Extend training exposure
+
+The data-scale comparison continues the two trained grown
+checkpoints on 16,384,000 more enwik8 targets each. It uses
+4,000 steps at 512 bytes and batch size eight, seed 1109,
+128 warmup steps, and a peak learning rate of 0.0003.
+Each model reaches 49,152,000 cumulative targets. The SNN
+uses the same six-bit router charge and 310,000-pulse target
+as the first grown continuation. The jobs wait for the
+from-scratch width study's Metal worker to finish.
