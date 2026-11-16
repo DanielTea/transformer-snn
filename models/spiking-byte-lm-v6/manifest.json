@@ -1,0 +1,200 @@
+{
+  "release": "spiking-byte-lm-v6",
+  "model": {
+    "file": "weights.pt",
+    "source_checkpoint": "depth-growth-study/depth_s4603.pt",
+    "sha256": "4e9718308cb29f3fb5384cfe4fafe475f64422391ddad47c990bed124af492dd",
+    "architecture": {
+      "dim": 768,
+      "hidden": 187,
+      "depth": 11,
+      "route": "steered_correction_code",
+      "carry": false,
+      "continuous": false,
+      "memory_heads": 4,
+      "memory_slots": 14,
+      "resolution": 16,
+      "memory_width": 32,
+      "forecast_key_channels": 2,
+      "match_forecast_key": true,
+      "learn_context_keys": true,
+      "learn_packet_thresholds": false,
+      "output_reference": false,
+      "compact_delays": true,
+      "departure_coincidence": false,
+      "delay_window": 1,
+      "delay_residual": false,
+      "router_charge_bits": 8,
+      "activity_inhibition": true,
+      "inhibition_by_expansion": true,
+      "local_trace": true,
+      "trace_write_credit": true,
+      "bank_write_credit": false,
+      "trace_read_veto": false,
+      "delay_filter": false,
+      "opponent_steering": false,
+      "spread_coincidence": false,
+      "residual_membrane": false,
+      "compact_axon_state": true,
+      "tag_phase_address": false,
+      "trace_coincidence_start": null,
+      "trace_write_confirm": false,
+      "steering_gradient_at_zero": false,
+      "redistribute_inhibition": false,
+      "tag_read_competition": false,
+      "late_steering": false,
+      "residual_correction_start": 7
+    },
+    "parameters": 9960960,
+    "streaming_tensor_bytes": 29674,
+    "training_targets": 9830400,
+    "seed": 4603,
+    "validation_bpb": 1.8906932178140248,
+    "training_record": "results/event_lm/depth_growth/event_correction_code_s4603_depth_growth_snn.json",
+    "cumulative_training_targets": 81920000
+  },
+  "archive": {
+    "file": "spiking-byte-lm-v6-checkpoints.tar.gz",
+    "sha256": "a628f152cf30e45efc7a74e46720971e5aa8b5b2eaf5b9a9e93610003eee7b2d",
+    "bytes": 620841690,
+    "contents_checksums": "checkpoints/SHA256SUMS-v6"
+  },
+  "checkpoints": {
+    "depth-growth-study/control_s4603.pt": {
+      "bytes": 26065194,
+      "sha256": "66e1fa7d2d844c6517ce8b455073754bb5e6f40717fcf1faf07945c0ed784202",
+      "training_record": "results/event_lm/depth_growth/event_correction_code_s4603_depth_growth_control.json",
+      "parent": "checkpoints/finer-router-charge-study/fine_charge_s3307.pt"
+    },
+    "depth-growth-study/control_transformer_s4603.pt": {
+      "bytes": 26329015,
+      "sha256": "0d86a15b272d4eeecb9b5c9898f52ac6741c2249459c3fea3cbc4172700c5583",
+      "training_record": "results/event_lm/depth_growth/transformer_s4603_depth_growth_control_transformer.json",
+      "parent": "checkpoints/scale-6510k-short-control-study/control_transformer_s3307.pt"
+    },
+    "depth-growth-study/corrections_s4603.pt": {
+      "bytes": 26065258,
+      "sha256": "8847ffb7d90e930cb6bfd936c8890d1bd6aa5e782181013abc7ab3bb5024d455",
+      "training_record": "results/event_lm/depth_growth/event_correction_code_s4603_depth_growth_corrections.json",
+      "parent": "checkpoints/finer-router-charge-study/fine_charge_s3307.pt"
+    },
+    "depth-growth-study/depth_s4603.pt": {
+      "bytes": 39854802,
+      "sha256": "4e9718308cb29f3fb5384cfe4fafe475f64422391ddad47c990bed124af492dd",
+      "training_record": "results/event_lm/depth_growth/event_correction_code_s4603_depth_growth_snn.json",
+      "parent": "checkpoints/finer-router-charge-study/fine_charge_s3307.pt"
+    },
+    "depth-growth-study/transformer_s4603.pt": {
+      "bytes": 40131271,
+      "sha256": "c5c9472af91a1f572138dcd0f482a8346d2cbedbf4a536d536e453e817f376d8",
+      "training_record": "results/event_lm/depth_growth/transformer_s4603_depth_growth_transformer.json",
+      "parent": "checkpoints/scale-6510k-short-control-study/control_transformer_s3307.pt"
+    },
+    "depth-growth-study/wide_s4603.pt": {
+      "bytes": 39840170,
+      "sha256": "e4f32a797f6a88480657faa2b1238f0819db262ac253446ee86fbe717db94ffd",
+      "training_record": "results/event_lm/depth_growth/event_correction_code_s4603_depth_growth_wide.json",
+      "parent": "checkpoints/finer-router-charge-study/fine_charge_s3307.pt"
+    },
+    "finer-router-charge-study/fine_charge_s3307.pt": {
+      "bytes": 26065194,
+      "sha256": "b6947e01846324480cdfa7314c836b7584171853fd5ed6efa191830f7633fa8d",
+      "training_record": "results/event_lm/finer_router_charge/event_correction_code_s3307_finer_router_charge.json",
+      "parent": "checkpoints/scale-6510k-next-data-study/trace_s2503.pt"
+    },
+    "grown-6510k-residual-study/grown_s711.pt": {
+      "bytes": 26064810,
+      "sha256": "02f0cec8e06396d006a37b9ea0f70c23b95fe49be972abb17845b7fb1ffb18ec",
+      "training_record": "results/event_lm/grown_6510k_residual/event_correction_code_s711_scale_6510k_grown_residual.json",
+      "parent": "checkpoints/scale-3260k-study/trace_s0.pt"
+    },
+    "grown-6510k-residual-study/transformer_s711.pt": {
+      "bytes": 26328567,
+      "sha256": "cefce4a78601c2333b8f45d1a7b9e0e140969709cc2c2d8c6694436b1bb88178",
+      "training_record": "results/event_lm/grown_6510k_residual/transformer_s711_scale_6510k_grown_ffn.json",
+      "parent": "checkpoints/scale-3260k-study/transformer_s0.pt"
+    },
+    "late-steering-study/late_s3307.pt": {
+      "bytes": 26067285,
+      "sha256": "5e4bc777447be25acac002e378daeb155945d60b73635b9e880d5c796dbfa950",
+      "training_record": "results/event_lm/late_steering/event_correction_code_s3307_late_steering.json",
+      "parent": "checkpoints/scale-6510k-next-data-study/trace_s2503.pt"
+    },
+    "residual-13030k-study/control_s3307.pt": {
+      "bytes": 26065066,
+      "sha256": "a5586f8aa72f3ddf9feecea743f64461c925cf3a92ff327df1bc37a2d19d2fa6",
+      "training_record": "results/event_lm/residual_growth_13030k/event_correction_code_s3307_scale_13030k_residual_control.json",
+      "parent": "checkpoints/scale-6510k-next-data-study/trace_s2503.pt"
+    },
+    "residual-13030k-study/residual_s3307.pt": {
+      "bytes": 52121770,
+      "sha256": "fed1eb50ef3d2ef9ad98ca4fb32339e11150efc3279c710dad05a6efb20b7d2d",
+      "training_record": "results/event_lm/residual_growth_13030k/event_correction_code_s3307_scale_13030k_residual_snn.json",
+      "parent": "checkpoints/scale-6510k-next-data-study/trace_s2503.pt"
+    },
+    "residual-13030k-study/transformer_s3307.pt": {
+      "bytes": 52391671,
+      "sha256": "b436dc92fbdedf5a3f0fc8f5e9f4e323d17b8035b6361900cffdb3b7b4c6a19a",
+      "training_record": "results/event_lm/residual_growth_13030k/transformer_s3307_scale_13030k_residual_transformer.json",
+      "parent": "checkpoints/scale-6510k-next-data-study/transformer_s2503.pt"
+    },
+    "scale-3260k-study/trace_s0.pt": {
+      "bytes": 13035946,
+      "sha256": "c9e1ba897073e2f43e0384bf508e84ca66168f67cb26a53ca1a4506d25e85e84",
+      "training_record": "results/event_lm/scale_3260k/event_correction_code_s0_scale_3260k_trace.json"
+    },
+    "scale-3260k-study/transformer_s0.pt": {
+      "bytes": 13302711,
+      "sha256": "b213587c672b4381acd4a66dcdb273f41103cb7f7f6a374309b4d6114124f309",
+      "training_record": "results/event_lm/scale_3260k/transformer_s0_scale_3260k.json"
+    },
+    "scale-6510k-data-study/trace_s1109.pt": {
+      "bytes": 26064874,
+      "sha256": "30e0dc25b8c14976438847e89f3dfeee3c7bda6774ed615b0c505bfd5b36227c",
+      "training_record": "results/event_lm/scale_6510k_data/event_correction_code_s1109_scale_6510k_49152k_targets.json",
+      "parent": "checkpoints/grown-6510k-residual-study/grown_s711.pt"
+    },
+    "scale-6510k-data-study/transformer_s1109.pt": {
+      "bytes": 26328631,
+      "sha256": "f5961d14b82a0de1727c8d33e9e8dc1d14e70577e156709afca98a996e54dd97",
+      "training_record": "results/event_lm/scale_6510k_data/transformer_s1109_scale_6510k_49152k_targets.json",
+      "parent": "checkpoints/grown-6510k-residual-study/transformer_s711.pt"
+    },
+    "scale-6510k-next-data-study/trace_s2503.pt": {
+      "bytes": 26065002,
+      "sha256": "52fbbb83b1064d8510e61c661fdfb5f59bf8ebfb54d19cde2ab4bcac02605f85",
+      "training_record": "results/event_lm/scale_6510k_next_data/event_correction_code_s2503_scale_6510k_65536k_targets.json",
+      "parent": "checkpoints/scale-6510k-data-study/trace_s1109.pt"
+    },
+    "scale-6510k-next-data-study/transformer_s2503.pt": {
+      "bytes": 26328823,
+      "sha256": "fa5c8c44fdb7c0fc8bc7c2c814fff669c90d5e90fab605e5649c3ccd82fcd6dd",
+      "training_record": "results/event_lm/scale_6510k_next_data/transformer_s2503_scale_6510k_65536k_targets.json",
+      "parent": "checkpoints/scale-6510k-data-study/transformer_s1109.pt"
+    },
+    "scale-6510k-short-control-study/control_transformer_s3307.pt": {
+      "bytes": 26328887,
+      "sha256": "e3e79eec3fc2f29d3de9f55c1adebc78db3624427306e342d063179540023103",
+      "training_record": "results/event_lm/scale_6510k_short_control/transformer_s3307_scale_6510k_residual_transformer_control.json",
+      "parent": "checkpoints/scale-6510k-next-data-study/transformer_s2503.pt"
+    },
+    "tag-read-active-start-study/tag_active_s3307.pt": {
+      "bytes": 26065511,
+      "sha256": "9ce82cdec05bf728b260dc24549b332b7ccc447246bc8e52e640eb190b6d259b",
+      "training_record": "results/event_lm/tag_read_competition/event_correction_code_s3307_tag_read_active_start.json",
+      "parent": "checkpoints/scale-6510k-next-data-study/trace_s2503.pt"
+    },
+    "tag-read-competition-study/tag_reads_s3307.pt": {
+      "bytes": 26065383,
+      "sha256": "01968be8c5777504e8136da69957e5e2ae15059f06e53cb0079789b829a6e28b",
+      "training_record": "results/event_lm/tag_read_competition/event_correction_code_s3307_tag_read_competition.json",
+      "parent": "checkpoints/scale-6510k-next-data-study/trace_s2503.pt"
+    },
+    "tag-read-supervision-study/tag_supervised_s3307.pt": {
+      "bytes": 26065511,
+      "sha256": "7cbc60726353fcc0b2f680a754f478a644be334fb24ec375fdb92e8ffaa74700",
+      "training_record": "results/event_lm/tag_read_competition/event_correction_code_s3307_tag_read_supervision.json",
+      "parent": "checkpoints/scale-6510k-next-data-study/trace_s2503.pt"
+    }
+  }
+}

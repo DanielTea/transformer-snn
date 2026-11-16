@@ -239,7 +239,7 @@ weights received gradients in all four blocks.
 [Transformer warm start](../results/event_lm/residual_growth_13030k/warm_transformer.json)
 
 The full comparison starts from the completed 65.54M pair
-and also continues the original-width SNN. Each arm uses
+and continues both original-width controls. Each arm uses
 seed 3307, 1,600 steps, 512-byte windows, and 6,553,600
 additional targets, for 72,089,600 targets per model. The v5
 archive contains both starting checkpoints. The launcher defaults
@@ -268,4 +268,70 @@ python experiments/audit_growth_gradients.py transformer --enwik8 data/enwik8 --
 PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-snn
 PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-transformer
 PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-control
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-control-transformer
 ```
+
+| Model at 72,089,600 targets | Parameters | enwik8 bpb | PG-19 bpb | PG-19 raw bpb | State |
+|---|---:|---:|---:|---:|---:|
+| Original-width SNN | 6,514,176 | 1.87259 | 2.81227 | 2.90738 | 19,536 B |
+| Original-width full-attention Transformer | 6,513,152 | 1.77292 | 2.95995 | 3.16079 | 4 MiB |
+| Wider residual SNN | 13,028,352 | 1.87451 | 2.79672 | 2.88959 | 19,536 B |
+| Wider full-attention Transformer | 13,028,864 | 1.77285 | 2.95990 | 3.16073 | 4 MiB |
+
+Doubling residual width increased enwik8 loss by 0.00192 bits per
+byte and reduced calibrated PG-19 loss by 0.01555 relative to the
+original-width continuation. The wider SNN led both controls on
+all 16 PG-19 books. The widened Transformer led on enwik8 by
+0.10166. The SNN native audit counted 308,111 pulses per byte with
+exact CPU and Metal parity. Silencing the added residual outputs
+after training increased loss from 1.80283 to 1.81011 on 65,536
+enwik8 validation targets. The matched comparison uses one seed.
+The two Transformer widths scored within 0.00007 bits per byte
+on each corpus at this exposure.
+[Paired scores, audits, and intervention](../results/event_lm/residual_growth_13030k) ·
+[Original-width Transformer scores](../results/event_lm/scale_6510k_short_control)
+
+### Refine router charge at fixed width
+
+The v4 finer-charge run changed both the residual width and the
+charge grid relative to its starting weights. This continuation
+starts at width 768 and uses the same 6,514,176 parameters and
+19,536-byte stream state as the v5 parent. It sets the loaded router
+weights to their previous six-bit physical values, then trains on
+an eight-bit charge grid. Every old router charge and threshold
+uses four times as many ticks on the finer grid. Firing resolution
+is 16×, with the original-width control's pulse target, seed 3307,
+and 6,553,600 additional training targets.
+
+On 4,096 enwik8 validation bytes, CPU step, CPU chunk and Metal
+counts agreed. The unchanged-width models emitted the same output
+counts and 1,288,006,522 total pulses on that sample. All seven
+expansion populations had nonzero gradients. The trainable router
+can now move in quarter-size charge increments from that starting
+function.
+[Warm-start record](../results/event_lm/finer_router_charge/warm_finer_router_charge.json)
+
+```bash
+export PYTORCH_ENABLE_MPS_FALLBACK=0
+mkdir -p checkpoints/work
+python experiments/audit_residual_growth.py --enwik8 data/enwik8 --device mps \
+  --parent checkpoints/scale-6510k-next-data-study/trace_s2503.pt --refine-router-charge 8 \
+  --json checkpoints/work/warm_finer_router_charge.json
+bash experiments/run_v4_continuation.sh finer-router-charge
+```
+
+| Model at 72,089,600 targets | enwik8 bpb | PG-19 bpb | PG-19 raw bpb | Native pulses per byte |
+|---|---:|---:|---:|---:|
+| Six-bit router | 1.87259 | 2.81227 | 2.90738 | 309,048 |
+| Eight-bit router | 1.86770 | 2.82082 | 2.92020 | 309,180 |
+| Original-width full-attention Transformer | 1.77292 | 2.95995 | 3.16079 | — |
+
+The finer router lowered enwik8 loss by 0.00489 bits per byte
+relative to the matched six-bit continuation. Calibrated PG-19
+loss increased by 0.00855. On the 65,536-target enwik8 validation
+probe, returning the trained router to six-bit charge raised loss
+from 1.79341 to 1.79744. The eight-bit model stayed at 19,536
+stream bytes and emitted 0.043% more pulses on the native sample.
+CPU single-byte, CPU chunked, and Metal counts matched on the
+audited prefixes. The held-out comparison uses one seed.
+[Fine-charge held-out scores, parity, and intervention](../results/event_lm/finer_router_charge)

@@ -4,6 +4,51 @@ Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## 9.96M depth and width growth · 81,920,000 training targets · seed 4603
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 11-block SNN | 9,960,960 | 29,674 B | 1.84288 | 2 | **2.79854** | 1 | 2.90068 | 309,059 |
+| 7-block wider SNN | 9,957,868 | 19,536 B | 1.84496 | 3 | 2.80299 | 2 | 2.90845 | 307,543 |
+| 6-block full attention | 9,962,496 | 6 MiB | **1.75713** | 1 | 2.93008 | 3 | 3.12422 | — |
+
+![Held-out loss for deeper and wider SNNs and full attention](../results/figures/event_lm_growth_9960k.png)
+
+![enwik8 loss gap by prefix age for the 11-block SNN](../results/figures/event_lm_growth_9960k_prefix_age.png)
+
+## 6.51M signed residual output · 81,920,000 training targets · seed 4603
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 7-block SNN, ordinary output | 6,514,176 | 19,536 B | 1.84466 | 3 | **2.80932** | 1 | 2.91443 | 309,030 |
+| 7-block SNN, correction output | 6,514,176 | 19,536 B | 1.84464 | 2 | 2.86794 | 2 | 2.99541 | 305,045 |
+| 4-block full attention | 6,513,152 | 4 MiB | **1.75773** | 1 | 2.93346 | 3 | 3.12986 | — |
+
+![Held-out loss with ordinary and correction output](../results/figures/event_lm_residual_output.png)
+
+![Generated pulses with identical output counts within each pair](../results/figures/event_lm_residual_emissions.png)
+
+## 13.03M residual growth and original-width controls · 72,089,600 training targets · seed 3307
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Wider residual SNN | 13,028,352 | 19,536 B | 1.87451 | 4 | **2.79672** | 1 | 2.88959 | 308,111 |
+| Wider full-attention Transformer | 13,028,864 | 4 MiB | **1.77285** | 1 | 2.95990 | 3 | 3.16073 | — |
+| Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.87259 | 3 | 2.81227 | 2 | 2.90738 | 309,048 |
+| Original-width full-attention Transformer | 6,513,152 | 4 MiB | 1.77292 | 2 | 2.95995 | 4 | 3.16079 | — |
+
+## 6.51M spike circuit and charge comparisons · 72,089,600 training targets · seed 3307
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.87259 | 4 | **2.81227** | 1 | 2.90738 | 309,048 |
+| Eight-bit router charge | 6,514,176 | 19,536 B | 1.86770 | 2 | 2.82082 | 5 | 2.92020 | 309,180 |
+| Tag read competition, zero start | 6,514,180 | 19,536 B | 1.87077 | 3 | 2.81844 | 3 | 2.91860 | 309,523 |
+| Tag read competition, active start | 6,514,180 | 19,536 B | 1.87409 | 6 | 2.81635 | 2 | 2.91291 | 309,599 |
+| Tag reads with forecast-error ranking | 6,514,180 | 19,536 B | 1.87620 | 7 | 2.83214 | 6 | 2.93471 | 309,582 |
+| Late steering | 6,514,204 | 19,536 B | 1.87323 | 5 | 2.82081 | 4 | 2.92053 | 308,536 |
+| Original-width full-attention Transformer | 6,513,152 | 4 MiB | **1.77292** | 1 | 2.95995 | 7 | 3.16079 | — |
+
 ## 6.51M at 65.54M observed targets · 65,536,000 training targets · seed 2503
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
@@ -120,6 +165,10 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 | Held-charge SNN | 1,630,992 | 21,320 B | 2.00633 | 2 | **2.98979** | 1 | 3.10037 | 307,013 |
 | Full-attention Transformer | 1,630,848 | 3 MiB | **1.82812** | 1 | 3.09559 | 2 | 3.29465 | — |
 
+![Held-out loss after doubling residual width](../results/figures/event_lm_residual_growth_13030k.png)
+
+![Held-out loss after changing the spike circuits at 6.51M parameters](../results/figures/event_lm_6510k_circuits.png)
+
 ![Held-out loss as enwik8 training exposure grows at 6.51M parameters](../results/figures/event_lm_6510k_data.png)
 
 ![enwik8 loss gap by prefix age after 65.54M targets](../results/figures/event_lm_65536_prefix_age.png)
@@ -130,7 +179,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 ![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)
 
-[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · [Current model card](../models/spiking-byte-lm-v5/README.md)
+[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · [Current model card](../models/spiking-byte-lm-v6/README.md) · [Depth growth study](DEPTH_GROWTH.md)
 
 ![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)
 

@@ -1,0 +1,113 @@
+{
+  "system": "macOS-26.6.2-arm64-arm-64bit",
+  "dtype": "int32",
+  "threads": 2,
+  "interop_threads": 1,
+  "batch_size": 1,
+  "decode_steps": 64,
+  "warmups": 1,
+  "repeats": 3,
+  "prompt_file": "data/enwik8",
+  "prompt_offset": 95000000,
+  "prompt_seed": null,
+  "prompt_sha256": "565ca9366464a36eab82d7e3881360ea538e21db3dc09a70e17f6f387e1cedec",
+  "timing": "wall clock with device synchronization at phase boundaries, greedy argmax included in decode",
+  "rss_scope": "peak CPU resident bytes per checkpoint process, including imports, weights and all contexts",
+  "state_scope": "allocated tensor storage reachable from decoder state, excluding weights and temporary tensors",
+  "models": [
+    {
+      "checkpoint": "checkpoints/depth-growth-study/control_s4603.pt",
+      "run_name": "event_correction_code_s4603_depth_growth_control",
+      "parameters": 6514176,
+      "variant": "integer_event",
+      "local_history_bytes": 79,
+      "spike_resolution": 16,
+      "device": "cpu",
+      "torch_version": "2.15.0",
+      "process_peak_rss_bytes": 312967168,
+      "contexts": [
+        {
+          "context_bytes": 128,
+          "sequential_prompt_ms": [
+            253.86158301262185,
+            254.4866250245832,
+            261.373832996469
+          ],
+          "median_sequential_prompt_ms": 254.4866250245832,
+          "decode_ms_per_byte": [
+            2.0767962187164812,
+            1.896596343613055,
+            2.04731118719792
+          ],
+          "median_decode_ms_per_byte": 2.04731118719792,
+          "state_bytes_after_prompt": 19536,
+          "state_bytes_after_decode": 19536
+        },
+        {
+          "context_bytes": 512,
+          "sequential_prompt_ms": [
+            1080.1601669518277,
+            1041.608500003349,
+            1032.8896249993704
+          ],
+          "median_sequential_prompt_ms": 1041.608500003349,
+          "decode_ms_per_byte": [
+            2.0541881558528985,
+            2.1501523442566395,
+            2.0115032648391207
+          ],
+          "median_decode_ms_per_byte": 2.0541881558528985,
+          "state_bytes_after_prompt": 19536,
+          "state_bytes_after_decode": 19536
+        }
+      ]
+    },
+    {
+      "checkpoint": "checkpoints/depth-growth-study/depth_s4603.pt",
+      "run_name": "event_correction_code_s4603_depth_growth_snn",
+      "parameters": 9960960,
+      "variant": "integer_event",
+      "local_history_bytes": 125,
+      "spike_resolution": 16,
+      "device": "cpu",
+      "torch_version": "2.15.0",
+      "process_peak_rss_bytes": 357810176,
+      "contexts": [
+        {
+          "context_bytes": 128,
+          "sequential_prompt_ms": [
+            411.17300000041723,
+            392.3054579645395,
+            386.02970802458003
+          ],
+          "median_sequential_prompt_ms": 392.3054579645395,
+          "decode_ms_per_byte": [
+            3.105887359197368,
+            2.9947721250209725,
+            3.103629562247079
+          ],
+          "median_decode_ms_per_byte": 3.103629562247079,
+          "state_bytes_after_prompt": 29674,
+          "state_bytes_after_decode": 29674
+        },
+        {
+          "context_bytes": 512,
+          "sequential_prompt_ms": [
+            1572.6490830420516,
+            1594.332416949328,
+            1581.6227920004167
+          ],
+          "median_sequential_prompt_ms": 1581.6227920004167,
+          "decode_ms_per_byte": [
+            3.3308391875834786,
+            3.0473209535557544,
+            3.038743484466977
+          ],
+          "median_decode_ms_per_byte": 3.0473209535557544,
+          "state_bytes_after_prompt": 29674,
+          "state_bytes_after_decode": 29674
+        }
+      ]
+    }
+  ]
+}

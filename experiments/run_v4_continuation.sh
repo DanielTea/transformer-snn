@@ -8,7 +8,11 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         expansion-snn expansion-transformer expansion-control expansion-steering" >&2
   echo "         scale-data-snn scale-data-transformer" >&2
   echo "         residual-growth-snn residual-growth-transformer residual-growth-control" >&2
-  echo "         redistribute-inhibition teacher-guidance" >&2
+  echo "         residual-growth-control-transformer" >&2
+  echo "         redistribute-inhibition teacher-guidance late-steering finer-router-charge" >&2
+  echo "         tag-read-competition tag-read-active-start tag-read-supervision" >&2
+  echo "         depth-growth-snn depth-growth-control depth-growth-wide depth-growth-transformer" >&2
+  echo "         depth-growth-corrections depth-growth-control-transformer" >&2
   exit 2
 fi
 
@@ -66,6 +70,65 @@ case "$study" in
     training+=("${spiking[@]}" --initialize-from checkpoints/scale-6510k-next-data-study/trace_s2503.pt)
     name=control_s3307
     ;;
+  residual-growth-control-transformer)
+    training+=(--variant transformer --dim 256 --depth 4 --heads 4 --mlp-ratio 10.2890625
+      --initialize-from checkpoints/scale-6510k-next-data-study/transformer_s2503.pt)
+    name=control_transformer_s3307
+    ;;
+  tag-read-competition|tag-read-active-start|tag-read-supervision)
+    training+=("${spiking[@]}" --tag-read-competition
+      --initialize-from checkpoints/scale-6510k-next-data-study/trace_s2503.pt)
+    case "$study" in
+      tag-read-competition) name=tag_reads_s3307 ;;
+      tag-read-active-start)
+        training+=(--tag-read-initial-gain 0.25)
+        name=tag_active_s3307
+        ;;
+      tag-read-supervision)
+        training+=(--tag-read-initial-gain 0.25 --bank-read-rank-weight 0.10)
+        name=tag_supervised_s3307
+        ;;
+    esac
+    ;;
+  late-steering)
+    training+=("${spiking[@]}" --late-steering
+      --initialize-from checkpoints/scale-6510k-next-data-study/trace_s2503.pt)
+    name=late_s3307
+    ;;
+  finer-router-charge)
+    training+=("${spiking[@]}" --router-charge-bits 8 --preserve-router-charge
+      --initialize-from checkpoints/scale-6510k-next-data-study/trace_s2503.pt)
+    name=fine_charge_s3307
+    ;;
+  depth-growth-snn|depth-growth-control|depth-growth-wide|depth-growth-corrections)
+    training+=("${spiking[@]}" --router-charge-bits 8
+      --initialize-from checkpoints/finer-router-charge-study/fine_charge_s3307.pt)
+    case "$study" in
+      depth-growth-snn)
+        training+=(--depth 11 --grow-depth --residual-correction-start 7)
+        name=depth_s4603
+        ;;
+      depth-growth-control) name=control_s4603 ;;
+      depth-growth-wide)
+        training+=(--dim 1174 --grow-residual)
+        name=wide_s4603
+        ;;
+      depth-growth-corrections)
+        training+=(--residual-correction-start 0)
+        name=corrections_s4603
+        ;;
+    esac
+    ;;
+  depth-growth-transformer)
+    training+=(--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 10.576171875
+      --grow-depth --initialize-from checkpoints/scale-6510k-short-control-study/control_transformer_s3307.pt)
+    name=transformer_s4603
+    ;;
+  depth-growth-control-transformer)
+    training+=(--variant transformer --dim 256 --depth 4 --heads 4 --mlp-ratio 10.2890625
+      --initialize-from checkpoints/scale-6510k-short-control-study/control_transformer_s3307.pt)
+    name=control_transformer_s4603
+    ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
       --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
@@ -111,9 +174,18 @@ if [[ $study == extend-* ]]; then
 elif [[ $study == scale-data-* ]]; then
   training+=(--steps 4000 --warmup 128 --lr 0.0003 --seed 2503 --eval-every 400
     --tag scale_6510k_65536k_targets)
+elif [[ $study == depth-growth-* ]]; then
+  training+=(--steps 2400 --warmup 96 --lr 0.0002 --seed 4603 --eval-every 300
+    --tag "${study//-/_}")
+elif [[ $study == residual-growth-control-transformer ]]; then
+  training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
+    --tag scale_6510k_residual_transformer_control)
 elif [[ $study == residual-growth-* ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
     --tag "scale_13030k_residual_${study#residual-growth-}")
+elif [[ $study == tag-read-* || $study == late-steering || $study == finer-router-charge ]]; then
+  training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
+    --tag "${study//-/_}")
 elif [[ $study == expansion-* || $study == trace-write-confirm || $study == redistribute-inhibition ||
         $study == teacher-guidance ]]; then
   case "$study" in
@@ -164,7 +236,9 @@ if [[ $study != *-transformer ]]; then
     --device "$device" --split test --enwik8 data/enwik8 --activity-profile --checkpoint "$checkpoint"
 fi
 if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == redistribute-inhibition ||
-      $study == expansion-snn || $study == expansion-steering || $study == residual-growth-snn ]]; then
+      $study == tag-read-* || $study == late-steering || $study == finer-router-charge ||
+      $study == expansion-snn || $study == expansion-steering || $study == residual-growth-snn ||
+      $study == depth-growth-snn || $study == depth-growth-wide ]]; then
   run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
     --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"
 fi

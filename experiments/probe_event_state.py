@@ -14,8 +14,8 @@ from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
-from snnformer.event_lm import EventLM, _delay_group_widths
-from train_event_lm import scoring_logits
+from snnformer.event_lm import EventLM, EventLMConfig, _delay_group_widths
+from train_event_lm import initialize_from_checkpoint, scoring_logits
 from train_lm import load_splits
 
 
@@ -71,7 +71,30 @@ def added_expansion_rows(block, previous_width, weight):
     return [group[width:] for group, width in zip(weight.split(block.widths * 2), before * 2, strict=True)]
 
 
-def probe(model, window, chunk_size, *, residual_width_before=None, expansion_width_before=None):
+@torch.inference_mode()
+def probe_tag_read_gains(model, checkpoint_path, window, chunk_size, gains):
+    if not model.cfg.tag_read_competition:
+        model = EventLM(replace(model.cfg, tag_read_competition=True))
+        initialize_from_checkpoint(model, {}, checkpoint_path, freeze_router=False)
+        model.to(window.device).eval()
+    metrics = []
+    prefix = window[:, :min(4096, window.shape[1] - 1)].cpu()
+    gain = model.prediction_memory.read_inhibition.gain
+    for value in gains:
+        gain.fill_(value)
+        native = model.to_integer()
+        stats = {}
+        native.forward_chunk(prefix, stats=stats)
+        metrics.append({
+            "gain_ticks": native.prediction_memory.read_inhibition.gains().tolist(),
+            "validation_bpb": score(model, window, chunk_size),
+            "native_activity_bytes": prefix.numel(),
+            "memory_stats": {name: int(count) for name, count in stats.items()},
+        })
+    return metrics
+
+
+def probe(model, window, chunk_size, *, residual_width_before=None, expansion_width_before=None, depth_before=None):
     pools = [block.activity_inhibition for block in model.blocks if block.activity_inhibition is not None]
     series = [[] for _ in pools]
     hooks = [pool.register_forward_hook(watch(counts)) for pool, counts in zip(pools, series, strict=True)]
@@ -102,6 +125,16 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.prediction_memory is not None:
         result["mute_bank_corrections_bpb"] = score_without_synapses(
             model, window, chunk_size, [model.recall_synapse.weight],
+        )
+    if model.cfg.tag_read_competition:
+        gain = model.prediction_memory.read_inhibition.gain
+        result["zero_tag_read_competition_bpb"] = score_without_synapses(model, window, chunk_size, [gain])
+    if model.cfg.late_steering:
+        weights = [block.late_steering.gain for block in model.blocks]
+        result["zero_late_steering_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.router_charge_bits > EventLMConfig.router_charge_bits:
+        result["six_bit_router_bpb"] = score_with_options(
+            model, window, chunk_size, router_charge_bits=EventLMConfig.router_charge_bits,
         )
     if model.cfg.delay_filter:
         weights = [kernel.weight for block in model.blocks for kernel in block.delay_filters if kernel is not None]
@@ -136,6 +169,9 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
         new_rows = [rows for block in model.blocks
                     for rows in added_expansion_rows(block, expansion_width_before, block.expand.weight)]
         result["silence_added_expansion_bpb"] = score_without_synapses(model, window, chunk_size, new_rows)
+    if depth_before is not None:
+        added_projections = [block.project.weight for block in model.blocks[depth_before:]]
+        result["silence_added_blocks_bpb"] = score_without_synapses(model, window, chunk_size, added_projections)
     return result
 
 
@@ -146,6 +182,8 @@ def main():
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu")
     parser.add_argument("--targets", type=int, default=32_768)
     parser.add_argument("--chunk-size", type=int, default=64)
+    parser.add_argument("--tag-read-gains", type=float, nargs="+",
+                        help="intervene on all read competition conductances and score the validation text")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
     if min(args.targets, args.chunk_size) < 1:
@@ -159,12 +197,22 @@ def main():
         parser.error("a chunk-capable spiking checkpoint is required")
     if not (model.cfg.activity_inhibition or model.cfg.local_trace or model.cfg.delay_filter):
         parser.error("the checkpoint needs inhibition, a local trace, or delay filters")
+    if args.tag_read_gains is not None and (not model.cfg.match_forecast_key
+            or any(not 0 <= gain <= 1 for gain in args.tag_read_gains)):
+        parser.error("tag read gain interventions require forecast tags and gains in [0, 1]")
     _, validation, _ = load_splits(args.enwik8)
     if args.targets >= len(validation):
         parser.error("the requested targets exceed the validation split")
     sample = validation[:args.targets + 1]
     window = torch.from_numpy(sample.copy()).to(device=device, dtype=torch.long)[None]
     initialization = checkpoint.get("initialization") or {}
+    if args.tag_read_gains is None:
+        metrics = probe(model, window, args.chunk_size, residual_width_before=initialization.get("residual_width_before"),
+                        expansion_width_before=initialization.get("expansion_width_before"),
+                        depth_before=initialization.get("depth_before"))
+    else:
+        metrics = {"tag_read_gain_sweep": probe_tag_read_gains(model, args.checkpoint, window,
+                                                              args.chunk_size, args.tag_read_gains)}
     record = {
         "checkpoint": str(args.checkpoint),
         "checkpoint_sha256": hashlib.sha256(args.checkpoint.read_bytes()).hexdigest(),
@@ -172,9 +220,7 @@ def main():
         "sample_sha256": hashlib.sha256(sample).hexdigest(),
         "target_bytes": args.targets,
         "chunk_bytes": args.chunk_size,
-        **probe(model, window, args.chunk_size,
-                residual_width_before=initialization.get("residual_width_before"),
-                expansion_width_before=initialization.get("expansion_width_before")),
+        **metrics,
     }
     with _atomic_output(args.json, "w", overwrite=False) as output:
         json.dump(record, output, indent=2)

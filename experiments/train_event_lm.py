@@ -134,6 +134,7 @@ def build_model(args):
                             memory_heads=args.memory_heads, memory_slots=args.memory_slots,
                             resolution=args.spike_resolution, memory_width=getattr(args, "memory_width", None),
                             forecast_key_channels=args.forecast_key_channels, match_forecast_key=args.match_forecast_key,
+                            tag_read_competition=args.tag_read_competition,
                             learn_context_keys=args.learn_context_keys, learn_packet_thresholds=args.learn_packet_thresholds,
                             output_reference=args.output_reference, compact_delays=args.compact_delays,
                             departure_coincidence=args.departure_coincidence, delay_window=args.delay_window,
@@ -144,12 +145,14 @@ def build_model(args):
                             local_trace=args.local_trace, trace_coincidence_start=args.trace_coincidence_start,
                             trace_write_credit=args.trace_write_credit, trace_write_confirm=args.trace_write_confirm,
                             steering_gradient_at_zero=args.steering_gradient_at_zero,
+                            late_steering=args.late_steering,
                             bank_write_credit=args.bank_write_credit,
                             trace_read_veto=args.trace_read_veto,
                             delay_filter=args.delay_filter,
                             opponent_steering=args.opponent_steering,
                             spread_coincidence=args.spread_coincidence,
                             residual_membrane=args.residual_membrane,
+                            residual_correction_start=args.residual_correction_start,
                             compact_axon_state=args.compact_axon_state,
                             tag_phase_address=args.tag_phase_address)
         return EventLM(cfg), cfg, {}
@@ -164,7 +167,7 @@ _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
 _OPTIONAL_ROUTER_PARAMETERS = (
     ".packet_thresholds.", ".delay_correction.", ".delay_filters.", ".opponent_steering.", ".trace.read_veto.",
     ".spread_coincidence.", ".trace.write_confirm.",
-    ".inhibition_redistribution.",
+    ".inhibition_redistribution.", ".late_steering.",
 )
 
 
@@ -189,21 +192,26 @@ def initialize_router(model, source, source_cfg):
 
 
 def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow_residual=False,
-                               grow_feed_forward=False, grow_expansion=False):
+                               grow_feed_forward=False, grow_expansion=False, grow_depth=False, preserve_router_charge=False):
     source = torch.load(path, map_location="cpu", weights_only=True)
     if source.get("task") != "event_lm" or source.get("model_type") != type(model).__name__:
         raise ValueError("--initialize-from needs a checkpoint of the same decoder family")
+    if preserve_router_charge and (not isinstance(model, EventLM) or grow_residual or grow_expansion or grow_depth):
+        raise ValueError("preserving router charge applies to a spiking continuation at the same width")
     growth = {}
-    if grow_residual or grow_expansion:
+    if grow_residual or grow_expansion or (grow_depth and isinstance(model, EventLM)):
         if not isinstance(model, EventLM) or freeze_router:
             raise ValueError("growth needs a trainable spiking decoder")
         prior = EventLMConfig(**source["cfg"])
         if grow_residual:
             model.initialize_wider_residual(prior, source["state_dict"])
             growth["residual_width_before"] = prior.dim
-        else:
+        elif grow_expansion:
             model.initialize_wider_expansion(prior, source["state_dict"])
             growth["expansion_width_before"] = prior.hidden
+        else:
+            model.initialize_deeper(prior, source["state_dict"])
+            growth["depth_before"] = prior.depth
     elif isinstance(model, EventLM):
         source_cfg = EventLMConfig(**source["cfg"])
         # Training checkpoints store weights in physical units. These switches can
@@ -221,10 +229,13 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   trace_write_credit=model.cfg.trace_write_credit,
                                   trace_write_confirm=source_cfg.trace_write_confirm or model.cfg.trace_write_confirm,
                                   steering_gradient_at_zero=model.cfg.steering_gradient_at_zero,
+                                  late_steering=source_cfg.late_steering or model.cfg.late_steering,
                                   bank_write_credit=model.cfg.bank_write_credit,
                                   trace_read_veto=source_cfg.trace_read_veto or model.cfg.trace_read_veto,
                                   residual_membrane=model.cfg.residual_membrane,
+                                  residual_correction_start=model.cfg.residual_correction_start,
                                   tag_phase_address=model.cfg.tag_phase_address,
+                                  tag_read_competition=source_cfg.tag_read_competition or model.cfg.tag_read_competition,
                                   delay_filter=source_cfg.delay_filter or model.cfg.delay_filter,
                                   opponent_steering=source_cfg.opponent_steering or model.cfg.opponent_steering,
                                   spread_coincidence=source_cfg.spread_coincidence or model.cfg.spread_coincidence)
@@ -245,6 +256,10 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
             if model.cfg.redistribute_inhibition and not source_cfg.redistribute_inhibition:
                 expected.update(f"blocks.{index}.inhibition_redistribution.synapse.weight"
                                 for index in range(model.cfg.depth))
+            if model.cfg.tag_read_competition and not source_cfg.tag_read_competition:
+                expected.add("prediction_memory.read_inhibition.gain")
+            if model.cfg.late_steering and not source_cfg.late_steering:
+                expected.update(f"blocks.{index}.late_steering.gain" for index in range(model.cfg.depth))
             if expected:
                 missing, unexpected = model.load_state_dict(source["state_dict"], strict=False)
                 if set(missing) != expected or unexpected:
@@ -253,6 +268,8 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 model.load_state_dict(source["state_dict"])
         else:
             initialize_router(model, source, source_cfg)
+        if preserve_router_charge:
+            model.preserve_router_charge(source_cfg.router_charge_bits)
         if freeze_router:
             if model.prediction_memory is None:
                 raise ValueError("--freeze-router needs a model with a trainable prediction bank")
@@ -260,12 +277,19 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 if name in source["state_dict"] and not name.startswith(_BANK_PARAMETERS):
                     parameter.requires_grad_(False)
     else:
-        source_geometry = {name: value for name, value in source["model_kwargs"].items() if name != "ctx"}
-        geometry = {name: value for name, value in model_kwargs.items() if name != "ctx"}
+        changed_geometry = ("ctx", "depth") if grow_depth else ("ctx",)
+        source_geometry = {name: value for name, value in source["model_kwargs"].items() if name not in changed_geometry}
+        geometry = {name: value for name, value in model_kwargs.items() if name not in changed_geometry}
         prior = SNNConfig(**source["cfg"])
         if source_geometry != geometry:
             raise ValueError("the checkpoint and Transformer must use the same geometry")
-        if grow_feed_forward:
+        if grow_depth:
+            prior_depth = source["model_kwargs"]["depth"]
+            width = model.initialize_deeper(prior, source["state_dict"], prior_depth)
+            growth["depth_before"] = prior_depth
+            if width is not None:
+                growth["feed_forward_width_before"] = width
+        elif grow_feed_forward:
             growth["feed_forward_width_before"] = model.initialize_wider_feed_forward(prior, source["state_dict"])
         elif prior != model.cfg:
             raise ValueError("the checkpoint and Transformer must use the same geometry")
@@ -296,6 +320,12 @@ def main():
     parser.add_argument("--match-forecast-key", action="store_true", help="use key mismatches to inhibit reads")
     parser.add_argument("--tag-phase-address", action="store_true",
                         help="use signed forecast tags to time each address spike within a short clock")
+    parser.add_argument("--tag-read-competition", action="store_true",
+                        help="have stored tags inhibit candidate reads before their address competition")
+    parser.add_argument("--tag-read-initial-gain", type=float,
+                        help="set all stored-tag read gains at the start of training")
+    parser.add_argument("--bank-read-rank-weight", type=float, default=0.0,
+                        help="supervise read competition with the next observed forecast error")
     parser.add_argument("--learn-context-keys", action="store_true",
                         help="learn reserved answers to memory queries through next-byte loss")
     parser.add_argument("--learn-packet-thresholds", action="store_true",
@@ -314,6 +344,8 @@ def main():
                         help="emit learned correction pulses from matching delays into the fixed split")
     parser.add_argument("--router-charge-bits", type=int, default=EventLMConfig.router_charge_bits,
                         help="fractional charge bits for local synapses and firing thresholds")
+    parser.add_argument("--preserve-router-charge", action="store_true",
+                        help="put loaded router weights on the old charge grid before refining it")
     parser.add_argument("--activity-inhibition", action="store_true",
                         help="raise content and steering thresholds with pooled incoming spike activity")
     parser.add_argument("--inhibition-by-expansion", action="store_true",
@@ -326,12 +358,16 @@ def main():
                         help="first residual neuron whose present pulses must also match the signed held read")
     parser.add_argument("--residual-membrane", action="store_true",
                         help="retain the signed subthreshold charge at the output of each routing block")
+    parser.add_argument("--residual-correction-start", type=int,
+                        help="first block whose residual axon carries input spikes and emits only corrections")
     parser.add_argument("--trace-write-credit", action="store_true",
                         help="send held-charge gradients to the last bound that moved the charge")
     parser.add_argument("--trace-write-confirm", action="store_true",
                         help="use delayed content spikes to extend the held-charge write interval")
     parser.add_argument("--steering-gradient-at-zero", action="store_true",
                         help="use the right training derivative for steering at zero synaptic charge")
+    parser.add_argument("--late-steering", action="store_true",
+                        help="let the first residual spikes steer the remaining immediate bypass spikes")
     parser.add_argument("--bank-write-credit", action="store_true",
                         help="send each correction-cell gradient to the last write that moved it")
     parser.add_argument("--trace-read-veto", action="store_true",
@@ -372,6 +408,8 @@ def main():
                         help="grow silent content and steering neurons inside each delay group")
     growth.add_argument("--grow-feed-forward", action="store_true",
                         help="grow a Transformer reference's SwiGLU width from a narrower checkpoint")
+    growth.add_argument("--grow-depth", action="store_true",
+                        help="append identity-initialized blocks to the loaded model")
     parser.add_argument("--freeze-router", action="store_true", help="update only the newly added bank")
     parser.add_argument("--code-loss-weight", type=float, default=0.0, help="weight for the next-byte spike code loss")
     parser.add_argument("--corrected-code-loss", action="store_true",
@@ -399,6 +437,12 @@ def main():
         parser.error("spiking growth needs an --initialize-from checkpoint and a trainable router")
     if args.grow_feed_forward and (args.initialize_from is None or args.variant not in ("transformer", "transformer_local")):
         parser.error("--grow-feed-forward needs a Transformer --initialize-from checkpoint")
+    if args.grow_depth and (args.initialize_from is None or args.freeze_router):
+        parser.error("--grow-depth needs a trainable --initialize-from checkpoint")
+    if args.residual_correction_start is not None and args.variant not in EVENT_ROUTES:
+        parser.error("--residual-correction-start needs a spiking variant")
+    if args.preserve_router_charge and (args.initialize_from is None or args.variant not in EVENT_ROUTES):
+        parser.error("--preserve-router-charge needs a spiking --initialize-from checkpoint")
     if args.bank_write_credit and args.variant not in EVENT_ROUTES:
         parser.error("--bank-write-credit needs a spiking correction bank")
     if args.freeze_router and args.variant not in EVENT_ROUTES:
@@ -410,13 +454,21 @@ def main():
     if args.corrected_code_loss and not args.code_loss_weight:
         parser.error("--corrected-code-loss needs a positive --code-loss-weight")
     if (args.forecast_key_channels or args.match_forecast_key or args.learn_context_keys
-            or args.tag_phase_address) and args.variant != "event_correction_code":
+            or args.tag_phase_address or args.tag_read_competition) and args.variant != "event_correction_code":
         parser.error("forecast keys need --variant event_correction_code")
+    if args.tag_read_initial_gain is not None and (
+        not args.tag_read_competition or not 0 <= args.tag_read_initial_gain <= 1
+    ):
+        parser.error("a read gain in [0, 1] needs --tag-read-competition")
+    if not math.isfinite(args.bank_read_rank_weight) or args.bank_read_rank_weight < 0:
+        parser.error("bank read ranking weight must be finite and nonnegative")
+    if args.bank_read_rank_weight and (not args.tag_read_competition or args.ctx < 2):
+        parser.error("bank read ranking needs --tag-read-competition and at least two input bytes")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
             or args.compact_axon_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
             or args.inhibition_by_expansion or args.redistribute_inhibition
-            or args.trace_coincidence_start is not None or args.steering_gradient_at_zero
+            or args.trace_coincidence_start is not None or args.steering_gradient_at_zero or args.late_steering
             or args.local_trace or args.trace_write_credit or args.trace_write_confirm or args.trace_read_veto
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
@@ -444,8 +496,12 @@ def main():
             initialization = initialize_from_checkpoint(
                 model, model_kwargs, args.initialize_from.expanduser(),
                 freeze_router=args.freeze_router, grow_residual=args.grow_residual, grow_feed_forward=args.grow_feed_forward,
-                grow_expansion=args.grow_expansion,
+                grow_expansion=args.grow_expansion, grow_depth=args.grow_depth,
+                preserve_router_charge=args.preserve_router_charge,
             )
+        if args.tag_read_initial_gain is not None:
+            with torch.no_grad():
+                model.prediction_memory.read_inhibition.gain.fill_(args.tag_read_initial_gain)
         model = model.to(device)
         teacher = None
         teacher_details = {}
@@ -494,6 +550,9 @@ def main():
         if pulse_counts is not None:
             pulse_counts.clear()
         forward_options = {} if pulse_counts is None else {"memory_pulses": pulse_counts}
+        if args.bank_read_rank_weight:
+            bank_read_losses = []
+            forward_options["bank_read_losses"] = bank_read_losses
         if args.code_loss_weight:
             counts, predicted, observed = model(
                 inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
@@ -516,6 +575,9 @@ def main():
             loss, language_loss, teacher_fraction = guided_language_loss(logits, targets, guidance, args.teacher_weight)
         if args.code_loss_weight:
             loss = loss + args.code_loss_weight * code_loss
+        if args.bank_read_rank_weight:
+            (bank_read_loss,) = bank_read_losses
+            loss = loss + args.bank_read_rank_weight * bank_read_loss
         if pulse_counts is not None:
             pulses = torch.stack(pulse_counts).sum() / inputs.numel()
             gap = pulses / args.pulse_budget - 1.0
@@ -533,6 +595,7 @@ def main():
                               **({"train_pulses_per_byte": pulses.item(), "val_pulses_per_byte": metrics["pulses_per_byte"],
                                   "spike_price": spike_price.item()} if pulse_counts is not None else {}),
                               **({"teacher_selected_fraction": teacher_fraction.item()} if teacher is not None else {}),
+                              **({"bank_read_rank_loss": bank_read_loss.item()} if args.bank_read_rank_weight else {}),
                               **({"code_loss": code_loss.item()} if args.code_loss_weight else {})))
             activity = f" pulses/byte={metrics['pulses_per_byte']:.0f}" if pulse_counts is not None else ""
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "

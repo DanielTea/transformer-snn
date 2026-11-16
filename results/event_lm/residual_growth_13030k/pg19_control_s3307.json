@@ -1,0 +1,701 @@
+{
+  "dataset": "PG-19",
+  "manifest": "results/event_lm/correction_pg19_full_book_manifest.json",
+  "manifest_sha256": "d6052a884dc6199397fcd72cf53d7ff399e2a33728d9a2d2b72b40bde110f847",
+  "calibration": {
+    "manifest": "results/event_lm/correction_pg19_validation_manifest.json",
+    "manifest_sha256": "ae131151cd70a4d5d17603eca2d45ab3e14393ba653e90c8bccb2cab84b40296",
+    "temperatures": [
+      0.8,
+      1.0,
+      1.15,
+      1.25,
+      1.4,
+      1.5,
+      1.65,
+      1.8,
+      2.0,
+      2.25
+    ]
+  },
+  "split": "test",
+  "protocol": "causal_warmed_windows",
+  "device": "mps",
+  "context_bytes": 8192,
+  "window_stride_bytes": 8192,
+  "unscored_history_bytes": 256,
+  "batch_size": 8,
+  "unscored_leading_bytes_per_book": 1,
+  "target_bytes": 8404368,
+  "models": [
+    {
+      "run_name": "event_correction_code_s3307_scale_13030k_residual_control",
+      "checkpoint": "checkpoints/residual-13030k-study/control_s3307.pt",
+      "parameters": 6514176,
+      "streaming_tensor_bytes": 19536,
+      "scoring": "normalized exponential of scaled output",
+      "temperature": 1.25,
+      "continuous_correction_state": true,
+      "continuous_local_trace_state": true,
+      "training_context_bytes": 512,
+      "target_bytes": 8404368,
+      "nll_nats": 16382764.64742038,
+      "bpb": 2.812267777051696,
+      "raw_bpb": 2.9073832824115584,
+      "argmax_accuracy": 0.4993188066015196,
+      "prefix_age": {
+        "unseen": {
+          "target_bytes": 4271350,
+          "nll_nats": 8400818.166238012,
+          "bpb": 2.8374679452260985
+        },
+        "1-31": {
+          "target_bytes": 29237,
+          "nll_nats": 49761.545964799356,
+          "bpb": 2.455475445168254
+        },
+        "32-127": {
+          "target_bytes": 83787,
+          "nll_nats": 166766.98636052432,
+          "bpb": 2.871494434773006
+        },
+        "128-511": {
+          "target_bytes": 185503,
+          "nll_nats": 379038.9296354074,
+          "bpb": 2.947863830174515
+        },
+        "512+": {
+          "target_bytes": 3834491,
+          "nll_nats": 7386379.019221638,
+          "bpb": 2.779063083250774
+        }
+      },
+      "books": [
+        {
+          "book_id": 15562,
+          "excerpt_file": "15562.txt",
+          "excerpt_sha256": "90eae481a404688312d407918b07e649643ce6c934a16ad31040614221673ca1",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 222300,
+          "target_bytes": 222299,
+          "nll_nats": 486282.38431327464,
+          "bpb": 3.1559169601321755,
+          "raw_nll_nats": 509536.76904296875,
+          "correct_bytes": 100949,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 142004,
+              "nll_nats": 303987.9860523357,
+              "bpb": 3.088377510263993
+            },
+            "1-31": {
+              "target_bytes": 214,
+              "nll_nats": 553.6813738979399,
+              "bpb": 3.732679310070775
+            },
+            "32-127": {
+              "target_bytes": 1263,
+              "nll_nats": 2876.3019029479474,
+              "bpb": 3.285531663881625
+            },
+            "128-511": {
+              "target_bytes": 4166,
+              "nll_nats": 9995.39199990686,
+              "bpb": 3.461426421029008
+            },
+            "512+": {
+              "target_bytes": 74652,
+              "nll_nats": 168869.0229841862,
+              "bpb": 3.2634959816086617
+            }
+          }
+        },
+        {
+          "book_id": 22424,
+          "excerpt_file": "22424.txt",
+          "excerpt_sha256": "a3475140ed4763614c11c4f2e486e468ae5620bf539877bf769e16710d808a0d",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 444287,
+          "target_bytes": 444286,
+          "nll_nats": 986852.0532847615,
+          "bpb": 3.204527181511496,
+          "raw_nll_nats": 1036627.677734375,
+          "correct_bytes": 202558,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 244183,
+              "nll_nats": 539081.3298984403,
+              "bpb": 3.1850291022729147
+            },
+            "1-31": {
+              "target_bytes": 1159,
+              "nll_nats": 2599.4212884176522,
+              "bpb": 3.235696464177176
+            },
+            "32-127": {
+              "target_bytes": 3464,
+              "nll_nats": 8194.865579304285,
+              "bpb": 3.4130173013897096
+            },
+            "128-511": {
+              "target_bytes": 10134,
+              "nll_nats": 23401.36172864167,
+              "bpb": 3.331461270570369
+            },
+            "512+": {
+              "target_bytes": 185346,
+              "nll_nats": 413575.0747899576,
+              "bpb": 3.2191830923502747
+            }
+          }
+        },
+        {
+          "book_id": 25773,
+          "excerpt_file": "25773.txt",
+          "excerpt_sha256": "02dedc58fe901826fe05a6864f377ec2d38993bd8c4e27429152e5e047dd52c4",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 488162,
+          "target_bytes": 488161,
+          "nll_nats": 950668.0881500151,
+          "bpb": 2.809573350401648,
+          "raw_nll_nats": 980335.1181640625,
+          "correct_bytes": 242668,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 302584,
+              "nll_nats": 607706.4115509135,
+              "bpb": 2.897493014372638
+            },
+            "1-31": {
+              "target_bytes": 1635,
+              "nll_nats": 3410.4488853346556,
+              "bpb": 3.0093196905673403
+            },
+            "32-127": {
+              "target_bytes": 4176,
+              "nll_nats": 8902.408919044305,
+              "bpb": 3.075541474969084
+            },
+            "128-511": {
+              "target_bytes": 8669,
+              "nll_nats": 18036.289981951006,
+              "bpb": 3.0015995054788336
+            },
+            "512+": {
+              "target_bytes": 171097,
+              "nll_nats": 312612.52881277166,
+              "bpb": 2.635958228595147
+            }
+          }
+        },
+        {
+          "book_id": 26183,
+          "excerpt_file": "26183.txt",
+          "excerpt_sha256": "b73ddfcfe10430b96635b021312cbe21eaa6227bf1614b39846d4234d9e12a66",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 475456,
+          "target_bytes": 475455,
+          "nll_nats": 943036.5236985176,
+          "bpb": 2.8614992294055566,
+          "raw_nll_nats": 967267.7862548828,
+          "correct_bytes": 235038,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 263375,
+              "nll_nats": 541120.4059098247,
+              "bpb": 2.964107170877748
+            },
+            "1-31": {
+              "target_bytes": 1024,
+              "nll_nats": 2212.5732344910502,
+              "bpb": 3.117254329105363
+            },
+            "32-127": {
+              "target_bytes": 9250,
+              "nll_nats": 19186.634115987457,
+              "bpb": 2.9924823665390385
+            },
+            "128-511": {
+              "target_bytes": 15511,
+              "nll_nats": 32447.34702379629,
+              "bpb": 3.017963164285615
+            },
+            "512+": {
+              "target_bytes": 186295,
+              "nll_nats": 348069.56341441814,
+              "bpb": 2.6955003248738163
+            }
+          }
+        },
+        {
+          "book_id": 26239,
+          "excerpt_file": "26239.txt",
+          "excerpt_sha256": "550798583dc17a1b7f7300591a6531d1f0a3440b6d530c331186814225a36344",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 354117,
+          "target_bytes": 354116,
+          "nll_nats": 724680.9640684053,
+          "bpb": 2.9524043903357136,
+          "raw_nll_nats": 752994.8798828125,
+          "correct_bytes": 167780,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 217907,
+              "nll_nats": 444998.19829187216,
+              "bpb": 2.946195826110256
+            },
+            "1-31": {
+              "target_bytes": 1055,
+              "nll_nats": 1201.3110050270334,
+              "bpb": 1.6427729189742537
+            },
+            "32-127": {
+              "target_bytes": 1359,
+              "nll_nats": 2812.5152193037793,
+              "bpb": 2.985726092210668
+            },
+            "128-511": {
+              "target_bytes": 3593,
+              "nll_nats": 7767.605894367211,
+              "bpb": 3.1189219324752173
+            },
+            "512+": {
+              "target_bytes": 130202,
+              "nll_nats": 267901.33365783514,
+              "bpb": 2.968463814040478
+            }
+          }
+        },
+        {
+          "book_id": 26493,
+          "excerpt_file": "26493.txt",
+          "excerpt_sha256": "f2088dc639475a627a830a819d2b4ade98e347a840a08980e0fdf35a7f836275",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 562729,
+          "target_bytes": 562728,
+          "nll_nats": 987698.1947714626,
+          "bpb": 2.532213231777645,
+          "raw_nll_nats": 1000901.71875,
+          "correct_bytes": 308323,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 282209,
+              "nll_nats": 502079.33016115706,
+              "bpb": 2.566705384152716
+            },
+            "1-31": {
+              "target_bytes": 2081,
+              "nll_nats": 3619.684831141494,
+              "bpb": 2.5094192001291873
+            },
+            "32-127": {
+              "target_bytes": 7814,
+              "nll_nats": 18057.467626353726,
+              "bpb": 3.3339415146600357
+            },
+            "128-511": {
+              "target_bytes": 17810,
+              "nll_nats": 37030.4675843725,
+              "bpb": 2.9996446909474295
+            },
+            "512+": {
+              "target_bytes": 252814,
+              "nll_nats": 426911.2445684378,
+              "bpb": 2.436189196162478
+            }
+          }
+        },
+        {
+          "book_id": 27454,
+          "excerpt_file": "27454.txt",
+          "excerpt_sha256": "0f5a3efba148e8435ae9acc4a34e570369d493d635413d56a3044b08d70f6d9a",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 404307,
+          "target_bytes": 404306,
+          "nll_nats": 890079.6467387751,
+          "bpb": 3.176093088765023,
+          "raw_nll_nats": 934451.373046875,
+          "correct_bytes": 186049,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 235803,
+              "nll_nats": 502247.2299911259,
+              "bpb": 3.0728599212411036
+            },
+            "1-31": {
+              "target_bytes": 2437,
+              "nll_nats": 3519.9018971519545,
+              "bpb": 2.0837689829449237
+            },
+            "32-127": {
+              "target_bytes": 3835,
+              "nll_nats": 8527.523276356515,
+              "bpb": 3.2079831921420467
+            },
+            "128-511": {
+              "target_bytes": 8017,
+              "nll_nats": 20209.621948906686,
+              "bpb": 3.6368119451076995
+            },
+            "512+": {
+              "target_bytes": 154214,
+              "nll_nats": 355575.36962523405,
+              "bpb": 3.326460778013574
+            }
+          }
+        },
+        {
+          "book_id": 28444,
+          "excerpt_file": "28444.txt",
+          "excerpt_sha256": "f7bd54971caf53bc3ca651cacbaaefae402812b56918f6c4b5dcaeb6a279864f",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 335975,
+          "target_bytes": 335974,
+          "nll_nats": 671944.2391240862,
+          "bpb": 2.88537393232282,
+          "raw_nll_nats": 696199.0043029785,
+          "correct_bytes": 164740,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 201633,
+              "nll_nats": 398411.74283492286,
+              "bpb": 2.8506576087241284
+            },
+            "1-31": {
+              "target_bytes": 3382,
+              "nll_nats": 4790.224235348403,
+              "bpb": 2.0434159518282873
+            },
+            "32-127": {
+              "target_bytes": 3592,
+              "nll_nats": 6766.58143930044,
+              "bpb": 2.7177376075306374
+            },
+            "128-511": {
+              "target_bytes": 6382,
+              "nll_nats": 13564.226575168315,
+              "bpb": 3.066286808757383
+            },
+            "512+": {
+              "target_bytes": 120985,
+              "nll_nats": 248411.4640393462,
+              "bpb": 2.9622018206350527
+            }
+          }
+        },
+        {
+          "book_id": 28988,
+          "excerpt_file": "28988.txt",
+          "excerpt_sha256": "5ba1eb22b96320155afd942871f76b1f040d4918d9871a1d4b854176c7015567",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 737008,
+          "target_bytes": 737007,
+          "nll_nats": 1403499.4825968575,
+          "bpb": 2.7473575467162625,
+          "raw_nll_nats": 1451877.873046875,
+          "correct_bytes": 369904,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 355743,
+              "nll_nats": 675600.8799098427,
+              "bpb": 2.7398600648955855
+            },
+            "1-31": {
+              "target_bytes": 1120,
+              "nll_nats": 2677.352042349521,
+              "bpb": 3.4487522448317787
+            },
+            "32-127": {
+              "target_bytes": 5143,
+              "nll_nats": 9916.897600513417,
+              "bpb": 2.781850863166317
+            },
+            "128-511": {
+              "target_bytes": 14151,
+              "nll_nats": 28216.287847200874,
+              "bpb": 2.8766517242210603
+            },
+            "512+": {
+              "target_bytes": 360850,
+              "nll_nats": 687088.0651969509,
+              "bpb": 2.7470099606862517
+            }
+          }
+        },
+        {
+          "book_id": 29973,
+          "excerpt_file": "29973.txt",
+          "excerpt_sha256": "349ac4532773414f8da1723d38f09ffad5911018fb380365022e6e76e48abf46",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 168905,
+          "target_bytes": 168904,
+          "nll_nats": 295023.50387497153,
+          "bpb": 2.519945921861574,
+          "raw_nll_nats": 300346.1611328125,
+          "correct_bytes": 92886,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 106949,
+              "nll_nats": 190458.775999418,
+              "bpb": 2.569205243883929
+            },
+            "1-31": {
+              "target_bytes": 667,
+              "nll_nats": 1726.2665927382186,
+              "bpb": 3.7338474551659906
+            },
+            "32-127": {
+              "target_bytes": 2201,
+              "nll_nats": 4630.661026475485,
+              "bpb": 3.0352711035592823
+            },
+            "128-511": {
+              "target_bytes": 5265,
+              "nll_nats": 9479.425118635409,
+              "bpb": 2.5975155952770326
+            },
+            "512+": {
+              "target_bytes": 53822,
+              "nll_nats": 88728.37513770442,
+              "bpb": 2.378358046845189
+            }
+          }
+        },
+        {
+          "book_id": 30312,
+          "excerpt_file": "30312.txt",
+          "excerpt_sha256": "4d9c0b401a9fd85b169a744d76c9e88e1d2a4b5d9a690c40fa2bf98164823032",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 2502293,
+          "target_bytes": 2502292,
+          "nll_nats": 4937653.54044879,
+          "bpb": 2.8468013630836464,
+          "raw_nll_nats": 5120362.3994140625,
+          "correct_bytes": 1221990,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 985091,
+              "nll_nats": 1952781.6639399957,
+              "bpb": 2.859906772577488
+            },
+            "1-31": {
+              "target_bytes": 6136,
+              "nll_nats": 10838.636561847758,
+              "bpb": 2.5483779689986252
+            },
+            "32-127": {
+              "target_bytes": 17219,
+              "nll_nats": 31669.256439301185,
+              "bpb": 2.6534107215065155
+            },
+            "128-511": {
+              "target_bytes": 44057,
+              "nll_nats": 90727.70622098725,
+              "bpb": 2.9709787737759963
+            },
+            "512+": {
+              "target_bytes": 1449789,
+              "nll_nats": 2851636.277286659,
+              "bpb": 2.8376829425940797
+            }
+          }
+        },
+        {
+          "book_id": 30752,
+          "excerpt_file": "30752.txt",
+          "excerpt_sha256": "14f951b46330ff912bf29fe4888d668fc4693cd05b9d87f0c2fd0d985f3c29de",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 171844,
+          "target_bytes": 171843,
+          "nll_nats": 303323.5892754358,
+          "bpb": 2.5465304844090944,
+          "raw_nll_nats": 310380.685546875,
+          "correct_bytes": 93254,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 110651,
+              "nll_nats": 200028.77037463617,
+              "bpb": 2.608024464800181
+            },
+            "1-31": {
+              "target_bytes": 242,
+              "nll_nats": 650.5437688622624,
+              "bpb": 3.878249046358686
+            },
+            "32-127": {
+              "target_bytes": 1908,
+              "nll_nats": 3859.557622231543,
+              "bpb": 2.9183252838672153
+            },
+            "128-511": {
+              "target_bytes": 4451,
+              "nll_nats": 8507.190455273725,
+              "bpb": 2.757421137209914
+            },
+            "512+": {
+              "target_bytes": 54591,
+              "nll_nats": 90277.52705443208,
+              "bpb": 2.3857951051482553
+            }
+          }
+        },
+        {
+          "book_id": 30754,
+          "excerpt_file": "30754.txt",
+          "excerpt_sha256": "f01af5df32ed5c8c4f5e99121f85d25667d45579da31856e9d572fd09810dd50",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 916394,
+          "target_bytes": 916393,
+          "nll_nats": 1586016.89370937,
+          "bpb": 2.4968967542534983,
+          "raw_nll_nats": 1618291.1669921875,
+          "correct_bytes": 497362,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 427335,
+              "nll_nats": 765778.500011941,
+              "bpb": 2.5852898648288023
+            },
+            "1-31": {
+              "target_bytes": 4695,
+              "nll_nats": 5676.886664757505,
+              "bpb": 1.7444124044588583
+            },
+            "32-127": {
+              "target_bytes": 12932,
+              "nll_nats": 23246.849508340936,
+              "bpb": 2.5934205460853317
+            },
+            "128-511": {
+              "target_bytes": 26365,
+              "nll_nats": 46777.86853006249,
+              "bpb": 2.559688941842483
+            },
+            "512+": {
+              "target_bytes": 445066,
+              "nll_nats": 744536.788994268,
+              "bpb": 2.413438755693365
+            }
+          }
+        },
+        {
+          "book_id": 30909,
+          "excerpt_file": "30909.txt",
+          "excerpt_sha256": "1eebeea3739f55afd5d47e989fca2657022e72829abcab070af599cefa62dc92",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 190582,
+          "target_bytes": 190581,
+          "nll_nats": 365299.3407859965,
+          "bpb": 2.765310011973726,
+          "raw_nll_nats": 377483.53759765625,
+          "correct_bytes": 100648,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 123354,
+              "nll_nats": 242573.8203362301,
+              "bpb": 2.8370385042120203
+            },
+            "1-31": {
+              "target_bytes": 1424,
+              "nll_nats": 3230.1806424609385,
+              "bpb": 3.2725881980715745
+            },
+            "32-127": {
+              "target_bytes": 6201,
+              "nll_nats": 10115.915866627358,
+              "bpb": 2.3535206668010438
+            },
+            "128-511": {
+              "target_bytes": 8132,
+              "nll_nats": 13725.855913543142,
+              "bpb": 2.4350989004457877
+            },
+            "512+": {
+              "target_bytes": 51470,
+              "nll_nats": 95653.56802713498,
+              "bpb": 2.6811526760459055
+            }
+          }
+        },
+        {
+          "book_id": 30981,
+          "excerpt_file": "30981.txt",
+          "excerpt_sha256": "c77512286586b2c9367f8ad0e493e947c42f03fb5cb4d20f84db78c1eaac4dfe",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 153798,
+          "target_bytes": 153797,
+          "nll_nats": 302987.91179362265,
+          "bpb": 2.842182603002413,
+          "raw_nll_nats": 312509.6376953125,
+          "correct_bytes": 74535,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 112941,
+              "nll_nats": 223501.6115045813,
+              "bpb": 2.8549832793082333
+            },
+            "1-31": {
+              "target_bytes": 615,
+              "nll_nats": 1024.3450863994658,
+              "bpb": 2.4029554086300586
+            },
+            "32-127": {
+              "target_bytes": 987,
+              "nll_nats": 2016.237926453352,
+              "bpb": 2.947129136521274
+            },
+            "128-511": {
+              "target_bytes": 2690,
+              "nll_nats": 5628.944808620028,
+              "bpb": 3.0189036285627475
+            },
+            "512+": {
+              "target_bytes": 36564,
+              "nll_nats": 70816.77246756852,
+              "bpb": 2.794196653832272
+            }
+          }
+        },
+        {
+          "book_id": 31065,
+          "excerpt_file": "31065.txt",
+          "excerpt_sha256": "9d8228e48a41bef67408a097a3598588325bc70d5e2f6b00c96372783029d05f",
+          "source_start_raw_byte": 0,
+          "excerpt_bytes_used": 276227,
+          "target_bytes": 276226,
+          "nll_nats": 547718.2907860386,
+          "bpb": 2.860666490197147,
+          "raw_nll_nats": 567290.8095703125,
+          "correct_bytes": 137775,
+          "prefix_age": {
+            "unseen": {
+              "target_bytes": 159588,
+              "nll_nats": 310461.5094707748,
+              "bpb": 2.8066100214326184
+            },
+            "1-31": {
+              "target_bytes": 1351,
+              "nll_nats": 2030.0878545735031,
+              "bpb": 2.1678739306899395
+            },
+            "32-127": {
+              "target_bytes": 2443,
+              "nll_nats": 5987.312291982584,
+              "bpb": 3.535761666760871
+            },
+            "128-511": {
+              "target_bytes": 6110,
+              "nll_nats": 13523.338003973942,
+              "bpb": 3.1931346439604678
+            },
+            "512+": {
+              "target_bytes": 106734,
+              "nll_nats": 215716.0431647338,
+              "bpb": 2.9157762822900954
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

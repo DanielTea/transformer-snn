@@ -60,7 +60,7 @@ holds the additional seeds, and `delay_filter` holds the paired
 warm-start experiment. Their checkpoint catalogs match the paths in
 the [v2 release manifest](../models/spiking-byte-lm-v2/manifest.json).
 
-The [v5 handoff](../docs/HANDOFF.md) links the native audits,
+The [research handoff](../docs/HANDOFF.md) links the native audits,
 full-corpus scores, and exact training records.
 
 | Study | Files |
@@ -76,13 +76,20 @@ full-corpus scores, and exact training records.
 | [Delayed write confirmation](event_lm/trace_write_confirm) | Warm checks, both held-out scores, write ages and the learned-interval ablation |
 | [Redistribution of inhibition](event_lm/inhibition_redistribution) | Warm-start checks, both held-out corpora, native transfer pulses and the zero-transfer intervention |
 | [Frozen teacher guidance](event_lm/teacher_guidance) | Student training metadata, teacher digest, held-out scores, and native audits |
-| [13.03M residual growth](event_lm/residual_growth_13030k) | Warm-start parity for widened SNN and Transformer, plus the Metal training smoke |
+| [13.03M residual growth](event_lm/residual_growth_13030k) | Warm starts, matched held-out results, original-width control and added-neuron intervention |
+| [6.51M Transformer at 72.09M targets](event_lm/scale_6510k_short_control) | Continuation control for the width and circuit comparisons |
+| [Tag read competition](event_lm/tag_read_competition) | Zero-start, active-start and ranked-read training arms, gain sweep on fixed weights, and native integer audits |
+| [Late steering](event_lm/late_steering) | Warm identity, held-out scores, native feedback pulses, and zero-gain intervention |
+| [Finer router charge at fixed width](event_lm/finer_router_charge) | Warm-start parity, full-corpus scores, eight-bit native pulse audit, and six-bit intervention |
+| [Depth growth with signed residual corrections](event_lm/depth_growth) | Six matched endpoints at 81.92M targets, both held-out corpora, warm starts, native parity, interventions and CPU timing |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
-exposure, geometry, and seed. The v5 archive combines the checkpoint
-catalogs `event_lm/continuation_checkpoints.sha256`,
-`event_lm/v4_checkpoints.sha256`, and `event_lm/v5_checkpoints.sha256`.
-[Archive manifest](../models/spiking-byte-lm-v5/manifest.json)
+exposure, geometry, and seed. The v6 archive uses
+`event_lm/v6_checkpoints.sha256` for the new studies and their
+parent chains. Earlier catalogs remain available with the prior
+releases.
+[v6 archive manifest](../models/spiking-byte-lm-v6/manifest.json) ·
+[v5 archive manifest](../models/spiking-byte-lm-v5/manifest.json)
 
 Regenerate the [leaderboards and current figures](../docs/LEADERBOARD.md)
 with `python experiments/plot_event_lm_study.py` and

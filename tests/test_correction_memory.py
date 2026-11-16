@@ -3,11 +3,42 @@ from dataclasses import replace
 import pytest
 import torch
 
-from snnformer.correction_memory import _interval_scan, _write_credit_scan, correction_reads, correction_step
+from snnformer.correction_memory import CorrectionState, _interval_scan, _write_credit_scan, correction_reads, correction_step
 from snnformer.event_lm import (
     EventLM, EventLMConfig, _DelayCorrection, _DelayFilter, _DelayState, _IntegrateFire, _OpponentSteering,
     _ResidualMembraneFire, _SpikeCorrection, _SpikeTrace, _SpreadCoincidence, _steer_packet,
 )
+
+
+def test_depth_growth_preserves_counts_and_active_residuals_match_ordinary_firing():
+    torch.manual_seed(711)
+    prior = EventLMConfig(dim=32, hidden=16, depth=2, route="steered_correction_code", carry=False,
+                          compact_delays=True, local_trace=True, activity_inhibition=True, resolution=4)
+    source = EventLM(prior)
+    parent = source.to_integer()
+    cfg = replace(prior, depth=4, residual_correction_start=2)
+    grown = EventLM(cfg).eval()
+    grown.initialize_deeper(prior, source.state_dict())
+    tokens = torch.randint(256, (2, 23))
+    torch.testing.assert_close(grown.to_integer()(tokens), parent(tokens), rtol=0, atol=0)
+    with torch.no_grad():
+        for block in grown.blocks[prior.depth:]:
+            block.expand.weight.normal_(std=0.25)
+    ordinary = EventLM(replace(cfg, residual_correction_start=None)).eval()
+    ordinary.load_state_dict(grown.state_dict())
+    native = grown.to_integer()
+    expected = ordinary.to_integer()(tokens)
+    torch.testing.assert_close(native(tokens), expected, rtol=0, atol=0)
+    steps, state = [], None
+    for byte in tokens.unbind(1):
+        counts, state = native.step(byte, state)
+        steps.append(counts)
+    torch.testing.assert_close(torch.stack(steps, dim=1), expected, rtol=0, atol=0)
+    chunks, state = [], None
+    for part in tokens.split(7, dim=1):
+        counts, state = native.forward_chunk(part, state)
+        chunks.append(counts)
+    torch.testing.assert_close(torch.cat(chunks, dim=1), expected, rtol=0, atol=0)
 
 
 def test_correction_moves_only_addressed_cells_to_nearest_consistent_value():
@@ -35,6 +66,129 @@ def test_bank_write_credit_ignores_an_interval_that_just_touches_charge():
     assert state.charge.item() == 3
     reads.sum().backward()
     assert targets.grad.flatten().tolist() == [2, 0, 0]
+
+
+def test_tag_inhibition_reroutes_reads_of_pre_write_charge_and_preserves_writes():
+    bank = _SpikeCorrection(8, 2, 1, 3, 1, True, forecast=True, key_channels=1,
+                            match_key=True, tag_read_competition=True).eval()
+    drive = torch.tensor([[[5, 4, 0]]], dtype=torch.int32)
+    cells = torch.tensor([[[[-2, 6], [2, -5], [2, 7]]]], dtype=torch.int32)
+    forecast = torch.tensor([[[2, 0]]], dtype=torch.int32)
+    tolerance = torch.zeros((1, 1, 1), dtype=torch.int32)
+    bank.read_inhibition.freeze_integer()
+    address, choose = bank._addresses(drive, forecast, tolerance)
+    torch.testing.assert_close(choose(cells), address)
+    bank.read_inhibition.gain.fill_(64)
+
+    stats = {}
+    address, choose = bank._addresses(drive, forecast, tolerance, stats)
+    previous = torch.tensor([[[0, 1, 0]]], dtype=torch.int32)
+    state = CorrectionState(cells.clone(), previous_address=previous)
+    read, state = correction_step(address, forecast, tolerance, 8, state, bind_previous=True, select_read=choose)
+    assert address.flatten().tolist() == [1, 0, 0]
+    assert read.flatten().tolist() == [2, -5]
+    assert state.charge[0, 0, 1].tolist() == [2, 0]
+    assert stats["rerouted_read_heads"].item() == 1
+    assert stats["bank_read_inhibition_spikes"].item() == 4
+
+    _, choose = bank._addresses(torch.tensor([[[1, 0, 0]]], dtype=torch.int32), forecast, tolerance)
+    assert choose(cells).flatten().tolist() == [1, 0, 0]
+
+
+@pytest.mark.parametrize("phase_address", (False, True))
+def test_tag_read_competition_is_silent_at_initialization_and_matches_integer_streams(phase_address):
+    torch.manual_seed(711)
+    cfg = EventLMConfig(dim=32, hidden=16, route="steered_correction_code", carry=False, memory_slots=4,
+                        memory_width=8, forecast_key_channels=1, match_forecast_key=True, resolution=4,
+                        compact_delays=True, local_trace=True, tag_phase_address=phase_address)
+    parent = EventLM(cfg).eval()
+    candidate = EventLM(replace(cfg, tag_read_competition=True)).eval()
+    missing, unexpected = candidate.load_state_dict(parent.state_dict(), strict=False)
+    assert missing == ["prediction_memory.read_inhibition.gain"] and not unexpected
+    tokens = torch.randint(256, (2, 23))
+    torch.testing.assert_close(parent(tokens), candidate(tokens), rtol=0, atol=0)
+
+    with torch.no_grad():
+        candidate.prediction_memory.read_inhibition.gain.fill_(0.75)
+    native = candidate.to_integer()
+    expected = native(tokens)
+    torch.testing.assert_close(candidate(tokens), expected, rtol=0, atol=0, check_dtype=False)
+
+    steps, state = [], None
+    for byte in tokens.unbind(1):
+        output, state = native.step(byte, state)
+        steps.append(output)
+    torch.testing.assert_close(torch.stack(steps, 1), expected)
+
+    chunks, state = [], None
+    for part in tokens.split(7, dim=1):
+        output, state = native.forward_chunk(part, state)
+        chunks.append(output)
+    torch.testing.assert_close(torch.cat(chunks, 1), expected)
+
+
+def test_training_read_ranking_observes_the_same_spike_forward_pass():
+    torch.manual_seed(711)
+    cfg = EventLMConfig(dim=32, hidden=16, route="steered_correction_code", carry=False, memory_slots=4,
+                        memory_width=8, forecast_key_channels=1, match_forecast_key=True, resolution=4,
+                        tag_read_competition=True)
+    model = EventLM(cfg).train()
+    tokens = torch.randint(256, (2, 23))
+    with torch.no_grad():
+        model.prediction_memory.read_inhibition.gain.fill_(0.25)
+    losses = []
+    expected = model(tokens)
+    torch.testing.assert_close(model(tokens, bank_read_losses=losses), expected, rtol=0, atol=0)
+    (loss,) = losses
+    assert loss.isfinite() and loss.requires_grad
+    loss.backward()
+    assert model.prediction_memory.read_inhibition.gain.grad.isfinite().all()
+
+
+def test_late_steering_redirects_only_bypass_pulses_on_both_sign_rails():
+    cfg = EventLMConfig(dim=8, hidden=4, depth=1, route="steered", carry=False, late_steering=True)
+    with torch.no_grad():
+        model = EventLM(cfg).eval()
+        block = model.blocks[0]
+        block.expand.weight.zero_()
+        block.project.weight.zero_()
+        block.expand.weight[4, 0] = 1
+        block.project.weight[0, 0] = 1
+    block = model.to_integer().blocks[0]
+    current = torch.zeros((2, 8), dtype=torch.int32)
+    current[:, 0] = 3 * block.emit.threshold
+    present = torch.tensor([[5, 0, 0, 0], [-5, 0, 0, 0]], dtype=torch.int32)
+    steering = torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0]], dtype=torch.int32)
+    first = block.emit(current)
+    torch.testing.assert_close(block._apply_late_steering(current, first, present, steering, None, None), first)
+    block.late_steering.gain.fill_(64)
+    output = block._apply_late_steering(current, first, present, steering, None, None)
+    assert output[:, 0].tolist() == [6, 0]
+    assert output[:, 1:].count_nonzero().item() == 0
+
+
+def test_late_steering_preserves_native_step_and_chunk_semantics():
+    torch.manual_seed(711)
+    cfg = EventLMConfig(dim=32, hidden=16, depth=3, route="steered_correction_code", carry=False,
+                        compact_delays=True, local_trace=True, activity_inhibition=True, late_steering=True)
+    model = EventLM(cfg).eval()
+    with torch.no_grad():
+        for block in model.blocks:
+            block.late_steering.gain.fill_(0.75)
+    native = model.to_integer()
+    tokens = torch.randint(256, (1, 23))
+    expected = native(tokens)
+    torch.testing.assert_close(model(tokens), expected, rtol=0, atol=0, check_dtype=False)
+    steps, state = [], None
+    for token in tokens.unbind(1):
+        counts, state = native.step(token, state)
+        steps.append(counts)
+    torch.testing.assert_close(torch.stack(steps, dim=1), expected)
+    chunks, state = [], None
+    for part in tokens.split(9, dim=1):
+        counts, state = native.forward_chunk(part, state)
+        chunks.append(counts)
+    torch.testing.assert_close(torch.cat(chunks, dim=1), expected)
 
 
 def test_read_ablation_uses_age_of_effective_change_and_keeps_state_intact():

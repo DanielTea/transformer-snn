@@ -87,7 +87,7 @@ def interval_spikes(charge, lower, upper):
 
 def correction_reads(address, target, tolerance, limit, state=None, *, bind_previous=False,
                      hide_age=None, stats=None, key_channels=0, shuffle_keys=False, pulse_counts=None,
-                     write_credit=False):
+                     write_credit=False, select_read=None):
     """Read before writing, moving each addressed cell by the least signed error."""
     prior_address = None
     if bind_previous:
@@ -105,7 +105,12 @@ def correction_reads(address, target, tolerance, limit, state=None, *, bind_prev
         pulse_counts.append((after - before).abs().sum())
     position = state.position + address.shape[1]
     last_change = state.last_change
-    selected = address.unsqueeze(-1)
+    readable = before
+    if shuffle_keys:
+        # Permute tags within each head without changing writes or payloads.
+        keys = before[..., :key_channels].roll(1, dims=-2)
+        readable = torch.cat((keys, before[..., key_channels:]), dim=-1)
+    selected = (address if select_read is None else select_read(readable)).unsqueeze(-1)
     ages = hide_age if isinstance(hide_age, tuple) else None
 
     if hide_age is not None or stats is not None or last_change is not None:
@@ -129,14 +134,8 @@ def correction_reads(address, target, tolerance, limit, state=None, *, bind_prev
             if key_channels:
                 stats["key_write_spikes"] = write_spikes[..., :key_channels].sum(dtype=torch.int64)
 
-    if shuffle_keys:
-        # Keep the values and the write trajectory intact while permuting
-        # the attached forecast keys within each head.
-        keys = before[..., :key_channels].roll(1, dims=-2)
-        before = torch.cat((keys, before[..., key_channels:]), dim=-1)
-
     def read_at(age):
-        charge = before
+        charge = readable
         if age is not None:
             hidden = elapsed >= age
             if key_channels:
@@ -149,14 +148,15 @@ def correction_reads(address, target, tolerance, limit, state=None, *, bind_prev
     return read, CorrectionState(after[:, -1].clone(), last_change, position, prior_address)
 
 
-def correction_step(address, target, tolerance, limit, state, *, bind_previous=False):
+def correction_step(address, target, tolerance, limit, state, *, bind_previous=False, select_read=None):
     write = address
     if bind_previous:
         write = torch.zeros_like(address) if state is None else state.previous_address
     lower, upper = _bounds(write, target, tolerance, limit)
     if state is None:
         state = CorrectionState(torch.zeros_like(lower))
-    read = (address.unsqueeze(-1) * state.charge).sum(-2, dtype=state.charge.dtype)
+    selected = address if select_read is None else select_read(state.charge)
+    read = (selected.unsqueeze(-1) * state.charge).sum(-2, dtype=state.charge.dtype)
     correction = interval_spikes(state.charge, lower, upper)
     if state.last_change is not None:
         state.last_change.masked_fill_(correction != 0, state.position + 1)
