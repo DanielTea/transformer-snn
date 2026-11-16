@@ -22,6 +22,19 @@ spikes $v_t$ widen the old charge's permitted interval. Only the
 positive steering spikes admit a read, so an inactive read can coexist
 with an undisturbed memory cell.
 
+```mermaid
+flowchart LR
+    Spikes["Incoming spikes"] --> U["Shared signed steering current"]
+    U --> Plus["Positive steering spikes"]
+    U --> Minus["Opposite current through learned synapse"]
+    Minus --> Protect["Write-protection spikes"]
+    Plus --> Read["Read coincidence with old charge"]
+    Plus --> Bounds["Allowed charge interval"]
+    Protect --> Bounds
+    Content["Current content spikes"] --> Bounds
+    Bounds --> Retain["Hold charge or emit correction spikes"]
+```
+
 $$
 r_t = \operatorname{sgn}(m_t)\min(|m_t|,s_t)
 \qquad
@@ -62,6 +75,37 @@ separate validation books select PG-19 temperatures. A gain-zeroing
 intervention measures the trained circuit's effect with the same
 other weights.
 
+## Results
+
+| Seed-711 continuation | enwik8 bits/byte | PG-19 bits/byte | Native pulses/byte |
+|---|---:|---:|---:|
+| Held-charge control | 1.98564 | 2.98490 | 307,730 |
+| Opponent write protection | 1.98533 | 2.97309 | 308,471 |
+
+The opponent circuit gained 0.01180 bits per byte on PG-19, with lower
+calibrated loss on 12 of 16 books. The raw PG-19 losses were 3.10338
+for the control and 3.09454 for opponent steering. The enwik8 change
+was 0.00031 bits per byte in this pair, and the final validation score
+was 0.00050 higher. Both arms use 21,320 bytes of streaming state.
+Native CPU inference matched MPS over 4,096 test bytes and preserved
+exact single-byte and chunked decoding.
+[Control enwik8](../results/event_lm/opponent_steering/enwik8_control_s711.json) ·
+[Opponent enwik8](../results/event_lm/opponent_steering/enwik8_opponent_s711.json) ·
+[Control PG-19](../results/event_lm/opponent_steering/pg19_control_s711.json) ·
+[Opponent PG-19](../results/event_lm/opponent_steering/pg19_opponent_s711.json) ·
+[Integer audit](../results/event_lm/opponent_steering/native_opponent_s711.json)
+
+Opponent steering raised the deepest block's fraction of read pulses
+from charge at least 32 bytes old from 11.69% to 13.18%, on the same
+validation bytes used in the original profile. The five blocks emitted
+about 68.5 write-protection spikes per input byte on that sample.
+Zeroing the trained gains raised loss by 0.00032 bits per byte on a
+separate 65,536-target validation probe. The measured circuit changes
+retention in a single continuation and adds a small PG-19 gain.
+[Control trace profile](../results/event_lm/opponent_steering/control_trace_profile.json) ·
+[Opponent trace profile](../results/event_lm/opponent_steering/opponent_trace_profile.json) ·
+[Zero-gain intervention](../results/event_lm/opponent_steering/probe_opponent_s711.json)
+
 ## Reproduce the native charge profile
 
 ```bash
@@ -72,3 +116,13 @@ python experiments/profile_charge_trace.py \
 
 Read ages are weighted by delivered pulses. The age is the number of
 bytes since the stored integer charge most recently changed.
+
+Replay the paired training records through the standard runner. Both
+use the bundled v2 parent and verify its checksum.
+
+```bash
+PYTORCH_ENABLE_MPS_FALLBACK=0 python experiments/replay_event_run.py \
+  results/event_lm/opponent_steering/event_correction_code_s711_opponent_warm_opponent.json \
+  --enwik8 data/enwik8 --device mps --parent-checkpoints models/spiking-byte-lm-v2 \
+  --output-dir checkpoints/replayed-opponent
+```
