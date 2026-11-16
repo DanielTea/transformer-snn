@@ -15,7 +15,7 @@ import torch
 from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
-from probe_event_state import added_residual_weights, muted_synapses
+from probe_event_state import added_residual_weights, added_residual_weights_by_stage, muted_synapses
 from snnformer.event_lm import EventLM, _route_packets, _steer_packet
 from train_event_lm import load_checkpoint, scoring_logits, training_exposure
 from train_lm import ENWIK8_SHA1, load_splits
@@ -78,6 +78,8 @@ def main():
     parser.add_argument("--batch-size", type=int, default=48)
     parser.add_argument("--profile-arrivals", action="store_true",
                         help="count selected and unmatched fixed-arrival pulses by age")
+    parser.add_argument("--ablate-residual-stages", action="store_true",
+                        help="mute each stage's projections into the added neurons independently")
     parser.add_argument("--width-gap", nargs=4, type=Path,
                         metavar=("WIDE_SNN", "WIDE_TRANSFORMER", "NARROW_SNN", "NARROW_TRANSFORMER"),
                         help="compare the paired SNN-to-Transformer gap at two widths")
@@ -119,11 +121,16 @@ def main():
         arrival = None
         muted = None
         silenced_residual = None
+        silenced_stages = {}
         if isinstance(model, EventLM):
             prior_width = (checkpoint.get("initialization") or {}).get("residual_width_before")
             if prior_width is not None:
                 with muted_synapses(added_residual_weights(model, prior_width)):
                     silenced_residual = score(model, windows, args.batch_size, device)
+                if args.ablate_residual_stages:
+                    for stage, weights in added_residual_weights_by_stage(model, prior_width).items():
+                        with muted_synapses(weights):
+                            silenced_stages[stage] = score(model, windows, args.batch_size, device)
             arrival = model.cfg.trace_arrival
             if arrival is not None:
                 with muted_synapses([block.arrival_project.weight for block in model.blocks]):
@@ -147,6 +154,13 @@ def main():
                 row.update(silenced_residual_bpb=float(silenced_residual[:, span].mean()),
                            silenced_residual_minus_intact_bpb=float(change.mean()),
                            silenced_residual_paired_95_bpb=paired_interval(change, resamples))
+            if silenced_stages:
+                row["residual_stage_ablation"] = {
+                    stage: {"bpb": float(stage_loss[:, span].mean()),
+                            "delta_bpb": float((stage_loss[:, span] - bpb).mean()),
+                            "paired_95_bpb": paired_interval(stage_loss[:, span] - bpb, resamples)}
+                    for stage, stage_loss in silenced_stages.items()
+                }
             ages.append(row)
         with path.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()

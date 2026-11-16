@@ -67,14 +67,23 @@ def score_without_synapses(model, window, chunk_size, weights):
         return score(model, window, chunk_size)
 
 
-def added_residual_weights(model, prior_width):
-    synapses = [model.input, *model.delayed_input, *(block.project for block in model.blocks)]
+def added_residual_weights_by_stage(model, prior_width):
+    stages = {"input": [model.input, *model.delayed_input], "ordinary_residual": [], "signed_correction": [], "recall": []}
     for block in model.blocks:
-        synapses.extend(synapse for synapse in (block.memory_residual, block.arrival_project) if synapse is not None)
+        group = stages["signed_correction" if block.residual_correction else "ordinary_residual"]
+        group.extend(synapse for synapse in (block.project, block.memory_residual, block.arrival_project)
+                     if synapse is not None)
     if model.prediction_memory is not None:
-        synapses.append(model.recall_synapse)
-    return [synapse.weight[:, prior_width:] if synapse.byte_input else synapse.weight[prior_width:]
-            for synapse in synapses]
+        stages["recall"].append(model.recall_synapse)
+    return {
+        name: [synapse.weight[:, prior_width:] if synapse.byte_input else synapse.weight[prior_width:]
+               for synapse in synapses]
+        for name, synapses in stages.items() if synapses
+    }
+
+
+def added_residual_weights(model, prior_width):
+    return [weight for weights in added_residual_weights_by_stage(model, prior_width).values() for weight in weights]
 
 
 @torch.inference_mode()

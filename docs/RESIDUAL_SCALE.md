@@ -127,6 +127,28 @@ added neurons affect enwik8 after each training recipe.
 [C4 mixture comparison](../results/event_lm/residual_scale/c4_mixture_cpu.json) ·
 [Paired enwik8 validation](../results/event_lm/residual_scale/mixture_effect_validation.json)
 
+## Where the wider neurons affect early prediction
+
+At predictions 17–32 on enwik8 validation, muting the added
+projections in the ordinary residual blocks lowers mixed-model
+loss by 0.00347 bpb. Muting the added projections in the signed
+correction blocks lowers it by 0.00243 bpb. The matched enwik8-only
+model loses 0.00467 and 0.00067 bpb under the same interventions.
+Both stages reverse direction between the training recipes. The
+joint ablation gives their combined effect at fixed weights.
+
+| Projections silenced | Mixed SNN loss change (bpb) | enwik8-only SNN loss change (bpb) |
+|---|---:|---:|
+| Ordinary blocks 1–7 | −0.00347 | +0.00467 |
+| Signed correction blocks 8–11 | −0.00243 | +0.00067 |
+| All added projections | −0.00679 | +0.00394 |
+
+The paired 95% intervals for these six changes exclude zero.
+The corresponding input-projection masks have zero measured
+effect on this sample, and the recall-projection changes are
+below 0.00002 bpb.
+[Paired per-stage records](../results/event_lm/residual_scale/residual_stage_validation.json)
+
 ## Paired SNN width validation
 
 The two mixture-trained SNNs reproduced the same hash of all
