@@ -167,9 +167,10 @@ def main():
     torch.testing.assert_close(parent_counts, grown_counts, rtol=0, atol=0)
     pulse_delta = grown_metrics["total_pulses"] - parent_metrics["total_pulses"]
     known_pulses = sum(grown_metrics.get("added_inhibition_pulses_by_block", []))
-    known_pulses += sum(grown_metrics.get("tap_release_pulses_by_block", []))
+    if args.trace_tap_read is not None:
+        known_pulses += sum(grown_metrics["tap_release_pulses_by_block"])
     if pulse_delta != known_pulses:
-        raise AssertionError("an added routing branch emitted at initialization")
+        raise AssertionError(f"expected {known_pulses} additional pulses at initialization, observed {pulse_delta}")
 
     generator = torch.Generator().manual_seed(711)
     inputs, labels = random_batch(train, 1, 512, generator)
