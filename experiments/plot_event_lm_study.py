@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from statistics import mean, stdev
 
+from package_event_lm import residual_scale_mixture
 from plot_byte_transfer import plot_transfer, read_transfer, transfer_tables
 from plot_dendrite import BLUE, GRAY, MUTED, ORANGE, RESULTS, TEXT, VIOLET, heading, plt, read_result, save, style
 
@@ -57,6 +58,9 @@ TRACE_READ_DRIVE = "event_lm/trace_read_drive"
 TRACE_ARRIVAL = "event_lm/trace_arrival"
 ARRIVAL_GROUP = "trace_arrival_121241k"
 ARRIVAL_TRANSFER = "event_lm/byte_transfer/trace_arrival_s9349.json"
+RESIDUAL_SCALE = "event_lm/residual_scale"
+RESIDUAL_SCALE_GROUP = "residual_scale_131072k"
+RESIDUAL_SCALE_CHECKPOINTS = "event_lm/residual_scale_checkpoints.sha256"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -178,6 +182,14 @@ TRACE_ARRIVAL_121241K = (
     ("Selected arrivals", TRACE_ARRIVAL, "selected_s9349", f"{TRACE_ARRIVAL}/native_selected_s9349.json", BLUE),
     ("Unmatched arrivals", TRACE_ARRIVAL, "unmatched_s9349", f"{TRACE_ARRIVAL}/native_unmatched_s9349.json", VIOLET),
     ("Full attention", TRACE_ARRIVAL, "transformer_s9349", None, ORANGE),
+)
+RESIDUAL_SCALE_ARMS = (
+    ("14.07M SNN", RESIDUAL_SCALE, "snn_s9631", f"{RESIDUAL_SCALE}/native_snn_s9631.json", BLUE),
+    ("25.79M SNN", RESIDUAL_SCALE, "wide-snn_s9631", f"{RESIDUAL_SCALE}/native_wide-snn_s9631.json", VIOLET),
+    ("25.79M SNN, enwik8 only", RESIDUAL_SCALE, "enwik8-snn_s9631",
+     f"{RESIDUAL_SCALE}/native_enwik8-snn_s9631.json", "#187b62"),
+    ("14.07M full attention", RESIDUAL_SCALE, "transformer_s9631", None, GRAY),
+    ("25.79M full attention", RESIDUAL_SCALE, "wide-transformer_s9631", None, ORANGE),
 )
 TRACE_READ_DRIVE_116326K = (
     ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
@@ -360,6 +372,24 @@ def read_comparison(definitions, *, seed, context, exposure, test_inputs=None):
 
 def build_research():
     groups = {}
+    if (RESULTS / RESIDUAL_SCALE_CHECKPOINTS).is_file():
+        rows = read_comparison(RESIDUAL_SCALE_ARMS, seed=9631, context=512, exposure=(121_241_600, 9_830_400))
+        mixture = residual_scale_mixture(RESULTS / row["training_record"] for row in rows)
+        narrow, wide, enwik8_only, _, _ = rows
+        enwik8 = [row["scores"]["enwik8"]["mean"] for row in rows]
+        narrow_gap, wide_gap = enwik8[0] - enwik8[3], enwik8[1] - enwik8[4]
+        if ([row["parameters"] for row in rows] != [14_066_688, 25_788_928, 25_788_928, 14_068_224, 25_790_976]
+                or any(row["state_bytes"] != 28_584 for row in (narrow, wide, enwik8_only))):
+            raise ValueError("the residual scale study must use the two audited widths and stream budget")
+        groups[RESIDUAL_SCALE_GROUP] = {
+            "title": "Residual width on expanded training data", "seeds": [9631], "rows": rows,
+            "training_context_bytes": 512, "training_summary": "131,072,000 training targets · seed 9631",
+            "parent_training_targets": 121_241_600, "additional_training_targets": 9_830_400,
+            "training_mixture": mixture, "transfer_record": f"event_lm/byte_transfer/{RESIDUAL_SCALE_GROUP}.json",
+            "early_context_records": {split: f"{RESIDUAL_SCALE}/early_context_{split}.json" for split in ("val", "test")},
+            "enwik8_width_gap": {"narrow_bpb": narrow_gap, "wide_bpb": wide_gap,
+                                 "change_bpb": wide_gap - narrow_gap, "mixture_minus_enwik8_bpb": enwik8[1] - enwik8[2]},
+        }
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
         (ARRIVAL_GROUP, "Scheduled spike arrivals", TRACE_ARRIVAL_121241K, 9349, 512, (116_326_400, 4_915_200)),
@@ -496,7 +526,7 @@ def write_leaderboards(data, depth, research, transfers):
     latest = depth["groups"]["depth"]
     paragraphs = [
         "# Spiking byte model leaderboards",
-        "Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 training exposure and scores "
+        "Lower bits per byte rank higher. Every row in a comparison has the same number of training targets and scores "
         "4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books.",
         "State is persistent tensor storage for one stream. Full attention reports FP32 "
         "key and value storage at the context length in each comparison. Pulse counts use "
@@ -505,6 +535,12 @@ def write_leaderboards(data, depth, research, transfers):
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
     ]
     study_figures = {
+        RESIDUAL_SCALE_GROUP: (
+            "![Held-out loss at both residual widths](../results/figures/event_lm_residual_scale.png)",
+            "![Change in the enwik8 gap during the first 32 predictions]"
+            "(../results/figures/event_lm_residual_scale_early_context.png)",
+            "[Width experiment, corpus preparation and replay](RESIDUAL_SCALE.md)",
+        ),
         ARRIVAL_GROUP: (
             "![Held-out enwik8 and PG-19 loss for the arrival study](../results/figures/event_lm_trace_arrival.png)",
             "![Paired enwik8 loss gap during the first 32 predictions after reset]"
@@ -552,6 +588,14 @@ def write_leaderboards(data, depth, research, transfers):
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
         paragraphs.extend(study_figures.get(name, ()))
+        if name == RESIDUAL_SCALE_GROUP:
+            gap = group["enwik8_width_gap"]
+            paragraphs.extend([
+                f"The enwik8 SNN minus Transformer gap is {gap['narrow_bpb']:+.5f} bpb at 14.07M and "
+                f"{gap['wide_bpb']:+.5f} bpb at 25.79M. The change is {gap['change_bpb']:+.5f} bpb.",
+                "The enwik8-only control uses the same number of targets and the wide SNN geometry. "
+                "The other four arms received identical windows from the new mixture.",
+            ])
         if name in transfers:
             transfer, labels, figure = transfers[name]
             corpus, screened, words = transfer_tables(transfer, labels)
@@ -611,7 +655,8 @@ def write_leaderboards(data, depth, research, transfers):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    table = markdown_table(research["groups"][ARRIVAL_GROUP]["rows"],
+    latest_group = research["groups"].get(RESIDUAL_SCALE_GROUP, research["groups"][ARRIVAL_GROUP])
+    table = markdown_table(latest_group["rows"],
                            include_ranks=False, include_raw_pg19=True)
     readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
 
@@ -1056,19 +1101,49 @@ def read_transfers(research):
     return reports
 
 
-def read_arrival_early_context(group, transfer):
-    catalog = (RESULTS / "event_lm/trace_arrival_checkpoints.sha256").read_text().splitlines()
+def read_early_context(group, transfer, *, checkpoint_catalogue, reference):
+    catalog = (RESULTS / checkpoint_catalogue).read_text().splitlines()
     checkpoints = dict(line.split("  ", 1)[::-1] for line in catalog)
     for model in transfer["models"]:
         if checkpoints[model["checkpoint"]] != model["checkpoint_sha256"]:
-            raise ValueError("the transfer record must score the catalogued arrival checkpoints")
+            raise ValueError("the transfer record must score the catalogued checkpoints")
     records = {split: read_result(path) for split, path in group["early_context_records"].items()}
     for split, record in records.items():
         run_labels = labels_for_runs(group, record)
-        if (record["split"] != split or run_labels[record["models"][0]["run_name"]][0] != "Full attention"
+        if (record["split"] != split or run_labels[record["models"][0]["run_name"]][0] != reference
                 or any(checkpoints[model["checkpoint"]] != model["sha256"] for model in record["models"])):
-            raise ValueError("the early-context record must score the catalogued arrival checkpoints")
+            raise ValueError("the early-context record must score the catalogued checkpoints")
     return records["test"], run_labels
+
+
+def plot_residual_scale(group, early, output):
+    narrow, wide, _, narrow_full, wide_full = group["rows"]
+    gap = group["enwik8_width_gap"]
+    pairs = (("SNN", VIOLET, narrow, wide), ("Full attention", ORANGE, narrow_full, wide_full))
+    plot_paired_change(pairs, output, title="Widening both byte models",
+                       subtitle="131.07M training targets · identical expanded mixture · seed 9631",
+                       ticks=("14.07M parameters", "25.79M parameters"),
+                       note=f"enwik8 gap change {gap['change_bpb']:+.5f} bpb. The SNN uses 28,584 B at both widths.",
+                       filename="event_lm_residual_scale.png")
+
+    rows = early["width_gap"]["ages"][:5]
+    values = [row["gap_change_bpb"] for row in rows]
+    intervals = [row["paired_95_bpb"] for row in rows]
+    lower = [max(0, gap - ci[0]) for gap, ci in zip(values, intervals, strict=True)]
+    upper = [max(0, ci[1] - gap) for gap, ci in zip(values, intervals, strict=True)]
+    fig, ax = plt.subplots(figsize=(9.4, 4.4))
+    fig.subplots_adjust(left=0.14, right=0.96, bottom=0.24, top=0.725)
+    heading(fig, "How width changes the enwik8 gap",
+            f"{early['target_bytes']:,} paired targets after a reset · seed 9631")
+    style(ax)
+    ax.axhline(0, color=MUTED, linewidth=0.9)
+    ax.errorbar(range(len(rows)), values, yerr=(lower, upper), color=VIOLET, linewidth=1.7, marker="o", capsize=4)
+    ax.set_xticks(range(len(rows)), [f"{lo}–{hi}" for lo, hi in (row["context_bytes"] for row in rows)])
+    ax.set_xlabel("Bytes observed", color=MUTED)
+    ax.set_ylabel("Wide gap minus narrow gap (bpb)", color=MUTED)
+    fig.text(0.035, 0.04, "Negative changes close the gap. Whiskers show 95% intervals from paired windows.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_residual_scale_early_context.png")
 
 
 def main():
@@ -1076,7 +1151,20 @@ def main():
     depth = build_depth()
     research = build_research()
     transfers = read_transfers(research)
-    early, run_labels = read_arrival_early_context(research["groups"][ARRIVAL_GROUP], transfers[ARRIVAL_GROUP][0])
+    early, run_labels = read_early_context(
+        research["groups"][ARRIVAL_GROUP], transfers[ARRIVAL_GROUP][0],
+        checkpoint_catalogue="event_lm/trace_arrival_checkpoints.sha256", reference="Full attention",
+    )
+    scale = research["groups"].get(RESIDUAL_SCALE_GROUP)
+    if scale:
+        scale_early, _ = read_early_context(
+            scale, transfers[RESIDUAL_SCALE_GROUP][0],
+            checkpoint_catalogue=RESIDUAL_SCALE_CHECKPOINTS, reference="25.79M full attention",
+        )
+        planned = ("wide-snn_s9631.pt", "wide-transformer_s9631.pt", "snn_s9631.pt", "transformer_s9631.pt")
+        keys = ("wide_snn", "wide_transformer", "narrow_snn", "narrow_transformer")
+        if tuple(Path(scale_early["width_gap"][key]).name for key in keys) != planned:
+            raise ValueError("the enwik8 width gap must use the four mixed training arms")
     summary = RESULTS / "event_lm/threshold_scale_leaderboard.json"
     summary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     summary = RESULTS / "event_lm/depth_inhibition_leaderboard.json"
@@ -1134,6 +1222,8 @@ def main():
                  subtitle="12.8–14.1M parameters · 121.24M enwik8 training targets · seed 9349",
                  filename="event_lm_trace_arrival.png", precision=5)
     plot_arrival_early_context(early, run_labels, output)
+    if scale:
+        plot_residual_scale(scale, scale_early, output)
     for transfer, labels, filename in transfers.values():
         plot_transfer(transfer, labels, output, filename)
     packed_rows = research["groups"]["packed_width_111411k"]["rows"]

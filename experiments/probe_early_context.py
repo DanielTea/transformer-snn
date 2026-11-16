@@ -77,10 +77,15 @@ def main():
     parser.add_argument("--batch-size", type=int, default=48)
     parser.add_argument("--profile-arrivals", action="store_true",
                         help="count selected and unmatched fixed-arrival pulses by age")
+    parser.add_argument("--width-gap", nargs=4, type=Path,
+                        metavar=("WIDE_SNN", "WIDE_TRANSFORMER", "NARROW_SNN", "NARROW_TRANSFORMER"),
+                        help="compare the paired SNN-to-Transformer gap at two widths")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
     if args.batch_size < 1:
         parser.error("batch size must be positive")
+    if args.width_gap and (len(set(args.width_gap)) != 4 or not set(args.width_gap) <= set(args.checkpoint)):
+        parser.error("--width-gap must list four distinct paths also supplied to --checkpoint")
     if args.json.exists():
         parser.error(f"{args.json} already exists")
 
@@ -153,6 +158,21 @@ def main():
                          "paired_95_bpb": paired_interval(difference, resamples)})
         comparisons.append({"reference": reference_path, "checkpoint": arm_path, "ages": ages})
 
+    width_gap = None
+    if args.width_gap:
+        by_path = dict([(str(args.checkpoint[0]), reference), *losses])
+        wide_snn, wide_full, narrow_snn, narrow_full = (by_path[str(path)] for path in args.width_gap)
+        wide, narrow = wide_snn - wide_full, narrow_snn - narrow_full
+        ages = []
+        for low, high in CONTEXT_BINS:
+            span = slice(low - 1, high)
+            change = wide[:, span] - narrow[:, span]
+            ages.append({"context_bytes": [low, high], "wide_gap_bpb": float(wide[:, span].mean()),
+                         "narrow_gap_bpb": float(narrow[:, span].mean()), "gap_change_bpb": float(change.mean()),
+                         "paired_95_bpb": paired_interval(change, resamples)})
+        keys = ("wide_snn", "wide_transformer", "narrow_snn", "narrow_transformer")
+        width_gap = {**dict(zip(keys, (str(path) for path in args.width_gap), strict=True)), "ages": ages}
+
     result = {
         "data_sha1": ENWIK8_SHA1, "split": args.split, "device": str(device), "positions_from": str(args.positions_from),
         "batch_size": args.batch_size, "target_start_offsets": starts.tolist(),
@@ -160,6 +180,7 @@ def main():
         "reference": str(args.checkpoint[0]),
         "bootstrap": "3000 paired resamples of complete 32-target windows, seed 5261",
         "models": models, "nonreference_comparisons": comparisons,
+        **({"width_gap": width_gap} if width_gap is not None else {}),
     }
     with _atomic_output(args.json, "w", overwrite=False) as output:
         json.dump(result, output, indent=2)

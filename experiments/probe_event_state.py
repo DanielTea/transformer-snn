@@ -273,6 +273,7 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if residual_width_before is not None:
         output_synapses = [model.input, *model.delayed_input, *(block.project for block in model.blocks)]
         output_synapses += [block.memory_residual for block in model.blocks if block.memory_residual is not None]
+        output_synapses += [block.arrival_project for block in model.blocks if block.arrival_project is not None]
         if model.prediction_memory is not None:
             output_synapses.append(model.recall_synapse)
         extra_outputs = [synapse.weight[:, residual_width_before:] if synapse.byte_input
