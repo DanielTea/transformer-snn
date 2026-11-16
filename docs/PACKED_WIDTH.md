@@ -352,13 +352,14 @@ The frozen probes use the same 1,536 positions and 16-byte targets
 as the validation history study and repeat the relative offsets on
 the enwik8 test split. At 32 bytes of test warmup, the 243-channel
 SNN scores 1.82614 bpb and full attention scores 1.76922 bpb.
-Doubling ring capacity with the original reads preserves the
-counts. Choosing taps by the frozen network's coincidence raises
-loss by 0.49366 bpb at the original capacity. Replacing the held
-read with delayed coincidence raises loss by 1.32742 bpb. The
-observed difference from 10-bit router weights with the original
-resolution is −0.00049 bpb, with a paired bootstrap interval of
-[−0.00209, 0.00116]. These tests intervene on trained weights.
+The fixed-read capacity control accounts for the extra rings
+logically and reproduces the original counts. Choosing taps by
+the frozen network's coincidence raises loss by 0.49366 bpb at the
+original capacity. Replacing the held read with delayed coincidence
+raises loss by 1.32742 bpb. The difference from 10-bit router weights
+with the original resolution is −0.00049 bpb, with a 95% paired
+bootstrap interval of [−0.00209, 0.00116]. These tests intervene
+on trained weights.
 [Validation probes](../results/event_lm/packed_width/wide_context_ablations_val.json) ·
 [Test probes](../results/event_lm/packed_width/wide_context_ablations_test.json) ·
 [Trained width control](../results/event_lm/packed_width/wide_context_trained_width_control.json) ·
