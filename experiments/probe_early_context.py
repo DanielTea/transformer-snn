@@ -15,6 +15,7 @@ import torch
 from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
+from probe_event_state import added_residual_weights, muted_synapses
 from snnformer.event_lm import EventLM, _route_packets, _steer_packet
 from train_event_lm import load_checkpoint, scoring_logits, training_exposure
 from train_lm import ENWIK8_SHA1, load_splits
@@ -117,12 +118,16 @@ def main():
             losses.append((str(path), actual))
         arrival = None
         muted = None
-        if isinstance(model, EventLM) and model.cfg.trace_arrival is not None:
+        silenced_residual = None
+        if isinstance(model, EventLM):
+            prior_width = (checkpoint.get("initialization") or {}).get("residual_width_before")
+            if prior_width is not None:
+                with muted_synapses(added_residual_weights(model, prior_width)):
+                    silenced_residual = score(model, windows, args.batch_size, device)
             arrival = model.cfg.trace_arrival
-            with torch.no_grad():
-                for block in model.blocks:
-                    block.arrival_project.weight.zero_()
-            muted = score(model, windows, args.batch_size, device)
+            if arrival is not None:
+                with muted_synapses([block.arrival_project.weight for block in model.blocks]):
+                    muted = score(model, windows, args.batch_size, device)
         ages = []
         for low, high in CONTEXT_BINS:
             span = slice(low - 1, high)
@@ -137,6 +142,11 @@ def main():
                 change = muted[:, span] - bpb
                 row.update(muted_arrival_bpb=float(muted[:, span].mean()), muted_minus_intact_bpb=float(change.mean()),
                            muted_minus_intact_paired_95_bpb=paired_interval(change, resamples))
+            if silenced_residual is not None:
+                change = silenced_residual[:, span] - bpb
+                row.update(silenced_residual_bpb=float(silenced_residual[:, span].mean()),
+                           silenced_residual_minus_intact_bpb=float(change.mean()),
+                           silenced_residual_paired_95_bpb=paired_interval(change, resamples))
             ages.append(row)
         with path.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()

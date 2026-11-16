@@ -98,6 +98,17 @@ corpora.
 [Native pulse audit](../experiments/audit_spike_code.py) ·
 [Fixed-weight probe](../experiments/probe_event_state.py)
 
+## Fixed-weight validation of the enwik8 control
+
+On 1,535 reset enwik8 validation windows, the trained wide
+enwik8-only SNN scores 1.81145 bpb at predictions 17–32. Its
+v9 parent scores 1.81698 with 9,830,400 fewer training targets.
+Silencing the wide model's added neurons at fixed weights
+raises loss by 0.00394 bpb. The paired 95% interval is
+[+0.00095, +0.00687] bpb. The mute result measures how much
+the wider model relies on its new neurons on this sample.
+[Paired validation and interventions](../results/event_lm/residual_scale/enwik8_only_preview.json)
+
 ## Reproduce the data and launches
 
 Prepare the canonical [enwik8 and PG-19 evaluation files](HANDOFF.md#datasets)
