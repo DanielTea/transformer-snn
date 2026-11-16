@@ -84,6 +84,7 @@ full-corpus scores, and exact training records.
 | [Depth growth with signed residual corrections](event_lm/depth_growth) | Six matched endpoints at 81.92M targets, both held-out corpora, warm starts, native parity, interventions and CPU timing |
 | [Held-charge inputs and group thresholds](event_lm/trace_integration) | Five matched endpoints at 91.75M targets, paired history and axon tap probes, fine-threshold offsets, and native parity |
 | [Axon tap reads](event_lm/trace_tap_read) | Four matched endpoints at 101.58M targets, warm checks, full-corpus scores, per-group winning delays, frozen-weight interventions, and packed-width parity |
+| [Packed width and steering transfers](event_lm/packed_width) | Paired v7 histories, integer warm starts and training records for the 111.41M-target study |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
 exposure, geometry, and seed. The v7 archive uses

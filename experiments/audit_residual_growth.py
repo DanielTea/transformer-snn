@@ -106,6 +106,8 @@ def main():
     parser.add_argument("--inhibition-threshold-bits", type=int)
     parser.add_argument("--compact-trace-state", action="store_true",
                         help="pack the trace tensors while growing the expansion")
+    parser.add_argument("--steering-transfer", choices=("present", "delayed"),
+                        help="add silent transfers alone or while widening the expansion")
     parser.add_argument("--trace-coincidence", action="store_true")
     parser.add_argument("--json", required=True, type=Path)
     args = parser.parse_args()
@@ -127,6 +129,12 @@ def main():
     circuit_options = ("trace_write_confirm", "trace_integration", "trace_tap_read", "redistribute_inhibition",
                        "learn_inhibition_thresholds", "tag_read_competition", "late_steering")
     added_circuit = next((option for option in circuit_options if getattr(args, option)), None)
+    if args.steering_transfer is not None:
+        if (added_circuit or args.depth is not None or args.dim is not None or prior.steering_transfer is not None
+                or args.refine_router_charge is not None):
+            parser.error("adding steering transfers can accompany expansion growth")
+        if args.hidden is None:
+            added_circuit = "steering_transfer"
     if ((args.depth is not None or args.hidden is not None or added_circuit)
             and (args.router_charge_bits is not None or args.trace_coincidence)):
         parser.error("charge precision and trace coincidence options apply to residual growth")
@@ -158,7 +166,8 @@ def main():
         grown = EventLM(cfg)
         grown.initialize_wider_residual(prior, checkpoint["state_dict"])
     else:
-        cfg = replace(prior, hidden=args.hidden, compact_trace_state=prior.compact_trace_state or args.compact_trace_state)
+        cfg = replace(prior, hidden=args.hidden, compact_trace_state=prior.compact_trace_state or args.compact_trace_state,
+                      steering_transfer=args.steering_transfer or prior.steering_transfer)
         grown = EventLM(cfg)
         grown.initialize_wider_expansion(prior, checkpoint["state_dict"])
     parent_counts, parent_metrics = measure(parent, tokens, device, profile_coincidence=False)
@@ -186,6 +195,12 @@ def main():
     elif args.trace_tap_read is not None:
         gradient_field = "active_tap_input_gradients_on_512_train_targets"
         gradients = [block.trace_taps.weight.grad.count_nonzero().item() for block in grown.blocks]
+    elif args.steering_transfer is not None:
+        gradient_field = "active_steering_transfer_gradients_on_512_train_targets"
+        gradients = [
+            sum(weight.grad.count_nonzero().item() for weight in block.steering_transfer.weights if weight.numel())
+            for block in grown.blocks
+        ]
     elif args.redistribute_inhibition:
         gradient_field = "active_inhibition_gradients_on_512_train_targets"
         gradients = [block.inhibition_redistribution.synapse.weight.grad.count_nonzero().item()

@@ -111,6 +111,8 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
                 populations[f"block_{index}_inhibition"] = block.activity_inhibition
             if block.inhibition_redistribution is not None:
                 populations[f"block_{index}_inhibition_transfer"] = block.inhibition_redistribution.emit
+            if block.steering_transfer is not None:
+                populations[f"block_{index}_steering_transfer"] = block.steering_transfer.emit
             if block.late_steering is not None:
                 populations[f"block_{index}_late_steering"] = block.late_steering.emit
                 populations[f"block_{index}_late_residual"] = block.late_emit
@@ -215,6 +217,12 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         row["trace_input_nonzero_weights_by_block"] = [
             block.trace.input.weight.count_nonzero().item() for block in integer.blocks
         ]
+    if integer.cfg.steering_transfer is not None:
+        row["steering_transfer"] = integer.cfg.steering_transfer
+        row["steering_transfer_active_weights_by_block"] = [
+            sum(weight.count_nonzero().item() for weight in block.steering_transfer.weights)
+            for block in integer.blocks
+        ]
     if integer.cfg.learn_inhibition_thresholds:
         row["inhibition_threshold_units_per_base"] = 1 << integer.cfg.inhibition_threshold_bits
         row["inhibition_threshold_quanta_by_block"] = [
@@ -252,6 +260,11 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
         if integer.cfg.trace_integration:
             row["trace_input_pulses_per_byte"] = sum(
                 activity[f"block_{index}_trace_input"].abs().sum(dtype=torch.int64).item()
+                for index in range(len(integer.blocks))
+            ) / tokens.numel()
+        if integer.cfg.steering_transfer is not None:
+            row["steering_transfer_pulses_per_byte"] = sum(
+                activity[f"block_{index}_steering_transfer"].abs().sum(dtype=torch.int64).item()
                 for index in range(len(integer.blocks))
             ) / tokens.numel()
         if tap_winners:

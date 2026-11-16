@@ -16,6 +16,8 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         trace-transport trace-group-thresholds trace-transport-control trace-transport-transformer" >&2
   echo "         trace-fine-group-thresholds" >&2
   echo "         trace-tap-control trace-tap-fixed trace-tap-race trace-tap-transformer" >&2
+  echo "         packed-width-snn packed-width-control packed-width-transformer packed-width-control-transformer" >&2
+  echo "         packed-width-present-transfer packed-width-delayed-transfer" >&2
   exit 2
 fi
 
@@ -170,6 +172,34 @@ case "$study" in
       --initialize-from checkpoints/trace-transport-study/transformer_s5801.pt)
     name=transformer_s6899
     ;;
+  packed-width-snn|packed-width-control|packed-width-present-transfer|packed-width-delayed-transfer)
+    training+=("${spiking[@]}" --depth 11 --router-charge-bits 8 --residual-correction-start 7
+      --initialize-from checkpoints/trace-tap-study/control_s6899.pt)
+    if [[ $study != packed-width-control ]]; then
+      training+=(--hidden 243 --grow-expansion --compact-trace-state)
+    fi
+    case "$study" in
+      packed-width-snn) name=wide_s7907 ;;
+      packed-width-control) name=control_s7907 ;;
+      packed-width-*-transfer)
+        source=${study#packed-width-}
+        source=${source%-transfer}
+        training+=(--steering-transfer "$source")
+        name="${source}_transfer_s7907"
+        ;;
+    esac
+    ;;
+  packed-width-transformer|packed-width-control-transformer)
+    training+=(--variant transformer --dim 256 --depth 6 --heads 4
+      --initialize-from checkpoints/trace-tap-study/transformer_s6899.pt)
+    if [[ $study == packed-width-transformer ]]; then
+      training+=(--mlp-ratio 14.185546875 --grow-feed-forward)
+      name=transformer_s7907
+    else
+      training+=(--mlp-ratio 10.576171875)
+      name=control_transformer_s7907
+    fi
+    ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
       --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
@@ -224,6 +254,9 @@ elif [[ $study == trace-transport* || $study == trace-group-thresholds || $study
 elif [[ $study == trace-tap-* ]]; then
   training+=(--steps 2400 --warmup 96 --lr 0.0002 --seed 6899 --eval-every 300
     --tag "trace_tap_${name%_s6899}")
+elif [[ $study == packed-width-* ]]; then
+  training+=(--steps 2400 --warmup 96 --lr 0.0002 --seed 7907 --eval-every 300
+    --tag "${study//-/_}")
 elif [[ $study == residual-growth-control-transformer ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
     --tag scale_6510k_residual_transformer_control)
@@ -287,7 +320,8 @@ if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == 
       $study == expansion-snn || $study == expansion-steering || $study == residual-growth-snn ||
       $study == depth-growth-snn || $study == depth-growth-wide || $study == trace-transport ||
       $study == trace-group-thresholds || $study == trace-fine-group-thresholds || $study == trace-transport-control ||
-      $study == trace-tap-fixed || $study == trace-tap-race ]]; then
+      $study == trace-tap-fixed || $study == trace-tap-race ||
+      ($study == packed-width-* && $study != *transformer) ]]; then
   run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
     --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"
 fi

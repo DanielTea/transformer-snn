@@ -147,6 +147,7 @@ def build_model(args):
                             local_trace=args.local_trace, trace_coincidence_start=args.trace_coincidence_start,
                             trace_write_credit=args.trace_write_credit, trace_write_confirm=args.trace_write_confirm,
                             trace_integration=args.trace_integration, trace_tap_read=args.trace_tap_read,
+                            steering_transfer=args.steering_transfer,
                             steering_gradient_at_zero=args.steering_gradient_at_zero,
                             late_steering=args.late_steering,
                             bank_write_credit=args.bank_write_credit,
@@ -171,7 +172,7 @@ _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
 _OPTIONAL_ROUTER_PARAMETERS = (
     ".packet_thresholds.", ".delay_correction.", ".delay_filters.", ".opponent_steering.", ".trace.read_veto.",
     ".spread_coincidence.", ".trace.write_confirm.", ".trace.input.", ".trace_taps.",
-    ".inhibition_redistribution.", ".inhibition_thresholds.", ".late_steering.",
+    ".inhibition_redistribution.", ".inhibition_thresholds.", ".late_steering.", ".steering_transfer.",
 )
 
 
@@ -238,6 +239,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   trace_write_confirm=source_cfg.trace_write_confirm or model.cfg.trace_write_confirm,
                                   trace_integration=source_cfg.trace_integration or model.cfg.trace_integration,
                                   trace_tap_read=model.cfg.trace_tap_read,
+                                  steering_transfer=source_cfg.steering_transfer or model.cfg.steering_transfer,
                                   steering_gradient_at_zero=model.cfg.steering_gradient_at_zero,
                                   late_steering=source_cfg.late_steering or model.cfg.late_steering,
                                   bank_write_credit=model.cfg.bank_write_credit,
@@ -265,6 +267,8 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 expected.update(name for name in model.state_dict() if ".trace.input." in name)
             if model.cfg.trace_tap_read is not None and source_cfg.trace_tap_read is None:
                 expected.update(name for name in model.state_dict() if ".trace_taps." in name)
+            if model.cfg.steering_transfer is not None and source_cfg.steering_transfer is None:
+                expected.update(name for name in model.state_dict() if ".steering_transfer." in name)
             if model.cfg.spread_coincidence and not source_cfg.spread_coincidence:
                 expected.update(name for name in model.state_dict() if ".spread_coincidence." in name)
             if model.cfg.redistribute_inhibition and not source_cfg.redistribute_inhibition:
@@ -390,6 +394,8 @@ def main():
                         help="integrate learned current and arriving spikes before correcting held charge")
     parser.add_argument("--trace-tap-read", choices=("fixed", "race"),
                         help="read the shortest candidate tap or let held spikes race among recent taps")
+    parser.add_argument("--steering-transfer", choices=("present", "delayed"),
+                        help="move steering pulses within each pair in response to present or arriving content")
     parser.add_argument("--steering-gradient-at-zero", action="store_true",
                         help="use the right training derivative for steering at zero synaptic charge")
     parser.add_argument("--late-steering", action="store_true",
@@ -497,7 +503,7 @@ def main():
             or args.inhibition_threshold_bits != EventLMConfig.inhibition_threshold_bits
             or args.trace_coincidence_start is not None or args.steering_gradient_at_zero or args.late_steering
             or args.local_trace or args.trace_write_credit or args.trace_write_confirm or args.trace_read_veto
-            or args.trace_integration or args.trace_tap_read is not None
+            or args.trace_integration or args.trace_tap_read is not None or args.steering_transfer is not None
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"

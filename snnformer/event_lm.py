@@ -95,6 +95,7 @@ class EventLMConfig:
     inhibition_threshold_bits: int = _PACKET_BITS
     trace_tap_read: str | None = None
     compact_trace_state: bool = False
+    steering_transfer: str | None = None
 
     @property
     def inhibition_bits(self) -> int:
@@ -959,6 +960,50 @@ class _TraceTapRead(nn.Module):
         return (read + (after - before)).clamp(-limit, limit), delayed, winners
 
 
+class _SteeringTransfer(nn.Module):
+    """Use content spikes to transfer steering pulses within each neuron pair."""
+
+    def __init__(self, widths, cap, quanta_per_threshold, source):
+        super().__init__()
+        self.widths = widths
+        self.cap = cap
+        self.quanta_per_threshold = quanta_per_threshold
+        self.use_delay = source == "delayed"
+        self.weights = nn.ParameterList(nn.Parameter(torch.zeros(width // 2, width)) for width in widths)
+        self.emit = _IntegrateFire(2 * cap, _CHARGE_BITS, False)
+        channels = []
+        start = 0
+        for width in widths:
+            channels.extend(range(start, start + width - width % 2))
+            start += width
+        self.register_buffer("paired_channels", torch.tensor(channels, dtype=torch.long), persistent=False)
+
+    def freeze_integer(self):
+        for group, weight in enumerate(self.weights):
+            if weight.is_floating_point():
+                self.weights[group] = nn.Parameter(_weight_ticks(weight).to(torch.int32), requires_grad=False)
+
+    def forward(self, steering, present, delayed, quanta):
+        source = delayed if self.use_delay else present
+        drive = torch.cat([
+            F.linear(packet, _weight_ticks(weight))
+            for packet, weight in zip(source.split(self.widths, dim=-1), self.weights, strict=True)
+            if weight.shape[0]
+        ], dim=-1)
+        ceiling = (self.cap if quanta is None
+                   else (self.cap * self.quanta_per_threshold) // quanta.to(torch.int32))
+        stock = steering.index_select(-1, self.paired_channels).unflatten(-1, (-1, 2))
+        room = (ceiling - steering).index_select(-1, self.paired_channels).unflatten(-1, (-1, 2))
+        first, second = stock.unbind(-1)
+        first_room, second_room = room.unbind(-1)
+        threshold = self.emit.threshold
+        lower = -first.minimum(second_room) * threshold
+        upper = second.minimum(first_room) * threshold
+        transfer = self.emit(drive.clamp(lower, upper))
+        adjustment = torch.stack((transfer, -transfer), dim=-1).flatten(-2)
+        return steering.index_add(-1, self.paired_channels, adjustment)
+
+
 class _DelayBlock(nn.Module):
     def __init__(self, cfg: EventLMConfig, depth: int):
         super().__init__()
@@ -1022,6 +1067,8 @@ class _DelayBlock(nn.Module):
             if cfg.trace_tap_read is not None else None
         )
         quanta_per_threshold = 1 << cfg.inhibition_threshold_bits
+        self.steering_transfer = (_SteeringTransfer(self.widths, cap, quanta_per_threshold, cfg.steering_transfer)
+                                  if cfg.steering_transfer is not None else None)
         self.opponent_steering = (_OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits, quanta_per_threshold)
                                   if cfg.opponent_steering else None)
         self.spread_coincidence = (
@@ -1268,6 +1315,8 @@ class _DelayBlock(nn.Module):
                                        zip(groups, self.alternate_delays, strict=True)], dim=-1)
         else:
             delayed = self.selector(present, delay_limit)
+        if self.steering_transfer is not None:
+            steering = self.steering_transfer(steering, present, delayed, firing_quanta)
         if self.trace is not None:
             initial = None if local_state is None else local_state.trace_charge
             radius = self._trace_radius(steering, steer_drive, firing_quanta)
@@ -1384,6 +1433,8 @@ class _DelayBlock(nn.Module):
             else:
                 delayed = self.selector.step(state.history, position)
             state.history[:, position % ring_size].copy_(present[:, :local_width])
+        if self.steering_transfer is not None:
+            steering = self.steering_transfer(steering, present, delayed, firing_quanta)
         if self.trace is not None:
             radius = self._trace_radius(steering, steer_drive, firing_quanta)
             coincidence_read, state.trace_charge = self.trace.step(
@@ -1472,6 +1523,11 @@ class EventLM(nn.Module):
             raise ValueError("trace tap reads need a local trace and a fixed or race selector")
         if cfg.compact_trace_state and not cfg.local_trace:
             raise ValueError("compact trace state needs a local charge trace")
+        if cfg.steering_transfer is not None and (
+            cfg.steering_transfer not in ("present", "delayed") or not cfg.local_trace
+            or cfg.hidden <= len(_STEERED_DELAYS[0])
+        ):
+            raise ValueError("steering transfers need paired held-charge neurons and present or delayed input")
         if cfg.trace_coincidence_start is not None and (not cfg.local_trace
                 or not isinstance(cfg.trace_coincidence_start, int) or not 0 < cfg.trace_coincidence_start < cfg.dim):
             raise ValueError("trace coincidence needs a local trace and two nonempty residual groups")
@@ -1643,6 +1699,10 @@ class EventLM(nn.Module):
                 # The unshunted packet thresholds can emit up to twice the nominal count cap.
                 count_scale = 2 if block.packet_thresholds is not None else 1
                 bounds.append(count_scale * block.trace.input.weight_ticks().abs().sum(0).amax())
+            if block.steering_transfer is not None:
+                count_scale = 2 if block.packet_thresholds is not None else 1
+                bounds.extend(count_scale * _weight_ticks(weight).abs().sum(-1).amax()
+                              for weight in block.steering_transfer.weights if weight.shape[0])
             packet_units = _PACKET_UNITS if block.packet_thresholds is not None else 1
             projected = row_sums(block.project) * packet_units + block.emit.threshold
             if block.correction is not None:
@@ -1818,8 +1878,10 @@ class EventLM(nn.Module):
     def initialize_wider_expansion(self, prior: EventLMConfig, previous: dict[str, torch.Tensor]):
         """Add silent content and steering neurons inside each fixed-delay group."""
         cfg = self.cfg
+        add_transfer = prior.steering_transfer is None and cfg.steering_transfer is not None
         expected = replace(prior, hidden=cfg.hidden, steering_gradient_at_zero=cfg.steering_gradient_at_zero,
-                           compact_trace_state=cfg.compact_trace_state)
+                           compact_trace_state=cfg.compact_trace_state,
+                           steering_transfer=cfg.steering_transfer if add_transfer else prior.steering_transfer)
         if not cfg.local_trace or cfg.hidden <= prior.hidden or expected != cfg:
             raise ValueError("expansion growth needs the same held-charge router with a larger expansion")
         if cfg.activity_inhibition and cfg.inhibition_bits != prior.inhibition_bits:
@@ -1829,7 +1891,8 @@ class EventLM(nn.Module):
         if self.prediction_memory is not None and cfg.memory_width is None and groups[-1] != old_groups[-1]:
             raise ValueError("expansion growth needs a separate memory_width to preserve the forecast bank")
         weights = self.state_dict()
-        if weights.keys() != previous.keys():
+        new_names = {name for name in weights if add_transfer and ".steering_transfer." in name}
+        if weights.keys() - new_names != previous.keys():
             raise ValueError("expansion growth needs the same synaptic populations")
 
         old_channels = []
@@ -1870,6 +1933,14 @@ class EventLM(nn.Module):
                                           previous[name].split(old_widths), strict=True):
                     target[:source.numel()].copy_(source.to(target))
                 widened[name] = gains
+            if block.steering_transfer is not None:
+                for group, weights_in_group in enumerate(block.steering_transfer.weights):
+                    name = f"blocks.{index}.steering_transfer.weights.{group}"
+                    enlarged = torch.zeros_like(weights_in_group)
+                    if not add_transfer:
+                        original = previous[name]
+                        enlarged[:original.shape[0], :original.shape[1]].copy_(original.to(enlarged))
+                    widened[name] = enlarged
 
         if any(value.shape != weights[name].shape for name, value in widened.items()):
             raise ValueError("expansion growth would change a synaptic population outside the delay groups")
@@ -1892,7 +1963,8 @@ class EventLM(nn.Module):
         model = copy.deepcopy(self).cpu().eval()
         for submodule in model.modules():
             if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection, _DelayFilter,
-                                      _OpponentSteering, _SpreadCoincidence, _TraceInput, _TraceTapRead)):
+                                      _OpponentSteering, _SpreadCoincidence, _TraceInput, _TraceTapRead,
+                                      _SteeringTransfer)):
                 submodule.freeze_integer()
         return model
 

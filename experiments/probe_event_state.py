@@ -169,6 +169,13 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
         result["zero_tap_correction_bpb"] = score_without_synapses(model, window, chunk_size, weights)
         if model.cfg.trace_tap_read == "race":
             result["fixed_tap_on_race_weights_bpb"] = score_with_options(model, window, chunk_size, trace_tap_read="fixed")
+    if model.cfg.steering_transfer is not None:
+        weights = [weight for block in model.blocks for weight in block.steering_transfer.weights]
+        result["zero_steering_transfer_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+        if model.cfg.steering_transfer == "delayed":
+            result["present_transfer_on_delayed_weights_bpb"] = score_with_options(
+                model, window, chunk_size, steering_transfer="present",
+            )
     if model.prediction_memory is not None:
         result["mute_bank_corrections_bpb"] = score_without_synapses(
             model, window, chunk_size, [model.recall_synapse.weight],
