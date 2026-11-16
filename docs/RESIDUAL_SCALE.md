@@ -17,6 +17,10 @@ eight-byte prefix last appeared 32–127 bytes earlier. The gap in
 that group falls from 0.20346 to 0.19044 bpb. First occurrences
 and repeats beyond 512 bytes account for most of the test targets
 and have slightly larger gaps at the wider size.
+The wide enwik8-only continuation scores **1.78054 bpb** on
+the same full test at equal training exposure. Its 0.01733 bpb
+lead over the wide mixed SNN quantifies the effect of replacing
+half the continuation targets with C4 and PG-19 text.
 [Full enwik8 score records](../results/event_lm/residual_scale)
 
 The v9 selected-arrival SNN and full-attention reference each saw
