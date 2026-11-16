@@ -15,6 +15,13 @@ from snnformer.event_lm import EventLM
 from train_lm import ENWIK8_SHA1, load_splits
 
 
+def _read_pulses_by_age(pulses, changes, positions, groups):
+    writes = torch.where(changes, positions, 0).cummax(1).values
+    latest = torch.cat((torch.zeros_like(writes[:, :1]), writes[:, :-1]), dim=1)
+    ages = positions - latest
+    return {label: int(pulses[(ages >= low) & (ages < high)].sum()) for label, low, high in groups}
+
+
 @torch.inference_mode()
 def profile(model, tokens):
     records = []
@@ -25,27 +32,33 @@ def profile(model, tokens):
         delayed = options.get("delayed_content")
         lower, upper = trace._bounds(content, radius, delayed)
         initial = torch.zeros_like(content[:, 0]) if initial is None else initial
-        after, _ = trace._scan(lower, upper, initial, content, delayed)
+        after, input_pulses = trace._scan(lower, upper, initial, content, delayed)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
         changed = after != before
         silent = steering == 0
         silent_with_charge = silent & (before != 0)
         positions = torch.arange(1, tokens.shape[1] + 1, device=tokens.device)[None, :, None]
-        writes = torch.where(changed, positions, 0).cummax(1).values
-        latest = torch.cat((torch.zeros_like(writes[:, :1]), writes[:, :-1]), dim=1)
-        ages = positions - latest
         pulses = output[0].abs()
         groups = (("1-7", 1, 8), ("8-31", 8, 32), ("32-127", 32, 128), ("128+", 128, tokens.shape[1] + 1))
-        age_bins = {label: int(pulses[(ages >= low) & (ages < high)].sum()) for label, low, high in groups}
-        records.append({
+        record = {
             "block": len(records) + 1,
             "channel_bytes": content.numel(),
             "changed_cells": int(changed.sum()),
             "closed_aperture_cells_with_charge": int(silent_with_charge.sum()),
             "writes_to_charged_cells_with_closed_aperture": int((silent_with_charge & changed).sum()),
             "write_protection_pulses": int((radius - steering).sum()),
-            "coincident_read_pulses_by_bytes_since_last_change": age_bins,
-        })
+            "coincident_read_pulses_by_bytes_since_last_change": _read_pulses_by_age(pulses, changed, positions, groups),
+        }
+        if input_pulses is not None:
+            corrected = after != before + input_pulses
+            record.update(
+                input_pulses=int(input_pulses.abs().sum()),
+                input_pulses_without_interval_correction=int(input_pulses[~corrected].abs().sum()),
+                coincident_read_pulses_by_bytes_since_interval_correction=_read_pulses_by_age(
+                    pulses, corrected, positions, groups,
+                ),
+            )
+        records.append(record)
 
     hooks = [block.trace.register_forward_hook(observe, with_kwargs=True) for block in model.blocks]
     try:

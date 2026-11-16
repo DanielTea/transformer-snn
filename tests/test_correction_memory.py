@@ -25,16 +25,26 @@ def test_translated_charge_gradient_stops_at_the_last_actual_correction():
     torch.testing.assert_close(initial.grad, torch.tensor([[2.]]))
 
 
-def test_learned_group_thresholds_share_the_activity_pool_and_keep_the_firing_floor():
+@pytest.mark.parametrize("bits", [2, 8])
+def test_learned_group_thresholds_share_the_activity_pool_and_keep_the_firing_floor(bits):
     cfg = EventLMConfig(dim=8, hidden=4, depth=1, route="steered", carry=False,
-                        activity_inhibition=True, learn_inhibition_thresholds=True)
+                        activity_inhibition=True, learn_inhibition_thresholds=True, router_charge_bits=8,
+                        inhibition_threshold_bits=bits)
     model = EventLM(cfg)
     with torch.no_grad():
         model.blocks[0].inhibition_thresholds.relative.copy_(torch.tensor([0.5, 1.0, 1.5, 2.0]))
     block = model.to_integer().blocks[0]
     spikes = torch.tensor([[0] * 8, [4] + [0] * 7], dtype=torch.int32)
-    expected = torch.tensor([[4, 4, 6, 8], [4, 6, 8, 10]], dtype=torch.int32)
+    expected = torch.tensor([[4, 4, 6, 8], [4, 6, 8, 10]], dtype=torch.int32) << (bits - 2)
     torch.testing.assert_close(block._firing_quanta(spikes, None), expected, rtol=0, atol=0)
+
+
+def test_one_threshold_tick_changes_integer_firing_at_the_half_threshold():
+    fire = _IntegrateFire(512, 8, False, quanta_per_threshold=256)
+    current = torch.tensor([128, 128, -128, -128], dtype=torch.int32)
+    thresholds = torch.tensor([256, 257, 256, 257], dtype=torch.int32)
+    expected = torch.tensor([1, 0, -1, 0], dtype=torch.int32)
+    torch.testing.assert_close(fire(current, thresholds), expected, rtol=0, atol=0)
 
 
 def test_translated_charge_rebases_before_float32_loses_integer_precision():

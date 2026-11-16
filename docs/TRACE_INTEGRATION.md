@@ -30,6 +30,11 @@ validation tails.
 [History plot](../results/figures/event_lm_validation_history.png) ·
 [Paired validation record and offsets](../results/event_lm/trace_integration/v6_validation_history.json)
 
+The continued SNN and Transformer show the same pattern on these
+exact targets. After another 9.83M training targets the gaps at 1,
+32, and 497 bytes of warmup are 0.00578, 0.05609, and 0.07232 bpb.
+[Continued checkpoint history probe](../results/event_lm/trace_integration/continued_validation_history.json)
+
 ## Learn which spikes move the cell
 
 Let $p_t$ be the current content count, $d_t$ the incoming fixed-delay
@@ -66,21 +71,23 @@ inside a chunk.
 
 The second arm keeps the original held-charge update. For each delay
 group $g$, a single learned parameter sets the base threshold for both
-content and steering. If the common pool emits $h_t$ spikes, the new
-threshold in charge ticks is
+content and steering. Given $Q$ subdivisions of the original threshold
+and $h_t$ spikes from the common pool, the threshold in charge ticks is
 
 $$
-\frac{\theta}{4}\max(4,\,b_g+h_t),
-\qquad b_g\in\{2,3,4,5,6,7,8\}.
+\frac{\theta}{Q}\max\!\left(Q,\,b_g+\frac{Q}{4}h_t\right),
+\qquad b_g\in\{Q/2,\ldots,2Q\}.
 $$
 
 $\theta=256$ router ticks at eight fractional bits. The quantized base
-starts at four, so both populations start with the same threshold as
-v6. A group can learn to use more of the ordinary pulse range under
-inhibition or increase its threshold and emit fewer pulses. The floor
-preserves the original maximum count per neuron and the axon layout.
-The two arms use the same soft target of 310,000 generated pulses per
-byte, including the unchanged shared inhibitory pool.
+starts at $Q$, producing the same firing thresholds as v6. A group
+can learn to use more of the ordinary pulse range under inhibition or
+increase its threshold and emit fewer pulses. The floor preserves
+the maximum count per neuron and the axon layout. The coarse arm
+uses $Q=4$, a 64-tick step. The finer arm uses $Q=256$, one step
+per router charge tick. One pool spike raises both thresholds by
+64 ticks in either arm. Both use the same soft target of 310,000
+generated pulses per byte.
 [Firing and routing implementation](../snnformer/event_lm.py)
 
 ## Matched continuation
@@ -89,7 +96,7 @@ byte, including the unchanged shared inhibitory pool.
 |---|---:|---:|
 | v6 SNN continued | 9,960,960 | 29,674 B |
 | Signed input into held charge | 9,965,074 | 29,674 B |
-| Learned group thresholds | 9,961,004 | 29,674 B |
+| Learned group thresholds, coarse or fine | 9,961,004 | 29,674 B |
 | Six-block full attention continued | 9,962,496 | 6 MiB at 512 bytes |
 
 Both spiking changes preserve every vocabulary count and the total
@@ -99,7 +106,8 @@ eleven blocks have nonzero gradients to the new trace input synapses
 on a 512-target training window. All 44 learned group thresholds
 receive a gradient.
 [Trace input warm start](../results/event_lm/trace_integration/warm_trace_integration.json) ·
-[Group threshold warm start](../results/event_lm/trace_integration/warm_group_thresholds.json)
+[Coarse threshold warm start](../results/event_lm/trace_integration/warm_group_thresholds.json) ·
+[Fine threshold warm start](../results/event_lm/trace_integration/warm_fine_group_thresholds.json)
 
 Each arm adds 9,830,400 enwik8 targets for 91,750,400 cumulative
 targets. All use seed 5801, 2,400 updates of eight 512-byte windows,
@@ -109,13 +117,76 @@ test split and 16 complete PG-19 books. It fits PG-19 temperatures on
 eight separate books.
 [Dataset and checkpoint restore](HANDOFF.md)
 
+## Held-out scores
+
+| Same exposure at 91.75M targets | enwik8 bpb | PG-19 bpb | Raw PG-19 bpb | Native pulses/byte |
+|---|---:|---:|---:|---:|
+| Continued v6 SNN | 1.82999 | **2.78446** | **2.88327** | 307,913 |
+| Learned trace input spikes | 1.82956 | 2.78972 | 2.89110 | 309,390 |
+| Coarse group thresholds | 1.82918 | 2.78697 | 2.88461 | 308,616 |
+| Continued full attention | **1.74475** | 2.90840 | 3.10229 | — |
+
+The ordinary SNN and full attention gained 0.01289 and 0.01238 bpb
+respectively on enwik8 from the extra training. Their enwik8 gap is
+0.08524 bpb. The three SNNs above lead on each of the 16 PG-19 books.
+Trace input changed test enwik8 loss by −0.00043 bpb and PG-19 loss by
++0.00525 bpb relative to the ordinary SNN. The results use one matched
+continuation seed.
+[Full-corpus records](../results/event_lm/trace_integration)
+
+All 44 coarse threshold weights moved during training. The final
+master weights range from 0.99946 to 1.06302. Every value rounds to
+four quanta with $Q=4$, and the fixed-threshold intervention reproduces
+the same validation loss. These observations motivated the one-tick
+threshold grid.
+[Coarse threshold audit](../results/event_lm/trace_integration/native_thresholds_s5801.json) ·
+[Fixed-threshold intervention](../results/event_lm/trace_integration/probe_thresholds_s5801.json)
+
+## What the trace-input circuit used
+
+On 16,384 enwik8 validation bytes, all eleven input populations
+together emitted 23.96 signed pulses per byte. Of those pulses,
+42.1% entered a cell whose interval admitted its moved charge.
+12.11% of delivered read pulses came from cells whose last interval
+correction was at least eight bytes earlier. The ordinary control
+had a corresponding fraction of 12.14%. The age is evaluated per
+cell at the time of each read.
+[Trace input profile](../results/event_lm/trace_integration/trace_ages_transport_s5801.json) ·
+[Control profile](../results/event_lm/trace_integration/trace_ages_control_s5801.json)
+
+On the paired 24,576 validation targets, trace inputs changed loss
+by +0.00339 bpb at 32 bytes of warmup and +0.00195 at 497. The trained
+input circuit is active, with a small validation effect. The gain
+intervention below scales its input synapses with the other trained
+weights fixed.
+[Trained model history probe](../results/event_lm/trace_integration/transport_validation_history.json)
+
+| Gain multiplier | Validation bpb | Native trace input pulses/byte |
+|---:|---:|---:|
+| 0 | 1.75999 | 0.00 |
+| 1 | **1.75867** | 24.32 |
+| 2 | 1.78973 | 94.09 |
+| 4 | 1.81411 | 326.88 |
+| 8 | 1.85760 | 848.93 |
+
+The loss uses 65,536 enwik8 validation targets. The native input
+counts use their first 4,096 input bytes. These are frozen-weight
+interventions.
+[Gain sweep](../results/event_lm/trace_integration/gain_trace_input_s5801.json)
+
+## Reproduce
+
 ```bash
 export PYTORCH_ENABLE_MPS_FALLBACK=0
 python experiments/probe_lm_context.py --event-lm --device cpu --threads 4 \
   --checkpoint checkpoints/depth-growth-study/depth_s4603.pt checkpoints/depth-growth-study/transformer_s4603.pt \
   --data data/enwik8 --split val --histories 1 8 32 96 224 497 --tail-bytes 16 --tails 1536 \
   --batch-size 32 --json checkpoints/work/v6_validation_history.json
-for study in trace-transport trace-group-thresholds trace-transport-control trace-transport-transformer; do
+for study in trace-transport trace-group-thresholds trace-fine-group-thresholds trace-transport-control trace-transport-transformer; do
   bash experiments/run_v4_continuation.sh "$study"
 done
+python experiments/probe_event_state.py --device mps --enwik8 data/enwik8 --targets 65536 \
+  --chunk-size 512 --trace-input-gains 0 1 2 4 8 \
+  --checkpoint checkpoints/work/trace-transport/transport_s5801.pt \
+  --json checkpoints/work/trace_input_gain.json
 ```

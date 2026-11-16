@@ -87,6 +87,7 @@ class EventLMConfig:
     residual_correction_start: int | None = None
     trace_integration: bool = False
     learn_inhibition_thresholds: bool = False
+    inhibition_threshold_bits: int = _PACKET_BITS
 
     @property
     def inhibition_bits(self) -> int:
@@ -144,13 +145,15 @@ class _Synapse(nn.Module):
 class _IntegrateFire(nn.Module):
     """Separate excitation and inhibition rails with subtractive reset."""
 
-    def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False):
+    def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False,
+                 quanta_per_threshold: int = _PACKET_UNITS):
         super().__init__()
         self.cap = cap
         self.bits = charge_bits
         self.threshold = 1 << charge_bits
         self.carry = carry
         self.continuous = continuous
+        self.quanta_per_threshold = quanta_per_threshold
 
     def _charge(self, bounded):
         rails = torch.stack((bounded.clamp_min(0), (-bounded).clamp_min(0)), dim=-1)
@@ -173,11 +176,11 @@ class _IntegrateFire(nn.Module):
             return emitted
         if quanta is not None:
             units = quanta.to(torch.int32)
-            quantum = self.threshold // _PACKET_UNITS
+            quantum = self.threshold // self.quanta_per_threshold
             threshold = units * quantum
             charge = bounded.to(torch.int32)
             magnitude = (charge.abs() + threshold // 2) // threshold
-            limit = (self.cap * _PACKET_UNITS) // units
+            limit = (self.cap * self.quanta_per_threshold) // units
             counts = magnitude.minimum(limit) * charge.sign()
             if current.is_floating_point():
                 surrogate = bounded / (quanta * quantum)
@@ -250,16 +253,17 @@ class _ResidualMembraneFire(_IntegrateFire):
 class _PacketThresholds(nn.Module):
     """A shared firing threshold for each content and steering group."""
 
-    def __init__(self, widths):
+    def __init__(self, widths, quanta_per_threshold=_PACKET_UNITS):
         super().__init__()
         self.relative = nn.Parameter(torch.ones(len(widths)))
+        self.quanta_per_threshold = quanta_per_threshold
         groups = torch.arange(len(widths)).repeat_interleave(torch.tensor(widths))
         self.register_buffer("groups", groups, persistent=False)
 
     def quanta(self):
         if not self.relative.is_floating_point():
             return self.relative
-        units = self.relative.clamp(0.5, 2.0) * _PACKET_UNITS
+        units = self.relative.clamp(0.5, 2.0) * self.quanta_per_threshold
         return units.detach().round() + (units - units.detach())
 
     def forward(self):
@@ -291,12 +295,13 @@ class _InhibitionRedistribution(nn.Module):
 class _DelayCorrection(nn.Module):
     """Emit scaled corrections with one conductance per channel group."""
 
-    def __init__(self, widths, cap, *, input_bits=0):
+    def __init__(self, widths, cap, *, input_bits=0, quanta_per_threshold=_PACKET_UNITS):
         super().__init__()
         self.gain = nn.Parameter(torch.zeros(len(widths)))
         groups = torch.arange(len(widths)).repeat_interleave(torch.tensor(widths))
         self.register_buffer("groups", groups, persistent=False)
-        self.emit = _IntegrateFire(2 * cap, _CHARGE_BITS + input_bits, False)
+        self.emit = _IntegrateFire(2 * cap, _CHARGE_BITS + input_bits, False,
+                                   quanta_per_threshold=quanta_per_threshold)
 
     def gains(self):
         return _unit_gain_ticks(self.gain)
@@ -838,11 +843,12 @@ class _SpikeTrace(nn.Module):
 class _OpponentSteering(nn.Module):
     """Use the opposite synaptic current to emit write-protection spikes."""
 
-    def __init__(self, width, cap, charge_bits):
+    def __init__(self, width, cap, charge_bits, quanta_per_threshold=_PACKET_UNITS):
         super().__init__()
         self.weight = nn.Parameter(torch.zeros(width))
         self.current_limit = cap << charge_bits
-        self.emit = _IntegrateFire(cap, charge_bits + _CHARGE_BITS, False)
+        self.emit = _IntegrateFire(cap, charge_bits + _CHARGE_BITS, False,
+                                   quanta_per_threshold=quanta_per_threshold)
 
     def gain_ticks(self):
         if not self.weight.is_floating_point():
@@ -914,9 +920,9 @@ class _DelayBlock(nn.Module):
             integration_width = cfg.hidden if cfg.trace_integration else None
             self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths,
                                      confirm_widths=confirm_widths, integration_width=integration_width)
-        self.opponent_steering = (
-            _OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits) if cfg.opponent_steering else None
-        )
+        quanta_per_threshold = 1 << cfg.inhibition_threshold_bits
+        self.opponent_steering = (_OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits, quanta_per_threshold)
+                                  if cfg.opponent_steering else None)
         self.spread_coincidence = (
             _SpreadCoincidence(self.widths, cap, cfg.resolution) if cfg.spread_coincidence else None
         )
@@ -933,7 +939,8 @@ class _DelayBlock(nn.Module):
         if cfg.activity_inhibition:
             # One pool receives one unit of charge per spike on either input rail.
             self.activity_inhibition = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
-        self.inhibition_thresholds = _PacketThresholds(self.widths) if cfg.learn_inhibition_thresholds else None
+        self.inhibition_thresholds = (_PacketThresholds(self.widths, quanta_per_threshold)
+                                      if cfg.learn_inhibition_thresholds else None)
         self.inhibition_redistribution = (
             _InhibitionRedistribution(cfg.dim, self.widths, self.activity_inhibition)
             if cfg.redistribute_inhibition else None
@@ -941,9 +948,11 @@ class _DelayBlock(nn.Module):
         bits = cfg.router_charge_bits
         self.expand = _Synapse(cfg.dim, cfg.hidden * (2 if self.steered else 1), gain=1.0,
                                continuous=cfg.continuous, charge_bits=bits)
-        self.relay = _IntegrateFire(cap, bits, cfg.carry, continuous=cfg.continuous)
+        self.relay = _IntegrateFire(cap, bits, cfg.carry, continuous=cfg.continuous,
+                                    quanta_per_threshold=quanta_per_threshold)
         if self.steered:
-            self.steer = _IntegrateFire(cap, bits, cfg.carry, continuous=cfg.continuous)
+            self.steer = _IntegrateFire(cap, bits, cfg.carry, continuous=cfg.continuous,
+                                        quanta_per_threshold=quanta_per_threshold)
         self.project = _Synapse((4 if self.steered else 3) * cfg.hidden, cfg.dim, gain=0.65,
                                 continuous=cfg.continuous, charge_bits=bits)
         output_bits = bits + (_PACKET_BITS if self.packet_thresholds is not None else 0)
@@ -952,7 +961,9 @@ class _DelayBlock(nn.Module):
             self.emit = _ResidualMembraneFire(cap, output_bits)
         else:
             self.emit = _IntegrateFire(cap, output_bits, cfg.carry, continuous=cfg.continuous)
-        self.late_steering = _DelayCorrection(self.widths, cap, input_bits=bits) if cfg.late_steering else None
+        self.late_steering = (_DelayCorrection(self.widths, cap, input_bits=bits,
+                                              quanta_per_threshold=quanta_per_threshold)
+                              if cfg.late_steering else None)
         self.late_emit = _IntegrateFire(cap, output_bits, False) if cfg.late_steering else None
         self.axon_dtype = None
         if cfg.compact_axon_state:
@@ -967,7 +978,9 @@ class _DelayBlock(nn.Module):
         if self.inhibition_redistribution is not None:
             inhibition = self.inhibition_redistribution(spikes, inhibition)
         if self.inhibition_thresholds is not None:
-            return (self.inhibition_thresholds() + inhibition).clamp_min(_PACKET_UNITS)
+            units = self.inhibition_thresholds.quanta_per_threshold
+            # Each shunt pulse still adds one quarter of the original threshold.
+            return (self.inhibition_thresholds() + inhibition * (units // _PACKET_UNITS)).clamp_min(units)
         return _PACKET_UNITS + inhibition
 
     def _steering_current(self, drive):
@@ -1371,6 +1384,11 @@ class EventLM(nn.Module):
             raise ValueError("delay filters need the fixed-delay coincidence path and reset-per-byte spike routing")
         if not isinstance(cfg.router_charge_bits, int) or not _CHARGE_BITS <= cfg.router_charge_bits < 31:
             raise ValueError("router_charge_bits must be an integer from 6 to 30")
+        if (not isinstance(cfg.inhibition_threshold_bits, int)
+                or not _PACKET_BITS <= cfg.inhibition_threshold_bits <= cfg.router_charge_bits):
+            raise ValueError("inhibition threshold precision must fit the router's charge grid")
+        if cfg.inhibition_threshold_bits != _PACKET_BITS and not cfg.learn_inhibition_thresholds:
+            raise ValueError("inhibition threshold precision applies to learned group thresholds")
         extra_charge_bits = cfg.router_charge_bits - _CHARGE_BITS
         if extra_charge_bits and (cfg.carry or cfg.continuous or cfg.learn_packet_thresholds
                                   or cfg.route not in ("steered", "steered_correction_code")):

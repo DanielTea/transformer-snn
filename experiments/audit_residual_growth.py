@@ -95,9 +95,12 @@ def main():
     growth.add_argument("--late-steering", action="store_true", help="add silent feedback steering")
     growth.add_argument("--refine-router-charge", type=int, choices=(8,), help="refine charge at a fixed width")
     parser.add_argument("--router-charge-bits", type=int, choices=(6, 8))
+    parser.add_argument("--inhibition-threshold-bits", type=int)
     parser.add_argument("--trace-coincidence", action="store_true")
     parser.add_argument("--json", required=True, type=Path)
     args = parser.parse_args()
+    if args.inhibition_threshold_bits is not None and not args.learn_inhibition_thresholds:
+        parser.error("threshold precision requires --learn-inhibition-thresholds")
 
     torch.set_num_threads(4)
     torch.manual_seed(711)
@@ -119,6 +122,8 @@ def main():
         if getattr(prior, added_circuit):
             parser.error(f"the parent already uses {added_circuit.replace('_', ' ')}")
         cfg = replace(prior, **{added_circuit: True})
+        if args.inhibition_threshold_bits is not None:
+            cfg = replace(cfg, inhibition_threshold_bits=args.inhibition_threshold_bits)
         grown = EventLM(cfg)
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False)
     elif args.refine_router_charge is not None:

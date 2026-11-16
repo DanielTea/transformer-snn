@@ -72,6 +72,7 @@ studies remain part of the research record.
 [Resume from v6](docs/HANDOFF.md#continue-from-the-v6-endpoints) ·
 [13.03M comparison](docs/GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state) ·
 [Growth to 11 spiking blocks](docs/DEPTH_GROWTH.md) ·
+[Held-charge inputs and group thresholds](docs/TRACE_INTEGRATION.md) ·
 [Charge at fixed width](docs/GROWN_RESIDUAL.md#refine-router-charge-at-fixed-width) ·
 [Tag read competition](docs/TAG_READ_COMPETITION.md) · [Late steering](docs/LATE_STEERING.md) ·
 [Training exposure](docs/GROWN_RESIDUAL.md#extend-training-exposure) ·

@@ -142,6 +142,7 @@ def build_model(args):
                             router_charge_bits=args.router_charge_bits, activity_inhibition=args.activity_inhibition,
                             inhibition_by_expansion=args.inhibition_by_expansion,
                             learn_inhibition_thresholds=args.learn_inhibition_thresholds,
+                            inhibition_threshold_bits=args.inhibition_threshold_bits,
                             redistribute_inhibition=args.redistribute_inhibition,
                             local_trace=args.local_trace, trace_coincidence_start=args.trace_coincidence_start,
                             trace_write_credit=args.trace_write_credit, trace_write_confirm=args.trace_write_confirm,
@@ -229,6 +230,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   inhibition_by_expansion=model.cfg.inhibition_by_expansion,
                                   learn_inhibition_thresholds=(source_cfg.learn_inhibition_thresholds
                                                                or model.cfg.learn_inhibition_thresholds),
+                                  inhibition_threshold_bits=model.cfg.inhibition_threshold_bits,
                                   redistribute_inhibition=source_cfg.redistribute_inhibition or model.cfg.redistribute_inhibition,
                                   trace_write_credit=model.cfg.trace_write_credit,
                                   trace_write_confirm=source_cfg.trace_write_confirm or model.cfg.trace_write_confirm,
@@ -363,6 +365,8 @@ def main():
                         help="learn to transfer inhibitory pulses between pairs of delay groups")
     parser.add_argument("--learn-inhibition-thresholds", action="store_true",
                         help="learn a shared content and steering threshold in each inhibited delay group")
+    parser.add_argument("--inhibition-threshold-bits", type=int, default=EventLMConfig.inhibition_threshold_bits,
+                        help="fractional bits for the learned base threshold as a share of the original threshold")
     parser.add_argument("--local-trace", action="store_true",
                         help="hold each channel's charge within its steering interval across bytes")
     parser.add_argument("--trace-coincidence-start", type=int,
@@ -481,6 +485,7 @@ def main():
             or args.compact_axon_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
             or args.inhibition_by_expansion or args.redistribute_inhibition or args.learn_inhibition_thresholds
+            or args.inhibition_threshold_bits != EventLMConfig.inhibition_threshold_bits
             or args.trace_coincidence_start is not None or args.steering_gradient_at_zero or args.late_steering
             or args.local_trace or args.trace_write_credit or args.trace_write_confirm or args.trace_read_veto
             or args.trace_integration

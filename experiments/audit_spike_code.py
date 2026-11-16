@@ -209,6 +209,7 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
             block.trace.input.weight.count_nonzero().item() for block in integer.blocks
         ]
     if integer.cfg.learn_inhibition_thresholds:
+        row["inhibition_threshold_units_per_base"] = 1 << integer.cfg.inhibition_threshold_bits
         row["inhibition_threshold_quanta_by_block"] = [
             block.inhibition_thresholds.quanta().tolist() for block in integer.blocks
         ]

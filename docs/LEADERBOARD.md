@@ -4,6 +4,21 @@ Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## 9.96M trace inputs and group thresholds · 91,750,400 training targets · seed 5801
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Continued v6 SNN | 9,960,960 | 29,674 B | 1.82999 | 4 | **2.78446** | 1 | 2.88327 | 307,913 |
+| Learned trace input spikes | 9,965,074 | 29,674 B | 1.82956 | 3 | 2.78972 | 3 | 2.89110 | 309,390 |
+| Coarse group thresholds | 9,961,004 | 29,674 B | 1.82918 | 2 | 2.78697 | 2 | 2.88461 | 308,616 |
+| 6-block full attention | 9,962,496 | 6 MiB | **1.74475** | 1 | 2.90840 | 4 | 3.10229 | — |
+
+![Held-out loss for trace inputs, group thresholds, and matched controls](../results/figures/event_lm_trace_integration.png)
+
+![Gap in held-out loss by available history at the v6 weights](../results/figures/event_lm_validation_history.png)
+
+[Circuit and interventions](TRACE_INTEGRATION.md)
+
 ## 9.96M depth and width growth · 81,920,000 training targets · seed 4603
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |

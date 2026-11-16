@@ -139,6 +139,13 @@ RESIDUAL_OUTPUT_81920K = (
      f"{DEPTH_GROWTH}/native_corrections_s4603.json", VIOLET),
     ("4-block full attention", DEPTH_GROWTH, "control_transformer_s4603", None, ORANGE),
 )
+TRACE_INTEGRATION_91750K = (
+    ("Continued v6 SNN", TRACE_INTEGRATION, "control_s5801", f"{TRACE_INTEGRATION}/native_control_s5801.json", BLUE),
+    ("Learned trace input spikes", TRACE_INTEGRATION, "transport_s5801", f"{TRACE_INTEGRATION}/native_transport_s5801.json", VIOLET),
+    ("Coarse group thresholds", TRACE_INTEGRATION, "thresholds_s5801",
+     f"{TRACE_INTEGRATION}/native_thresholds_s5801.json", "#138372"),
+    ("6-block full attention", TRACE_INTEGRATION, "transformer_s5801", None, ORANGE),
+)
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
     ("Three-way coincidence", TRACE_COINCIDENCE, "coincidence_s711",
@@ -301,6 +308,8 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
+        ("trace_integration_91750k", "9.96M trace inputs and group thresholds",
+         TRACE_INTEGRATION_91750K, 5801, 512, (81_920_000, 9_830_400)),
         ("growth_9960k", "9.96M depth and width growth", GROWTH_81920K, 4603, 512, (72_089_600, 9_830_400)),
         ("residual_output_6510k", "6.51M signed residual output", RESIDUAL_OUTPUT_81920K, 4603, 512,
          (72_089_600, 9_830_400)),
@@ -417,7 +426,12 @@ def write_leaderboards(data, depth, research):
         "Each PG-19 temperature is fitted on eight separate validation books. "
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
     ]
-    growth_figures = {
+    study_figures = {
+        "trace_integration_91750k": (
+            "![Held-out loss for trace inputs, group thresholds, and matched controls](../results/figures/event_lm_trace_integration.png)",
+            "![Gap in held-out loss by available history at the v6 weights](../results/figures/event_lm_validation_history.png)",
+            "[Circuit and interventions](TRACE_INTEGRATION.md)",
+        ),
         "growth_9960k": (
             "![Held-out loss for deeper and wider SNNs and full attention](../results/figures/event_lm_growth_9960k.png)",
             "![enwik8 loss gap by prefix age for the 11-block SNN](../results/figures/event_lm_growth_9960k_prefix_age.png)",
@@ -433,7 +447,7 @@ def write_leaderboards(data, depth, research):
             f'## {group["title"]} · {group["training_summary"]}',
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
-        paragraphs.extend(growth_figures.get(name, ()))
+        paragraphs.extend(study_figures.get(name, ()))
     paragraphs.extend([
         "![Held-out loss after doubling residual width](../results/figures/event_lm_residual_growth_13030k.png)",
         "![Held-out loss after changing the spike circuits at 6.51M parameters](../results/figures/event_lm_6510k_circuits.png)",
@@ -753,6 +767,10 @@ def main():
                  filename="event_lm_residual_output.png", precision=5)
     plot_residual_emissions(output)
     plot_validation_history(output)
+    plot_heldout(research["groups"]["trace_integration_91750k"]["rows"], output,
+                 title="Integrating charge and learning group thresholds",
+                 subtitle="About 9.96M parameters · 91.75M enwik8 training targets · seed 5801",
+                 filename="event_lm_trace_integration.png", precision=5)
     plot_trained_context(research, output)
     plot_training_exposure(research, output)
     plot_prefix_age_gap(f"{OPPONENT}/enwik8_opponent_s711.json", f"{CREDIT}/enwik8_transformer_s711.json", output,
