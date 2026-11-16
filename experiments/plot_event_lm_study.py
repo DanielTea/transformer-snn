@@ -47,6 +47,7 @@ SCALE_SHORT_CONTROL = "event_lm/scale_6510k_short_control"
 RESIDUAL_GROWTH = "event_lm/residual_growth_13030k"
 TAG_READS = "event_lm/tag_read_competition"
 LATE_STEERING = "event_lm/late_steering"
+FINER_ROUTER = "event_lm/finer_router_charge"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -116,6 +117,7 @@ RESIDUAL_GROWTH_13030K = (
 )
 CIRCUITS_6510K = (
     ORIGINAL_WIDTH_SNN,
+    ("Eight-bit router charge", FINER_ROUTER, "fine_charge_s3307", f"{FINER_ROUTER}/native_fine_charge_s3307.json", "#138372"),
     ("Tag read competition, zero start", TAG_READS, "tag_reads_s3307", f"{TAG_READS}/native_tag_reads_s3307.json", GRAY),
     ("Tag read competition, active start", TAG_READS, "tag_active_s3307", f"{TAG_READS}/native_tag_active_s3307.json", BLUE),
     ("Tag reads with forecast-error ranking", TAG_READS, "tag_supervised_s3307",
@@ -287,7 +289,7 @@ def build_research():
     for name, title, arms, seed, context, exposure in (
         ("residual_growth_13030k", "13.03M residual growth and original-width controls", RESIDUAL_GROWTH_13030K,
          3307, 512, (65_536_000, 6_553_600)),
-        ("circuits_6510k", "6.51M tag read competition and late steering", CIRCUITS_6510K,
+        ("circuits_6510k", "6.51M spike circuit and charge comparisons", CIRCUITS_6510K,
          3307, 512, (65_536_000, 6_553_600)),
         ("data_6510k_65536", "6.51M at 65.54M observed targets", NEXT_DATA_6510K, 2503, 512, (49_152_000, 16_384_000)),
         ("expansion_8740k", "8.74M expansion and original-width control", EXPANSION_8740K, 1801, 512, (49_152_000, 6_553_600)),
@@ -647,7 +649,7 @@ def main():
     plot_heldout(research["groups"]["residual_growth_13030k"]["rows"], output, title="Doubling residual width at fixed stream state",
                  subtitle="13.03M matched pair and 6.51M controls · 72.09M enwik8 training targets · seed 3307",
                  filename="event_lm_residual_growth_13030k.png", precision=5)
-    plot_heldout(research["groups"]["circuits_6510k"]["rows"], output, title="Read competition and steering feedback",
+    plot_heldout(research["groups"]["circuits_6510k"]["rows"], output, title="Spike circuit and charge comparisons",
                  subtitle="About 6.51M parameters · 72.09M enwik8 training targets · seed 3307",
                  filename="event_lm_6510k_circuits.png", precision=5)
     plot_trained_context(research, output)

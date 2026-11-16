@@ -80,7 +80,7 @@ full-corpus scores, and exact training records.
 | [6.51M Transformer at 72.09M targets](event_lm/scale_6510k_short_control) | Continuation control for the width and circuit comparisons |
 | [Tag read competition](event_lm/tag_read_competition) | Original training arm, gain sweep on fixed weights, and native integer audits |
 | [Late steering](event_lm/late_steering) | Warm identity, held-out scores, native feedback pulses, and zero-gain intervention |
-| [Finer router charge at fixed width](event_lm/finer_router_charge) | Warm-start parity with the v5 parent at six- and eight-bit charge precision |
+| [Finer router charge at fixed width](event_lm/finer_router_charge) | Warm-start parity, full-corpus scores, eight-bit native pulse audit, and six-bit intervention |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
 exposure, geometry, and seed. The v5 archive combines the checkpoint

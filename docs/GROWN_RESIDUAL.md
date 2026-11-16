@@ -319,3 +319,19 @@ python experiments/audit_residual_growth.py --enwik8 data/enwik8 --device mps \
   --json checkpoints/work/warm_finer_router_charge.json
 bash experiments/run_v4_continuation.sh finer-router-charge
 ```
+
+| Model at 72,089,600 targets | enwik8 bpb | PG-19 bpb | PG-19 raw bpb | Native pulses per byte |
+|---|---:|---:|---:|---:|
+| Six-bit router | 1.87259 | 2.81227 | 2.90738 | 309,048 |
+| Eight-bit router | 1.86770 | 2.82082 | 2.92020 | 309,180 |
+| Original-width full-attention Transformer | 1.77292 | 2.95995 | 3.16079 | — |
+
+The finer router lowered enwik8 loss by 0.00489 bits per byte
+relative to the matched six-bit continuation. Calibrated PG-19
+loss increased by 0.00855. On the 65,536-target enwik8 validation
+probe, returning the trained router to six-bit charge raised loss
+from 1.79341 to 1.79744. The eight-bit model stayed at 19,536
+stream bytes and emitted 0.043% more pulses on the native sample.
+CPU single-byte, CPU chunked, and Metal counts matched on the
+audited prefixes. The held-out comparison uses one seed.
+[Fine-charge held-out scores, parity, and intervention](../results/event_lm/finer_router_charge)

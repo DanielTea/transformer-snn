@@ -202,7 +202,7 @@ if [[ $study != *-transformer ]]; then
     --device "$device" --split test --enwik8 data/enwik8 --activity-profile --checkpoint "$checkpoint"
 fi
 if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == redistribute-inhibition ||
-      $study == tag-read-* || $study == late-steering ||
+      $study == tag-read-* || $study == late-steering || $study == finer-router-charge ||
       $study == expansion-snn || $study == expansion-steering || $study == residual-growth-snn ]]; then
   run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
     --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"

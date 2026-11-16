@@ -61,6 +61,7 @@ Transformer led on enwik8. Follow-up studies test whether stored
 tags can pick better reads and whether feedback can redirect
 bypass pulses within a byte.
 [13.03M comparison](docs/GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state) ·
+[Charge at fixed width](docs/GROWN_RESIDUAL.md#refine-router-charge-at-fixed-width) ·
 [Tag read competition](docs/TAG_READ_COMPETITION.md) · [Late steering](docs/LATE_STEERING.md) ·
 [Training exposure](docs/GROWN_RESIDUAL.md#extend-training-exposure) ·
 [Expansion study](docs/EXPANSION_GROWTH.md) ·

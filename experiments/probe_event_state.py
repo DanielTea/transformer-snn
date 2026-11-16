@@ -14,7 +14,7 @@ from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
 from eval_event_lm import load_checkpoint
-from snnformer.event_lm import EventLM, _delay_group_widths
+from snnformer.event_lm import EventLM, EventLMConfig, _delay_group_widths
 from train_event_lm import initialize_from_checkpoint, scoring_logits
 from train_lm import load_splits
 
@@ -132,6 +132,10 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.cfg.late_steering:
         weights = [block.late_steering.gain for block in model.blocks]
         result["zero_late_steering_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.router_charge_bits > EventLMConfig.router_charge_bits:
+        result["six_bit_router_bpb"] = score_with_options(
+            model, window, chunk_size, router_charge_bits=EventLMConfig.router_charge_bits,
+        )
     if model.cfg.delay_filter:
         weights = [kernel.weight for block in model.blocks for kernel in block.delay_filters if kernel is not None]
         result["zero_delay_filter_bpb"] = score_without_synapses(model, window, chunk_size, weights)
