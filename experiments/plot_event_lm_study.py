@@ -51,6 +51,7 @@ FINER_ROUTER = "event_lm/finer_router_charge"
 DEPTH_GROWTH = "event_lm/depth_growth"
 TRACE_INTEGRATION = "event_lm/trace_integration"
 TRACE_TAP_READ = "event_lm/trace_tap_read"
+PACKED_WIDTH = "event_lm/packed_width"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -154,6 +155,12 @@ TRACE_TAP_101580K = (
     ("Shortest eligible tap", TRACE_TAP_READ, "fixed_s6899", f"{TRACE_TAP_READ}/native_fixed_s6899.json", "#138372"),
     ("Held spike race", TRACE_TAP_READ, "race_s6899", f"{TRACE_TAP_READ}/native_race_s6899.json", VIOLET),
     ("6-block full attention", TRACE_TAP_READ, "transformer_s6899", None, ORANGE),
+)
+PACKED_WIDTH_111411K = (
+    ("187-channel SNN", PACKED_WIDTH, "control_s7907", f"{PACKED_WIDTH}/native_control_s7907.json", BLUE),
+    ("243-channel SNN", PACKED_WIDTH, "wide_s7907", f"{PACKED_WIDTH}/native_wide_s7907.json", VIOLET),
+    ("Original full attention", PACKED_WIDTH, "control_transformer_s7907", None, ORANGE),
+    ("Wider full attention", PACKED_WIDTH, "transformer_s7907", None, "#a34073"),
 )
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
@@ -317,6 +324,8 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
+        ("packed_width_111411k", "12.8M packed SNN width",
+         PACKED_WIDTH_111411K, 7907, 512, (101_580_800, 9_830_400)),
         ("trace_tap_101580k", "9.96M axon tap reads",
          TRACE_TAP_101580K, 6899, 512, (91_750_400, 9_830_400)),
         ("trace_integration_91750k", "9.96M trace inputs and group thresholds",
@@ -438,6 +447,11 @@ def write_leaderboards(data, depth, research):
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
     ]
     study_figures = {
+        "packed_width_111411k": (
+            "![Held-out loss at the original and wider sizes](../results/figures/event_lm_packed_width.png)",
+            "![Validation loss gap as the available history grows](../results/figures/event_lm_packed_width_history.png)",
+            "[Width, state budget, and steering circuit](PACKED_WIDTH.md)",
+        ),
         "trace_tap_101580k": (
             "![Held-out loss for the spike race, shortest tap, and matched controls](../results/figures/event_lm_trace_tap_read.png)",
             "![Validation loss and pulse counts during the tap comparison](../results/figures/event_lm_trace_tap_training.png)",
@@ -709,6 +723,36 @@ def plot_group_thresholds(output):
     save(fig, output, "event_lm_fine_group_thresholds.png")
 
 
+def plot_packed_width_history(output):
+    parent, control, wide = (read_result(f"{PACKED_WIDTH}/{name}_validation_history.json")
+                             for name in ("parent", "control", "wide"))
+    for key in ("data_sha1", "split", "target_bytes", "tail_bytes", "tail_starts"):
+        if parent[key] != control[key] or parent[key] != wide[key]:
+            raise ValueError("all checkpoints must score the same validation tails")
+    fig, ax = plt.subplots(figsize=(9.6, 4.45))
+    fig.subplots_adjust(left=0.11, right=0.966, bottom=0.21, top=0.75)
+    heading(fig, "The enwik8 gap grows with context",
+            f'{parent["target_bytes"]:,} matched validation targets · {parent["tail_bytes"]}-byte scored tails')
+    style(ax)
+    pairs = ((parent, "9.96M v7 pair · 101.58M targets", GRAY, "^--"),
+             (control, "9.96M pair · 111.41M targets", BLUE, "s:"),
+             (wide, "12.8M pair · 111.41M targets", VIOLET, "o-"))
+    histories = [row["history_bytes"] for row in parent["models"][0]["histories"]]
+    for record, name, color, line in pairs:
+        snn, attention = (model["histories"] for model in record["models"])
+        if any(histories != [row["history_bytes"] for row in model] for model in (snn, attention)):
+            raise ValueError("history comparisons must use matching warmup lengths")
+        gap = [spike["bpb"] - full["bpb"] for spike, full in zip(snn, attention, strict=True)]
+        ax.plot(histories, gap, line, color=color, label=name, markerfacecolor="white")
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(histories, [str(history) for history in histories])
+    ax.set_xlabel("Warmup bytes before each scored tail", color=MUTED, labelpad=8)
+    ax.set_ylabel("SNN loss minus full attention, bits per byte", color=MUTED, labelpad=7)
+    ax.axhline(0, linewidth=0.9, color=GRAY, alpha=0.7)
+    ax.legend(frameon=False, labelcolor=TEXT)
+    save(fig, output, "event_lm_packed_width_history.png")
+
+
 def plot_trained_context(research, output):
     short = research["groups"]["continuation_512"]["rows"]
     long = research["groups"]["continuation_2048"]["rows"]
@@ -848,6 +892,15 @@ def main():
                  subtitle="About 9.96M parameters · 101.58M enwik8 training targets · seed 6899",
                  filename="event_lm_trace_tap_read.png", precision=5)
     plot_trace_tap_training(tap_rows, output)
+    narrow_snn, wide_snn, narrow_full, wide_full = research["groups"]["packed_width_111411k"]["rows"]
+    width_pairs = (("11-block SNN", BLUE, narrow_snn, wide_snn),
+                   ("6-block full attention", ORANGE, narrow_full, wide_full))
+    plot_paired_change(width_pairs, output, title="Widening both models at matched exposure",
+                       subtitle="111.41M enwik8 training targets · seed 7907",
+                       ticks=("9.96M parameters", "12.8M parameters"),
+                       note="SNN state grows from 29,674 to 32,616 bytes. Full attention uses 6 MiB at both sizes.",
+                       filename="event_lm_packed_width.png")
+    plot_packed_width_history(output)
     plot_trained_context(research, output)
     plot_training_exposure(research, output)
     plot_prefix_age_gap(f"{OPPONENT}/enwik8_opponent_s711.json", f"{CREDIT}/enwik8_transformer_s711.json", output,

@@ -23,6 +23,32 @@ the gain from observing more training targets.
 | 243-channel SNN, present steering transfers | 12,879,678 | 32,616 B |
 | 243-channel SNN, delayed steering transfers | 12,879,678 | 32,616 B |
 
+## Matched width comparison
+
+All four width runs saw 111,411,200 training targets. The
+table reports bits per byte for seed 7907 on the full enwik8
+test split and 16 pinned PG-19 books. PG-19 temperatures were
+fit on eight separate books.
+
+| Model | enwik8 | PG-19 calibrated | PG-19 raw |
+|---|---:|---:|---:|
+| 187-channel SNN | 1.801526 | 2.774447 | 2.869215 |
+| 243-channel SNN | 1.800803 | **2.765625** | **2.855879** |
+| Original full attention | 1.717889 | 2.884740 | 3.080086 |
+| Wider full attention | **1.717858** | 2.884745 | 3.080105 |
+
+The 56 extra channels lower SNN loss by 0.00072 bpb on
+enwik8 and 0.00882 bpb across PG-19. Each PG-19 book improves
+at the wider size. At about 12.8M parameters, full attention
+leads by 0.08295 bpb on enwik8 and the SNN leads by 0.11912
+bpb on calibrated PG-19. Its PG-19 lead appears in every
+eight-byte prefix recurrence bin. The difference is 0.08813
+bpb on first occurrences and 0.15031 bpb when the nearest
+prior occurrence is at least 512 bytes away.
+[Full-corpus scores and per-book records](../results/event_lm/packed_width)
+
+![Held-out width comparison at the same training exposure](../results/figures/event_lm_packed_width.png)
+
 ## Where the v7 gap grows
 
 The v7 checkpoints predicted the same 24,576 enwik8 validation
@@ -41,6 +67,17 @@ spikes already arriving within its short axon delays.
 | 96 | 1.81302 | 1.74405 | 0.06896 |
 | 224 | 1.81014 | 1.73591 | 0.07423 |
 | 497 | 1.80915 | 1.73382 | 0.07534 |
+
+Both continued model pairs were scored on those same tails.
+The SNN scored 0.00240 bpb lower with one byte of warmup at
+9.96M parameters and 0.00362 bpb lower at 12.8M. With 32 bytes
+of warmup, full attention led by 0.05435 and 0.05460 bpb. With
+497 bytes, those gaps reached 0.07384 and 0.07495 bpb. Both
+SNNs leave most of the context-dependent gap to close.
+[Original-width continuation](../results/event_lm/packed_width/control_validation_history.json) ·
+[Wider continuation](../results/event_lm/packed_width/wide_validation_history.json)
+
+![Validation gap after the original and wider continuations](../results/figures/event_lm_packed_width_history.png)
 
 ## Transfer already-fired steering pulses
 
@@ -136,6 +173,53 @@ The group ablation motivates the allocation. The matched
 continuation measures what adding channels changes.
 [Short-group warm audit](../results/event_lm/packed_width/warm_short_groups.json)
 
+The wider trained SNN gives the same ordering on the same 65,536
+targets. Muting the one-byte group raises loss by 0.87509 bpb.
+Muting the group with delays of 3, 8, and 27 bytes raises it by
+0.29600 bpb.
+[Frozen group interventions at 12.8M](../results/event_lm/packed_width/wide_temporal_groups.json)
+
+The short-group decoder completed an AdamW update on eight
+512-byte enwik8 windows on Metal. The smoke record includes the
+configuration, parent digest, and counted pulses.
+[Short-group training smoke](../results/event_lm/packed_width/event_correction_code_s7907_packed_width_short_smoke.json)
+
+## Contribution of the wider Transformer units
+
+The full-attention width change moves the held-out scores by
+less than 0.00004 bpb. On 32,768 validation targets, zeroing the
+outgoing weights of the 616 added SwiGLU units per block moves
+the wider score from 1.694266 to 1.694273 bpb. The original-width
+model scores 1.694294 on those same windows.
+[Frozen Transformer intervention](../results/event_lm/packed_width/transformer_added_units.json)
+
+## Activity in the added spiking neurons
+
+On the same 4,096 enwik8 test bytes, the native decoder counts
+309,773 pulses per byte at 187 channels and 308,415 at 243.
+Both models reproduce the Metal output counts exactly on those
+bytes. The added content neurons generate 715 pulses per byte
+and the added steering neurons generate 531. The added steering
+neurons in blocks 1–7 are silent on the sample.
+[187-channel native audit](../results/event_lm/packed_width/native_control_s7907.json) ·
+[243-channel native audit](../results/event_lm/packed_width/native_wide_s7907.json)
+
+On 65,536 validation targets, silencing both added populations
+moves loss from 1.73900 to 1.73840 bpb. The 187-channel model
+scores 1.73744 bpb on the same slice.
+[Frozen expansion intervention](../results/event_lm/packed_width/probe_wide_s7907.json) ·
+[Original-width intervention record](../results/event_lm/packed_width/probe_control_s7907.json)
+
+On a 512-target Metal backward pass, the default training
+rectifier gave added steering synapses zero gradients in blocks
+1–7. The existing `--steering-gradient-at-zero` option yielded
+nonzero gradients in all eleven blocks, with exact native count
+parity on 4,096 validation bytes. The seven-block replication
+tested that derivative on a separate architecture and found a
+PG-19 gain alongside increased enwik8 loss.
+[Eleven-block gradient audit](../results/event_lm/packed_width/wide_steering_gradient.json) ·
+[Earlier seven-block comparison](EXPANSION_GROWTH.md#training-the-added-steering-neurons)
+
 ## Learning rate at a continuation boundary
 
 A separate CPU probe continues the released 187-channel SNN for
@@ -162,16 +246,35 @@ eight 512-byte windows per update, 96 warmup steps, and peak
 learning rate 0.0002. The SNNs use the 310,000-pulse soft
 training target. Evaluation uses 4,999,999 enwik8 test targets
 and 8,404,368 targets from 16 pinned PG-19 test books. PG-19
-temperatures use eight separate calibration books. Native
-audits count total pulses and transfer pulses. Frozen-weight
-interventions set transfer synapses to zero and test whether
-the learned delayed synapses also work with present input.
+temperatures use eight separate calibration books. The SNN
+streams through each corpus unit in 8,192-byte chunks with
+state carried between chunks. Full attention scores 256-byte
+segments after warming each window on up to 256 preceding
+bytes. Native audits count total pulses and transfer pulses.
+Frozen-weight interventions set transfer synapses to zero and
+test whether the learned delayed synapses also work with present
+input.
 [Exact launcher](../experiments/run_v4_continuation.sh) ·
-[Dataset manifests and evaluation protocol](HANDOFF.md#score-checkpoints)
+[Dataset manifests and evaluation protocol](HANDOFF.md#score-checkpoints) ·
+[SHA-256 catalog for the measured weights](../results/event_lm/packed_width_checkpoints.sha256)
+
+Restore the [v7 parent checkpoints](HANDOFF.md#checkpoints)
+before launching these continuations. The loader skips a completed
+training record, and the launcher fills in any missing evaluations.
 
 ```bash
-study=checkpoints/work/packed-width
+study=checkpoints/packed-width-study
 for arm in snn control transformer control-transformer delayed-transfer present-transfer short-groups; do
   PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh "packed-width-$arm" "$study"
 done
+```
+
+Replay the widest pair's validation history probe on CPU.
+
+```bash
+.venv/bin/python experiments/probe_lm_context.py --event-lm --device cpu \
+  --checkpoint "$study/wide_s7907.pt" "$study/transformer_s7907.pt" \
+  --data data/enwik8 --split val --histories 1 8 32 96 224 497 \
+  --tail-bytes 16 --tails 1536 --batch-size 32 \
+  --json "$study/results/wide_validation_history.json"
 ```

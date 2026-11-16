@@ -8,7 +8,7 @@ axons and held charge. The last four blocks forward arriving counts
 and emit signed corrections. A tagged error bank inhibits mismatched
 reads before the vocabulary neurons fire.
 
-The newest experimental circuit derives a release spike's timing from
+The v7 tap-read experiment derives a release spike's timing from
 the mismatch between held charge and each candidate on an existing
 axon ring. The first release selects its own spike packet. The
 selector and its shortest-tap control both use the original rings.
@@ -72,7 +72,7 @@ from its trained weights. A warm-start audit expands the local
 populations from 187 to 243 channels under 32 KiB with exact
 parent counts and pulses.
 [Resume from v7](docs/HANDOFF.md#continue-from-the-v7-endpoints) ·
-[Packed width audit](docs/TRACE_TAP_READ.md#expand-within-32-kib) ·
+[Packed-width continuation and steering transfers](docs/PACKED_WIDTH.md) ·
 [Held-charge inputs and group thresholds](docs/TRACE_INTEGRATION.md) ·
 [Growth to 11 spiking blocks](docs/DEPTH_GROWTH.md) ·
 [13.03M residual-width comparison](docs/GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state)

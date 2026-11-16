@@ -4,6 +4,21 @@ Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## 12.8M packed SNN width · 111,411,200 training targets · seed 7907
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 187-channel SNN | 9,960,960 | 29,674 B | 1.80153 | 4 | 2.77445 | 2 | 2.86922 | 309,773 |
+| 243-channel SNN | 12,799,488 | 32,616 B | 1.80080 | 3 | **2.76563** | 1 | 2.85588 | 308,415 |
+| Original full attention | 9,962,496 | 6 MiB | 1.71789 | 2 | 2.88474 | 3 | 3.08009 | — |
+| Wider full attention | 12,801,024 | 6 MiB | **1.71786** | 1 | 2.88475 | 4 | 3.08010 | — |
+
+![Held-out loss at the original and wider sizes](../results/figures/event_lm_packed_width.png)
+
+![Validation loss gap as the available history grows](../results/figures/event_lm_packed_width_history.png)
+
+[Width, state budget, and steering circuit](PACKED_WIDTH.md)
+
 ## 9.96M axon tap reads · 101,580,800 training targets · seed 6899
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |

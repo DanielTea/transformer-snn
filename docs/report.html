@@ -106,7 +106,13 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 
 <section id="spiking-byte-lm">
   <h2>Spiking byte language models</h2>
-  <p class="col">The v7 comparison tests whether a release spike can select its own packet from existing axon taps after 101.58 million enwik8 training targets. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for full attention at its evaluation context. The earlier frozen-teacher arm uses additional training compute.</p>
+  <p class="col">The packed-width study compares 9.96M and 12.8M decoders after 111.41 million enwik8 training targets. The v7 tap-read study tests whether a release spike can select its own packet from existing axon taps. The tables score the full enwik8 test split and 16 complete PG-19 books in bits per byte. PG-19 temperatures are fitted on separate books. State is persistent tensor storage per stream, including FP32 keys and values for full attention at its evaluation context. The earlier frozen-teacher arm uses additional training compute.</p>
+  <figure>
+    <a href="../results/figures/event_lm_packed_width.png"><img src="../results/figures/event_lm_packed_width.png" alt="Held-out loss for the 9.96M and 12.8M models at the same enwik8 training exposure" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_packed_width_history.png"><img src="../results/figures/event_lm_packed_width_history.png" alt="Validation loss gap by available context for the v7 pair and both widths of the continuation" loading="lazy"></a>
+  </figure>
   <figure>
     <a href="../results/figures/event_lm_trace_tap_read.png"><img src="../results/figures/event_lm_trace_tap_read.png" alt="Held-out loss for spike timing, shortest eligible tap, and the continued controls" loading="lazy"></a>
   </figure>
@@ -140,7 +146,14 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_65536_prefix_age.png"><img src="../results/figures/event_lm_65536_prefix_age.png" alt="enwik8 loss gap by eight-byte prefix age after 65.54 million training targets" loading="lazy"></a>
   </figure>
-  <h3>9.96M axon tap reads · 101,580,800 training targets · seed 6899</h3>
+  <h3>12.8M packed SNN width · 111,411,200 training targets · seed 7907</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">187-channel SNN</th><td class="num">9,960,960</td><td class="num">29,674 B</td><td class="num">1.80153</td><td class="num">2.77445</td><td class="num">2.86922</td><td class="num">309,773</td></tr>
+<tr><th scope="row">243-channel SNN</th><td class="num">12,799,488</td><td class="num">32,616 B</td><td class="num">1.80080</td><td class="num"><strong>2.76563</strong></td><td class="num">2.85588</td><td class="num">308,415</td></tr>
+<tr><th scope="row">Original full attention</th><td class="num">9,962,496</td><td class="num">6,291,456 B</td><td class="num">1.71789</td><td class="num">2.88474</td><td class="num">3.08009</td><td class="num">—</td></tr>
+<tr><th scope="row">Wider full attention</th><td class="num">12,801,024</td><td class="num">6,291,456 B</td><td class="num"><strong>1.71786</strong></td><td class="num">2.88475</td><td class="num">3.08010</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>9.96M axon tap reads · 101,580,800 training targets · seed 6899</h3>
 <div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
 <tr><th scope="row">Continued SNN</th><td class="num">9,960,960</td><td class="num">29,674 B</td><td class="num">1.81319</td><td class="num"><strong>2.77756</strong></td><td class="num">2.87524</td><td class="num">309,354</td></tr>
 <tr><th scope="row">Shortest eligible tap</th><td class="num">9,962,312</td><td class="num">29,674 B</td><td class="num">1.81655</td><td class="num">2.78455</td><td class="num">2.88665</td><td class="num">308,210</td></tr>
