@@ -55,13 +55,13 @@ per stream.
 
 ## Continue the research
 
-The next comparison widens the residual stream from 768 to 1,536
-while holding the SNN's persistent state at 19,536 bytes. The handoff
-includes exact commands for that run, the matched Transformer, and
-the original-width control. The expansion, write confirmation, and
-inhibition studies include native audits and interventions on learned
-circuits.
-[Resume the 13.03M comparison](docs/HANDOFF.md#resume-the-1303m-comparison) ·
+Widening the residual stream from 768 to 1,536 reduced PG-19 loss
+while keeping 19,536 bytes of persistent state. The matched wider
+Transformer led on enwik8. Follow-up studies test whether stored
+tags can pick better reads and whether feedback can redirect
+bypass pulses within a byte.
+[13.03M comparison](docs/GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state) ·
+[Tag read competition](docs/TAG_READ_COMPETITION.md) · [Late steering](docs/LATE_STEERING.md) ·
 [Training exposure](docs/GROWN_RESIDUAL.md#extend-training-exposure) ·
 [Expansion study](docs/EXPANSION_GROWTH.md) ·
 [Write confirmation](docs/TRACE_WRITE_CONFIRM.md) ·

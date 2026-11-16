@@ -239,7 +239,7 @@ weights received gradients in all four blocks.
 [Transformer warm start](../results/event_lm/residual_growth_13030k/warm_transformer.json)
 
 The full comparison starts from the completed 65.54M pair
-and also continues the original-width SNN. Each arm uses
+and continues both original-width controls. Each arm uses
 seed 3307, 1,600 steps, 512-byte windows, and 6,553,600
 additional targets, for 72,089,600 targets per model. The v5
 archive contains both starting checkpoints. The launcher defaults
@@ -268,4 +268,25 @@ python experiments/audit_growth_gradients.py transformer --enwik8 data/enwik8 --
 PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-snn
 PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-transformer
 PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-control
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh residual-growth-control-transformer
 ```
+
+| Model at 72,089,600 targets | Parameters | enwik8 bpb | PG-19 bpb | PG-19 raw bpb | State |
+|---|---:|---:|---:|---:|---:|
+| Original-width SNN | 6,514,176 | 1.87259 | 2.81227 | 2.90738 | 19,536 B |
+| Original-width full-attention Transformer | 6,513,152 | 1.77292 | 2.95995 | 3.16079 | 4 MiB |
+| Wider residual SNN | 13,028,352 | 1.87451 | 2.79672 | 2.88959 | 19,536 B |
+| Wider full-attention Transformer | 13,028,864 | 1.77285 | 2.95990 | 3.16073 | 4 MiB |
+
+Doubling residual width increased enwik8 loss by 0.00192 bits per
+byte and reduced calibrated PG-19 loss by 0.01555 relative to the
+original-width continuation. The wider SNN led both controls on
+all 16 PG-19 books. The widened Transformer led on enwik8 by
+0.10166. The SNN native audit counted 308,111 pulses per byte with
+exact CPU and Metal parity. Silencing the added residual outputs
+after training increased loss from 1.80283 to 1.81011 on 65,536
+enwik8 validation targets. The matched comparison uses one seed.
+The two Transformer widths scored within 0.00007 bits per byte
+on each corpus at this exposure.
+[Paired scores, audits, and intervention](../results/event_lm/residual_growth_13030k) ·
+[Original-width Transformer scores](../results/event_lm/scale_6510k_short_control)

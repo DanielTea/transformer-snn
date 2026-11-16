@@ -43,6 +43,10 @@ WIDTH_6510K = "event_lm/scale_6510k_width"
 FINE_CHARGE = "event_lm/grown_fine_charge"
 SCALE_DATA = "event_lm/scale_6510k_data"
 SCALE_NEXT_DATA = "event_lm/scale_6510k_next_data"
+SCALE_SHORT_CONTROL = "event_lm/scale_6510k_short_control"
+RESIDUAL_GROWTH = "event_lm/residual_growth_13030k"
+TAG_READS = "event_lm/tag_read_competition"
+LATE_STEERING = "event_lm/late_steering"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -99,6 +103,22 @@ DATA_6510K = (
 NEXT_DATA_6510K = (
     ("Six-bit grown SNN", SCALE_NEXT_DATA, "trace_s2503", f"{SCALE_NEXT_DATA}/native_trace_s2503.json", BLUE),
     ("Grown full-attention Transformer", SCALE_NEXT_DATA, "transformer_s2503", None, ORANGE),
+)
+ORIGINAL_WIDTH_SNN = ("Original-width held-charge SNN", RESIDUAL_GROWTH, "control_s3307",
+                      f"{RESIDUAL_GROWTH}/native_control_s3307.json", BLUE)
+ORIGINAL_WIDTH_TRANSFORMER = ("Original-width full-attention Transformer", SCALE_SHORT_CONTROL,
+                              "control_transformer_s3307", None, ORANGE)
+RESIDUAL_GROWTH_13030K = (
+    ("Wider residual SNN", RESIDUAL_GROWTH, "residual_s3307", f"{RESIDUAL_GROWTH}/native_residual_s3307.json", VIOLET),
+    ("Wider full-attention Transformer", RESIDUAL_GROWTH, "transformer_s3307", None, ORANGE),
+    ORIGINAL_WIDTH_SNN,
+    ORIGINAL_WIDTH_TRANSFORMER,
+)
+CIRCUITS_6510K = (
+    ORIGINAL_WIDTH_SNN,
+    ("Tag read competition, zero start", TAG_READS, "tag_reads_s3307", f"{TAG_READS}/native_tag_reads_s3307.json", GRAY),
+    ("Late steering", LATE_STEERING, "late_s3307", f"{LATE_STEERING}/native_late_s3307.json", VIOLET),
+    ORIGINAL_WIDTH_TRANSFORMER,
 )
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
@@ -262,6 +282,10 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
+        ("residual_growth_13030k", "13.03M residual growth and original-width controls", RESIDUAL_GROWTH_13030K,
+         3307, 512, (65_536_000, 6_553_600)),
+        ("circuits_6510k", "6.51M tag read competition and late steering", CIRCUITS_6510K,
+         3307, 512, (65_536_000, 6_553_600)),
         ("data_6510k_65536", "6.51M at 65.54M observed targets", NEXT_DATA_6510K, 2503, 512, (49_152_000, 16_384_000)),
         ("expansion_8740k", "8.74M expansion and original-width control", EXPANSION_8740K, 1801, 512, (49_152_000, 6_553_600)),
         ("inhibition_6510k", "6.52M redistribution of inhibition", INHIBITION_6510K, 1801, 512, (49_152_000, 6_553_600)),
@@ -378,6 +402,8 @@ def write_leaderboards(data, depth, research):
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
     paragraphs.extend([
+        "![Held-out loss after doubling residual width](../results/figures/event_lm_residual_growth_13030k.png)",
+        "![Held-out loss after changing the spike circuits at 6.51M parameters](../results/figures/event_lm_6510k_circuits.png)",
         "![Held-out loss as enwik8 training exposure grows at 6.51M parameters](../results/figures/event_lm_6510k_data.png)",
         "![enwik8 loss gap by prefix age after 65.54M targets](../results/figures/event_lm_65536_prefix_age.png)",
         "![Held-out loss after expanding the delay populations](../results/figures/event_lm_expansion_8740k.png)",
@@ -615,6 +641,12 @@ def main():
     plot_heldout(research["groups"]["expansion_8740k"]["rows"], output, title="Growing the content and steering neurons",
                  subtitle="8.74M expanded models and 6.51M control · 55.71M enwik8 training targets · seed 1801",
                  filename="event_lm_expansion_8740k.png", precision=5)
+    plot_heldout(research["groups"]["residual_growth_13030k"]["rows"], output, title="Doubling residual width at fixed stream state",
+                 subtitle="13.03M matched pair and 6.51M controls · 72.09M enwik8 training targets · seed 3307",
+                 filename="event_lm_residual_growth_13030k.png", precision=5)
+    plot_heldout(research["groups"]["circuits_6510k"]["rows"], output, title="Read competition and steering feedback",
+                 subtitle="About 6.51M parameters · 72.09M enwik8 training targets · seed 3307",
+                 filename="event_lm_6510k_circuits.png", precision=5)
     plot_trained_context(research, output)
     plot_training_exposure(research, output)
     plot_prefix_age_gap(f"{OPPONENT}/enwik8_opponent_s711.json", f"{CREDIT}/enwik8_transformer_s711.json", output,

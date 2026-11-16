@@ -84,6 +84,9 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
                 populations[f"block_{index}_inhibition"] = block.activity_inhibition
             if block.inhibition_redistribution is not None:
                 populations[f"block_{index}_inhibition_transfer"] = block.inhibition_redistribution.emit
+            if block.late_steering is not None:
+                populations[f"block_{index}_late_steering"] = block.late_steering.emit
+                populations[f"block_{index}_late_residual"] = block.late_emit
             if block.opponent_steering is not None:
                 populations[f"block_{index}_write_protection"] = block.opponent_steering.emit
             if integer.cfg.trace_read_veto:
@@ -144,6 +147,10 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False):
                    match_forecast_key=integer.cfg.match_forecast_key,
                    learn_context_keys=integer.cfg.learn_context_keys,
                    memory_stats={name: int(value.item()) for name, value in memory_stats.items()})
+    if integer.cfg.tag_read_competition:
+        row["read_competition_gain_ticks"] = integer.prediction_memory.read_inhibition.gains().tolist()
+    if integer.cfg.late_steering:
+        row["late_steering_gain_ticks"] = [block.late_steering.gains().tolist() for block in integer.blocks]
     if integer.cfg.learn_packet_thresholds:
         row["firing_threshold_ticks"] = [
             (block.packet_thresholds.quanta() * _PACKET_TICKS).tolist() for block in integer.blocks

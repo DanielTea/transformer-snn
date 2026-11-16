@@ -76,7 +76,10 @@ full-corpus scores, and exact training records.
 | [Delayed write confirmation](event_lm/trace_write_confirm) | Warm checks, both held-out scores, write ages and the learned-interval ablation |
 | [Redistribution of inhibition](event_lm/inhibition_redistribution) | Warm-start checks, both held-out corpora, native transfer pulses and the zero-transfer intervention |
 | [Frozen teacher guidance](event_lm/teacher_guidance) | Student training metadata, teacher digest, held-out scores, and native audits |
-| [13.03M residual growth](event_lm/residual_growth_13030k) | Warm-start parity for widened SNN and Transformer, plus the Metal training smoke |
+| [13.03M residual growth](event_lm/residual_growth_13030k) | Warm starts, matched held-out results, original-width control and added-neuron intervention |
+| [6.51M Transformer at 72.09M targets](event_lm/scale_6510k_short_control) | Continuation control for the width and circuit comparisons |
+| [Tag read competition](event_lm/tag_read_competition) | Original training arm, gain sweep on fixed weights, and native integer audits |
+| [Late steering](event_lm/late_steering) | Warm identity, held-out scores, native feedback pulses, and zero-gain intervention |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
 exposure, geometry, and seed. The v5 archive combines the checkpoint

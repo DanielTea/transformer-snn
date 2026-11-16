@@ -113,7 +113,21 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
   <figure>
     <a href="../results/figures/event_lm_65536_prefix_age.png"><img src="../results/figures/event_lm_65536_prefix_age.png" alt="enwik8 loss gap by eight-byte prefix age after 65.54 million training targets" loading="lazy"></a>
   </figure>
-  <h3>6.51M at 65.54M observed targets · 65,536,000 training targets · seed 2503</h3>
+  <h3>13.03M residual growth and original-width controls · 72,089,600 training targets · seed 3307</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Wider residual SNN</th><td class="num">13,028,352</td><td class="num">19,536 B</td><td class="num">1.87451</td><td class="num"><strong>2.79672</strong></td><td class="num">2.88959</td><td class="num">308,111</td></tr>
+<tr><th scope="row">Wider full-attention Transformer</th><td class="num">13,028,864</td><td class="num">4,194,304 B</td><td class="num"><strong>1.77285</strong></td><td class="num">2.95990</td><td class="num">3.16073</td><td class="num">—</td></tr>
+<tr><th scope="row">Original-width held-charge SNN</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.87259</td><td class="num">2.81227</td><td class="num">2.90738</td><td class="num">309,048</td></tr>
+<tr><th scope="row">Original-width full-attention Transformer</th><td class="num">6,513,152</td><td class="num">4,194,304 B</td><td class="num">1.77292</td><td class="num">2.95995</td><td class="num">3.16079</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>6.51M tag read competition and late steering · 72,089,600 training targets · seed 3307</h3>
+<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
+<tr><th scope="row">Original-width held-charge SNN</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.87259</td><td class="num"><strong>2.81227</strong></td><td class="num">2.90738</td><td class="num">309,048</td></tr>
+<tr><th scope="row">Tag read competition, zero start</th><td class="num">6,514,180</td><td class="num">19,536 B</td><td class="num">1.87077</td><td class="num">2.81844</td><td class="num">2.91860</td><td class="num">309,523</td></tr>
+<tr><th scope="row">Late steering</th><td class="num">6,514,204</td><td class="num">19,536 B</td><td class="num">1.87323</td><td class="num">2.82081</td><td class="num">2.92053</td><td class="num">308,536</td></tr>
+<tr><th scope="row">Original-width full-attention Transformer</th><td class="num">6,513,152</td><td class="num">4,194,304 B</td><td class="num"><strong>1.77292</strong></td><td class="num">2.95995</td><td class="num">3.16079</td><td class="num">—</td></tr>
+</tbody></table></div>
+<h3>6.51M at 65.54M observed targets · 65,536,000 training targets · seed 2503</h3>
 <div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th><th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th><th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th><th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th></tr></thead><tbody>
 <tr><th scope="row">Six-bit grown SNN</th><td class="num">6,514,176</td><td class="num">19,536 B</td><td class="num">1.86525</td><td class="num"><strong>2.81231</strong></td><td class="num">2.90664</td><td class="num">308,230</td></tr>
 <tr><th scope="row">Grown full-attention Transformer</th><td class="num">6,513,152</td><td class="num">4,194,304 B</td><td class="num"><strong>1.77728</strong></td><td class="num">2.98071</td><td class="num">3.18604</td><td class="num">—</td></tr>
@@ -225,6 +239,12 @@ a:focus-visible { outline: 2px solid var(--ours); outline-offset: 2px; }
 <tr><th scope="row">Local Transformer</th><td class="num">815,232</td><td class="num">32,768 B</td><td class="num">2.04457</td><td class="num">3.26187</td><td class="num">—</td><td class="num">—</td></tr>
 <tr><th scope="row">Full-attention Transformer</th><td class="num">815,232</td><td class="num">1,572,864 B</td><td class="num"><strong>2.01841</strong></td><td class="num">3.29072</td><td class="num">—</td><td class="num">—</td></tr>
 </tbody></table></div>
+  <figure>
+    <a href="../results/figures/event_lm_residual_growth_13030k.png"><img src="../results/figures/event_lm_residual_growth_13030k.png" alt="Held-out loss for the two 13.03M models and original-width controls" loading="lazy"></a>
+  </figure>
+  <figure>
+    <a href="../results/figures/event_lm_6510k_circuits.png"><img src="../results/figures/event_lm_6510k_circuits.png" alt="Held-out loss for read competition, late steering and the 6.51M controls" loading="lazy"></a>
+  </figure>
   <figure>
     <a href="../results/figures/event_lm_expansion_8740k.png"><img src="../results/figures/event_lm_expansion_8740k.png" alt="Held-out loss for the 8.74M expansion and original-width control" loading="lazy"></a>
   </figure>

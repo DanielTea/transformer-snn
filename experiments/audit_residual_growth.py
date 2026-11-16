@@ -79,6 +79,8 @@ def main():
     growth.add_argument("--hidden", type=int, help="grow content and steering within each delay group")
     growth.add_argument("--trace-write-confirm", action="store_true", help="add silent write confirmation neurons")
     growth.add_argument("--redistribute-inhibition", action="store_true", help="add silent inhibitory transfers")
+    growth.add_argument("--tag-read-competition", action="store_true", help="add silent tag read inhibition")
+    growth.add_argument("--late-steering", action="store_true", help="add silent feedback steering")
     parser.add_argument("--router-charge-bits", type=int, choices=(6, 8))
     parser.add_argument("--trace-coincidence", action="store_true")
     parser.add_argument("--json", required=True, type=Path)
@@ -94,15 +96,15 @@ def main():
     if not isinstance(parent, EventLM) or not parent.cfg.local_trace:
         parser.error("the parent must be a held-charge EventLM")
     prior = parent.cfg
-    added_circuit = args.trace_write_confirm or args.redistribute_inhibition
+    circuit_options = ("trace_write_confirm", "redistribute_inhibition", "tag_read_competition", "late_steering")
+    added_circuit = next((option for option in circuit_options if getattr(args, option)), None)
     if ((args.hidden is not None or added_circuit)
             and (args.router_charge_bits is not None or args.trace_coincidence)):
         parser.error("charge precision and trace coincidence options apply to residual growth")
     if added_circuit:
-        option = "trace_write_confirm" if args.trace_write_confirm else "redistribute_inhibition"
-        if getattr(prior, option):
-            parser.error(f"the parent already uses {option.replace('_', ' ')}")
-        cfg = replace(prior, **{option: True})
+        if getattr(prior, added_circuit):
+            parser.error(f"the parent already uses {added_circuit.replace('_', ' ')}")
+        cfg = replace(prior, **{added_circuit: True})
         grown = EventLM(cfg)
         initialize_from_checkpoint(grown, {}, args.parent, freeze_router=False)
     elif args.hidden is None:
@@ -135,6 +137,12 @@ def main():
         gradient_field = "active_inhibition_gradients_on_512_train_targets"
         gradients = [block.inhibition_redistribution.synapse.weight.grad.count_nonzero().item()
                      for block in grown.blocks]
+    elif args.tag_read_competition:
+        gradient_field = "active_read_competition_heads_on_512_train_targets"
+        gradients = grown.prediction_memory.read_inhibition.gain.grad.ne(0).int().tolist()
+    elif args.late_steering:
+        gradient_field = "active_late_steering_gradients_on_512_train_targets"
+        gradients = [block.late_steering.gain.grad.count_nonzero().item() for block in grown.blocks]
     elif args.hidden is None:
         gradient_field = "active_new_projection_gradients_on_512_train_targets"
         gradients = [block.project.weight.grad[prior.dim:].count_nonzero().item() for block in grown.blocks]
@@ -145,7 +153,7 @@ def main():
             for block in grown.blocks
         ]
     if not all(gradients):
-        raise AssertionError("the added neurons in a block received no gradient")
+        raise AssertionError("the added synapses received no gradient in a population")
 
     with args.parent.open("rb") as source:
         parent_sha256 = hashlib.file_digest(source, "sha256").hexdigest()

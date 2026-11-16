@@ -117,6 +117,10 @@ bash experiments/run_v4_continuation.sh residual-growth-transformer
 bash experiments/run_v4_continuation.sh residual-growth-control
 ```
 
+For the original-width Transformer comparison at the same exposure,
+run `bash experiments/run_v4_continuation.sh residual-growth-control-transformer`.
+[Held-out scores for both widths](GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state)
+
 On the original workstation these arms use
 `checkpoints/residual-13030k-study/`, with logs under `logs/` and
 records under `results/`. The expected output weights are
@@ -225,7 +229,9 @@ number of targets, and checkpoint path.
 | Experiment | State at handoff | Evidence |
 |---|---|---|
 | Expansion to 8.74M | Four arms scored. Audits confirm the restored steering population | [Expansion study](EXPANSION_GROWTH.md) |
-| 13.03M residual growth | Warm starts and Metal smoke verified. Full comparison uses the archived 65.54M checkpoints | [Resume the comparison](#resume-the-1303m-comparison) |
+| 13.03M residual growth | Both widths scored. The wider SNN improved PG-19 over the original-width control and full attention led on enwik8 | [Held-out comparison](GROWN_RESIDUAL.md#double-the-residual-stream-at-fixed-persistent-state) |
+| Tag read competition | The first trained circuit emitted zero competition pulses. An active-gain intervention plus two active-start training arms measure older reads | [Read circuit and scores](TAG_READ_COMPETITION.md) |
+| Late steering | Both corpora scored and late spikes measured. The original-width control led on both | [Feedback circuit and scores](LATE_STEERING.md) |
 | Redistribution of inhibition | Matched continuation, both scores, native audit and transfer intervention | [Inhibition study](INHIBITION_REDISTRIBUTION.md) |
 | Frozen teacher guidance | Equal-window control, held-out scores and native audit. The student uses extra training compute | [Training study](TEACHER_GUIDANCE.md) |
 | Delayed write confirmation | Both corpora scored. Native activity and write age measured | [Write confirmation study](TRACE_WRITE_CONFIRM.md) |

@@ -4,6 +4,24 @@ Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## 13.03M residual growth and original-width controls · 72,089,600 training targets · seed 3307
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Wider residual SNN | 13,028,352 | 19,536 B | 1.87451 | 4 | **2.79672** | 1 | 2.88959 | 308,111 |
+| Wider full-attention Transformer | 13,028,864 | 4 MiB | **1.77285** | 1 | 2.95990 | 3 | 3.16073 | — |
+| Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.87259 | 3 | 2.81227 | 2 | 2.90738 | 309,048 |
+| Original-width full-attention Transformer | 6,513,152 | 4 MiB | 1.77292 | 2 | 2.95995 | 4 | 3.16079 | — |
+
+## 6.51M tag read competition and late steering · 72,089,600 training targets · seed 3307
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Original-width held-charge SNN | 6,514,176 | 19,536 B | 1.87259 | 3 | **2.81227** | 1 | 2.90738 | 309,048 |
+| Tag read competition, zero start | 6,514,180 | 19,536 B | 1.87077 | 2 | 2.81844 | 2 | 2.91860 | 309,523 |
+| Late steering | 6,514,204 | 19,536 B | 1.87323 | 4 | 2.82081 | 3 | 2.92053 | 308,536 |
+| Original-width full-attention Transformer | 6,513,152 | 4 MiB | **1.77292** | 1 | 2.95995 | 4 | 3.16079 | — |
+
 ## 6.51M at 65.54M observed targets · 65,536,000 training targets · seed 2503
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
@@ -119,6 +137,10 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Held-charge SNN | 1,630,992 | 21,320 B | 2.00633 | 2 | **2.98979** | 1 | 3.10037 | 307,013 |
 | Full-attention Transformer | 1,630,848 | 3 MiB | **1.82812** | 1 | 3.09559 | 2 | 3.29465 | — |
+
+![Held-out loss after doubling residual width](../results/figures/event_lm_residual_growth_13030k.png)
+
+![Held-out loss after changing the spike circuits at 6.51M parameters](../results/figures/event_lm_6510k_circuits.png)
 
 ![Held-out loss as enwik8 training exposure grows at 6.51M parameters](../results/figures/event_lm_6510k_data.png)
 

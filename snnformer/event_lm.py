@@ -82,6 +82,8 @@ class EventLMConfig:
     trace_write_confirm: bool = False
     steering_gradient_at_zero: bool = False
     redistribute_inhibition: bool = False
+    tag_read_competition: bool = False
+    late_steering: bool = False
 
     @property
     def inhibition_bits(self) -> int:
@@ -280,14 +282,14 @@ class _InhibitionRedistribution(nn.Module):
 
 
 class _DelayCorrection(nn.Module):
-    """Emit the difference between the anchor and matching packet on one path."""
+    """Emit scaled corrections with one conductance per channel group."""
 
-    def __init__(self, widths, cap):
+    def __init__(self, widths, cap, *, input_bits=0):
         super().__init__()
         self.gain = nn.Parameter(torch.zeros(len(widths)))
         groups = torch.arange(len(widths)).repeat_interleave(torch.tensor(widths))
         self.register_buffer("groups", groups, persistent=False)
-        self.emit = _IntegrateFire(2 * cap, _CHARGE_BITS, False)
+        self.emit = _IntegrateFire(2 * cap, _CHARGE_BITS + input_bits, False)
 
     def gains(self):
         return _unit_gain_ticks(self.gain)
@@ -299,8 +301,8 @@ class _DelayCorrection(nn.Module):
     def forward(self, anchor, chosen):
         return self.emit_difference(chosen - anchor)
 
-    def emit_difference(self, difference):
-        return self.emit(difference * self.gains().index_select(0, self.groups))
+    def emit_difference(self, difference, quanta=None):
+        return self.emit(difference * self.gains().index_select(0, self.groups), quanta)
 
 
 def _even_prefix(count, slots, bits):
@@ -519,7 +521,8 @@ class _SpikeCorrection(nn.Module):
     """An address spike probes a bank and enables a bounded correction."""
 
     def __init__(self, dim, width, heads, slots, resolution, bind_previous, *, observed=False, forecast=False,
-                 key_channels=0, match_key=False, tag_phase_address=False, write_credit=False):
+                 key_channels=0, match_key=False, tag_phase_address=False, write_credit=False,
+                 tag_read_competition=False):
         super().__init__()
         if heads < 1 or slots < 2 or width < heads or width % heads:
             raise ValueError("memory needs at least two slots and a positive read width divisible by its heads")
@@ -542,7 +545,10 @@ class _SpikeCorrection(nn.Module):
         self.forecast = _IntegrateFire(2 * resolution, _CHARGE_BITS, False) if forecast else None
         self.address = _IntegrateFire(_HIDDEN_CAP * resolution, _CHARGE_BITS - 2, False)
         self.value = _IntegrateFire(_HIDDEN_CAP * resolution, _CHARGE_BITS, False)
+        self.read_inhibition = _DelayCorrection((1,) * heads, self.forecast.cap) if tag_read_competition else None
         self.register_buffer("slot_ids", torch.arange(slots), persistent=False)
+        self.register_buffer("read_slot_ids", torch.arange(slots << key_channels)
+                             if tag_phase_address and tag_read_competition else None, persistent=False)
         phase_negative = None
         if tag_phase_address:
             phases = torch.arange(1 << key_channels)
@@ -567,16 +573,70 @@ class _SpikeCorrection(nn.Module):
             drive, tolerance = encoded.split((self.heads * self.slots, self.heads), dim=-1)
             target = self.observation_code(observed)
         counts = self.address(drive.clamp_min(0)).unflatten(-1, (self.heads, self.slots))
-        winner = counts.argmax(-1, keepdim=True)
+        tolerance = self.value(tolerance.clamp_min(0)).unsqueeze(-1)
+        return counts, target, tolerance
+
+    def _compete(self, counts, inhibition=None):
+        preference = eligible = counts
+        slot_ids = self.slot_ids
+        if inhibition is not None:
+            preference = counts - inhibition
+            lower_bound = -self.read_inhibition.emit.cap
+            eligible = preference.masked_fill(counts <= 0, lower_bound - 1)
+            if self.read_slot_ids is not None:
+                slot_ids = self.read_slot_ids
+        winner = eligible.argmax(-1, keepdim=True)
         active = counts.amax(-1, keepdim=True).clamp(0, 1)
-        address = (winner == self.slot_ids).to(counts.dtype) * active
+        address = (winner == slot_ids).to(counts.dtype) * active
         if self.training and counts.is_floating_point():
             # One address fires in the forward pass. Gradients can also
             # reach runner-up neurons so the route can change during training.
-            probabilities = (counts / (2 * self.resolution)).softmax(-1)
+            probabilities = (preference / (2 * self.resolution)).softmax(-1)
             address = address + active.detach() * (probabilities - probabilities.detach())
-        tolerance = self.value(tolerance.clamp_min(0)).unsqueeze(-1)
-        return address, target, tolerance
+        return address
+
+    @staticmethod
+    def _tag_excess(key, query, tolerance):
+        outside = interval_spikes(key, query - tolerance, query + tolerance)
+        return outside.abs().amax(-1, keepdim=True)
+
+    def _read_ranking_loss(self, cells, counts, inhibition, error):
+        values = cells[:, :-1, ..., self.key_channels:].detach() / self.resolution
+        desired = (error.unsqueeze(-2) / self.resolution).expand_as(values)
+        eligible = counts[:, :-1] > 0
+        floor = torch.finfo(values.dtype).min
+        with torch.no_grad():
+            utility = -F.smooth_l1_loss(values, desired, reduction="none").mean(-1)
+            targets = utility.masked_fill(~eligible, floor).softmax(-1)
+        preference = (counts[:, :-1].detach() - inhibition[:, :-1]) / (2 * self.resolution)
+        log_probs = preference.masked_fill(~eligible, floor).log_softmax(-1)
+        present = eligible.any(-1)
+        loss = -(targets * log_probs).sum(-1)
+        return (loss * present).sum() / present.sum().clamp_min(1)
+
+    def _addresses(self, counts, prediction, tolerance, stats=None, ranking=None):
+        address = self._phase_address(self._compete(counts), prediction)
+        if self.read_inhibition is None:
+            return address, None
+
+        counts = self._phase_address(counts, prediction)
+        query = prediction[..., :self.key_channels].unsqueeze(-2)
+
+        def select_read(cells):
+            keys = cells[..., :self.key_channels]
+            excess = self._tag_excess(keys, query, tolerance.unsqueeze(-2)).squeeze(-1)
+            excess = excess * (counts > 0)
+            inhibition = self.read_inhibition.emit_difference(excess.transpose(-1, -2)).transpose(-1, -2)
+            selected = self._compete(counts, inhibition)
+            if ranking is not None:
+                error, losses = ranking
+                losses.append(self._read_ranking_loss(cells, counts, inhibition, error))
+            if stats is not None:
+                stats["rerouted_read_heads"] = (selected != address).any(-1).sum(dtype=torch.int64)
+                stats["bank_read_inhibition_spikes"] = inhibition.detach().sum(dtype=torch.int64)
+            return selected
+
+        return address, select_read
 
     def _write_target(self, observed, prediction, tolerance):
         error = (observed - prediction).clamp(-self.value.cap, self.value.cap)
@@ -609,10 +669,9 @@ class _SpikeCorrection(nn.Module):
         if not self.match_key:
             return payload
         query = prediction[..., :self.key_channels]
-        excess = interval_spikes(key, query - tolerance, query + tolerance).abs()
         # The inhibitory packets share a rail. Overlapping pulses make
         # one veto, and coincidence removes the same slots from the read.
-        veto = excess.amax(-1, keepdim=True) * address.amax(-1, keepdim=True)
+        veto = self._tag_excess(key, query, tolerance) * address.amax(-1, keepdim=True)
         muted, passed = _steer_packet(payload, veto)
         if pulse_counts is not None:
             pulse_counts.append(veto.sum())
@@ -626,14 +685,19 @@ class _SpikeCorrection(nn.Module):
             stats["passed_payload_spikes"] = passed_for_stats.detach().abs().sum(dtype=torch.int64)
         return passed
 
-    def forward(self, spikes, access, *, observed=None, prediction_code=None, pulse_counts=None):
+    def forward(self, spikes, access, *, observed=None, prediction_code=None, pulse_counts=None, read_losses=None):
         prefix = access.prefix if access is not None else 0
         state = None if access is None else access.state
         observation = None if observed is None else observed[:, prefix:]
-        address, target, tolerance = self._events(spikes[:, prefix:], observation)
+        counts, target, tolerance = self._events(spikes[:, prefix:], observation)
         read_tolerance = tolerance
         prediction = None if prediction_code is None else prediction_code[:, prefix:]
-        address = self._phase_address(address, prediction)
+        stats = None if access is None else access.stats
+        ranking = None
+        if read_losses is not None:
+            error = target[:, 1:, ..., self.key_channels:] - prediction[:, :-1, ..., self.key_channels:]
+            ranking = (error.detach(), read_losses)
+        address, select_read = self._addresses(counts, prediction, tolerance, stats, ranking)
         if prediction_code is not None:
             previous = None if state is None else state.previous_prediction
             first = torch.zeros_like(prediction[:, :1]) if previous is None else previous[:, None]
@@ -641,9 +705,9 @@ class _SpikeCorrection(nn.Module):
             target, tolerance = self._write_target(target, previous, tolerance)
         read, state = correction_reads(
             address, target, tolerance, self.value.cap, state, bind_previous=self.bind_previous,
-            hide_age=None if access is None else access.hide_age, stats=None if access is None else access.stats,
+            hide_age=None if access is None else access.hide_age, stats=stats,
             key_channels=self.key_channels, shuffle_keys=access is not None and access.shuffle_keys,
-            pulse_counts=pulse_counts, write_credit=self.write_credit,
+            pulse_counts=pulse_counts, write_credit=self.write_credit, select_read=select_read,
         )
         if access is not None and access.stats is not None and self.phase_negative is not None:
             by_phase = address.detach().unflatten(-1, (self.slots, -1))
@@ -653,20 +717,19 @@ class _SpikeCorrection(nn.Module):
             if prediction_code is not None:
                 state.previous_prediction = prediction[:, -1].clone()
             access.state = state
-        read = self._read_payload(read, prediction, read_tolerance, address,
-                                  None if access is None else access.stats, pulse_counts)
+        read = self._read_payload(read, prediction, read_tolerance, address, stats, pulse_counts)
         if pulse_counts is not None:
             pulse_counts.append(read.abs().sum())
         return F.pad(read.flatten(-2), (0, 0, prefix, 0)) if prefix else read.flatten(-2)
 
     def step(self, spikes, state, *, observed=None, prediction_code=None):
-        address, target, tolerance = self._events(spikes, observed)
-        address = self._phase_address(address, prediction_code)
+        counts, target, tolerance = self._events(spikes, observed)
+        address, select_read = self._addresses(counts, prediction_code, tolerance)
         read_tolerance = tolerance
         if prediction_code is not None and state is not None:
             target, tolerance = self._write_target(target, state.previous_prediction, tolerance)
         read, state = correction_step(
-            address, target, tolerance, self.value.cap, state, bind_previous=self.bind_previous,
+            address, target, tolerance, self.value.cap, state, bind_previous=self.bind_previous, select_read=select_read,
         )
         if prediction_code is not None:
             state.previous_prediction = prediction_code
@@ -847,6 +910,8 @@ class _DelayBlock(nn.Module):
             self.emit = _ResidualMembraneFire(cap, output_bits)
         else:
             self.emit = _IntegrateFire(cap, output_bits, cfg.carry, continuous=cfg.continuous)
+        self.late_steering = _DelayCorrection(self.widths, cap, input_bits=bits) if cfg.late_steering else None
+        self.late_emit = _IntegrateFire(cap, output_bits, False) if cfg.late_steering else None
         self.axon_dtype = None
         if cfg.compact_axon_state:
             self.axon_dtype = next(dtype for dtype in (torch.int8, torch.int16, torch.int32)
@@ -868,6 +933,19 @@ class _DelayBlock(nn.Module):
             # Use the right derivative at the silent boundary during training.
             return torch.where(drive >= 0, drive, 0)
         return drive.clamp_min(0)
+
+    def _apply_late_steering(self, current, first, present, steering, firing_quanta, quanta):
+        width = sum(self.widths)
+        drive = F.linear(first, self.expand.weight_ticks()[width:])
+        back = self.late_steering.emit_difference(drive.clamp(0, self.steer.cap * self.steer.threshold), firing_quanta)
+        _, bypass = _steer_packet(present, steering)
+        redirected, _ = _steer_packet(bypass, back)
+        if quanta is not None:
+            redirected = redirected * quanta
+        match, miss = self.project.weight_ticks()[:, :2 * width].split(width, dim=-1)
+        # Transfer the same packets from bypass to coincidence with opposite synaptic signs.
+        revised = current + F.linear(redirected, match - miss)
+        return first + self.late_emit(revised, reference=first)
 
     def _trace_radius(self, steering, current, quanta):
         if self.opponent_steering is None:
@@ -1043,7 +1121,10 @@ class _DelayBlock(nn.Module):
                                 departure=departure, anchor=anchor, coincidence_read=coincidence_read)
         if self.residual_membrane:
             return self.emit(current, state=local_state)
-        return self.emit(current)
+        first = self.emit(current)
+        if self.late_steering is not None:
+            return self._apply_late_steering(current, first, present, steering, firing_quanta, quanta)
+        return first
 
     def _step_compact(self, packets, steering, state, position):
         # Recycle a packet's slot as soon as its fixed delay has elapsed.
@@ -1136,6 +1217,8 @@ class _DelayBlock(nn.Module):
         current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
                                 departure=departure, anchor=anchor, coincidence_read=coincidence_read)
         spikes, state.output_phase = self.emit.step(current, state.output_phase)
+        if self.late_steering is not None:
+            spikes = self._apply_late_steering(current, spikes, present, steering, firing_quanta, quanta)
         return spikes
 
 
@@ -1179,6 +1262,8 @@ class EventLM(nn.Module):
             raise ValueError("matching needs a positive integer number of forecast key channels")
         if cfg.tag_phase_address and not cfg.match_forecast_key:
             raise ValueError("tag phase addresses need a forecast bank with matching tags")
+        if cfg.tag_read_competition and not cfg.match_forecast_key:
+            raise ValueError("read competition needs a forecast bank with matching tags")
         if cfg.learn_context_keys and (cfg.route != "steered_correction_code" or cfg.forecast_key_channels < 1):
             raise ValueError("learned context keys need reserved channels in the direct forecast bank")
         if cfg.learn_packet_thresholds and (cfg.carry or cfg.continuous or
@@ -1219,6 +1304,10 @@ class EventLM(nn.Module):
         if cfg.spread_coincidence and (cfg.carry or cfg.continuous
                                        or cfg.route not in ("steered", "steered_correction_code")):
             raise ValueError("spread coincidence needs a reset-per-byte steered spike router")
+        if cfg.late_steering and (cfg.carry or cfg.continuous or cfg.residual_membrane or cfg.spread_coincidence
+                                 or cfg.trace_coincidence_start is not None
+                                 or cfg.route not in ("steered", "steered_correction_code")):
+            raise ValueError("late steering needs ordinary immediate coincidence and reset-per-byte residual neurons")
         if cfg.delay_filter and (not cfg.compact_delays or cfg.carry or cfg.continuous or cfg.delay_window != 1
                                  or cfg.departure_coincidence or cfg.local_trace):
             raise ValueError("delay filters need the fixed-delay coincidence path and reset-per-byte spike routing")
@@ -1251,6 +1340,8 @@ class EventLM(nn.Module):
         cap = _HIDDEN_CAP * cfg.resolution
         if cfg.opponent_steering and ((cap * _WEIGHT_LIMIT) << cfg.router_charge_bits) > _FP32_EXACT:
             raise ValueError("opponent steering charge would exceed the exact FP32 integer range")
+        if cfg.late_steering and (cap << (cfg.router_charge_bits + _CHARGE_BITS)) > _FP32_EXACT:
+            raise ValueError("late steering charge would exceed the exact FP32 integer range")
         # The additional read projection is bounded by one delay group's width.
         if cfg.route in _CORRECTION_ROUTES and cfg.route != "steered_correction":
             projection_width += cfg.hidden // len(_STEERED_DELAYS[0])
@@ -1285,7 +1376,7 @@ class EventLM(nn.Module):
                 cfg.dim, width, cfg.memory_heads, cfg.memory_slots, cfg.resolution, bind_previous=True, observed=True,
                 forecast=cfg.route == "steered_correction_code", key_channels=cfg.forecast_key_channels,
                 match_key=cfg.match_forecast_key, tag_phase_address=cfg.tag_phase_address,
-                write_credit=cfg.bank_write_credit,
+                write_credit=cfg.bank_write_credit, tag_read_competition=cfg.tag_read_competition,
             )
             self.recall_synapse = _Synapse(width - cfg.memory_heads * cfg.forecast_key_channels, cfg.dim, gain=0.15)
             self.recall_emit = _IntegrateFire(cap, _CHARGE_BITS, False)
@@ -1352,7 +1443,7 @@ class EventLM(nn.Module):
             raise ValueError("quantized weights exceed the exact FP32 accumulator range at this spike resolution")
 
     def forward(self, tokens, *, delay_limit=None, shuffle_phase=False, correction_access=None,
-                return_prediction=False, corrected_prediction=False, memory_pulses=None):
+                return_prediction=False, corrected_prediction=False, memory_pulses=None, bank_read_losses=None):
         if tokens.ndim != 2 or tokens.shape[1] == 0:
             raise ValueError("expected a nonempty [batch, bytes] tensor")
         if delay_limit is not None and (delay_limit < 1 or self.cfg.route not in _DELAY_ROUTES):
@@ -1363,6 +1454,10 @@ class EventLM(nn.Module):
             raise ValueError("return_prediction needs a spike forecast")
         if corrected_prediction and not return_prediction:
             raise ValueError("a corrected forecast requires returning the prediction")
+        if bank_read_losses is not None and (
+            not self.training or not self.cfg.tag_read_competition or correction_access is not None or tokens.shape[1] < 2
+        ):
+            raise ValueError("read ranking needs a complete training window with forecast-tag competition")
         if self._check_weights and self.input.weight.is_floating_point():
             self._check_accumulator()
         drive = self.input(tokens)
@@ -1381,6 +1476,7 @@ class EventLM(nn.Module):
             prediction = self._prediction_code(spikes)
             recall = self.prediction_memory(
                 spikes, correction_access, observed=observed, prediction_code=prediction, pulse_counts=memory_pulses,
+                read_losses=bank_read_losses,
             )
             spikes = self._apply_recall(spikes, recall)
         current = self.output(spikes)
