@@ -48,6 +48,7 @@ RESIDUAL_GROWTH = "event_lm/residual_growth_13030k"
 TAG_READS = "event_lm/tag_read_competition"
 LATE_STEERING = "event_lm/late_steering"
 FINER_ROUTER = "event_lm/finer_router_charge"
+DEPTH_GROWTH = "event_lm/depth_growth"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -124,6 +125,18 @@ CIRCUITS_6510K = (
      f"{TAG_READS}/native_tag_supervised_s3307.json", VIOLET),
     ("Late steering", LATE_STEERING, "late_s3307", f"{LATE_STEERING}/native_late_s3307.json", VIOLET),
     ORIGINAL_WIDTH_TRANSFORMER,
+)
+GROWTH_81920K = (
+    ("11-block SNN", DEPTH_GROWTH, "depth_s4603", f"{DEPTH_GROWTH}/native_depth_s4603.json", VIOLET),
+    ("7-block wider SNN", DEPTH_GROWTH, "wide_s4603", f"{DEPTH_GROWTH}/native_wide_s4603.json", BLUE),
+    ("6-block full attention", DEPTH_GROWTH, "transformer_s4603", None, ORANGE),
+)
+RESIDUAL_OUTPUT_81920K = (
+    ("7-block SNN, ordinary output", DEPTH_GROWTH, "control_s4603",
+     f"{DEPTH_GROWTH}/native_control_s4603.json", BLUE),
+    ("7-block SNN, correction output", DEPTH_GROWTH, "corrections_s4603",
+     f"{DEPTH_GROWTH}/native_corrections_s4603.json", VIOLET),
+    ("4-block full attention", DEPTH_GROWTH, "control_transformer_s4603", None, ORANGE),
 )
 TRACE_COINCIDENCE_6510K = (
     GROWN_6510K[1],
@@ -287,6 +300,9 @@ def build_research():
     groups = {}
     continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
+        ("growth_9960k", "9.96M depth and width growth", GROWTH_81920K, 4603, 512, (72_089_600, 9_830_400)),
+        ("residual_output_6510k", "6.51M signed residual output", RESIDUAL_OUTPUT_81920K, 4603, 512,
+         (72_089_600, 9_830_400)),
         ("residual_growth_13030k", "13.03M residual growth and original-width controls", RESIDUAL_GROWTH_13030K,
          3307, 512, (65_536_000, 6_553_600)),
         ("circuits_6510k", "6.51M spike circuit and charge comparisons", CIRCUITS_6510K,
@@ -400,12 +416,23 @@ def write_leaderboards(data, depth, research):
         "Each PG-19 temperature is fitted on eight separate validation books. "
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
     ]
-    for group in research["groups"].values():
+    growth_figures = {
+        "growth_9960k": (
+            "![Held-out loss for deeper and wider SNNs and full attention](../results/figures/event_lm_growth_9960k.png)",
+            "![enwik8 loss gap by prefix age for the 11-block SNN](../results/figures/event_lm_growth_9960k_prefix_age.png)",
+        ),
+        "residual_output_6510k": (
+            "![Held-out loss with ordinary and correction output](../results/figures/event_lm_residual_output.png)",
+            "![Generated pulses with identical output counts within each pair](../results/figures/event_lm_residual_emissions.png)",
+        ),
+    }
+    for name, group in research["groups"].items():
         rows = group["rows"]
         paragraphs.extend([
             f'## {group["title"]} · {group["training_summary"]}',
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
+        paragraphs.extend(growth_figures.get(name, ()))
     paragraphs.extend([
         "![Held-out loss after doubling residual width](../results/figures/event_lm_residual_growth_13030k.png)",
         "![Held-out loss after changing the spike circuits at 6.51M parameters](../results/figures/event_lm_6510k_circuits.png)",
@@ -415,7 +442,7 @@ def write_leaderboards(data, depth, research):
         "![Held-out next-byte loss for the grown 6.51M models](../results/figures/event_lm_grown_6510k.png)",
         "![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)",
         "[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · "
-        "[Current model card](../models/spiking-byte-lm-v5/README.md)",
+        "[Current model card](../models/spiking-byte-lm-v6/README.md) · [Depth growth study](DEPTH_GROWTH.md)",
         "![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)",
         "![Held-out loss at both trained context lengths](../results/figures/event_lm_trained_context.png)",
         "[Continuation and scale source records](../results/event_lm/continuation_leaderboard.json) · "
@@ -449,7 +476,7 @@ def write_leaderboards(data, depth, research):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    table = markdown_table(research["groups"]["data_6510k_65536"]["rows"], include_ranks=False)
+    table = markdown_table(research["groups"]["growth_9960k"]["rows"], include_ranks=False)
     readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
 
 
@@ -529,6 +556,41 @@ def plot_heldout(rows, output, *, title, subtitle, filename, precision=3):
     fig.text(0.035, 0.043, "Lower is better. PG-19 uses temperatures fitted on separate validation books.",
              color=MUTED, size=9)
     save(fig, output, filename)
+
+
+def plot_residual_emissions(output):
+    audits = [read_result(f"{DEPTH_GROWTH}/{name}.json") for name in (
+        "parent_residual_emissions", "native_depth_s4603", "native_corrections_s4603",
+    )]
+    if len({(audit["input_sha256"], audit["input_bytes"], audit["split"]) for audit in audits}) != 1:
+        raise ValueError("residual emission audits must use the same input")
+    parent, depth, corrections = (audit["models"][0] for audit in audits)
+    labels = ["Seven-block parent", "Trained 11-block SNN", "Seven-block correction SNN"]
+    ordinary = [parent["total_pulses_per_byte"], depth["ordinary_residual_pulses_per_byte"],
+                corrections["ordinary_residual_pulses_per_byte"]]
+    signed = [parent["all_residual_corrections_pulses_per_byte"], depth["total_pulses_per_byte"],
+              corrections["total_pulses_per_byte"]]
+
+    fig, ax = plt.subplots(figsize=(10.8, 4.6))
+    fig.subplots_adjust(left=0.25, right=0.96, bottom=0.28, top=0.76)
+    heading(fig, "Generated events with the same output counts",
+            "Same checkpoint weights within each row · native audit on 4,096 enwik8 test bytes")
+    style(ax, grid_axis="x")
+    rows = range(len(labels))
+    ax.hlines(rows, signed, ordinary, color=GRAY, alpha=0.45)
+    for values, name, color in ((ordinary, "Ordinary re-emission", GRAY), (signed, "Signed correction", VIOLET)):
+        ax.scatter(values, rows, color=color, s=45, zorder=3, label=name)
+        for row, value in zip(rows, values, strict=True):
+            ax.annotate(f"{value:,.0f}", (value, row), xytext=(0, 9), textcoords="offset points",
+                        ha="center", color=TEXT, fontsize=9)
+    ax.set_yticks(rows, labels)
+    ax.set_ylim(len(labels) - 0.48, -0.57)
+    ax.margins(x=0.14)
+    ax.xaxis.set_major_formatter("{x:,.0f}")
+    ax.set_xlabel("Generated pulses per byte", color=MUTED, labelpad=7)
+    fig.legend(loc="lower center", bbox_to_anchor=(0.6, 0.09), ncol=2, frameon=False, labelcolor=TEXT)
+    fig.text(0.036, 0.043, "Forwarded pulses still drive downstream synapses.", color=MUTED, size=9)
+    save(fig, output, "event_lm_residual_emissions.png")
 
 
 def plot_trained_context(research, output):
@@ -652,6 +714,13 @@ def main():
     plot_heldout(research["groups"]["circuits_6510k"]["rows"], output, title="Spike circuit and charge comparisons",
                  subtitle="About 6.51M parameters · 72.09M enwik8 training targets · seed 3307",
                  filename="event_lm_6510k_circuits.png", precision=5)
+    plot_heldout(research["groups"]["growth_9960k"]["rows"], output, title="Growing spiking depth or width",
+                 subtitle="About 9.96M parameters · 81.92M enwik8 training targets · seed 4603",
+                 filename="event_lm_growth_9960k.png", precision=5)
+    plot_heldout(research["groups"]["residual_output_6510k"]["rows"], output, title="Emitting signed corrections",
+                 subtitle="About 6.51M parameters · 81.92M enwik8 training targets · seed 4603",
+                 filename="event_lm_residual_output.png", precision=5)
+    plot_residual_emissions(output)
     plot_trained_context(research, output)
     plot_training_exposure(research, output)
     plot_prefix_age_gap(f"{OPPONENT}/enwik8_opponent_s711.json", f"{CREDIT}/enwik8_transformer_s711.json", output,
@@ -664,6 +733,10 @@ def main():
                         f"{SCALE_NEXT_DATA}/enwik8_transformer_s2503.json", output,
                         subtitle="65.54M enwik8 training targets · 4,999,999 shared test targets",
                         filename="event_lm_65536_prefix_age.png")
+    plot_prefix_age_gap(f"{DEPTH_GROWTH}/enwik8_depth_s4603.json",
+                        f"{DEPTH_GROWTH}/enwik8_transformer_s4603.json", output,
+                        subtitle="11-block SNN and 512-byte full attention · 4,999,999 shared test targets",
+                        filename="event_lm_growth_9960k_prefix_age.png")
 
 
 if __name__ == "__main__":

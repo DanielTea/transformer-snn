@@ -68,17 +68,39 @@ def worker(options):
     import torch
 
     from common import resolve_device
-    from probe_lm_context import load_model
     from snnformer import count_params
 
     torch.set_num_threads(options["threads"])
     torch.set_num_interop_threads(1)
     device = resolve_device(options["device"])
     checkpoint = Path(options["checkpoint"])
-    model, run_name = load_model(checkpoint, device)
-    if model.cfg.attn not in ("transformer_local", "transformer_successor"):
-        raise ValueError(f"{checkpoint}: streaming requires a local Transformer or successor model")
-    model.float()
+    if options.get("integer_event"):
+        from snnformer.event_lm import EventLM
+        from train_event_lm import load_checkpoint
+
+        if device.type != "cpu":
+            raise ValueError("the integer event decoder requires CPU")
+        model, metadata = load_checkpoint(checkpoint, device)
+        if not isinstance(model, EventLM):
+            raise ValueError(f"{checkpoint}: expected a spiking byte model from train_event_lm.py")
+        run_name = metadata["run_name"]
+        model = model.to_integer()
+        details = {"variant": "integer_event", "local_history_bytes": model.local_history,
+                   "spike_resolution": model.cfg.resolution}
+    else:
+        from probe_lm_context import load_model
+
+        model, run_name = load_model(checkpoint, device)
+        if model.cfg.attn not in ("transformer_local", "transformer_successor"):
+            raise ValueError(f"{checkpoint}: streaming requires a local Transformer or successor model")
+        model.float()
+        successor = model.cfg.attn == "transformer_successor"
+        details = {
+            "variant": ("spike" if model.cfg.successor_spikes else "continuous") if successor else "local",
+            "local_window": model.cfg.local_window,
+            "successor_slots_per_order": model.cfg.successor_slots if successor else None,
+            "successor_orders": list(model.cfg.successor_orders) if successor else None,
+        }
 
     def synchronize():
         if device.type == "cuda":
@@ -108,15 +130,11 @@ def worker(options):
                 "state_bytes_after_prompt": max(after_prompt),
                 "state_bytes_after_decode": max(after_decode),
             })
-    successor = model.cfg.attn == "transformer_successor"
     return {
         "checkpoint": str(checkpoint),
         "run_name": run_name,
-        "variant": ("spike" if model.cfg.successor_spikes else "continuous") if successor else "local",
         "parameters": count_params(model),
-        "local_window": model.cfg.local_window,
-        "successor_slots_per_order": model.cfg.successor_slots if successor else None,
-        "successor_orders": list(model.cfg.successor_orders) if successor else None,
+        **details,
         "device": str(device),
         "torch_version": str(torch.__version__),
         "process_peak_rss_bytes": peak_rss_bytes(),
@@ -127,6 +145,8 @@ def worker(options):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, nargs="+", required=True)
+    parser.add_argument("--integer-event", action="store_true",
+                        help="benchmark the native integer export of train_event_lm.py checkpoints on CPU")
     parser.add_argument("--contexts", type=int, nargs="+", default=[32, 512, 1024])
     parser.add_argument("--steps", type=int, default=128, help="greedy decode steps per repeat")
     parser.add_argument("--warmups", type=int, default=2, help="unmeasured repeats at each context")
@@ -165,6 +185,7 @@ def main():
         "repeats": args.repeats,
         "threads": args.threads,
         "device": args.device,
+        "integer_event": args.integer_event,
         "prompt": prompt.hex(),
     }
     results = []
@@ -187,7 +208,7 @@ def main():
 
     output = {
         "system": platform.platform(),
-        "dtype": "float32",
+        "dtype": "int32" if args.integer_event else "float32",
         "threads": args.threads,
         "interop_threads": 1,
         "batch_size": 1,

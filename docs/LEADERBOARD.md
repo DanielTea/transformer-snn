@@ -4,6 +4,30 @@ Lower bits per byte rank higher. Every row in a comparison uses the same enwik8 
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## 9.96M depth and width growth · 81,920,000 training targets · seed 4603
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 11-block SNN | 9,960,960 | 29,674 B | 1.84288 | 2 | **2.79854** | 1 | 2.90068 | 309,059 |
+| 7-block wider SNN | 9,957,868 | 19,536 B | 1.84496 | 3 | 2.80299 | 2 | 2.90845 | 307,543 |
+| 6-block full attention | 9,962,496 | 6 MiB | **1.75713** | 1 | 2.93008 | 3 | 3.12422 | — |
+
+![Held-out loss for deeper and wider SNNs and full attention](../results/figures/event_lm_growth_9960k.png)
+
+![enwik8 loss gap by prefix age for the 11-block SNN](../results/figures/event_lm_growth_9960k_prefix_age.png)
+
+## 6.51M signed residual output · 81,920,000 training targets · seed 4603
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 7-block SNN, ordinary output | 6,514,176 | 19,536 B | 1.84466 | 3 | **2.80932** | 1 | 2.91443 | 309,030 |
+| 7-block SNN, correction output | 6,514,176 | 19,536 B | 1.84464 | 2 | 2.86794 | 2 | 2.99541 | 305,045 |
+| 4-block full attention | 6,513,152 | 4 MiB | **1.75773** | 1 | 2.93346 | 3 | 3.12986 | — |
+
+![Held-out loss with ordinary and correction output](../results/figures/event_lm_residual_output.png)
+
+![Generated pulses with identical output counts within each pair](../results/figures/event_lm_residual_emissions.png)
+
 ## 13.03M residual growth and original-width controls · 72,089,600 training targets · seed 3307
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 | Rank | PG-19 raw | Pulses/byte |
@@ -155,7 +179,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 ![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)
 
-[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · [Current model card](../models/spiking-byte-lm-v5/README.md)
+[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · [Current model card](../models/spiking-byte-lm-v6/README.md) · [Depth growth study](DEPTH_GROWTH.md)
 
 ![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)
 

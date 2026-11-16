@@ -84,6 +84,77 @@ starting checkpoint scored 1.86770 and 2.82082 respectively.
 [Control records](../results/event_lm/depth_growth) ·
 [Eight-bit parent scores](../results/event_lm/finer_router_charge)
 
+## Held-out results
+
+| 9.96M comparison | enwik8 bpb | PG-19 calibrated bpb | PG-19 raw bpb | Generated pulses/byte |
+|---|---:|---:|---:|---:|
+| 11-block SNN | 1.84288 | **2.79854** | **2.90068** | 309,059 |
+| 7-block wider SNN | 1.84496 | 2.80299 | 2.90845 | 307,543 |
+| 6-block full attention | **1.75713** | 2.93008 | 3.12422 | — |
+
+At this parameter count, depth improved over width by 0.00208 bpb
+on enwik8 and 0.00445 calibrated bpb on PG-19. Both SNNs scored
+lower than full attention on all 16 PG-19 books. Full attention
+leads the deeper SNN by 0.08575 bpb on enwik8. The 11-block model
+also improved on the 6.51M ordinary-output control by 0.00178 bpb
+on enwik8 and 0.01079 on PG-19. These differences come from one
+matched continuation seed.
+[Ranked results](LEADERBOARD.md) · [Per-book scores and records](../results/event_lm/depth_growth)
+
+The enwik8 breakdown groups test targets by the previous
+occurrence of their eight-byte prefix. First occurrences and
+repeats at least 512 bytes apart account for 78.7% of the total
+loss gap. The gap remains positive in every recurrence group.
+[Prefix-age breakdown](../results/figures/event_lm_growth_9960k_prefix_age.png)
+
+### Seven-block output comparison
+
+| 6.51M comparison | enwik8 bpb | PG-19 calibrated bpb | PG-19 raw bpb | Generated pulses/byte |
+|---|---:|---:|---:|---:|
+| Ordinary-output SNN | 1.84466 | **2.80932** | **2.91443** | 309,030 |
+| Signed corrections at every output | 1.84464 | 2.86794 | 2.99541 | 305,045 |
+| 4-block full attention | **1.75773** | 2.93346 | 3.12986 | — |
+
+Training with corrections at every output changed enwik8 loss by
+0.00002 bpb and increased calibrated PG-19 loss by 0.05862 bpb
+relative to the ordinary-output SNN. On the native audit it generated
+1.3% fewer pulses than that independently trained control. At the
+correction model's own trained weights, switching to ordinary
+re-emission would generate 346,146 pulses per byte at identical
+output counts. The signed output saves 11.9% in that fixed-weights
+comparison. The released depth checkpoint applies signed output
+only to the four appended blocks.
+[Seven-block native audit](../results/event_lm/depth_growth/native_corrections_s4603.json) ·
+[Held-out output comparison](../results/figures/event_lm_residual_output.png)
+
+## What the added blocks learned
+
+At the trained 11-block weights, the decoder emitted 309,059
+pulses per byte. Switching the same four blocks to ordinary
+re-emission at the same weights and identical output counts would
+emit 365,063 per byte. Signed correction saves 15.3% of generated
+events in that comparison. All four appended steering populations
+fired on the test sample. On 65,536 validation targets, silencing
+the four new projections increased loss from 1.77115 to 1.77546
+bpb. This intervention isolates the trained projections while
+retaining the other learned weights.
+[Native pulse and parity audit](../results/event_lm/depth_growth/native_depth_s4603.json) ·
+[Added-block intervention](../results/event_lm/depth_growth/probe_depth_s4603.json) ·
+[Same-weights pulse comparison](../results/figures/event_lm_residual_emissions.png)
+
+## Native CPU timing
+
+With two PyTorch CPU threads on the Apple M3 Max, median greedy
+decode after a 512-byte enwik8 prompt took 2.05 ms per byte for
+the seven-block control and 3.05 ms for the 11-block SNN. Three
+repeats each generated 64 bytes after one warmup. Measured stream
+state stayed at 19,536 and 29,674 B through both 128- and 512-byte
+prompts and generation. The timing records local software
+performance with Metal jobs running on the same machine.
+[Timing metadata and repeats](../results/event_lm/depth_growth/decode_control_depth.json)
+
+## Reproduce
+
 ```bash
 export PYTORCH_ENABLE_MPS_FALLBACK=0
 mkdir -p checkpoints/work
@@ -99,4 +170,13 @@ bash experiments/run_v4_continuation.sh depth-growth-wide
 bash experiments/run_v4_continuation.sh depth-growth-transformer
 bash experiments/run_v4_continuation.sh depth-growth-corrections
 bash experiments/run_v4_continuation.sh depth-growth-control-transformer
+python experiments/benchmark_decode.py --integer-event --device cpu --threads 2 \
+  --checkpoint checkpoints/depth-growth-study/control_s4603.pt checkpoints/depth-growth-study/depth_s4603.pt \
+  --contexts 128 512 --steps 64 --warmups 1 --repeats 3 \
+  --prompt-file data/enwik8 --prompt-offset 95000000 --json checkpoints/work/decode_control_depth.json
 ```
+
+Restore the parents using the v6 archive. Use the tracked training
+records to replay a specific arm, or use the launcher above to score
+and audit each endpoint as well.
+[Archive restore and replay](HANDOFF.md#replay-the-released-runs)

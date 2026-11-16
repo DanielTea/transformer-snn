@@ -1,8 +1,9 @@
 # ShuntFormer — design notes
 
-The [v5 model card](../models/spiking-byte-lm-v5/README.md) describes the
-current integer byte decoder. This page documents the original
-competitive-shunting attention architecture.
+The [v6 model card](../models/spiking-byte-lm-v6/README.md) describes
+the current integer byte decoder and its signed correction blocks.
+This page documents the original competitive-shunting attention
+architecture.
 
 ShuntFormer is a spike-driven transformer whose attention is built from two
 classic cortical inhibition motifs instead of softmax:

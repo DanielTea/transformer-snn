@@ -20,11 +20,13 @@ RELEASES = {
     "v3": ("spiking-byte-lm-v3", "spiking-byte-lm-v3-checkpoints"),
     "v4": ("spiking-byte-lm-v4", "spiking-byte-lm-v4-checkpoints"),
     "v5": ("spiking-byte-lm-v5", "spiking-byte-lm-v5-checkpoints"),
+    "v6": ("spiking-byte-lm-v6", "spiking-byte-lm-v6-checkpoints"),
 }
 DEPTH_REFERENCE = "depth-inhibition-study/trace_s0.pt"
 CONTINUATION_REFERENCE = "long-context-continuation/trace_ctx2048_s711.pt"
 FINE_CHARGE_REFERENCE = "grown-fine-charge-study/fine_s711.pt"
 EXPOSURE_REFERENCE = "scale-6510k-next-data-study/trace_s2503.pt"
+DEPTH_GROWTH_REFERENCE = "depth-growth-study/depth_s4603.pt"
 V4_CATALOGS = ("continuation_checkpoints.sha256", "v4_checkpoints.sha256")
 
 
@@ -214,17 +216,22 @@ def main():
             entries, candidate, measured = collect_catalog_release(
                 args.checkpoint_dir, V4_CATALOGS, FINE_CHARGE_REFERENCE, "grown_fine_charge/native_fine_s711.json",
             )
-        else:
+        elif args.release == "v5":
             entries, candidate, measured = collect_catalog_release(
                 args.checkpoint_dir, (*V4_CATALOGS, "v5_checkpoints.sha256"),
                 EXPOSURE_REFERENCE, "scale_6510k_next_data/native_trace_s2503.json",
+            )
+        else:
+            entries, candidate, measured = collect_catalog_release(
+                args.checkpoint_dir, ("v6_checkpoints.sha256",),
+                DEPTH_GROWTH_REFERENCE, "depth_growth/native_depth_s4603.json",
             )
         val_bpb, name, training, record_path = candidate
         args.release_dir.mkdir(parents=True, exist_ok=True)
         model_dir.mkdir(parents=True, exist_ok=True)
         bundle = args.release_dir / f"{archive_stem}.tar.gz"
-        checksum_path = (f"checkpoints/SHA256SUMS-{args.release}" if args.release in ("v3", "v4", "v5")
-                         else "checkpoints/SHA256SUMS")
+        continuation = args.release not in ("v1", "v2")
+        checksum_path = f"checkpoints/SHA256SUMS-{args.release}" if continuation else "checkpoints/SHA256SUMS"
         write_archive(args.checkpoint_dir, entries, bundle, checksum_path)
         bundle_sha256 = sha256(bundle)
         (args.release_dir / f"{archive_stem}.sha256").write_text(
@@ -244,7 +251,7 @@ def main():
             "archive": {"file": bundle.name, "sha256": bundle_sha256, "bytes": bundle.stat().st_size},
             "checkpoints": dict(sorted(entries.items())),
         }
-        if args.release in ("v3", "v4", "v5"):
+        if continuation:
             manifest["model"]["cumulative_training_targets"] = (
                 training["train_target_bytes"] + training["initialization"]["training_targets"]
             )
