@@ -15,6 +15,7 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   echo "         depth-growth-corrections depth-growth-control-transformer" >&2
   echo "         trace-transport trace-group-thresholds trace-transport-control trace-transport-transformer" >&2
   echo "         trace-fine-group-thresholds" >&2
+  echo "         trace-tap-control trace-tap-fixed trace-tap-race trace-tap-transformer" >&2
   exit 2
 fi
 
@@ -155,6 +156,20 @@ case "$study" in
       --initialize-from checkpoints/depth-growth-study/transformer_s4603.pt)
     name=transformer_s5801
     ;;
+  trace-tap-control|trace-tap-fixed|trace-tap-race)
+    training+=("${spiking[@]}" --depth 11 --router-charge-bits 8 --residual-correction-start 7
+      --initialize-from checkpoints/trace-transport-study/control_s5801.pt)
+    arm=${study#trace-tap-}
+    if [[ $arm != control ]]; then
+      training+=(--trace-tap-read "$arm")
+    fi
+    name="${arm}_s6899"
+    ;;
+  trace-tap-transformer)
+    training+=(--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 10.576171875
+      --initialize-from checkpoints/trace-transport-study/transformer_s5801.pt)
+    name=transformer_s6899
+    ;;
   expansion-snn|expansion-steering)
     training+=("${spiking[@]}" --hidden 256 --grow-expansion
       --initialize-from checkpoints/scale-6510k-data-study/trace_s1109.pt)
@@ -206,6 +221,9 @@ elif [[ $study == depth-growth-* ]]; then
 elif [[ $study == trace-transport* || $study == trace-group-thresholds || $study == trace-fine-group-thresholds ]]; then
   training+=(--steps 2400 --warmup 96 --lr 0.0002 --seed 5801 --eval-every 300
     --tag "trace_transport_${name%_s5801}")
+elif [[ $study == trace-tap-* ]]; then
+  training+=(--steps 2400 --warmup 96 --lr 0.0002 --seed 6899 --eval-every 300
+    --tag "trace_tap_${name%_s6899}")
 elif [[ $study == residual-growth-control-transformer ]]; then
   training+=(--steps 1600 --warmup 64 --lr 0.0003 --seed 3307 --eval-every 200
     --tag scale_6510k_residual_transformer_control)
@@ -268,7 +286,8 @@ if [[ $study == trace-coincidence || $study == trace-write-confirm || $study == 
       $study == tag-read-* || $study == late-steering || $study == finer-router-charge ||
       $study == expansion-snn || $study == expansion-steering || $study == residual-growth-snn ||
       $study == depth-growth-snn || $study == depth-growth-wide || $study == trace-transport ||
-      $study == trace-group-thresholds || $study == trace-fine-group-thresholds || $study == trace-transport-control ]]; then
+      $study == trace-group-thresholds || $study == trace-fine-group-thresholds || $study == trace-transport-control ||
+      $study == trace-tap-fixed || $study == trace-tap-race ]]; then
   run_report "$records/probe_$name.json" "$python_exe" -u experiments/probe_event_state.py \
     --device "$device" --enwik8 data/enwik8 --chunk-size 512 --targets 65536 --checkpoint "$checkpoint"
 fi

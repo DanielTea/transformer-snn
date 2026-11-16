@@ -146,7 +146,7 @@ def build_model(args):
                             redistribute_inhibition=args.redistribute_inhibition,
                             local_trace=args.local_trace, trace_coincidence_start=args.trace_coincidence_start,
                             trace_write_credit=args.trace_write_credit, trace_write_confirm=args.trace_write_confirm,
-                            trace_integration=args.trace_integration,
+                            trace_integration=args.trace_integration, trace_tap_read=args.trace_tap_read,
                             steering_gradient_at_zero=args.steering_gradient_at_zero,
                             late_steering=args.late_steering,
                             bank_write_credit=args.bank_write_credit,
@@ -157,6 +157,7 @@ def build_model(args):
                             residual_membrane=args.residual_membrane,
                             residual_correction_start=args.residual_correction_start,
                             compact_axon_state=args.compact_axon_state,
+                            compact_trace_state=args.compact_trace_state,
                             tag_phase_address=args.tag_phase_address)
         return EventLM(cfg), cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
@@ -169,7 +170,7 @@ def build_model(args):
 _BANK_PARAMETERS = ("prediction_memory.", "recall_synapse.")
 _OPTIONAL_ROUTER_PARAMETERS = (
     ".packet_thresholds.", ".delay_correction.", ".delay_filters.", ".opponent_steering.", ".trace.read_veto.",
-    ".spread_coincidence.", ".trace.write_confirm.", ".trace.input.",
+    ".spread_coincidence.", ".trace.write_confirm.", ".trace.input.", ".trace_taps.",
     ".inhibition_redistribution.", ".inhibition_thresholds.", ".late_steering.",
 )
 
@@ -222,6 +223,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
         source_geometry = replace(source_cfg, resolution=model.cfg.resolution,
                                   output_reference=model.cfg.output_reference, compact_delays=model.cfg.compact_delays,
                                   compact_axon_state=model.cfg.compact_axon_state,
+                                  compact_trace_state=model.cfg.compact_trace_state,
                                   departure_coincidence=model.cfg.departure_coincidence,
                                   delay_window=model.cfg.delay_window, router_charge_bits=model.cfg.router_charge_bits,
                                   delay_residual=source_cfg.delay_residual or model.cfg.delay_residual,
@@ -235,6 +237,7 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                                   trace_write_credit=model.cfg.trace_write_credit,
                                   trace_write_confirm=source_cfg.trace_write_confirm or model.cfg.trace_write_confirm,
                                   trace_integration=source_cfg.trace_integration or model.cfg.trace_integration,
+                                  trace_tap_read=model.cfg.trace_tap_read,
                                   steering_gradient_at_zero=model.cfg.steering_gradient_at_zero,
                                   late_steering=source_cfg.late_steering or model.cfg.late_steering,
                                   bank_write_credit=model.cfg.bank_write_credit,
@@ -260,6 +263,8 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
                 expected.update(name for name in model.state_dict() if ".trace.write_confirm." in name)
             if model.cfg.trace_integration and not source_cfg.trace_integration:
                 expected.update(name for name in model.state_dict() if ".trace.input." in name)
+            if model.cfg.trace_tap_read is not None and source_cfg.trace_tap_read is None:
+                expected.update(name for name in model.state_dict() if ".trace_taps." in name)
             if model.cfg.spread_coincidence and not source_cfg.spread_coincidence:
                 expected.update(name for name in model.state_dict() if ".spread_coincidence." in name)
             if model.cfg.redistribute_inhibition and not source_cfg.redistribute_inhibition:
@@ -347,6 +352,8 @@ def main():
                         help="allocate a history ring of its own length to each fixed axon group")
     parser.add_argument("--compact-axon-state", action="store_true",
                         help="store axon counts in the narrowest signed integer that holds every pulse")
+    parser.add_argument("--compact-trace-state", action="store_true",
+                        help="store held charge in the narrowest signed integer that holds its bounds")
     parser.add_argument("--departure-coincidence", action="store_true",
                         help="route delayed pulses by coincidence with both departure and arrival steering")
     parser.add_argument("--delay-window", type=int, default=1,
@@ -381,6 +388,8 @@ def main():
                         help="use delayed content spikes to extend the held-charge write interval")
     parser.add_argument("--trace-integration", action="store_true",
                         help="integrate learned current and arriving spikes before correcting held charge")
+    parser.add_argument("--trace-tap-read", choices=("fixed", "race"),
+                        help="read the shortest candidate tap or let held spikes race among recent taps")
     parser.add_argument("--steering-gradient-at-zero", action="store_true",
                         help="use the right training derivative for steering at zero synaptic charge")
     parser.add_argument("--late-steering", action="store_true",
@@ -482,13 +491,13 @@ def main():
     if args.bank_read_rank_weight and (not args.tag_read_competition or args.ctx < 2):
         parser.error("bank read ranking needs --tag-read-competition and at least two input bytes")
     if (args.learn_packet_thresholds or args.pulse_budget is not None or args.output_reference or args.compact_delays
-            or args.compact_axon_state or args.residual_membrane
+            or args.compact_axon_state or args.compact_trace_state or args.residual_membrane
             or args.departure_coincidence or args.delay_window != 1 or args.delay_residual or args.activity_inhibition
             or args.inhibition_by_expansion or args.redistribute_inhibition or args.learn_inhibition_thresholds
             or args.inhibition_threshold_bits != EventLMConfig.inhibition_threshold_bits
             or args.trace_coincidence_start is not None or args.steering_gradient_at_zero or args.late_steering
             or args.local_trace or args.trace_write_credit or args.trace_write_confirm or args.trace_read_veto
-            or args.trace_integration
+            or args.trace_integration or args.trace_tap_read is not None
             or args.delay_filter or args.opponent_steering or args.spread_coincidence
             or args.router_charge_bits != EventLMConfig.router_charge_bits) and args.variant not in (
         "event_steered", "event_correction_code"

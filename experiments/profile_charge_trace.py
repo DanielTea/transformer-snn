@@ -59,7 +59,7 @@ def profile(model, tokens, *, compare_recent_taps=False):
         radius = options.get("write_radius", steering)
         delayed = options.get("delayed_content")
         lower, upper = trace._bounds(content, radius, delayed)
-        initial = torch.zeros_like(content[:, 0]) if initial is None else initial
+        initial = torch.zeros_like(content[:, 0]) if initial is None else initial.to(content.dtype)
         after, input_pulses = trace._scan(lower, upper, initial, content, delayed)
         before = torch.cat((initial[:, None], after[:, :-1]), dim=1)
         changed = after != before

@@ -164,6 +164,11 @@ def probe(model, window, chunk_size, *, residual_width_before=None, expansion_wi
     if model.cfg.trace_integration:
         weights = [block.trace.input.weight for block in model.blocks]
         result["zero_trace_input_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+    if model.cfg.trace_tap_read is not None:
+        weights = [block.trace_taps.weight for block in model.blocks]
+        result["zero_tap_correction_bpb"] = score_without_synapses(model, window, chunk_size, weights)
+        if model.cfg.trace_tap_read == "race":
+            result["fixed_tap_on_race_weights_bpb"] = score_with_options(model, window, chunk_size, trace_tap_read="fixed")
     if model.prediction_memory is not None:
         result["mute_bank_corrections_bpb"] = score_without_synapses(
             model, window, chunk_size, [model.recall_synapse.weight],

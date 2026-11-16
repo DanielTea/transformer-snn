@@ -29,6 +29,7 @@ _DELAYS = ((1, 2, 4, 8), (1, 3, 9, 27), (1, 4, 16, 64))
 _STEERED_DELAYS = ((1, 1, 2, 3), (1, 2, 4, 8), (1, 3, 9, 27))
 _LONG_DELAY = (16, 64, 128)
 _FEEDBACK_WINDOW = 8
+_TRACE_TAP_COUNT = 4
 _DELAY_ROUTES = ("steered_static", "steered_feedback", "steered_margin")
 _PHASE_ROUTES = ("steered_timed", "steered_phase_swap", "steered_phase_delay")
 _CORRECTION_ROUTES = ("steered_correction", "steered_correction_residual", "steered_correction_binding")
@@ -42,6 +43,10 @@ _STEERED_ROUTES = (
 def _delay_group_widths(channels, groups):
     width, extra = divmod(channels, groups)
     return tuple(width + (group < extra) for group in range(groups))
+
+
+def _spike_storage_dtype(cap):
+    return next(dtype for dtype in (torch.int8, torch.int16, torch.int32) if cap <= torch.iinfo(dtype).max)
 
 
 @dataclass(frozen=True)
@@ -88,6 +93,8 @@ class EventLMConfig:
     trace_integration: bool = False
     learn_inhibition_thresholds: bool = False
     inhibition_threshold_bits: int = _PACKET_BITS
+    trace_tap_read: str | None = None
+    compact_trace_state: bool = False
 
     @property
     def inhibition_bits(self) -> int:
@@ -416,6 +423,16 @@ def _steer_packet(packet, steering, start=None):
     return selected, packet - selected
 
 
+def _first_arrival(candidates, latencies, surrogate_scale=None):
+    index = latencies.argmin(-1, keepdim=True)
+    packet = candidates.gather(-1, index.unsqueeze(-2).expand_as(candidates[..., :1])).squeeze(-1)
+    if surrogate_scale is not None:
+        weights = (-latencies / surrogate_scale).softmax(-1)
+        surrogate = (candidates.detach() * weights.unsqueeze(-2)).sum(-1)
+        packet = packet + (surrogate - surrogate.detach())
+    return packet, index.squeeze(-1)
+
+
 def _phase_swap(packet, steering, start):
     """Use one timing bit to swap the destinations of intact pulse groups."""
     matched, rest = _steer_packet(packet, steering)
@@ -527,6 +544,7 @@ class _CorrectionAccess:
     stats: dict | None
     shuffle_keys: bool = False
     local_layers: list[_DelayState] | None = None
+    local_position: int = 0
 
 
 class _SpikeCorrection(nn.Module):
@@ -782,10 +800,12 @@ class _TraceInput(nn.Module):
 class _SpikeTrace(nn.Module):
     """A causal charge trace with interval correction and optional input spikes."""
 
-    def __init__(self, cap, *, write_credit=False, veto_widths=None, confirm_widths=None, integration_width=None):
+    def __init__(self, cap, *, write_credit=False, veto_widths=None, confirm_widths=None, integration_width=None,
+                 compact_state=False):
         super().__init__()
         self.cap = cap
         self.write_credit = write_credit
+        self.storage_dtype = _spike_storage_dtype(cap) if compact_state else None
         self.read_veto = _DelayCorrection(veto_widths, cap) if veto_widths is not None else None
         self.write_confirm = _DelayCorrection(confirm_widths, cap) if confirm_widths is not None else None
         self.input = _TraceInput(integration_width, cap) if integration_width is not None else None
@@ -816,9 +836,16 @@ class _SpikeTrace(nn.Module):
         after = _scan_translated_charge(lower, upper, initial, pulses, self.cap, write_credit=self.write_credit)
         return after, pulses
 
+    def _store(self, charge):
+        if self.storage_dtype is None or (charge.is_floating_point() and torch.is_grad_enabled()):
+            return charge
+        return charge.to(self.storage_dtype)
+
     def forward(self, present, steering, initial, pulse_counts, *, write_radius=None, delayed_content=None):
         if initial is None:
             initial = torch.zeros_like(present[:, 0])
+        elif self.storage_dtype is not None:
+            initial = initial.to(present.dtype)
         radius = steering if write_radius is None else write_radius
         lower, upper = self._bounds(present, radius, delayed_content)
         after, pulses = self._scan(lower, upper, initial, present, delayed_content)
@@ -828,16 +855,18 @@ class _SpikeTrace(nn.Module):
         read = self._read(before, change, steering)
         if pulse_counts is not None:
             pulse_counts.extend((change.abs().sum(), read.abs().sum()))
-        return read, after[:, -1].clone()
+        return read, self._store(after[:, -1].clone())
 
     def step(self, present, steering, before, *, write_radius=None, delayed_content=None):
         if before is None:
             before = torch.zeros_like(present)
+        elif self.storage_dtype is not None:
+            before = before.to(present.dtype)
         radius = steering if write_radius is None else write_radius
         lower, upper = self._bounds(present, radius, delayed_content)
         moved = before if self.input is None else before + self.input(present, delayed_content)
         change = interval_spikes(moved, lower, upper)
-        return self._read(before, change, steering), moved + change
+        return self._read(before, change, steering), self._store(moved + change)
 
 
 class _OpponentSteering(nn.Module):
@@ -863,6 +892,71 @@ class _OpponentSteering(nn.Module):
     def forward(self, current, quanta):
         opposite = (-current).clamp(0, self.current_limit)
         return self.emit(opposite * self.gain_ticks(), quanta)
+
+
+class _TraceTapRead(nn.Module):
+    """Race arriving axon packets using inhibited firing times from the held read."""
+
+    def __init__(self, widths, delays, cap, resolution, mode, *, packet_thresholds):
+        super().__init__()
+        self.widths = widths
+        self.delays = delays
+        self.choices = tuple(min(_TRACE_TAP_COUNT, delay) for delay in delays)
+        self.active_widths = tuple(width for width, count in zip(widths, self.choices, strict=True) if count > 1)
+        self.cap = cap
+        self.resolution = resolution
+        self.race = mode == "race"
+        self.weight = nn.Parameter(torch.zeros(sum(self.active_widths)))
+        self.emit = _IntegrateFire((4 if packet_thresholds else 2) * cap, _CHARGE_BITS, False)
+
+    def gain_ticks(self):
+        if not self.weight.is_floating_point():
+            return self.weight
+        # One master weight learns both the mismatch conductance and the packet correction.
+        return _weight_ticks(self.weight * 4).clamp(1 - _TICKS, _TICKS)
+
+    def freeze_integer(self):
+        if self.weight.is_floating_point():
+            self.weight = nn.Parameter(self.gain_ticks().to(torch.int32), requires_grad=False)
+
+    def forward(self, candidates, anchor, read, steering, position, quanta=None, pulse_counts=None):
+        if read.ndim == 3:
+            position = torch.arange(read.shape[1], device=read.device) + position
+        gains = iter(self.gain_ticks().split(self.active_widths))
+        currents, indices = [], []
+        for taps, fixed, query, aperture, delay, choices in zip(
+            candidates, anchor.split(self.widths, dim=-1), read.split(self.widths, dim=-1),
+            steering.split(self.widths, dim=-1), self.delays, self.choices, strict=True,
+        ):
+            gain = next(gains) if choices > 1 else None
+            if taps is None:
+                currents.append(torch.zeros_like(fixed))
+                indices.append(torch.full_like(query[..., 0], -1, dtype=torch.long))
+                continue
+            active = query.ne(0).any(-1) & (position >= delay)
+            if self.race:
+                window = aperture.unsqueeze(-1)
+                exposed = taps.clamp(-window, window)
+                mismatch = (exposed - query.unsqueeze(-1)).abs()
+                latency = (mismatch * (_TICKS + gain[:, None])).sum(-2, dtype=taps.dtype)
+                scale = (_TICKS * self.resolution * math.isqrt(gain.numel())
+                         if self.training and taps.is_floating_point() else None)
+                selected, index = _first_arrival(taps, latency, scale)
+            else:
+                selected = taps[..., -1]
+                index = torch.full_like(active, taps.shape[-1] - 1, dtype=torch.long)
+            currents.append(torch.where(active.unsqueeze(-1), selected - fixed, 0) * gain)
+            indices.append(index.masked_fill(~active, -1))
+
+        winners = torch.stack(indices, dim=-1)
+        if pulse_counts is not None:
+            pulse_counts.append(winners.ge(0).sum(dtype=torch.int32))
+        correction = self.emit(torch.cat(currents, dim=-1))
+        limit = self.cap if quanta is None else (self.cap * _PACKET_UNITS) // quanta
+        delayed = (anchor + correction).clamp(-limit, limit)
+        before, _ = _steer_packet(anchor, steering)
+        after, _ = _steer_packet(delayed, steering)
+        return (read + (after - before)).clamp(-limit, limit), delayed, winners
 
 
 class _DelayBlock(nn.Module):
@@ -905,8 +999,9 @@ class _DelayBlock(nn.Module):
         self.departure_coincidence = cfg.departure_coincidence
         self.delay_window = cfg.delay_window
         self.resolution = cfg.resolution
-        if self.delay_window > 1:
-            offsets = torch.arange(min(self.delay_window, self.history_size))
+        candidate_window = _TRACE_TAP_COUNT if cfg.trace_tap_read is not None else self.delay_window
+        if candidate_window > 1:
+            offsets = torch.arange(min(candidate_window, self.history_size))
             self.register_buffer("delay_offsets", offsets, persistent=False)
         counts_per_channel = 2 if self.departure_coincidence else 1
         self.delay_widths = tuple(counts_per_channel * width for width in self.widths)
@@ -919,7 +1014,13 @@ class _DelayBlock(nn.Module):
             confirm_widths = self.widths if cfg.trace_write_confirm else None
             integration_width = cfg.hidden if cfg.trace_integration else None
             self.trace = _SpikeTrace(cap, write_credit=cfg.trace_write_credit, veto_widths=veto_widths,
-                                     confirm_widths=confirm_widths, integration_width=integration_width)
+                                     confirm_widths=confirm_widths, integration_width=integration_width,
+                                     compact_state=cfg.compact_trace_state)
+        self.trace_taps = (
+            _TraceTapRead(self.widths, self.local_delays, cap, cfg.resolution, cfg.trace_tap_read,
+                          packet_thresholds=cfg.learn_packet_thresholds)
+            if cfg.trace_tap_read is not None else None
+        )
         quanta_per_threshold = 1 << cfg.inhibition_threshold_bits
         self.opponent_steering = (_OpponentSteering(cfg.hidden, cap, cfg.router_charge_bits, quanta_per_threshold)
                                   if cfg.opponent_steering else None)
@@ -967,8 +1068,8 @@ class _DelayBlock(nn.Module):
         self.late_emit = _IntegrateFire(cap, output_bits, False) if cfg.late_steering else None
         self.axon_dtype = None
         if cfg.compact_axon_state:
-            self.axon_dtype = next(dtype for dtype in (torch.int8, torch.int16, torch.int32)
-                                   if cap <= torch.iinfo(dtype).max)
+            axon_cap = 2 * cap if cfg.learn_packet_thresholds else cap
+            self.axon_dtype = _spike_storage_dtype(axon_cap)
 
     def _firing_quanta(self, spikes, quanta):
         if self.activity_inhibition is None:
@@ -1024,13 +1125,8 @@ class _DelayBlock(nn.Module):
         mismatches = (keys - query.unsqueeze(-1)).abs().sum(-2, dtype=keys.dtype)
         limit = 2 * self.relay.cap * query.shape[-1] + 1
         mismatches = mismatches.masked_fill(~available, limit)
-        index = mismatches.argmin(-1, keepdim=True)
-        winner = candidates.gather(-1, index.unsqueeze(-2).expand_as(candidates[..., :1])).squeeze(-1)
-        if self.training and candidates.is_floating_point():
-            scale = self.resolution * math.isqrt(query.shape[-1])
-            weights = (-mismatches / scale).softmax(-1)
-            surrogate = (candidates.detach() * weights.unsqueeze(-2)).sum(-1)
-            winner = winner + (surrogate - surrogate.detach())
+        scale = self.resolution * math.isqrt(query.shape[-1]) if self.training and candidates.is_floating_point() else None
+        winner, _ = _first_arrival(candidates, mismatches, scale)
         return winner
 
     def _delayed_groups(self, groups, steering, pulse_counts):
@@ -1062,16 +1158,21 @@ class _DelayBlock(nn.Module):
         history_dtype = groups[0].dtype
         if self.axon_dtype is not None and not (groups[0].is_floating_point() and torch.is_grad_enabled()):
             history_dtype = self.axon_dtype
-        if state.history is None:
-            state.history = groups[0].new_zeros(batch, sum(self.delay_sizes), dtype=history_dtype)
-        delayed, tails = [], []
-        history = state.history.split(self.delay_sizes, dim=-1)
-        for storage, group, delay in zip(history, groups, self.local_delays, strict=True):
-            joined = torch.cat((storage.reshape(batch, delay, group.shape[-1]).to(group.dtype), group), dim=1)
+        history = ((None,) * len(groups) if state is None or state.history is None
+                   else state.history.split(self.delay_sizes, dim=-1))
+        delayed, tails, tap_candidates = [], [], []
+        for index, (storage, group, delay) in enumerate(zip(history, groups, self.local_delays, strict=True)):
+            joined = (F.pad(group, (0, 0, delay, 0)) if storage is None
+                      else torch.cat((storage.reshape(batch, delay, group.shape[-1]).to(group.dtype), group), dim=1))
             delayed.append(joined[:, :steps])
-            tails.append(joined[:, -delay:].flatten(1))
-        state.history = torch.cat(tails, dim=-1).to(history_dtype)
-        return delayed
+            if self.trace_taps is not None:
+                choices = self.trace_taps.choices[index]
+                tap_candidates.append(joined.unfold(1, choices, 1)[:, :steps] if choices > 1 else None)
+            if state is not None:
+                tails.append(joined[:, -delay:].flatten(1))
+        if state is not None:
+            state.history = torch.cat(tails, dim=-1).to(history_dtype)
+        return delayed, tap_candidates
 
     def _current(self, residual, present, delayed, steering, start, alternate=None, recall=None, quanta=None, *,
                  departure=None, anchor=None, coincidence_read=None):
@@ -1146,12 +1247,13 @@ class _DelayBlock(nn.Module):
         coincidence_read = None
         packets, departure = self._departure_packets(present, steering)
         alternate = recall = anchor = None
+        tap_candidates = ()
         if self.selector is None:
             groups = packets.split(self.delay_widths, dim=-1)
-            if local_state is None:
+            if local_state is None and self.trace_taps is None:
                 delayed_groups, anchor = self._delayed_groups(groups, steering, pulse_counts)
             else:
-                delayed_groups = self._chunk_delays(groups, local_state)
+                delayed_groups, tap_candidates = self._chunk_delays(groups, local_state)
             if self.delay_filters is not None:
                 filtered = [base if kernel is None else kernel(base, [_lag(group, tap) for tap in kernel.taps])
                             for group, base, kernel in zip(groups, delayed_groups, self.delay_filters, strict=True)]
@@ -1174,6 +1276,11 @@ class _DelayBlock(nn.Module):
             )
             if local_state is not None:
                 local_state.trace_charge = trace_charge
+        if self.trace_taps is not None:
+            position = 0 if correction_access is None else correction_access.local_position
+            coincidence_read, delayed, _ = self.trace_taps(
+                tap_candidates, delayed, coincidence_read, steering, position, quanta, pulse_counts,
+            )
         current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
                                 departure=departure, anchor=anchor, coincidence_read=coincidence_read)
         if self.residual_membrane:
@@ -1194,7 +1301,7 @@ class _DelayBlock(nn.Module):
         groups = packets.split(self.delay_widths, dim=-1)
         history = state.history.split(self.delay_sizes, dim=-1)
         apertures = steering.split(self.widths, dim=-1)
-        previous, slots, base_packets, filtered = [], [], [], []
+        previous, slots, base_packets, filtered, tap_candidates = [], [], [], [], []
         for index, (storage, packet, aperture, delay) in enumerate(
             zip(history, groups, apertures, self.local_delays, strict=True)
         ):
@@ -1203,6 +1310,13 @@ class _DelayBlock(nn.Module):
             slots.append(slot)
             old = slot.to(packets.dtype)
             base_packets.append(old)
+            if self.trace_taps is not None:
+                tap_count = self.trace_taps.choices[index]
+                candidates = None
+                if tap_count > 1 and position >= delay:
+                    addresses = (position - delay + self.delay_offsets[:tap_count]) % delay
+                    candidates = ring.index_select(1, addresses).transpose(1, 2).to(packets.dtype)
+                tap_candidates.append(candidates)
             if self.delay_filters is not None:
                 kernel = self.delay_filters[index]
                 if kernel is None:
@@ -1223,7 +1337,7 @@ class _DelayBlock(nn.Module):
         filtered_packets = torch.cat(filtered, dim=-1) if filtered else None
         for slot, packet in zip(slots, groups, strict=True):
             slot.copy_(packet)
-        return delayed, anchor, filtered_packets
+        return delayed, anchor, filtered_packets, tap_candidates
 
     def step(self, spikes, state, position):
         drive = self.expand(spikes)
@@ -1240,8 +1354,9 @@ class _DelayBlock(nn.Module):
         coincidence_read = None
         packets, departure = self._departure_packets(present, steering)
         alternate = recall = anchor = None
+        tap_candidates = ()
         if self.compact_delays:
-            delayed, anchor, filtered = self._step_compact(packets, steering, state, position)
+            delayed, anchor, filtered, tap_candidates = self._step_compact(packets, steering, state, position)
             if filtered is not None:
                 coincidence_read, _ = _steer_packet(filtered, steering)
         else:
@@ -1274,6 +1389,10 @@ class _DelayBlock(nn.Module):
             coincidence_read, state.trace_charge = self.trace.step(
                 present, steering, state.trace_charge, write_radius=radius, delayed_content=delayed,
             )
+        if self.trace_taps is not None:
+            coincidence_read, delayed, _ = self.trace_taps(
+                tap_candidates, delayed, coincidence_read, steering, position, quanta,
+            )
         current = self._current(spikes, present, delayed, steering, start, alternate, recall, quanta,
                                 departure=departure, anchor=anchor, coincidence_read=coincidence_read)
         if self.residual_correction:
@@ -1301,6 +1420,7 @@ class EventChunkState:
     local_prefix: torch.Tensor | None
     correction: CorrectionState | None
     local_layers: list[_DelayState] | None = None
+    position: int = 0
 
 
 class EventLM(nn.Module):
@@ -1348,6 +1468,10 @@ class EventLM(nn.Module):
         if cfg.local_trace and (not cfg.compact_delays or cfg.carry or cfg.continuous
                                 or cfg.delay_window != 1 or cfg.departure_coincidence):
             raise ValueError("local traces need compact fixed delays and reset-per-byte spike routing")
+        if cfg.trace_tap_read is not None and (cfg.trace_tap_read not in ("fixed", "race") or not cfg.local_trace):
+            raise ValueError("trace tap reads need a local trace and a fixed or race selector")
+        if cfg.compact_trace_state and not cfg.local_trace:
+            raise ValueError("compact trace state needs a local charge trace")
         if cfg.trace_coincidence_start is not None and (not cfg.local_trace
                 or not isinstance(cfg.trace_coincidence_start, int) or not 0 < cfg.trace_coincidence_start < cfg.dim):
             raise ValueError("trace coincidence needs a local trace and two nonempty residual groups")
@@ -1416,6 +1540,13 @@ class EventLM(nn.Module):
                 raise ValueError("pooled output charge would exceed the exact FP32 integer range")
         projection_width = (4 if cfg.route in _STEERED_ROUTES else 3) * cfg.hidden
         cap = _HIDDEN_CAP * cfg.resolution
+        if cfg.trace_tap_read is not None:
+            count_scale = 2 if cfg.learn_packet_thresholds else 1
+            ticks = 2 * cap * count_scale * _TICKS
+            if cfg.trace_tap_read == "race":
+                ticks *= 2 * max(_delay_group_widths(cfg.hidden, len(_STEERED_DELAYS[0])))
+            if ticks > _FP32_EXACT:
+                raise ValueError("trace tap charge would exceed the exact FP32 integer range")
         residual_bits = cfg.router_charge_bits + (_PACKET_BITS if cfg.learn_packet_thresholds else 0)
         if cfg.residual_correction_start is not None and ((2 * cap + 1) << residual_bits) > torch.iinfo(torch.int32).max:
             raise ValueError("residual correction charge would exceed the int32 range")
@@ -1602,9 +1733,11 @@ class EventLM(nn.Module):
                         or previous[0].history.shape[0] != tokens.shape[0]):
                     raise ValueError("chunk state must match the trace decoder and batch size")
                 layers = [copy.copy(layer) for layer in previous]
-            access = _CorrectionAccess(correction, 0, hide_age, stats, shuffle_keys, local_layers=layers)
+            position = 0 if state is None else state.position
+            access = _CorrectionAccess(correction, 0, hide_age, stats, shuffle_keys, local_layers=layers,
+                                       local_position=position)
             counts = self(tokens, correction_access=access)
-            return counts, EventChunkState(None, access.state, layers)
+            return counts, EventChunkState(None, access.state, layers, position + tokens.shape[1])
         if state is not None and state.local_prefix is None:
             raise ValueError("chunk state must contain the local byte prefix")
         prefix = 0 if state is None else state.local_prefix.shape[1]
@@ -1685,7 +1818,8 @@ class EventLM(nn.Module):
     def initialize_wider_expansion(self, prior: EventLMConfig, previous: dict[str, torch.Tensor]):
         """Add silent content and steering neurons inside each fixed-delay group."""
         cfg = self.cfg
-        expected = replace(prior, hidden=cfg.hidden, steering_gradient_at_zero=cfg.steering_gradient_at_zero)
+        expected = replace(prior, hidden=cfg.hidden, steering_gradient_at_zero=cfg.steering_gradient_at_zero,
+                           compact_trace_state=cfg.compact_trace_state)
         if not cfg.local_trace or cfg.hidden <= prior.hidden or expected != cfg:
             raise ValueError("expansion growth needs the same held-charge router with a larger expansion")
         if cfg.activity_inhibition and cfg.inhibition_bits != prior.inhibition_bits:
@@ -1727,6 +1861,15 @@ class EventLM(nn.Module):
                 inputs = torch.zeros_like(weights[name])
                 inputs.index_copy_(1, retained, previous[name].to(inputs))
                 widened[name] = inputs
+            if block.trace_taps is not None:
+                name = f"blocks.{index}.trace_taps.weight"
+                gains = torch.zeros_like(weights[name])
+                old_widths = tuple(width for width, count in zip(old_groups, block.trace_taps.choices, strict=True)
+                                   if count > 1)
+                for target, source in zip(gains.split(block.trace_taps.active_widths),
+                                          previous[name].split(old_widths), strict=True):
+                    target[:source.numel()].copy_(source.to(target))
+                widened[name] = gains
 
         if any(value.shape != weights[name].shape for name, value in widened.items()):
             raise ValueError("expansion growth would change a synaptic population outside the delay groups")
@@ -1749,7 +1892,7 @@ class EventLM(nn.Module):
         model = copy.deepcopy(self).cpu().eval()
         for submodule in model.modules():
             if isinstance(submodule, (_Synapse, _DelaySelector, _PacketThresholds, _DelayCorrection, _DelayFilter,
-                                      _OpponentSteering, _SpreadCoincidence, _TraceInput)):
+                                      _OpponentSteering, _SpreadCoincidence, _TraceInput, _TraceTapRead)):
                 submodule.freeze_integer()
         return model
 
