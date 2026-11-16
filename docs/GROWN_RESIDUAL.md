@@ -64,16 +64,29 @@ to measure how their activity affects validation loss.
 
 | Continuation | enwik8 bpb | PG-19 bpb | PG-19 raw bpb |
 |---|---:|---:|---:|
-| Grown 6.51M SNN | 1.95646 | Scoring | Scoring |
+| Grown 6.51M SNN | 1.95646 | 2.86904 | 2.95290 |
 | Grown 6.51M Transformer | 1.84266 | 3.06318 | 3.26549 |
 
 The wider SNN reduced enwik8 loss by 0.00784 bits per byte
-relative to the matched 3.26M SNN continuation. The wider
-Transformer led enwik8 by 0.11380 bits per byte. On a separate
-262,144-target validation probe, silencing the added residual
-neurons raised loss from 1.87218 to 1.88876. That intervention
-preserved the trained weights in the original neurons.
-[Held-out records and added-neuron intervention](../results/event_lm/grown_6510k_residual)
+and PG-19 loss by 0.01764 relative to the 512-byte 3.26M
+SNN continuation. The grown SNN led the matched Transformer
+by 0.19414 bits per byte on PG-19 after calibration and
+0.31259 in raw loss. The calibrated loss was lower on all
+16 complete test books. The Transformer led enwik8 by 0.11380
+bits per byte. First occurrences of eight-byte prefixes and
+repeats at least 512 bytes away account for 80.6% of that gap.
+[SNN book scores](../results/event_lm/grown_6510k_residual/pg19_grown_s711.json) ·
+[Transformer book scores](../results/event_lm/grown_6510k_residual/pg19_transformer_s711.json) ·
+[Prefix-age chart](../results/figures/event_lm_grown_prefix_age.png)
+
+On a separate 262,144-target validation probe, silencing
+the added residual neurons raised loss from 1.87218 to
+1.88876. Native decoding matched Metal and chunked output
+on 4,096 enwik8 test bytes. The native audit counted
+306,923 pulses per byte and carries activity for the
+added neurons in each block.
+[Added-neuron intervention](../results/event_lm/grown_6510k_residual/probe_growth_262k.json) ·
+[Native audit](../results/event_lm/grown_6510k_residual/native_grown_s711.json)
 
 Run from the repository root in Bash with the `spiking` array
 from the handoff. Both released 3.26M parents are required.
@@ -113,7 +126,16 @@ the parent on CPU and Metal. Both decoders emitted 1,292,767,233
 pulses in total. The finer, wider model uses 19,536 bytes of
 state. Its paired training run adds `--router-charge-bits 8`
 to the grown SNN command and uses a separate output path.
-[Finer-grid initialization audit](../results/event_lm/grown_6510k_residual/warm_fine_charge.json)
+[Finer-grid initialization audit](../results/event_lm/grown_fine_charge/warm_fine_charge.json)
+
+The finer-charge continuation scored **1.95110** on enwik8 and
+**2.85083** on calibrated PG-19. The gains over the six-bit
+continuation are 0.00536 and 0.01821 bits per byte. Raw PG-19 loss
+was 2.93341. The native pulse count rose by 0.84% to 309,505 per
+byte. State stayed at 19,536 bytes. The finer model also had the
+lower training-time validation loss and is the v4 reference.
+[Fine-charge training and evaluation](../results/event_lm/grown_fine_charge) ·
+[v4 model card](../models/spiking-byte-lm-v4/README.md)
 
 ## Extend training exposure
 
@@ -123,5 +145,6 @@ checkpoints on 16,384,000 more enwik8 targets each. It uses
 128 warmup steps, and a peak learning rate of 0.0003.
 Each model reaches 49,152,000 cumulative targets. The SNN
 uses the same six-bit router charge and 310,000-pulse target
-as the first grown continuation. The jobs wait for the
-from-scratch width study's Metal worker to finish.
+as the first grown continuation. The handoff includes the
+commands and the local run status.
+[Resume the study](HANDOFF.md#pick-up-the-current-experiments)

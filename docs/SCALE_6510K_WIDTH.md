@@ -37,12 +37,17 @@ write credit changes how gradients reach the trace during training.
 The separate 3.26M run used the original trace gradient.
 [3.26M control](SCALE_3260K.md) · [Chronological gradient](TRACE_WRITE_CREDIT.md)
 
-The wider Transformer scored 2.03855 bits per byte on enwik8
-and 3.28561 on PG-19 at this exposure. The 3.26M Transformer
-scored 1.86093 and 3.05929. A separate growth experiment starts
-from the trained 3.26M pair and preserves their measured
-predictions before further training.
-[From-scratch Transformer scores](../results/event_lm/scale_6510k_width) ·
+| From-scratch model | enwik8 bpb | PG-19 bpb | PG-19 raw bpb |
+|---|---:|---:|---:|
+| Wide held-charge SNN | 2.06640 | 2.98527 | 3.09220 |
+| Full-attention Transformer | 2.03855 | 3.28561 | 3.57094 |
+
+At this exposure the SNN led on the sampled PG-19 books and
+full attention led on enwik8. The SNN emitted 313,057 pulses
+per byte on the native enwik8 test audit. A separate growth
+experiment starts from the trained 3.26M pair and preserves
+their measured predictions before further training.
+[Full score records](../results/event_lm/scale_6510k_width) ·
 [Matched growth study](GROWN_RESIDUAL.md)
 
 Run from the repository root in Bash with the `spiking` array

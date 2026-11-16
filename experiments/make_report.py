@@ -139,6 +139,7 @@ def spiking_byte_tables():
         sections.append('<div class="tablewrap"><table><thead><tr><th scope="col">Decoder</th>'
                         '<th scope="col" class="num">Parameters</th><th scope="col" class="num">State</th>'
                         '<th scope="col" class="num">enwik8</th><th scope="col" class="num">PG-19</th>'
+                        '<th scope="col" class="num">PG-19 raw</th><th scope="col" class="num">Pulses/byte</th>'
                         '</tr></thead><tbody>')
         for row in rows:
             cells = [f'{row["parameters"]:,}', f'{row["state_bytes"]:,} B']
@@ -146,6 +147,9 @@ def spiking_byte_tables():
                 result = row["scores"][corpus]
                 score = f'{result["mean"]:.5f}'
                 cells.append(f"<strong>{score}</strong>" if result["rank"] == 1 else score)
+            raw = row["scores"]["pg19_full"].get("raw_bpb")
+            pulses = row["pulses_per_byte"]
+            cells.extend([f"{raw:.5f}" if raw is not None else "—", f'{pulses["mean"]:,.0f}' if pulses else "—"])
             body = "".join(f'<td class="num">{value}</td>' for value in cells)
             sections.append(f'<tr><th scope="row">{html.escape(row["model"])}</th>{body}</tr>')
         sections.append("</tbody></table></div>")

@@ -37,6 +37,13 @@ VETO = "event_lm/trace_read_veto"
 SPREAD = "event_lm/spread_coincidence"
 LONG = "event_lm/long_context_continuation"
 SCALE = "event_lm/scale_3260k"
+SCALE_CONTEXT = "event_lm/scale_3260k_context"
+GROWN = "event_lm/grown_6510k_residual"
+WIDTH_6510K = "event_lm/scale_6510k_width"
+FINE_CHARGE = "event_lm/grown_fine_charge"
+RESIDUAL_MEMBRANE = "event_lm/residual_membrane"
+TAG_PHASE = "event_lm/tag_phase_address"
+CORRECTED = "event_lm/corrected_forecast"
 DEPTH_ARMS = (
     ("Three-block SNN, fixed threshold", WIDTH, "fixed", f"{DEPTH}/native_wide_fixed.json", GRAY),
     ("Three-block SNN, activity inhibition", DEPTH, "wide_inhibited", f"{DEPTH}/native_wide_inhibited.json", BLUE),
@@ -61,6 +68,26 @@ CONTINUATION_2048 = (
 SCALE_3260K = (
     ("Seven-block held charge", SCALE, "trace_s0", f"{SCALE}/native_trace_s0.json", BLUE),
     ("Full-attention Transformer", SCALE, "transformer_s0", None, ORANGE),
+)
+SCALE_CONTEXT_512 = (
+    ("Held charge", SCALE_CONTEXT, "trace_ctx512_s711", f"{SCALE_CONTEXT}/native_trace_ctx512_s711.json", BLUE),
+    ("Signed residual membrane", RESIDUAL_MEMBRANE, "membrane_s711", f"{RESIDUAL_MEMBRANE}/native_membrane_s711.json", VIOLET),
+    ("Four address phases", TAG_PHASE, "tag_phase_s711", f"{TAG_PHASE}/native_tag_phase_s711.json", VIOLET),
+    ("Four phases, corrected forecast loss", CORRECTED, "corrected_s711", f"{CORRECTED}/native_corrected_s711.json", VIOLET),
+    ("Full-attention Transformer", SCALE_CONTEXT, "transformer_ctx512_s711", None, ORANGE),
+)
+SCALE_CONTEXT_2048 = (
+    ("Held charge", SCALE_CONTEXT, "trace_ctx2048_s711", f"{SCALE_CONTEXT}/native_trace_ctx2048_s711.json", BLUE),
+    ("Full-attention Transformer", SCALE_CONTEXT, "transformer_ctx2048_s711", None, ORANGE),
+)
+GROWN_6510K = (
+    ("Grown SNN, finer charge", FINE_CHARGE, "fine_s711", f"{FINE_CHARGE}/native_fine_s711.json", VIOLET),
+    ("Grown SNN, six-bit charge", GROWN, "grown_s711", f"{GROWN}/native_grown_s711.json", BLUE),
+    ("Grown full-attention Transformer", GROWN, "transformer_s711", None, ORANGE),
+)
+SCRATCH_6510K = (
+    ("Wide held-charge SNN", WIDTH_6510K, "trace_s0", f"{WIDTH_6510K}/native_trace_s0.json", BLUE),
+    ("Full-attention Transformer", WIDTH_6510K, "transformer_s0", None, ORANGE),
 )
 
 
@@ -191,9 +218,14 @@ def read_comparison(definitions, *, seed, context, exposure, test_inputs=None):
 
 def build_research():
     groups = {}
+    continuation = (26_214_400, 6_553_600)
     for name, title, arms, seed, context, exposure in (
-        ("continuation_512", "512-byte continuations", CONTINUATION_512, 711, 512, (26_214_400, 6_553_600)),
-        ("continuation_2048", "2,048-byte continuations", CONTINUATION_2048, 711, 2048, (26_214_400, 6_553_600)),
+        ("grown_6510k", "6.51M growth · 512-byte continuations", GROWN_6510K, 711, 512, continuation),
+        ("context_3260k_512", "3.26M · 512-byte continuations", SCALE_CONTEXT_512, 711, 512, continuation),
+        ("context_3260k_2048", "3.26M · 2,048-byte continuations", SCALE_CONTEXT_2048, 711, 2048, continuation),
+        ("scratch_6510k", "6.51M trained from scratch", SCRATCH_6510K, 0, 512, (0, 26_214_400)),
+        ("continuation_512", "512-byte continuations", CONTINUATION_512, 711, 512, continuation),
+        ("continuation_2048", "2,048-byte continuations", CONTINUATION_2048, 711, 2048, continuation),
         ("scale_3260k", "3.26M parameter comparison", SCALE_3260K, 0, 512, (0, 26_214_400)),
     ):
         groups[name] = {"title": title, "seeds": [seed], "training_context_bytes": context,
@@ -295,10 +327,14 @@ def write_leaderboards(data, depth, research):
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
     paragraphs.extend([
+        "![Held-out next-byte loss for the grown 6.51M models](../results/figures/event_lm_grown_6510k.png)",
+        "![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)",
+        "[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · "
+        "[Current model card](../models/spiking-byte-lm-v4/README.md)",
         "![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)",
         "![Held-out loss at both trained context lengths](../results/figures/event_lm_trained_context.png)",
         "[Continuation and scale source records](../results/event_lm/continuation_leaderboard.json) · "
-        "[Held-charge replication](HELD_CHARGE_REPLICATION.md) · [Current model card](../models/spiking-byte-lm-v3/README.md)",
+        "[Held-charge replication](HELD_CHARGE_REPLICATION.md)",
         "## Depth and activity inhibition · 26,214,400 training targets · seed 0",
         markdown_table(latest, include_ranks=True),
         "![Held-out loss for matched depth and inhibition models](../results/figures/depth_inhibition_test.png)",
@@ -328,11 +364,8 @@ def write_leaderboards(data, depth, research):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    tables = []
-    for name in ("continuation_512", "continuation_2048"):
-        group = research["groups"][name]
-        tables.extend([f'**{group["title"]}**', markdown_table(group["rows"], include_ranks=False)])
-    readme.write_text(f"{before}{marker}\n\n" + "\n\n".join(tables) + f"\n\n{end}{after}", encoding="utf-8")
+    table = markdown_table(research["groups"]["grown_6510k"]["rows"], include_ranks=False)
+    readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
 
 
 def plot_loss(data, output):
@@ -444,11 +477,8 @@ def plot_trained_context(research, output):
     save(fig, output, "event_lm_trained_context.png")
 
 
-def plot_prefix_age_gap(output):
-    spiking, attention = (
-        read_result(f"{directory}/enwik8_{suffix}_s711.json")["models"][0]
-        for directory, suffix in ((OPPONENT, "opponent"), (CREDIT, "transformer"))
-    )
+def plot_prefix_age_gap(spiking_source, attention_source, output, *, subtitle, filename):
+    spiking, attention = (read_result(source)["models"][0] for source in (spiking_source, attention_source))
     ages = ("unseen", "1-31", "32-127", "128-511", "512+")
     labels = ("First occurrence", "1–31 bytes", "32–127 bytes", "128–511 bytes", "512+ bytes")
     gaps, contributions = [], []
@@ -462,8 +492,7 @@ def plot_prefix_age_gap(output):
 
     fig, axes = plt.subplots(1, 2, figsize=(10.7, 4.35), sharey=True)
     fig.subplots_adjust(left=0.20, right=0.96, bottom=0.215, top=0.76, wspace=0.28)
-    heading(fig, "Where the enwik8 loss gap accumulates",
-            "Opponent steering and 512-byte full attention · 4,999,999 shared targets")
+    heading(fig, "Where the enwik8 loss gap accumulates", subtitle)
     for ax, values, title in zip(axes, (gaps, contributions),
                                  ("Gap within prefix group", "Contribution to total gap"), strict=True):
         style(ax, grid_axis="x")
@@ -477,7 +506,7 @@ def plot_prefix_age_gap(output):
     fraction = (contributions[0] + contributions[-1]) / sum(contributions)
     fig.text(0.035, 0.045, f"First occurrences and repeats at 512+ bytes account for {fraction:.1%} of the total gap.",
              color=MUTED, size=9)
-    save(fig, output, "event_lm_prefix_age_gap.png")
+    save(fig, output, filename)
 
 
 def main():
@@ -501,8 +530,16 @@ def main():
     plot_heldout(research["groups"]["continuation_512"]["rows"], output, title="Held-out loss after 512-byte continuations",
                  subtitle="About 1.63M parameters · 32.77M total enwik8 training targets · seed 711",
                  filename="event_lm_continuation_test.png", precision=5)
+    plot_heldout(research["groups"]["grown_6510k"]["rows"], output, title="Held-out loss after growing both models",
+                 subtitle="About 6.51M parameters · 32.77M total enwik8 training targets · seed 711",
+                 filename="event_lm_grown_6510k.png", precision=5)
     plot_trained_context(research, output)
-    plot_prefix_age_gap(output)
+    plot_prefix_age_gap(f"{OPPONENT}/enwik8_opponent_s711.json", f"{CREDIT}/enwik8_transformer_s711.json", output,
+                        subtitle="Opponent steering and 512-byte full attention · 4,999,999 shared targets",
+                        filename="event_lm_prefix_age_gap.png")
+    plot_prefix_age_gap(f"{GROWN}/enwik8_grown_s711.json", f"{GROWN}/enwik8_transformer_s711.json", output,
+                        subtitle="Six-bit grown SNN and 512-byte full attention · 4,999,999 shared targets",
+                        filename="event_lm_grown_prefix_age.png")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
-# ShuntFormer v3 research handoff
+# ShuntFormer v4 research handoff
 
-Start with the bundled five-block checkpoint after its 2,048-byte
-continuation. Pick up an experimental branch from the checkpoint
-archive. Run the shell examples from the repository root in Bash.
-[Model card](../models/spiking-byte-lm-v3/README.md) ·
+Start with the bundled seven-block, 6.51M-parameter SNN. The
+checkpoint archive restores the exact 3.26M parents, grown pair,
+and the other scored experiments. Run the shell examples from the
+repository root in Bash.
+[Model card](../models/spiking-byte-lm-v4/README.md) ·
 [Leaderboards](LEADERBOARD.md) · [Experiment status](#experiment-status)
 
 ## Set up a working checkout
@@ -15,7 +16,7 @@ python -m pip install -r requirements.txt
 python -m pytest -q
 ```
 
-The v3 runs used Python 3.12.8, PyTorch 2.15.0 and NumPy 2.5.4 on an
+The v4 runs used Python 3.12.8, PyTorch 2.15.0 and NumPy 2.5.4 on an
 Apple M3 Max with 48 GiB of unified memory. The training and scoring
 commands below use Metal with CPU fallback disabled. Use `--device cpu`
 for evaluation on CPU. The released plots use Matplotlib 3.11.2 and the
@@ -23,14 +24,12 @@ test suite uses pytest 9.2.0.
 
 ### Checkpoints
 
-The checkout ships the seed-711 2,048-byte held-charge continuation
-as `models/spiking-byte-lm-v3/weights.pt` and its seed-0 parent
-under `models/spiking-byte-lm-v2/`. The v3 archive adds the paired
-continuations, scaling runs, replication checkpoints, and the
-Transformer parents. Each checkpoint has a SHA-256 and a training
-record in the manifest.
-[v3 release assets](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v3) ·
-[v3 manifest](../models/spiking-byte-lm-v3/manifest.json) ·
+The reference is `models/spiking-byte-lm-v4/weights.pt`. The v4
+archive contains 29 checkpoints across the v3 set and the newly
+completed studies. Each member is linked to its training record and
+SHA-256 in the manifest.
+[v4 release assets](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v4) ·
+[v4 manifest](../models/spiking-byte-lm-v4/manifest.json) ·
 [Earlier depth and routing weights](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v2)
 
 Download and extract the archive to restore the study paths under
@@ -38,20 +37,23 @@ Download and extract the archive to restore the study paths under
 
 ```bash
 mkdir -p checkpoints/downloads
-gh release download spiking-byte-lm-v3 --repo DanielTea/transformer-snn \
-  --pattern 'spiking-byte-lm-v3-checkpoints.*' --dir checkpoints/downloads
+gh release download spiking-byte-lm-v4 --repo DanielTea/transformer-snn \
+  --pattern 'spiking-byte-lm-v4-checkpoints.*' --dir checkpoints/downloads
 (
   cd checkpoints/downloads
-  shasum -a 256 -c spiking-byte-lm-v3-checkpoints.sha256
+  shasum -a 256 -c spiking-byte-lm-v4-checkpoints.sha256
 )
-tar -xzf checkpoints/downloads/spiking-byte-lm-v3-checkpoints.tar.gz
-shasum -a 256 -c checkpoints/SHA256SUMS-v3
+tar -xzf checkpoints/downloads/spiking-byte-lm-v4-checkpoints.tar.gz
+shasum -a 256 -c checkpoints/SHA256SUMS-v4
 ```
 
-The seven-block checkpoint is `checkpoints/scale-3260k-study/trace_s0.pt`.
-Use it with the same integer generator as the default. It has the
-lowest PG-19 loss in the release and uses 31,692 bytes of stream state.
-[Seven-block evaluation](SCALE_3260K.md)
+The reference is also archived as
+`checkpoints/grown-fine-charge-study/fine_s711.pt`.
+The six-bit grown control and its matched reference are
+`checkpoints/grown-6510k-residual-study/grown_s711.pt`
+and `checkpoints/grown-6510k-residual-study/transformer_s711.pt`.
+The 3.26M SNN parent is `checkpoints/scale-3260k-study/trace_s0.pt`.
+[Growth comparison](GROWN_RESIDUAL.md) · [Parent comparison](SCALE_3260K.md)
 
 ### Datasets
 
@@ -62,6 +64,7 @@ are training data, the next 5,000,000 are for validation, and the last
 the text pinned by each content-addressed manifest. The test uses
 16 complete books, and the temperature fit uses eight separate books.
 [enwik8 source](https://www.mattmahoney.net/dc/textdata.html) ·
+[PG-19 source](https://github.com/google-deepmind/pg19) ·
 [PG-19 preparation](../experiments/prepare_pg19.py)
 
 ```bash
@@ -84,19 +87,46 @@ inspect the exact generated command.
 ```bash
 export PYTORCH_ENABLE_MPS_FALLBACK=0
 python experiments/replay_event_run.py \
-  results/event_lm/long_context_continuation/event_correction_code_s711_ctx2048_continuation.json \
-  --enwik8 data/enwik8 --device mps --output-dir checkpoints/work/replay-v3
+  results/event_lm/grown_fine_charge/event_correction_code_s711_scale_6510k_grown_fine_charge.json \
+  --enwik8 data/enwik8 --device mps --output-dir checkpoints/work/replay-v4
 
 python experiments/replay_event_run.py \
-  results/event_lm/long_context_continuation/transformer_s711_ctx2048_continuation.json \
-  --enwik8 data/enwik8 --device mps --output-dir checkpoints/work/replay-v3-transformer
+  results/event_lm/grown_6510k_residual/transformer_s711_scale_6510k_grown_ffn.json \
+  --enwik8 data/enwik8 --device mps --output-dir checkpoints/work/replay-v4-transformer
 ```
 
-For a new experiment initialized from v3, use the same spike geometry
-and the chronological held-charge gradient. The checkpoint contains
-weights and metadata. Each continuation starts a fresh AdamW optimizer
-and scheduler. Record the new experiment under its own tag and output
-path. To repeat a measured result, use its training record above.
+Use the corresponding training JSON for any other completed run.
+Its parent digest is checked before training. Exported checkpoints
+store weights, configuration, and training metadata. Each
+continuation starts fresh AdamW and scheduler state. An interrupted
+training stage must be replayed from its recorded starting checkpoint.
+
+### Pick up the current experiments
+
+The first two commands extend the six-bit grown SNN and its matched
+Transformer by 16,384,000 enwik8 targets to 49,152,000 total.
+The third repeats the original
+32,768,000-target growth protocol with three-way coincidence in the
+added residual neurons. Each command trains, scores both corpora, and
+runs the integer audit for SNNs. At the release cutoff the extended
+Transformer had finished, and its checkpoint and scores are included.
+On the original workstation, check
+`checkpoints/scale-6510k-data-study/logs/train_trace_s1109.log`
+for the SNN's progress before starting a repeat.
+[Continuation script](../experiments/run_v4_continuation.sh) ·
+[Three-way coincidence design](TRACE_COINCIDENCE.md)
+
+```bash
+bash experiments/run_v4_continuation.sh extend-snn
+bash experiments/run_v4_continuation.sh extend-transformer
+bash experiments/run_v4_continuation.sh trace-coincidence
+```
+
+### Shared options for earlier studies
+
+The following profile and example reproduce the earlier v3
+geometry. Several study notes reuse the `spiking` array and
+override its width, depth, and expansion size.
 
 ```bash
 spiking=(--variant event_correction_code --dim 264 --hidden 185 --depth 5
@@ -121,22 +151,23 @@ python experiments/replay_event_run.py \
   --output-dir checkpoints/work/delay-filter
 ```
 
-## Score and audit
+## Score checkpoints
 
 The SNN carries its charge and axon state through 8,192-byte evaluation
-chunks. The 2,048-byte Transformer scores 1,024-byte chunks with up
-to 1,024 preceding warmup bytes. Each scores 4,999,999 enwik8 test
-targets and 8,404,368 PG-19 test targets. enwik8 uses the original
-output scale. For PG-19 the evaluator selects one temperature per
-checkpoint on the validation books and reports calibrated and raw loss.
+chunks and resets state between books. The 512-byte Transformer
+scores 256-byte chunks with up to 256 preceding warmup bytes.
+Each scores 4,999,999 enwik8 test targets and 8,404,368 PG-19 test
+targets. enwik8 uses the original output scale. For PG-19 the
+evaluator selects one temperature per checkpoint on the validation
+books and reports calibrated and raw loss.
 
 ```bash
 export PYTORCH_ENABLE_MPS_FALLBACK=0
 mkdir -p checkpoints/work/scores
-snn=models/spiking-byte-lm-v3/weights.pt
-full=checkpoints/long-context-continuation/transformer_ctx2048_s711.pt
+snn=models/spiking-byte-lm-v4/weights.pt
+full=checkpoints/grown-6510k-residual-study/transformer_s711.pt
 snn_score=(python experiments/eval_event_lm.py --device mps --context 8192 --history 256 --batch-size 8)
-full_score=(python experiments/eval_event_lm.py --device mps --context 1024 --history 1024 --batch-size 4)
+full_score=(python experiments/eval_event_lm.py --device mps --context 256 --history 256 --batch-size 8)
 pg19=(--books-dir data/pg19-test
   --manifest results/event_lm/correction_pg19_full_book_manifest.json
   --calibration-books data/pg19-validation
@@ -156,15 +187,21 @@ python experiments/audit_spike_code.py --device mps --split test --activity-prof
   --enwik8 data/enwik8 --checkpoint "$snn" --json checkpoints/work/scores/native_snn.json
 ```
 
-For the 512-byte Transformer runs, set `--context 256 --history 256
---batch-size 8`. Keep the SNN streaming settings for either training
-length. Score files record the data digests, temperature grid, number
-of targets, and model path used for each run.
+For the 2,048-byte Transformer runs, use `--context 1024 --history 1024
+--batch-size 4`. Use the same SNN streaming settings for either
+training length. Score files record the data digests, temperature grid,
+number of targets, and checkpoint path.
 
 ## Experiment status
 
 | Experiment | State at handoff | Evidence |
 |---|---|---|
+| Grown 6.51M matched pair | Trained and scored on both corpora, with SNN native parity and an added-neuron ablation | [Growth study](GROWN_RESIDUAL.md) |
+| Grown 6.51M with finer charge | Released reference. Both corpora scored with native parity | [Finer-charge study](GROWN_RESIDUAL.md#finer-synaptic-charge-at-the-same-firing-resolution) |
+| 6.51M pair from scratch | Matched 26.21M-target comparison scored and audited | [Width study](SCALE_6510K_WIDTH.md) |
+| 3.26M context and memory variants | 512- and 2,048-byte continuations, signed residual membranes, four-phase address and corrected forecast scored | [Context](CONTEXT_LENGTH.md#repeat-at-326m-parameters) · [Membranes](RESIDUAL_MEMBRANE.md) · [Address phases](TAG_PHASE_ADDRESS.md) |
+| Three-way coincidence in added neurons | Warm-start parity, gradient check, and three training steps complete | [Design and next run](TRACE_COINCIDENCE.md) |
+| 49.15M cumulative-target extension | Transformer scored and archived. SNN still training at release cutoff | [Continuation commands](#pick-up-the-current-experiments) · [Transformer records](../results/event_lm/scale_6510k_data) |
 | Original held charge and inhibition | Depth controls and inhibition-only replication complete | [Depth study](DEPTH_INHIBITION.md) |
 | Held-charge replication | Seeds 0–2 scored and audited | [Per-seed results](HELD_CHARGE_REPLICATION.md) |
 | Opponent steering | 512-byte continuation and matched held-charge control scored and audited | [Circuit and intervention](OPPONENT_STEERING.md) |
@@ -173,12 +210,6 @@ of targets, and model path used for each run.
 | Spread coincidence | Matched continuation and timing-fraction-zeroing probe complete | [Circuit and intervention](SPREAD_COINCIDENCE.md) |
 | 2,048-byte continuations | Both models scored on both corpora, and the SNN passed the integer audit | [Context comparison](CONTEXT_LENGTH.md) |
 | Seven-block scaling study | Matched 3.26M runs and integer audit | [Scale comparison](SCALE_3260K.md) |
-
-The archived 3.26M pair was trained on 512-byte windows. A matched
-2,048-byte continuation at this size remains open. The release
-includes both parent checkpoints, the 3.26M geometry, and the
-1.63M continuation protocol.
-[Scale configuration](#scale-to-326m) · [Longer-context protocol](CONTEXT_LENGTH.md#train-the-longer-context)
 
 ### Repeat the held-charge comparison
 
@@ -229,10 +260,11 @@ python experiments/train_event_lm.py "${common[@]}" --variant transformer \
 | [Transformer reference](../snnformer/transformer_reference.py) | Matched causal attention baseline |
 | [Trainer](../experiments/train_event_lm.py) and [replay runner](../experiments/replay_event_run.py) | Shared training entry point and exact command reconstruction |
 | [Evaluator](../experiments/eval_event_lm.py), [native audit](../experiments/audit_spike_code.py) and [state probe](../experiments/probe_event_state.py) | Full-corpus scores, integer parity, pulse activity and mechanism ablations |
+| [Growth audit](../experiments/audit_residual_growth.py) | Reproduce initialization parity and gradient checks on enwik8 |
 | [Charge profile](../experiments/profile_charge_trace.py) and [training timing](../experiments/benchmark_trace_training.py) | Age of delivered charge and matched backward-pass measurements |
 | [Tests](../tests) | Spike arithmetic, causality, integer parity and memory tests |
 | [results](../results/README.md) | Raw JSON by study, per-book and per-seed results, manifests and figures |
-| [v3 model](../models/spiking-byte-lm-v3) | Reference weights, architecture and release inventory |
+| [v4 model](../models/spiking-byte-lm-v4) | Reference weights, architecture and release inventory |
 
 Rebuild the tables, figures, and browser report directly from the tracked
 records. Rebuild the optional checkpoint bundle from the restored
@@ -243,5 +275,5 @@ and preserves the original checkpoint paths.
 python experiments/plot_event_lm_study.py
 python experiments/plot_depth_inhibition.py
 python experiments/make_report.py docs/report.html
-python experiments/package_event_lm.py --release v3 --release-dir checkpoints/release-v3
+python experiments/package_event_lm.py --release v4 --release-dir checkpoints/release-v4
 ```

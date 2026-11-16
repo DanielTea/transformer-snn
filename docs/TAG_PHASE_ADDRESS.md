@@ -124,3 +124,11 @@ training feedback about the corrections it delivers. The
 paired run uses the same parent and enwik8 training windows.
 [Trainer](../experiments/train_event_lm.py) ·
 [Three-step Metal smoke](../results/event_lm/tag_phase_address/event_correction_code_s711_corrected_forecast_smoke.json)
+
+The corrected-forecast run finished at 2.00335 bits per byte on
+enwik8 and 2.90802 on the calibrated PG-19 test. The matched
+four-phase control scored 1.99725 and 2.90730. Raw PG-19 loss
+fell from 2.99722 to 2.99318. The modified SNN used 25,584 bytes of state and
+310,105 pulses per byte on the native test audit.
+[Full corrected-forecast records](../results/event_lm/corrected_forecast) ·
+[Matched leaderboard](LEADERBOARD.md)
