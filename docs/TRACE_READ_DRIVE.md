@@ -69,6 +69,12 @@ targets reaches the new synapses in all 11 blocks.
 [Write-input warm audit](../results/event_lm/trace_read_drive/warm_short_write.json) ·
 [Present-input warm audit](../results/event_lm/trace_read_drive/warm_short_present.json)
 
+The initial 243-channel geometry also passed the exact warm-start
+audit for both inputs at its original 32,616-byte state size. The
+trained comparisons use the shorter delay-group layout.
+[Write-input audit on the wider rings](../results/event_lm/trace_read_drive/warm_write.json) ·
+[Present-input audit on the wider rings](../results/event_lm/trace_read_drive/warm_present.json)
+
 All arms add 4,915,200 enwik8 targets to their 111,411,200-target
 parents. The launcher uses seed 8237, 1,200 AdamW updates on
 eight 512-byte windows, 48 warmup updates, and a peak learning
@@ -213,10 +219,24 @@ PG-19 test books.
 
 | Model | enwik8 | PG-19 calibrated | PG-19 raw | State |
 |---|---:|---:|---:|---:|
-| Original held-charge read | 1.795773 | **2.754952** | **2.841358** | 28,584 B |
+| Original held-charge read | 1.795773 | 2.754952 | **2.841358** | 28,584 B |
 | Write input, six-bit reset | 1.795816 | 2.757065 | 2.846544 | 28,584 B |
+| Present input, six-bit reset | 1.794660 | 2.757469 | 2.848596 | 28,584 B |
+| Write input, eight-bit reset | 1.794488 | **2.753136** | 2.841921 | 28,584 B |
 | Write input, eight-bit carry | 1.795332 | 2.757239 | 2.848498 | 31,257 B |
+| Present input, eight-bit carry | 1.795246 | 2.756376 | 2.843614 | 31,257 B |
+| Write input, shared steering | 1.795614 | 2.761023 | 2.850012 | 31,257 B |
+| Two write rails, shared steering | 1.794636 | 2.755903 | 2.845058 | 31,257 B |
 | Full attention | **1.713626** | 2.884781 | 3.080808 | 6 MiB |
+
+The six-bit present-read checkpoint has zero effective gains
+in its new read synapses. The eight-bit reset checkpoint has
+745 nonzero read gains and zero observed read count changes on
+4,096 test bytes. Zeroing either checkpoint's added gains gives
+the same loss on 65,536 consecutive validation targets.
+[Present reset audit](../results/event_lm/trace_read_drive/native_present_s8237.json) ·
+[Eight-bit reset audit](../results/event_lm/trace_read_drive/native_write_fine_s8237.json) ·
+[Eight-bit reset intervention](../results/event_lm/trace_read_drive/probe_write_fine_s8237.json)
 
 The carried model has lower loss than full attention on all 16
 PG-19 books. It has lower loss than the original-read SNN on
@@ -252,3 +272,185 @@ reads. For recurrences 32–127 bytes back, carry raises loss by
 0.001532 bpb and leaves a 0.173176 bpb gap to full attention.
 [Carry test loss by prefix age](../results/event_lm/trace_read_drive/enwik8_write_carry_s8237.json) ·
 [Full-attention test loss by prefix age](../results/event_lm/trace_read_drive/enwik8_transformer_s8237.json)
+
+The carried present-input control changes 4.050 read counts per
+byte on the 4,096-byte native test sample. The aperture admits
+37.10% of its weighted drive. Zeroing the present drive lowers loss
+by 0.000202 bpb on the same 65,536 validation targets.
+[Present carry audit](../results/event_lm/trace_read_drive/native_present_carry_s8237.json) ·
+[Present carry intervention](../results/event_lm/trace_read_drive/probe_present_carry_s8237.json)
+
+## Share spare read steering
+
+Four disjoint enwik8 validation windows give 16,384 bytes of
+native integer traces from the carried-read checkpoint. On
+these windows, adjacent pairs could recover 33.40% of blocked
+charge while protecting each donor's admitted current. Blocks
+of four had an aggregate upper bound of 67.74%. Each full
+delay group had sufficient spare capacity in charge ticks.
+Whole-pulse rounding can use more capacity than this upper
+bound counts.
+[Headroom measurements and sample positions](../results/event_lm/trace_read_drive/write_carry_validation_headroom.json) ·
+[Probe](../experiments/probe_read_headroom.py)
+
+The sharing circuit runs after the write. For each cell, let
+$a$ be its bounded steering aperture in pulses, $q$ its desired
+signed read current, $C$ its firing cap, and $T$ the read
+threshold in charge ticks. The cell receives
+$aT$ ticks of aperture and contributes the following counts.
+
+$$
+\begin{aligned}
+\text{requests} &= \left\lceil
+  \frac{\min((|q|-aT)_+,\,(C-a)T)}{T}\right\rceil, \\
+\text{spare} &= \left\lfloor\frac{(aT-|q|)_+}{T}\right\rfloor.
+\end{aligned}
+$$
+
+The requests and spare steering pulses form two ordered trains
+within each delay group. Matching pulses in that order changes
+exactly the smaller of the two totals. A donor keeps enough
+aperture for its admitted current. Each granted request moves
+one aperture pulse from a donor to a receiver. The read then
+uses the new aperture and the same fractional-charge recurrence.
+Every group conserves its total steering allocation. The pulse
+count includes the added request neuron. The circuit uses
+12,802,161 trainable parameters and 31,257 persistent bytes.
+[Integer implementation](../snnformer/event_lm.py) ·
+[Prior work on excitation and inhibition within dendritic compartments](https://arxiv.org/abs/2010.12395)
+
+Freezing the carried checkpoint and adding sharing admitted
+3,409.28 previously blocked ticks per byte on 4,096 validation
+bytes. The exchange moved 402.86 steering pulses per byte,
+preserved every group budget, and preserved each donor's read
+current. The resulting read differed from its base count by
+0.001953 counts per byte. At 32 bytes of warmup, sharing lowered
+frozen loss by 0.000002 bpb on the paired validation tails.
+[Frozen integer audit](../results/event_lm/trace_read_drive/native_frozen_write_share_s8237.json) ·
+[Frozen validation scores](../results/event_lm/trace_read_drive/frozen_write_share_history.json)
+
+Both signed source arms start from the same short-group checkpoint
+and use the original 1,200-update schedule and seed 8237. Write input
+uses the local interval-correction spikes. Present input uses the
+current content spikes.
+[Write-sharing warm audit](../results/event_lm/trace_read_drive/warm_short_write_share.json) ·
+[Present-sharing warm audit](../results/event_lm/trace_read_drive/warm_short_present_share.json)
+
+After training the signed write-sharing arm, every group kept its
+steering total and no donor lost admitted current in the native
+test audit. An average of 234.87 transferred pulses per byte admitted
+2,046.41 previously blocked ticks. The read count changed by 0.00244
+counts per byte relative to the ordinary read of the same cell.
+Disabling sharing on the trained weights lowered loss by 0.000278 bpb
+on 65,536 continuous validation targets.
+[Trained write-sharing audit](../results/event_lm/trace_read_drive/native_write_share_s8237.json) ·
+[Fixed-weight sharing intervention](../results/event_lm/trace_read_drive/probe_write_share_s8237.json)
+
+```bash
+study=checkpoints/trace-read-drive-study
+for arm in write-share present-share; do
+  PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh "trace-read-drive-$arm" "$study"
+done
+```
+
+## Learn two write conductances
+
+In this configuration the write correction is the change in
+held charge. With one signed gain $g$ and a fully open path,
+the accumulated correction telescopes to $g(h_n-h_0)$ over
+$n$ bytes. The shared aperture can admit both directions of
+change, so the read may remain near its original firing count
+even when the cell is repeatedly rewritten.
+
+The two-rail model gives each cell learned gains $g_+$ and
+$g_-$ on positive and negative write spikes. Its input is
+
+$$
+g_+[\Delta]_+ + g_-[-\Delta]_+
+=\tfrac12(g_+-g_-)\Delta+\tfrac12(g_++g_-)|\Delta|.
+$$
+
+The first term encodes direction and the second encodes the
+amount of write activity. Each conductance can excite or
+inhibit the read. Both use the single carried phase, the
+shared steering budget, and the read's ordinary firing cap.
+This variant has 12,804,834 trainable parameters and 31,257
+persistent bytes. Its matched continuation uses the same
+short-group parent, training text, seed, and pulse target.
+
+Copying each carried checkpoint gain into both polarities
+produced 14.305 read count changes per byte in the same
+4,096-byte validation audit. All requests received steering
+and the donors retained their read current. The frozen loss at
+32 bytes of warmup rose by 0.000407 bpb compared with signed
+sharing. The learned-rail continuation starts both gains at zero.
+[Frozen polarity audit](../results/event_lm/trace_read_drive/native_frozen_write_equal_rails_share_s8237.json) ·
+[Paired validation scores](../results/event_lm/trace_read_drive/frozen_write_equal_rails_share_history.json) ·
+[Two-rail warm audit](../results/event_lm/trace_read_drive/warm_short_write_rails_share.json)
+
+The learned two-rail checkpoint moves 176.17 steering pulses per
+byte and recovers 1,478.18 charge ticks per byte on 4,096 enwik8 test
+bytes. The read changes by 5.786 counts per byte relative to its
+ordinary count. Learned gains give 632 cells a nonzero response to
+the magnitude of the write. Every delay group conserves steering
+and admits the donor's original read current.
+
+On the 65,536-target validation intervention, zeroing the new
+conductances raises loss by 0.000346 bpb. Projecting the two gains
+onto a single signed response raises loss by 0.000342 bpb. Disabling
+steering sharing raises loss by 0.000537 bpb. The full enwik8 and
+PG-19 results use one matched continuation seed.
+[Training](../results/event_lm/trace_read_drive/event_correction_code_s8237_trace_read_drive_write_rails_share.json) ·
+[Native audit](../results/event_lm/trace_read_drive/native_write_rails_share_s8237.json) ·
+[Fixed-weight interventions](../results/event_lm/trace_read_drive/probe_write_rails_share_s8237.json)
+
+![Spare steering capacity and the read count changes with both write polarities](../results/figures/event_lm_read_steering.png)
+
+```bash
+PYTHON=.venv/bin/python bash experiments/run_v4_continuation.sh trace-read-drive-write-rails-share \
+  checkpoints/trace-read-drive-study
+```
+
+### Reproduce the frozen steering probes
+
+Both probes use the raw master weights from `write_carry_s8237.pt`.
+The equal-gain intervention copies each write gain to both polarities.
+
+```bash
+parent=checkpoints/trace-read-drive-study/write_carry_s8237.pt
+out=checkpoints/work/frozen-read-steering
+python - "$parent" "$out" <<'PY'
+import sys
+from pathlib import Path
+import torch
+
+parent, out = map(Path, sys.argv[1:])
+checkpoint = torch.load(parent, map_location="cpu", weights_only=True)
+out.mkdir(parents=True, exist_ok=True)
+for name, source in (("write_share", "write"), ("write_equal_rails_share", "write-rails")):
+    flags = dict(trace_read_share_steering=True, trace_read_drive=source)
+    state = checkpoint["state_dict"].copy()
+    if source == "write-rails":
+        for key, value in state.items():
+            if key.endswith(".trace.read_drive.weight"):
+                state[key] = torch.stack((value, value))
+    run_name = f"frozen_{name}_s8237"
+    derived = dict(checkpoint, cfg={**checkpoint["cfg"], **flags},
+                   args={**checkpoint["args"], **flags}, state_dict=state, run_name=run_name)
+    torch.save(derived, out / f"{run_name}.pt")
+PY
+python experiments/probe_read_headroom.py --enwik8 data/enwik8 \
+  --checkpoint "$parent" --json "$out/write_carry_validation_headroom.json"
+for arm in write_share write_equal_rails_share; do
+  checkpoint="$out/frozen_${arm}_s8237.pt"
+  audit=("$checkpoint")
+  if [[ $arm == write_equal_rails_share ]]; then audit=("$parent" "$checkpoint"); fi
+  python experiments/audit_spike_code.py --device mps --split validation \
+    --enwik8 data/enwik8 --activity-profile --checkpoint "${audit[@]}" \
+    --json "$out/native_frozen_${arm}_s8237.json"
+  python experiments/probe_lm_context.py --event-lm --device cpu \
+    --checkpoint "$checkpoint" --data data/enwik8 --split val \
+    --histories 1 32 497 --tail-bytes 16 --tails 1536 --batch-size 32 \
+    --json "$out/frozen_${arm}_history.json"
+done
+```

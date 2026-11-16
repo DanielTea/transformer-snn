@@ -84,18 +84,21 @@ full-corpus scores, and exact training records.
 | [Depth growth with signed residual corrections](event_lm/depth_growth) | Six matched endpoints at 81.92M targets, both held-out corpora, warm starts, native parity, interventions and CPU timing |
 | [Held-charge inputs and group thresholds](event_lm/trace_integration) | Five matched endpoints at 91.75M targets, paired history and axon tap probes, fine-threshold offsets, and native parity |
 | [Axon tap reads](event_lm/trace_tap_read) | Four matched endpoints at 101.58M targets, warm checks, full-corpus scores, per-group winning delays, frozen-weight interventions, and packed-width parity |
-| [Packed width and steering transfers](event_lm/packed_width) | Matched 9.96M and 12.8M scores, paired validation histories, native activity, frozen interventions and integer warm starts |
-| [Held-charge reads driven by write spikes](event_lm/trace_read_drive) | Matched held-out scores, fractional-charge and pulse audits, source interventions, and warm starts |
+| [Packed width and steering transfers](event_lm/packed_width) | Matched 9.96M and 12.8M scores, paired history and routing probes, integer warm starts, CPU timing and generation samples |
+| [Held-charge reads driven by write spikes](event_lm/trace_read_drive) | Matched held-out scores, fractional-charge and pulse audits, steering and polarity interventions, and 25.6M growth checks |
 
 `event_lm/continuation_leaderboard.json` groups ranks by training
-exposure, geometry, and seed. The v7 archive uses
+exposure, geometry, and seed. The v8 archive uses the packed-width,
+driven-read and supporting checkpoint catalogs. The v7 archive uses
 `event_lm/v7_checkpoints.sha256` and `event_lm/trace_integration_checkpoints.sha256`.
 The v6 archive uses `event_lm/v6_checkpoints.sha256` for its studies and
 their parent chains.
+[v8 archive manifest](../models/spiking-byte-lm-v8/manifest.json) ·
 [v7 archive manifest](../models/spiking-byte-lm-v7/manifest.json) ·
 [v6 archive manifest](../models/spiking-byte-lm-v6/manifest.json) ·
 [Packed-width checkpoint digests](event_lm/packed_width_checkpoints.sha256) ·
-[Driven read checkpoint digests](event_lm/trace_read_drive_checkpoints.sha256)
+[Driven read checkpoint digests](event_lm/trace_read_drive_checkpoints.sha256) ·
+[v8 supporting checkpoint digests](event_lm/v8_supporting_checkpoints.sha256)
 
 Regenerate the [leaderboards and current figures](../docs/LEADERBOARD.md)
 with `python experiments/plot_event_lm_study.py` and

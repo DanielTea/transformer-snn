@@ -174,8 +174,18 @@ TRACE_READ_DRIVE_116326K = (
      f"{TRACE_READ_DRIVE}/native_control_s8237.json", BLUE),
     ("Write input, six-bit reset", TRACE_READ_DRIVE, "write_s8237",
      f"{TRACE_READ_DRIVE}/native_write_s8237.json", "#7a6a50"),
+    ("Present input, six-bit reset", TRACE_READ_DRIVE, "present_s8237",
+     f"{TRACE_READ_DRIVE}/native_present_s8237.json", GRAY),
+    ("Write input, eight-bit reset", TRACE_READ_DRIVE, "write_fine_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_fine_s8237.json", "#138372"),
     ("Write input, eight-bit carry", TRACE_READ_DRIVE, "write_carry_s8237",
      f"{TRACE_READ_DRIVE}/native_write_carry_s8237.json", VIOLET),
+    ("Present input, eight-bit carry", TRACE_READ_DRIVE, "present_carry_s8237",
+     f"{TRACE_READ_DRIVE}/native_present_carry_s8237.json", "#ad4772"),
+    ("Write input, shared steering", TRACE_READ_DRIVE, "write_share_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_share_s8237.json", "#5750a1"),
+    ("Two write rails, shared steering", TRACE_READ_DRIVE, "write_rails_share_s8237",
+     f"{TRACE_READ_DRIVE}/native_write_rails_share_s8237.json", "#138372"),
     ("Full attention", TRACE_READ_DRIVE, "transformer_s8237", None, ORANGE),
 )
 TRACE_COINCIDENCE_6510K = (
@@ -431,12 +441,15 @@ def state_size(state):
 
 
 def markdown_table(rows, *, include_ranks, include_raw_pg19=False):
+    pg19_label = "PG-19 calibrated" if include_raw_pg19 else "PG-19"
     if include_ranks:
-        columns = ["Model", "Parameters", "State", "enwik8", "Rank", "PG-19", "Rank", "Pulses/byte"]
+        columns = ["Model", "Parameters", "State", "enwik8", "Rank", pg19_label, "Rank", "Pulses/byte"]
         if include_raw_pg19:
             columns.insert(7, "PG-19 raw")
     else:
-        columns = ["Model", "enwik8", "PG-19", "State"]
+        columns = ["Model", "enwik8", pg19_label, "State"]
+        if include_raw_pg19:
+            columns.insert(3, "PG-19 raw")
     lines = ["| " + " | ".join(columns) + " |", "|---|" + "---:|" * (len(columns) - 1)]
     for row in rows:
         enwik8, pg19 = (row["scores"][corpus] for corpus, _, _ in CORPORA)
@@ -448,7 +461,8 @@ def markdown_table(rows, *, include_ranks, include_raw_pg19=False):
             lines.append(f'| {row["model"]} | {row["parameters"]:,} | {state} | {score_cell(enwik8)} | '
                          f'{enwik8["rank"]} | {score_cell(pg19)} | {pg19["rank"]} |{raw} {pulse_text} |')
         else:
-            lines.append(f'| {row["model"]} | {score_cell(enwik8)} | {score_cell(pg19)} | {state} |')
+            raw = f' {pg19["raw_bpb"]:.5f} |' if include_raw_pg19 else ""
+            lines.append(f'| {row["model"]} | {score_cell(enwik8)} | {score_cell(pg19)} |{raw} {state} |')
     return "\n".join(lines)
 
 
@@ -468,6 +482,8 @@ def write_leaderboards(data, depth, research):
         "trace_read_drive_116326k": (
             "![Held-out next-byte loss after training the driven read circuits]"
             "(../results/figures/event_lm_trace_read_drive.png)",
+            "![Spare steering capacity and the effect of write polarity on read counts]"
+            "(../results/figures/event_lm_read_steering.png)",
             "[Circuit, native activity, and matched controls](TRACE_READ_DRIVE.md)",
         ),
         "packed_width_111411k": (
@@ -513,7 +529,7 @@ def write_leaderboards(data, depth, research):
         "![Held-out next-byte loss for the grown 6.51M models](../results/figures/event_lm_grown_6510k.png)",
         "![enwik8 loss gap for the grown pair by prefix age](../results/figures/event_lm_grown_prefix_age.png)",
         "[Growth study](GROWN_RESIDUAL.md) · [Width from scratch](SCALE_6510K_WIDTH.md) · "
-        "[Current model card](../models/spiking-byte-lm-v7/README.md) · [Depth growth study](DEPTH_GROWTH.md)",
+        "[Current model card](../models/spiking-byte-lm-v8/README.md) · [Depth growth study](DEPTH_GROWTH.md)",
         "![Held-out next-byte loss for the 512-byte continuations](../results/figures/event_lm_continuation_test.png)",
         "![Held-out loss at both trained context lengths](../results/figures/event_lm_trained_context.png)",
         "[Continuation and scale source records](../results/event_lm/continuation_leaderboard.json) · "
@@ -547,7 +563,8 @@ def write_leaderboards(data, depth, research):
     _, end, after = remainder.partition(READ_ME_END)
     if not marker or not end:
         raise ValueError("README.md needs both event model leaderboard markers")
-    table = markdown_table(research["groups"]["trace_tap_101580k"]["rows"], include_ranks=False)
+    table = markdown_table(research["groups"]["trace_read_drive_116326k"]["rows"],
+                           include_ranks=False, include_raw_pg19=True)
     readme.write_text(f"{before}{marker}\n\n{table}\n\n{end}{after}", encoding="utf-8")
 
 
@@ -608,8 +625,8 @@ def plot_pulses(data, output):
     save(fig, output, "event_lm_pulse_tradeoff.png")
 
 
-def plot_heldout(rows, output, *, title, subtitle, filename, precision=3):
-    fig, axes = plt.subplots(1, 2, figsize=(12.2, 4.7), sharey=True)
+def plot_heldout(rows, output, *, title, subtitle, filename, precision=3, height=4.7):
+    fig, axes = plt.subplots(1, 2, figsize=(12.2, height), sharey=True)
     fig.subplots_adjust(left=0.32, right=0.973, bottom=0.22, top=0.756, wspace=0.18)
     heading(fig, title, subtitle)
     for ax, (corpus, name, _) in zip(axes, CORPORA, strict=True):
@@ -807,6 +824,46 @@ def plot_packed_circuit_changes(baseline, variants, output):
     save(fig, output, "event_lm_packed_circuit_changes.png")
 
 
+def plot_read_steering(output):
+    headroom = read_result(f"{TRACE_READ_DRIVE}/write_carry_validation_headroom.json")["totals"]
+    signed = read_result(f"{TRACE_READ_DRIVE}/native_frozen_write_share_s8237.json")
+    equal = read_result(f"{TRACE_READ_DRIVE}/native_frozen_write_equal_rails_share_s8237.json")
+    for key in ("input_sha256", "input_bytes", "input_offset", "split"):
+        if signed[key] != equal[key]:
+            raise ValueError("frozen read steering audits must use the same validation bytes")
+    carried, equal_rails = equal["models"]
+    reach = [100 * headroom[key] / headroom["blocked_ticks"] for key in (
+        "pair_recoverable_ticks", "four_cell_upper_bound_ticks", "delay_group_upper_bound_ticks",
+    )]
+    changes = [sum(row["trace_read_changed_counts_per_byte_by_block"]) for row in (
+        carried, signed["models"][0], equal_rails,
+    )]
+    panels = (
+        ("Spare steering · 16,384 bytes", ("Adjacent pairs", "Blocks of four", "Full delay groups"),
+         reach, "Percent of blocked charge", ".1f", "%"),
+        ("Frozen read counts · 4,096 bytes", ("Original carry", "Signed sharing", "Equal gains on both rails"),
+         changes, "Absolute count change per byte", ".3f", ""),
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(12.4, 4.4))
+    fig.subplots_adjust(left=0.17, right=0.972, bottom=0.215, top=0.747, wspace=0.61)
+    heading(fig, "Spare steering and write polarity", "Native counts on enwik8 validation text")
+    for ax, (title, labels, values, xlabel, precision, unit) in zip(axes, panels, strict=True):
+        style(ax, grid_axis="x")
+        ax.set_title(title, fontsize=11, loc="left", color=TEXT)
+        ax.barh(range(3), values, color=[BLUE, VIOLET, "#138372"], height=0.43)
+        for index, value in enumerate(values):
+            ax.annotate(f"{value:{precision}}{unit}", (value, index), xytext=(5, 0),
+                        textcoords="offset points", va="center", size=9, color=TEXT)
+        ax.set_yticks(range(3), labels)
+        ax.set_ylim(2.55, -0.55)
+        ax.set_xlim(0, 1.24 * max(values))
+        ax.set_xlabel(xlabel, color=MUTED, labelpad=7)
+    axes[0].set_xticks(range(0, 101, 25))
+    fig.text(0.035, 0.045, "Four-cell and delay-group values are capacity bounds. Frozen variants use one trained checkpoint.",
+             color=MUTED, size=9)
+    save(fig, output, "event_lm_read_steering.png")
+
+
 def plot_trained_context(research, output):
     short = research["groups"]["continuation_512"]["rows"]
     long = research["groups"]["continuation_2048"]["rows"]
@@ -949,7 +1006,9 @@ def main():
     read_rows = research["groups"]["trace_read_drive_116326k"]["rows"]
     plot_heldout(read_rows, output, title="Held-charge read circuits at matched exposure",
                  subtitle="About 12.8M parameters · 116.33M enwik8 training targets · seed 8237",
-                 filename="event_lm_trace_read_drive.png", precision=5)
+                 filename="event_lm_trace_read_drive.png", precision=5,
+                 height=4.7 + 0.32 * (len(read_rows) - 4))
+    plot_read_steering(output)
     packed_rows = research["groups"]["packed_width_111411k"]["rows"]
     narrow_snn, wide_snn, narrow_full, wide_full, delayed, short, present = packed_rows
     width_pairs = (("11-block SNN", BLUE, narrow_snn, wide_snn),
