@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from plot_dendrite import BLUE, GRAY, MUTED, ORANGE, RESULTS, TEXT, VIOLET, heading, plt, read_result, save, style
+from plot_dendrite import GRAY, MUTED, ORANGE, RESULTS, TEXT, VIOLET, heading, plt, read_result, save, style
 
 STUDY = "event_lm/coasting_heads"
 GREEN = "#187b62"
@@ -31,6 +31,14 @@ DECODERS = (
 )
 PLOTTED = ("fit_only/test_clock", "recall_long16-clock", "recall_long-plain", "recall_long-heads", "recall_scratch-clock",
            "recall_scratch-clock-syn", "recall_scratch-heads", "recall_long16-transformer", "recall_scratch-transformer")
+# Label, record folder and checkpoint name of the from-scratch arms that are scored in the stream.
+STREAMED = (
+    ("Plain", "scratch-study", "clock_s20001"),
+    ("Beside fast synapses", "scratch-study", "clock-syn_s20001"),
+    ("Beside read heads", "v12-scratch", "heads_s20001"),
+    ("Beside read heads, strengths refitted", "v12-scratch", "heads-fitted_s20001"),
+    ("Full attention", "scratch-study", "transformer_s20001"),
+)
 BINS = ("1-8", "9-32", "33-96", "97-256", "257-512")
 DOCUMENTS = (("fineweb_edu", "Web pages"), ("finemath", "Mathematics"), ("stack_edu", "Source code"))
 
@@ -40,6 +48,16 @@ def replay(name):
     rows = {row["name"]: row for row in read_result(f"{STUDY}/{name}.json")["records"]}
     return (rows[HEADS]["test_base_bpb"], rows[SYNAPSES]["test_bpb"], rows[HEADS]["test_bpb"],
             rows[BOTH]["test_bpb"] if BOTH in rows else None)
+
+
+def streamed(folder, name):
+    """Streaming enwik8 and PG-19 loss, state bytes and native pulses per byte of one checkpoint."""
+    enwik8, pg19 = (read_result(f"{STUDY}/{folder}/{corpus}_{name}.json")["models"][0] for corpus in ("enwik8", "pg19"))
+    if enwik8["streaming_tensor_bytes"] != pg19["streaming_tensor_bytes"] or enwik8["checkpoint"] != pg19["checkpoint"]:
+        raise ValueError(f"{name}: the two corpora must score one checkpoint")
+    audit = RESULTS / STUDY / folder / f"native_{name}.json"
+    native = read_result(f"{STUDY}/{folder}/native_{name}.json")["models"][0] if audit.is_file() else None
+    return enwik8, pg19, native
 
 
 def gaps(record):
@@ -153,6 +171,16 @@ def tables():
     print("| Decoder | Alone | + v11 synapses | + heads | + both |\n|---|---:|---:|---:|---:|")
     for label, name, _ in DECODERS:
         print(f"| {label} | " + " | ".join(cell(value) for value in replay(name)) + " |")
+    print("\nstreamed\n| Arm | enwik8 | PG-19 | PG-19 raw | State | Pulses per byte | Head spikes per byte |\n"
+          "|---|---:|---:|---:|---:|---:|---:|")
+    for label, folder, name in STREAMED:
+        enwik8, pg19, native = streamed(folder, name)
+        heads = (native or {}).get("read_heads")
+        spikes = sum(heads[f"{kind}_spikes_per_byte"] for kind in ("key", "tape", "recall")) if heads else None
+        print(f"| {label} | {enwik8['bpb']:.5f} | {pg19['bpb']:.5f} | {pg19['raw_bpb']:.5f} | "
+              f"{enwik8['streaming_tensor_bytes']:,} B | "
+              + (f"{native['total_pulses_per_byte']:,.0f}" if native else "") + " | "
+              + (f"{spikes:.1f}" if spikes is not None else "") + " |")
     for record in ("history_gap_scratch", "history_gap_long", "history_gap_v2pair"):
         pairs = gaps(record)
         print(f"\n{record}\n| Arm | " + " | ".join(key.replace("-", "–") for key in (*BINS, "1-512")) + " |\n|---|"

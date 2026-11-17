@@ -26,16 +26,22 @@ beside **read heads on a tape of the stream**. A head follows a
 passage one byte at a time, gains charge with every confirmed
 byte and is removed by the first wrong one. With its heads the
 decoder scores **1.414 bits per byte** on the full enwik8 test
-split. The same decoder trained beside the v11 fast synapses
-scores 1.486, and the bundled v11 model scores 1.645.
+split and 1.646 on 16 PG-19 books. The bundled v11 model scores
+1.645 and 1.940.
 
-Full attention is far ahead at this training budget. The
-Transformer of the same size, trained from scratch on the same
-windows, scores 1.207. The head decoders are scored by replaying
-the heads over the decoder's recorded outputs. They have no
-streaming or native evaluation yet and no row on the leaderboard.
-Every arm is one seed. The v12 weights are release assets, and
-the model that runs from a clone is v11.
+| Trained from scratch, 368.64M targets | enwik8 | PG-19 | State |
+|---|---:|---:|---:|
+| 34.85M SNN, surprise clock | 1.61100 | 1.72052 | 43,796 B |
+| 34.85M SNN, surprise clock and fast synapses | 1.48587 | 1.68629 | 68,388 B |
+| 34.85M SNN, surprise clock and read heads | 1.41375 | 1.64562 | 179,028 B |
+| 34.85M full attention | **1.20684** | **1.48212** | 6 MiB |
+
+Full attention is far ahead at this training budget. The four
+rows received identical windows from random weights. The heads
+run inside the streaming evaluator and the native integer
+decoder, and their tape and key synapses add 135,232 bytes of
+state per stream. Every arm is one seed. The v12 weights are
+release assets, and the model that runs from a clone is v11.
 
 [Coasting-head study](docs/COASTING_HEADS.md) ·
 [Model card](models/spiking-byte-lm-v12/README.md) ·
@@ -134,8 +140,9 @@ handoff includes commands to replay each step of the study.
 [Result file guide](results/README.md)
 
 The v12 archives hold the 21 checkpoints of the coasting-head
-study. Its handoff has the restore commands, the launcher and
-the replay that scores a head decoder.
+study. Its handoff has the restore commands, the launcher, the
+streaming evaluation of a head decoder and the replay that fits
+its strengths.
 [Restore and replay](docs/V12_HANDOFF.md#restore-the-checkpoints) ·
 [Exact manifest](models/spiking-byte-lm-v12/manifest.json)
 

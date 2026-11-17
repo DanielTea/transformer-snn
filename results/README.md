@@ -26,8 +26,11 @@ web, mathematics and code documents. `fit_only` holds the sweeps
 on the frozen v11 decoder and `readout` the fitted head
 strengths. The other subdirectories are named after the
 checkpoint directories and hold their training and scoring
-records. `coasting_heads_checkpoints.sha256` lists every
-checkpoint of the study.
+records. In `scratch-study` and `v12-scratch` the `enwik8_*.json`
+and `pg19_*.json` records are streaming scores and the
+`native_*.json` records pulse audits of the integer decoder.
+`coasting_heads_checkpoints.sha256` lists every checkpoint of
+the study.
 
 The recall figure uses `recall_distance/*_gap_v1_*.json` and
 `recall_distance/dendrite_event_s0_anchored_extrapolation.json`.

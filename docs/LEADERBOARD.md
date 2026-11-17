@@ -4,7 +4,24 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
-The coasting read heads of v12 are scored by replay over a recorded stream and have no row here. [Coasting-head study](COASTING_HEADS.md)
+## Coasting read heads, trained from scratch · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 34.85M SNN, surprise clock | 34,845,184 | 43,796 B | 1.61100 | 4 | 1.72052 | 4 | 1.72052 | 311,540 |
+| 34.85M SNN, surprise clock and fast synapses | 34,845,184 | 68,388 B | 1.48587 | 3 | 1.68629 | 3 | 1.68629 | 318,451 |
+| 34.85M SNN, surprise clock and read heads | 34,845,184 | 179,028 B | 1.41375 | 2 | 1.64562 | 2 | 1.64562 | 309,469 |
+| 34.85M full attention | 34,845,696 | 6 MiB | **1.20684** | 1 | **1.48212** | 1 | **1.48212** | — |
+
+![Held-out enwik8 and PG-19 loss of the decoders trained from scratch](../results/figures/event_lm_coasting_heads_leaderboard.png)
+
+![enwik8 test loss of each decoder alone, with fast synapses and with read heads](../results/figures/event_lm_coasting_heads.png)
+
+![Gap to full attention by bytes of history](../results/figures/event_lm_coasting_heads_history.png)
+
+[Head circuit, controls and limits](COASTING_HEADS.md)
+
+The four models received identical windows from random weights. The read heads and the fast synapses carry one stream of any length. Full attention reads 512 bytes. Each recall circuit uses the strengths its decoder was trained beside. They were fitted on enwik8 validation with the released v11 decoder, and no row trains on test text.
 
 ## Surprise clock and fast synapses · 140,902,400 training targets · seed 10007
 
