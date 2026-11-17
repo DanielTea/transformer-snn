@@ -29,26 +29,43 @@ decoder scores **1.414 bits per byte** on the full enwik8 test
 split and 1.646 on 16 PG-19 books. The bundled v11 model scores
 1.645 and 1.940.
 
-| Trained from scratch, 368.64M targets | enwik8 | PG-19 | State |
-|---|---:|---:|---:|
-| 34.85M SNN, surprise clock | 1.61100 | 1.72052 | 43,796 B |
-| 34.85M SNN, surprise clock and fast synapses | 1.48587 | 1.68629 | 68,388 B |
-| 34.85M SNN, surprise clock and read heads | 1.41375 | 1.64562 | 179,028 B |
-| 34.85M full attention | **1.20684** | **1.48212** | 6 MiB |
+![Held-out enwik8 and PG-19 loss of the four decoders trained from scratch](results/figures/event_lm_coasting_heads_leaderboard.png)
+
+| Trained from scratch, 368.64M targets | enwik8 | PG-19 | State | Pulses per byte |
+|---|---:|---:|---:|---:|
+| 34.85M SNN, surprise clock | 1.61100 | 1.72052 | 43,796 B | 311,540 |
+| 34.85M SNN, surprise clock and fast synapses | 1.48587 | 1.68629 | 68,388 B | 318,451 |
+| 34.85M SNN, surprise clock and read heads | 1.41375 | 1.64562 | 179,028 B | 309,469 |
+| 34.85M full attention | **1.20684** | **1.48212** | 6 MiB | — |
 
 Full attention is far ahead at this training budget. The four
-rows received identical windows from random weights. The heads
-run inside the streaming evaluator and the native integer
-decoder, and their tape and key synapses add 135,232 bytes of
-state per stream. Every arm is one seed. The v12 weights are
-release assets, and the model that runs from a clone is v11.
+rows received identical windows from random weights. Every
+score comes from the streaming evaluator, which carries the
+tape, the key synapses and the heads from chunk to chunk. They
+add 135,232 bytes of state per stream, and the head decoder
+holds a 35th of the state full attention keeps for its 512-byte
+context. Pulses are counted in the native integer decoder on
+the first 4,096 bytes of the enwik8 test split, and 241 of the
+head decoder's 309,469 are in the head circuit. Every arm is
+one seed. The v12 weights are release assets, and the model
+that runs from a clone is v11.
+
+![Held-out loss against the state of one stream](results/figures/event_lm_coasting_heads_state.png)
+
+The study first scored the heads in a replay over each
+decoder's recorded outputs, with strengths refitted on enwik8
+validation. The stream confirms it. With refitted strengths the
+head decoder scores 1.41385 bpb both ways. The figure below is
+that replay for nine decoders, each alone, with the v11 fast
+synapses and with read heads.
+
+![enwik8 test loss of each decoder alone, with fast synapses and with read heads](results/figures/event_lm_coasting_heads.png)
 
 [Coasting-head study](docs/COASTING_HEADS.md) ·
+[Leaderboard](docs/LEADERBOARD.md) ·
 [Model card](models/spiking-byte-lm-v12/README.md) ·
 [Research handoff](docs/V12_HANDOFF.md) ·
 [Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v12)
-
-![enwik8 test loss of each decoder alone, with fast synapses and with read heads](results/figures/event_lm_coasting_heads.png)
 
 ## Run the bundled model
 

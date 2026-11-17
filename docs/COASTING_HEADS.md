@@ -250,6 +250,12 @@ synapse arm 0.034. On enwik8 the two differences are 0.197 and
 and 0.207 on enwik8. The PG-19 temperature fitted on the
 validation books is 1.0 in every row.
 
+Each recall circuit lowers the loss and adds state. The head
+arm's 179,028 bytes are a 35th of what full attention stores
+for its 512-byte context.
+
+![Held-out loss against the state of one stream](../results/figures/event_lm_coasting_heads_state.png)
+
 The pulse audit runs the native integer decoder over the first
 4,096 bytes of the enwik8 test split. The head circuit fires 241
 of the 309,469 pulses per byte there: 8 key spikes, 3 spikes of
