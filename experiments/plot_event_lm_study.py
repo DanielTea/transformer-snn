@@ -578,6 +578,8 @@ def write_leaderboards(data, depth, research, transfers):
         "a native 4,096-byte enwik8 test sample. "
         "Each PG-19 temperature is fitted on eight separate validation books. "
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
+        "The coasting read heads of v12 are scored by replay over a recorded stream and have no row here. "
+        "[Coasting-head study](COASTING_HEADS.md)",
     ]
     study_figures = {
         SURPRISE_CLOCK_GROUP: (

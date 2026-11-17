@@ -1,0 +1,115 @@
+{
+  "suite": "domain-heldout-v2",
+  "catalogue_sha256": "2259ecad3d961d680d08797671416489168b67d3ebf189230351094a51d7e0c1",
+  "manifest_sha256": "d871ad0e197ed5de80051fc8c9c14680f5bda943feff415010a29d2455bd5e5b",
+  "device": "cuda",
+  "batch_size": 24,
+  "context_bytes": 512,
+  "targets_per_window": 256,
+  "models": [
+    {
+      "checkpoint": "checkpoints/v12-long/plain_s30001.pt",
+      "checkpoint_sha256": "154b60277112645773a589ece8e40577aebb04464d3680d1f6ad36c25d183b88",
+      "run_name": "event_correction_code_s30001_v12_plain",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 34845184,
+      "training_targets": 157286400,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 5172587.617675684,
+          "bpb": 1.7751513624147133
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 7158468.743471414,
+          "bpb": 2.4524906926504406
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 10628061.749581814,
+          "bpb": 3.628169811965079
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/v12-long/syn_s30001.pt",
+      "checkpoint_sha256": "186ec557b810bf092adff6e3dcf44f265878458276928b1305d7868e598631dd",
+      "run_name": "event_correction_code_s30001_v12_syn",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 34845184,
+      "training_targets": 157286400,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 4992864.117793835,
+          "bpb": 1.7134730614840534
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 6386894.353039682,
+          "bpb": 2.1881493818153497
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 8481637.133787036,
+          "bpb": 2.8954310324795554
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/v12-long/heads_s30001.pt",
+      "checkpoint_sha256": "222b815988ce37e2cae6dcdf020c92553df8c3c53d01b87ea2eb62618ee90253",
+      "run_name": "event_correction_code_s30001_v12_heads",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 34845184,
+      "training_targets": 157286400,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 4913509.565201784,
+          "bpb": 1.68623981720488
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 6111164.019499123,
+          "bpb": 2.0936841964631965
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 7803941.795757532,
+          "bpb": 2.664081815182727
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/long16-study/transformer_s10007.pt",
+      "checkpoint_sha256": "e99afa21046cb2fa1db9695d3195a25eaa3d4713797a7262431c48c4fc314a19",
+      "run_name": "transformer_s10007_surprise_clock_transformer",
+      "model_type": "TransformerLM",
+      "attention": "transformer",
+      "parameters": 34845696,
+      "training_targets": 288358400,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 4914335.45778444,
+          "bpb": 1.6865232506528318
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 6516396.630954705,
+          "bpb": 2.232516849586063
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 8812606.837728798,
+          "bpb": 3.0084162895104316
+        }
+      }
+    }
+  ]
+}

@@ -19,6 +19,31 @@ as a negative result with its controls.
 
 ![Held-out enwik8 and PG-19 loss with the surprise clock and fast synapses](results/figures/event_lm_surprise_clock.png)
 
+## v12: coasting read heads
+
+The v12 study trains the 34.85M decoder from random weights
+beside **read heads on a tape of the stream**. A head follows a
+passage one byte at a time, gains charge with every confirmed
+byte and is removed by the first wrong one. With its heads the
+decoder scores **1.414 bits per byte** on the full enwik8 test
+split. The same decoder trained beside the v11 fast synapses
+scores 1.486, and the bundled v11 model scores 1.645.
+
+Full attention is far ahead at this training budget. The
+Transformer of the same size, trained from scratch on the same
+windows, scores 1.207. The head decoders are scored by replaying
+the heads over the decoder's recorded outputs. They have no
+streaming or native evaluation yet and no row on the leaderboard.
+Every arm is one seed. The v12 weights are release assets, and
+the model that runs from a clone is v11.
+
+[Coasting-head study](docs/COASTING_HEADS.md) ·
+[Model card](models/spiking-byte-lm-v12/README.md) ·
+[Research handoff](docs/V12_HANDOFF.md) ·
+[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v12)
+
+![enwik8 test loss of each decoder alone, with fast synapses and with read heads](results/figures/event_lm_coasting_heads.png)
+
 ## Run the bundled model
 
 From the repository root, set up Python 3.12 and run greedy
@@ -108,12 +133,19 @@ handoff includes commands to replay each step of the study.
 [Exact manifest](models/spiking-byte-lm-v11/manifest.json) ·
 [Result file guide](results/README.md)
 
+The v12 archives hold the 21 checkpoints of the coasting-head
+study. Its handoff has the restore commands, the launcher and
+the replay that scores a head decoder.
+[Restore and replay](docs/V12_HANDOFF.md#restore-the-checkpoints) ·
+[Exact manifest](models/spiking-byte-lm-v12/manifest.json)
+
 Regenerate the leaderboards, scientific figures and browser report
 from the checked-in records.
 
 ```bash
 python experiments/plot_event_lm_study.py
 python experiments/plot_depth_inhibition.py
+python experiments/plot_coasting_heads.py
 python experiments/make_report.py docs/report.html
 ```
 

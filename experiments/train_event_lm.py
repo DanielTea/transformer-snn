@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, replace
 import hashlib
+import json
 import math
 import os
 from pathlib import Path
@@ -133,6 +134,28 @@ def build_model(args):
     model_kwargs = dict(vocab=256, dim=args.dim, heads=args.heads, depth=args.depth, ctx=args.ctx)
     if args.variant in EVENT_ROUTES:
         groups = None if args.delay_group_widths is None else tuple(map(int, args.delay_group_widths.split(",")))
+        synapses, readout = {}, None
+        if getattr(args, "synapse_readout", None) is not None:
+            # The synapses stay as fitted. Only the decoder that reads beside them is trained.
+            donor = torch.load(args.synapse_readout.expanduser(), map_location="cpu", weights_only=True)
+            synapses = {name: tuple(value) if isinstance(value, list) else value
+                        for name, value in donor["cfg"].items() if name.startswith("synapse_")}
+            if synapses.get("synapse_orders") is None:
+                raise ValueError(f"{args.synapse_readout}: expected a decoder with fitted fast synapses")
+            readout = donor["state_dict"]["fast_synapses.readout"]
+        heads, head_readout, joint_readout = {}, None, None
+        if getattr(args, "head_readout", None) is not None:
+            # The heads stay as fitted, like the synapses.
+            fitted = json.loads(args.head_readout.expanduser().read_text(encoding="utf-8"))
+            setting = fitted["setting"]
+            heads = dict(head_orders=tuple(setting["orders"]), head_cells=setting["cells"], head_gate=setting["gate"],
+                         head_tape=setting["tape"], head_lookup=setting["lookup"], head_miss=setting["miss"],
+                         head_relock=setting["relock"])
+            head_readout = torch.tensor(fitted["head_strength_spikes"], dtype=torch.int32)
+            if fitted.get("synapse_strength_spikes") is not None:
+                if readout is None:
+                    raise ValueError(f"{args.head_readout}: jointly fitted synapses need --synapse-readout")
+                joint_readout = torch.tensor(fitted["synapse_strength_spikes"], dtype=torch.int32)
         cfg = EventLMConfig(dim=args.dim, hidden=args.hidden, depth=args.depth, route=EVENT_ROUTES[args.variant],
                             carry=not args.no_carry, continuous=args.variant == "event_continuous",
                             memory_heads=args.memory_heads, memory_slots=args.memory_slots,
@@ -171,8 +194,16 @@ def build_model(args):
                             compact_trace_state=args.compact_trace_state,
                             tag_phase_address=args.tag_phase_address,
                             clock_start=args.clock_start, clock_threshold=args.clock_threshold,
-                            clock_leak=args.clock_leak, clock_source=args.clock_source)
-        return EventLM(cfg), cfg, {}
+                            clock_leak=args.clock_leak, clock_source=args.clock_source, **synapses, **heads)
+        model = EventLM(cfg)
+        with torch.no_grad():
+            if readout is not None:
+                model.fast_synapses.readout.copy_(readout)
+            if joint_readout is not None:
+                model.fast_synapses.readout[:, 1:] = joint_readout
+            if head_readout is not None:
+                model.read_heads.readout[:, 1:] = head_readout
+        return model, cfg, {}
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
     if args.local_lookback is not None:
         per_layer, extra = divmod(args.local_lookback - 1, args.depth)
@@ -444,6 +475,14 @@ def main():
                         help="inhibitory spikes per byte against the clock membrane")
     parser.add_argument("--clock-source", choices=_CLOCK_SOURCES, default="surprise",
                         help="integrate surprise, or one unit per byte as the fixed-stride control")
+    parser.add_argument("--synapse-readout", type=Path,
+                        help="decoder with fitted fast synapses whose key neurons and fixed strengths run in training")
+    parser.add_argument("--head-readout", type=Path,
+                        help="fitted coasting heads from probe_coasting_heads.py whose fixed strengths run in training")
+    parser.add_argument("--load-weights", type=Path,
+                        help="start from the weights of a checkpoint of the same decoder, whatever its recall circuits")
+    parser.add_argument("--save-every", type=int, default=0,
+                        help="also write the weights to <checkpoint>.partial after every this many steps")
     parser.add_argument("--early-readout", type=int,
                         help="number of leading blocks whose stream also drives the vocabulary neurons")
     parser.add_argument("--early-readout-weight", type=float, default=0.0,
@@ -592,7 +631,7 @@ def main():
         if (len(val) - args.ctx - 1) // max_windows < args.ctx:
             raise ValueError("evaluation windows would overlap; reduce batch size or evaluation batches")
         model, cfg, model_kwargs = build_model(args)
-        initialization = None
+        initialization = loaded_weights = None
         if args.initialize_from is not None:
             initialization = initialize_from_checkpoint(
                 model, model_kwargs, args.initialize_from.expanduser(),
@@ -600,6 +639,23 @@ def main():
                 grow_expansion=args.grow_expansion, grow_depth=args.grow_depth,
                 preserve_router_charge=args.preserve_router_charge,
             )
+        if args.load_weights is not None:
+            # Synapses and heads carry no trained weights, so a decoder may gain or drop them here.
+            recall = ("fast_synapses.", "read_heads.")
+            parent = torch.load(args.load_weights.expanduser(), map_location="cpu", weights_only=True)
+            own = asdict(cfg)
+            different = sorted(name for name, value in (parent.get("cfg") or {}).items()
+                               if not name.startswith(("synapse_", "head_")) and name in own
+                               and json.dumps(value) != json.dumps(own[name]))
+            if different:
+                raise ValueError(f"{args.load_weights}: the decoder differs in {', '.join(different)}")
+            weights = {name: value for name, value in parent["state_dict"].items() if not name.startswith(recall)}
+            missing, unexpected = model.load_state_dict(weights, strict=False)
+            if unexpected or any(not name.startswith(recall) for name in missing):
+                raise ValueError(f"{args.load_weights}: expected the weights of the same decoder")
+            with args.load_weights.expanduser().open("rb") as stream:
+                loaded_weights = {"checkpoint": str(args.load_weights), "run_name": parent.get("run_name"),
+                                  "sha256": hashlib.file_digest(stream, "sha256").hexdigest()}
         if args.tag_read_initial_gain is not None:
             with torch.no_grad():
                 model.prediction_memory.read_inhibition.gain.fill_(args.tag_read_initial_gain)
@@ -713,10 +769,24 @@ def main():
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
                   f"accuracy={metrics['argmax_accuracy']:.4f} ({timer():.1f}s){activity}", flush=True)
 
+        if args.save_every and checkpoint is not None and step % args.save_every == 0 and step < args.steps:
+            # A long run that is stopped early keeps its last weights under another name.
+            partial = Path(f"{checkpoint}.partial")
+            reached = {name: str(value) if isinstance(value, Path) else value for name, value in vars(args).items()}
+            torch.save(dict(format_version=1, model_type=type(model).__name__, task="event_lm", run_name=name,
+                            cfg=asdict(cfg), model_kwargs=model_kwargs, args=dict(reached, steps=step),
+                            initialization=initialization,
+                            state_dict={key: value.detach().cpu() for key, value in model.state_dict().items()}),
+                       f"{partial}.tmp")
+            os.replace(f"{partial}.tmp", partial)
+
     val_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,
                                                             **evaluate_options)
     args_record = dict(vars(args), data=str(args.data), results_dir=None if results_dir is None else str(results_dir),
+                       synapse_readout=None if args.synapse_readout is None else str(args.synapse_readout),
+                       head_readout=None if args.head_readout is None else str(args.head_readout),
+                       load_weights=loaded_weights,
                        training_mixture=None if args.training_mixture is None else str(args.training_mixture),
                        initialize_from=None if args.initialize_from is None else str(args.initialize_from),
                        teacher_checkpoint=None if args.teacher_checkpoint is None else str(args.teacher_checkpoint))

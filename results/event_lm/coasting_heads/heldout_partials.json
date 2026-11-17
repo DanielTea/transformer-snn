@@ -1,0 +1,115 @@
+{
+  "suite": "domain-heldout-v2",
+  "catalogue_sha256": "2259ecad3d961d680d08797671416489168b67d3ebf189230351094a51d7e0c1",
+  "manifest_sha256": "d871ad0e197ed5de80051fc8c9c14680f5bda943feff415010a29d2455bd5e5b",
+  "device": "cuda",
+  "batch_size": 24,
+  "context_bytes": 512,
+  "targets_per_window": 256,
+  "models": [
+    {
+      "checkpoint": "checkpoints/scratch-v2-study/clock-syn_s20001.pt.partial",
+      "checkpoint_sha256": "5af138fd5bb147cc363ab0030a6410aa4786e1f2e078b2bf51397ec57e0e2762",
+      "run_name": "event_correction_code_s20001_scratch_clock_syn_v2",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 34845184,
+      "training_targets": 122880000,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 5403611.758544266,
+          "bpb": 1.8544352428872557
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 5771246.229430079,
+          "bpb": 1.9772283947708404
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 5320138.049922455,
+          "bpb": 1.8161697516459117
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/v12-snaps/clock-syn_45000.pt",
+      "checkpoint_sha256": "0d861dcb985055e8ed86a6ddb8d851ee597d1862dcbec97664dee588b843d015",
+      "run_name": "event_correction_code_s20001_scratch_clock_syn",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 34845184,
+      "training_targets": 184320000,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 5279771.614537831,
+          "bpb": 1.8119352377440967
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 6635819.011413693,
+          "bpb": 2.2734309454724126
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 8865595.122478604,
+          "bpb": 3.026505241160023
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/scratch-v2-study/transformer_s20001.pt.partial",
+      "checkpoint_sha256": "8ede2286a7967df3c9649adf072a7bedc772e2430e01d45fb3d8f3c25f74bfe3",
+      "run_name": "transformer_s20001_scratch_transformer_v2",
+      "model_type": "TransformerLM",
+      "attention": "transformer",
+      "parameters": 34845696,
+      "training_targets": 270336000,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 4142827.297127705,
+          "bpb": 1.4217536877702448
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 4169513.8856183738,
+          "bpb": 1.4284750501539534
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 3126132.733057125,
+          "bpb": 1.0671880421394835
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/scratch-study/transformer_s20001.pt",
+      "checkpoint_sha256": "de13da3ee9fe715bd59e227716252fc1fabe956ee4337e6bed82e59d5d2aa733",
+      "run_name": "transformer_s20001_scratch_transformer",
+      "model_type": "TransformerLM",
+      "attention": "transformer",
+      "parameters": 34845696,
+      "training_targets": 368640000,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 4177392.3959442126,
+          "bpb": 1.4336158903642522
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 5118026.918550584,
+          "bpb": 1.7534355226356444
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 6060324.915395021,
+          "bpb": 2.0688521036868464
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,582 @@
+{
+  "release": "spiking-byte-lm-v12",
+  "model": {
+    "file": null,
+    "note": "The weights are not in the repository. They are in the scratch archive of the release.",
+    "source_checkpoint": "v12-scratch/heads_s20001.pt",
+    "sha256": "c8996a3710c1d6c6975c1370c513b1c3b4c37d525f58fcf54229e62689f57a41",
+    "bytes": 139400842,
+    "archive": "spiking-byte-lm-v12-checkpoints-scratch.tar.gz",
+    "parameters": 34845184,
+    "training_targets": 368640000,
+    "seed": 20001,
+    "training_record": "results/event_lm/coasting_heads/v12-scratch/event_correction_code_s20001_v12_heads.json",
+    "enwik8_test_replay_bpb": {
+      "record": "results/event_lm/coasting_heads/recall_scratch-heads.json",
+      "decoder_alone": 1.6072530132106588,
+      "with_refitted_v11_synapses": 1.483057514570591,
+      "with_refitted_heads": 1.4138457010184167
+    },
+    "architecture": {
+      "dim": 1408,
+      "hidden": 243,
+      "depth": 15,
+      "route": "steered_correction_code",
+      "carry": false,
+      "continuous": false,
+      "memory_heads": 4,
+      "memory_slots": 14,
+      "resolution": 16,
+      "memory_width": 32,
+      "forecast_key_channels": 2,
+      "match_forecast_key": true,
+      "learn_context_keys": true,
+      "learn_packet_thresholds": false,
+      "output_reference": false,
+      "compact_delays": true,
+      "departure_coincidence": false,
+      "delay_window": 1,
+      "delay_residual": false,
+      "router_charge_bits": 8,
+      "activity_inhibition": true,
+      "inhibition_by_expansion": true,
+      "local_trace": true,
+      "trace_write_credit": true,
+      "bank_write_credit": false,
+      "trace_read_veto": false,
+      "delay_filter": false,
+      "opponent_steering": false,
+      "spread_coincidence": false,
+      "residual_membrane": false,
+      "compact_axon_state": true,
+      "tag_phase_address": false,
+      "trace_coincidence_start": null,
+      "trace_write_confirm": false,
+      "steering_gradient_at_zero": false,
+      "redistribute_inhibition": false,
+      "tag_read_competition": false,
+      "late_steering": false,
+      "residual_correction_start": 7,
+      "trace_integration": false,
+      "learn_inhibition_thresholds": false,
+      "inhibition_threshold_bits": 2,
+      "trace_tap_read": null,
+      "compact_trace_state": true,
+      "steering_transfer": null,
+      "delay_group_widths": [
+        75,
+        75,
+        47,
+        46
+      ],
+      "trace_read_drive": null,
+      "trace_read_drive_bits": 6,
+      "trace_read_drive_carry": false,
+      "trace_read_share_steering": false,
+      "trace_arrival": "selected",
+      "trace_arrival_groups": 2,
+      "clock_start": 11,
+      "clock_threshold": 35,
+      "clock_leak": 0,
+      "clock_source": "surprise",
+      "synapse_orders": null,
+      "synapse_groups": 4,
+      "synapse_cells": 4096,
+      "synapse_levels": 4,
+      "synapse_gate": 1,
+      "head_orders": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "head_cells": 4096,
+      "head_gate": 1,
+      "head_tape": 65536,
+      "head_lookup": 0,
+      "head_miss": 0,
+      "head_relock": 0
+    },
+    "read_heads": {
+      "context_bytes": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "key_neurons_per_head": 4096,
+      "tape_cells": 65536,
+      "error_spikes_to_move_a_synapse": 1,
+      "charge_levels": 13,
+      "trained_beside": "results/event_lm/coasting_heads/readout/heads.json",
+      "strengths_fitted_on": {
+        "run": "event_correction_code_s10007_surprise_clock_clock",
+        "split": "enwik8 validation, all targets",
+        "checkpoint": "surprise-clock-study/clock_s10007.pt",
+        "sha256": "256b7033003dc0bdcac8bdebf0303a9d94f208bd75b7179ade5e7abfac85b0ac"
+      }
+    },
+    "scoring": "replay of the heads over the decoder's recorded outputs; no streaming or native evaluation"
+  },
+  "archives": {
+    "spiking-byte-lm-v12-checkpoints-scratch.tar.gz": {
+      "sha256": "a6d520a0e3425f63e2562321274b5770522ca65177bae0312713b0f968c15f41",
+      "bytes": 518205604,
+      "contents_checksums": "checkpoints/SHA256SUMS-v12-scratch"
+    },
+    "spiking-byte-lm-v12-checkpoints-continuations.tar.gz": {
+      "sha256": "ab56cb7aa560c6b0ff4c65c97d4bd3767a1711fd7682ef0a472f005185728717",
+      "bytes": 1001675096,
+      "contents_checksums": "checkpoints/SHA256SUMS-v12-continuations"
+    },
+    "spiking-byte-lm-v12-checkpoints-followups.tar.gz": {
+      "sha256": "61fdbbcd1b8299e3c2f332a127e52081d5fc8907863a2423caa0df5b83832107",
+      "bytes": 1164791355,
+      "contents_checksums": "checkpoints/SHA256SUMS-v12-followups"
+    }
+  },
+  "checkpoints": {
+    "donor/clock-synapses-readout.pt": {
+      "bytes": 2258,
+      "sha256": "2c371221df754c3167504b1726f435542b359167a9cb66fecd259a2f7ce4c1b7",
+      "archive": "every archive",
+      "source": {
+        "checkpoint": "surprise-clock-study/clock-synapses_s10007.pt",
+        "sha256": "79f329626967c320218e8a752d919d3097fc8fa7ac56bf195261cdc16b5505c6"
+      }
+    },
+    "long16-study/clock_s10007.pt": {
+      "bytes": 139400013,
+      "sha256": "12792534e487f1651e8b428a1d4694d86c97354bfdf4a6292e8af803830e6b50",
+      "archive": "spiking-byte-lm-v12-checkpoints-continuations.tar.gz",
+      "run_name": "event_correction_code_s10007_surprise_clock_clock",
+      "seed": 10007,
+      "updates": 38400,
+      "training_targets": 157286400,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/long16-study/event_correction_code_s10007_surprise_clock_clock.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "residual-scale-study/wide-snn_s9631.pt",
+        "sha256": "dbd46b94f28d72dff163d35826761b5d40529821529f2f9407ec45ee3f283158"
+      },
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_long16-clock.json",
+        "decoder_alone": 1.6686660555402908,
+        "with_refitted_v11_synapses": 1.5415665018475062,
+        "with_refitted_heads": 1.4734651082865573,
+        "with_both": 1.4652681540756718
+      }
+    },
+    "long16-study/control-transformer_s10007.pt": {
+      "bytes": 103446151,
+      "sha256": "cfeb2fcbb42853004c4568810cf751f1cf286ed8e2aec9d6eadd78ef8d676761",
+      "archive": "spiking-byte-lm-v12-checkpoints-continuations.tar.gz",
+      "run_name": "transformer_s10007_surprise_clock_control_transformer",
+      "seed": 10007,
+      "updates": 38400,
+      "training_targets": 157286400,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/long16-study/transformer_s10007_surprise_clock_control_transformer.json",
+      "parameters": 25790976,
+      "parent": {
+        "checkpoint": "residual-scale-study/wide-transformer_s9631.pt",
+        "sha256": "406deb1fe328aa5a2c0bdd359e880b68a9896aebccf7e796b53a53425b60e399"
+      }
+    },
+    "long16-study/depth_s10007.pt": {
+      "bytes": 139400013,
+      "sha256": "304924637dc09f84f96fa559f6c524fe4b9a159affded2db23795900f36b6695",
+      "archive": "spiking-byte-lm-v12-checkpoints-continuations.tar.gz",
+      "run_name": "event_correction_code_s10007_surprise_clock_depth",
+      "seed": 10007,
+      "updates": 38400,
+      "training_targets": 157286400,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/long16-study/event_correction_code_s10007_surprise_clock_depth.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "residual-scale-study/wide-snn_s9631.pt",
+        "sha256": "dbd46b94f28d72dff163d35826761b5d40529821529f2f9407ec45ee3f283158"
+      }
+    },
+    "long16-study/stride_s10007.pt": {
+      "bytes": 139400013,
+      "sha256": "de1ed0ad5caeb2ecaa2e7b390cd7b6526952fc37371dc1520055feab088d5a5e",
+      "archive": "spiking-byte-lm-v12-checkpoints-continuations.tar.gz",
+      "run_name": "event_correction_code_s10007_surprise_clock_stride",
+      "seed": 10007,
+      "updates": 38400,
+      "training_targets": 157286400,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/long16-study/event_correction_code_s10007_surprise_clock_stride.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "residual-scale-study/wide-snn_s9631.pt",
+        "sha256": "dbd46b94f28d72dff163d35826761b5d40529821529f2f9407ec45ee3f283158"
+      }
+    },
+    "long16-study/transformer_s10007.pt": {
+      "bytes": 139665031,
+      "sha256": "e99afa21046cb2fa1db9695d3195a25eaa3d4713797a7262431c48c4fc314a19",
+      "archive": "spiking-byte-lm-v12-checkpoints-continuations.tar.gz",
+      "run_name": "transformer_s10007_surprise_clock_transformer",
+      "seed": 10007,
+      "updates": 38400,
+      "training_targets": 157286400,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/long16-study/transformer_s10007_surprise_clock_transformer.json",
+      "parameters": 34845696,
+      "parent": {
+        "checkpoint": "residual-scale-study/wide-transformer_s9631.pt",
+        "sha256": "406deb1fe328aa5a2c0bdd359e880b68a9896aebccf7e796b53a53425b60e399"
+      },
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_long16-transformer.json",
+        "decoder_alone": 1.4820020927586057,
+        "with_refitted_v11_synapses": 1.427362577194199,
+        "with_refitted_heads": 1.394123169380798
+      }
+    },
+    "scratch-study/clock-syn_s20001.pt": {
+      "bytes": 139404881,
+      "sha256": "a4e8c9dcc3a1b1baaae2602821495ebc9aee4288ce9aa7ee532cc64ffb65d057",
+      "archive": "spiking-byte-lm-v12-checkpoints-scratch.tar.gz",
+      "run_name": "event_correction_code_s20001_scratch_clock_syn",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/scratch-study/event_correction_code_s20001_scratch_clock_syn.json",
+      "parameters": 34845184,
+      "trained_beside_synapse_strengths": "checkpoints/donor/clock-synapses-readout.pt",
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_scratch-clock-syn.json",
+        "decoder_alone": 1.613902200490999,
+        "with_refitted_v11_synapses": 1.4857253058500386,
+        "with_refitted_heads": 1.4272241074067993
+      }
+    },
+    "scratch-study/clock_s20001.pt": {
+      "bytes": 139400741,
+      "sha256": "c5efe54aafa75dff33a0c47e164a65a8fbdf68455d0f35535b53ab4657026979",
+      "archive": "spiking-byte-lm-v12-checkpoints-scratch.tar.gz",
+      "run_name": "event_correction_code_s20001_scratch_clock",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/scratch-study/event_correction_code_s20001_scratch_clock.json",
+      "parameters": 34845184,
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_scratch-clock.json",
+        "decoder_alone": 1.6109970164767728,
+        "with_refitted_v11_synapses": 1.4933327140999955,
+        "with_refitted_heads": 1.4296792409016632
+      }
+    },
+    "scratch-study/transformer_s20001.pt": {
+      "bytes": 139666053,
+      "sha256": "de13da3ee9fe715bd59e227716252fc1fabe956ee4337e6bed82e59d5d2aa733",
+      "archive": "spiking-byte-lm-v12-checkpoints-scratch.tar.gz",
+      "run_name": "transformer_s20001_scratch_transformer",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/scratch-study/transformer_s20001_scratch_transformer.json",
+      "parameters": 34845696,
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_scratch-transformer.json",
+        "decoder_alone": 1.2068393457370108,
+        "with_refitted_v11_synapses": 1.189934712986302,
+        "with_refitted_heads": 1.1756025020667444,
+        "with_both": 1.173234626506378
+      }
+    },
+    "scratch-v2-study/clock-syn_s20001.pt.partial": {
+      "bytes": 139404735,
+      "sha256": "5af138fd5bb147cc363ab0030a6410aa4786e1f2e078b2bf51397ec57e0e2762",
+      "archive": "spiking-byte-lm-v12-checkpoints-followups.tar.gz",
+      "run_name": "event_correction_code_s20001_scratch_clock_syn_v2",
+      "seed": 20001,
+      "updates": 30000,
+      "training_targets": 122880000,
+      "training_mixture": "training-v2",
+      "parameters": 34845184,
+      "stopped_run": "stopped after 30,000 of 90,000 updates",
+      "trained_beside_synapse_strengths": "checkpoints/donor/clock-synapses-readout.pt"
+    },
+    "scratch-v2-study/transformer_s20001.pt.partial": {
+      "bytes": 139665843,
+      "sha256": "8ede2286a7967df3c9649adf072a7bedc772e2430e01d45fb3d8f3c25f74bfe3",
+      "archive": "spiking-byte-lm-v12-checkpoints-followups.tar.gz",
+      "run_name": "transformer_s20001_scratch_transformer_v2",
+      "seed": 20001,
+      "updates": 66000,
+      "training_targets": 270336000,
+      "training_mixture": "training-v2",
+      "parameters": 34845696,
+      "stopped_run": "stopped after 66,000 of 90,000 updates"
+    },
+    "v12-long/heads_s30001.pt": {
+      "bytes": 139401034,
+      "sha256": "222b815988ce37e2cae6dcdf020c92553df8c3c53d01b87ea2eb62618ee90253",
+      "archive": "spiking-byte-lm-v12-checkpoints-continuations.tar.gz",
+      "run_name": "event_correction_code_s30001_v12_heads",
+      "seed": 30001,
+      "updates": 38400,
+      "training_targets": 157286400,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/v12-long/event_correction_code_s30001_v12_heads.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "long16-study/clock_s10007.pt",
+        "sha256": "12792534e487f1651e8b428a1d4694d86c97354bfdf4a6292e8af803830e6b50"
+      },
+      "trained_beside_head_strengths": "results/event_lm/coasting_heads/readout/heads.json",
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_long-heads.json",
+        "decoder_alone": 1.6216926935288143,
+        "with_refitted_v11_synapses": 1.4970818136424988,
+        "with_refitted_heads": 1.4276635132746112
+      }
+    },
+    "v12-long/plain_s30001.pt": {
+      "bytes": 139400269,
+      "sha256": "154b60277112645773a589ece8e40577aebb04464d3680d1f6ad36c25d183b88",
+      "archive": "spiking-byte-lm-v12-checkpoints-continuations.tar.gz",
+      "run_name": "event_correction_code_s30001_v12_plain",
+      "seed": 30001,
+      "updates": 38400,
+      "training_targets": 157286400,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/v12-long/event_correction_code_s30001_v12_plain.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "long16-study/clock_s10007.pt",
+        "sha256": "12792534e487f1651e8b428a1d4694d86c97354bfdf4a6292e8af803830e6b50"
+      },
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_long-plain.json",
+        "decoder_alone": 1.633594912765616,
+        "with_refitted_v11_synapses": 1.509792206633439,
+        "with_refitted_heads": 1.4458873164707087
+      }
+    },
+    "v12-long/syn_s30001.pt": {
+      "bytes": 139404103,
+      "sha256": "186ec557b810bf092adff6e3dcf44f265878458276928b1305d7868e598631dd",
+      "archive": "spiking-byte-lm-v12-checkpoints-continuations.tar.gz",
+      "run_name": "event_correction_code_s30001_v12_syn",
+      "seed": 30001,
+      "updates": 38400,
+      "training_targets": 157286400,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/v12-long/event_correction_code_s30001_v12_syn.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "long16-study/clock_s10007.pt",
+        "sha256": "12792534e487f1651e8b428a1d4694d86c97354bfdf4a6292e8af803830e6b50"
+      },
+      "trained_beside_synapse_strengths": "checkpoints/donor/clock-synapses-readout.pt",
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_long-syn.json",
+        "decoder_alone": 1.6261264896543441,
+        "with_refitted_v11_synapses": 1.4965152536965811,
+        "with_refitted_heads": 1.437605636561713
+      }
+    },
+    "v12-rep/heads_s30003.pt": {
+      "bytes": 139401034,
+      "sha256": "46c4502fbfe12ca7382cf5fd0ee0d2c2c2a951f989d587f7c2480d928f057944",
+      "archive": "spiking-byte-lm-v12-checkpoints-followups.tar.gz",
+      "run_name": "event_correction_code_s30003_v12_heads",
+      "seed": 30003,
+      "updates": 18240,
+      "training_targets": 74711040,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/v12-rep/event_correction_code_s30003_v12_heads.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "long16-study/clock_s10007.pt",
+        "sha256": "12792534e487f1651e8b428a1d4694d86c97354bfdf4a6292e8af803830e6b50"
+      },
+      "trained_beside_head_strengths": "results/event_lm/coasting_heads/readout/heads.json",
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_rep-heads.json",
+        "decoder_alone": 1.649919265873126,
+        "with_refitted_v11_synapses": 1.5215883391935414,
+        "with_refitted_heads": 1.449457600100636
+      }
+    },
+    "v12-rep/plain_s30003.pt": {
+      "bytes": 139400269,
+      "sha256": "a854bbac954f2807f332999c6977c064528e1cbe7643329ffdb2c8555eca3511",
+      "archive": "spiking-byte-lm-v12-checkpoints-followups.tar.gz",
+      "run_name": "event_correction_code_s30003_v12_plain",
+      "seed": 30003,
+      "updates": 18240,
+      "training_targets": 74711040,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/v12-rep/event_correction_code_s30003_v12_plain.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "long16-study/clock_s10007.pt",
+        "sha256": "12792534e487f1651e8b428a1d4694d86c97354bfdf4a6292e8af803830e6b50"
+      },
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_rep-plain.json",
+        "decoder_alone": 1.6592271007035115,
+        "with_refitted_v11_synapses": 1.5317476296752006,
+        "with_refitted_heads": 1.4668066945961502
+      }
+    },
+    "v12-round2-refit/heads_s30002.pt": {
+      "bytes": 139401098,
+      "sha256": "a380eec0a29bdd8f577dfe90cd5389175f3455b9024c531cc7c4279321f38f11",
+      "archive": "spiking-byte-lm-v12-checkpoints-followups.tar.gz",
+      "run_name": "event_correction_code_s30002_v12_heads",
+      "seed": 30002,
+      "updates": 24000,
+      "training_targets": 98304000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/v12-round2-refit/event_correction_code_s30002_v12_heads.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "v12-long/heads_s30001.pt",
+        "sha256": "222b815988ce37e2cae6dcdf020c92553df8c3c53d01b87ea2eb62618ee90253"
+      },
+      "trained_beside_head_strengths": "results/event_lm/coasting_heads/readout/long-heads/heads_0.json",
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_round2-refit.json",
+        "decoder_alone": 1.615343801291214,
+        "with_refitted_v11_synapses": 1.4886765110492641,
+        "with_refitted_heads": 1.421956349274772
+      }
+    },
+    "v12-round2-same/heads_s30002.pt": {
+      "bytes": 139401034,
+      "sha256": "504dea9c508cbe5a7bf0b83b858b537afc426e92f78abc6de4bd5d615e620571",
+      "archive": "spiking-byte-lm-v12-checkpoints-followups.tar.gz",
+      "run_name": "event_correction_code_s30002_v12_heads",
+      "seed": 30002,
+      "updates": 24000,
+      "training_targets": 98304000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/v12-round2-same/event_correction_code_s30002_v12_heads.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "v12-long/heads_s30001.pt",
+        "sha256": "222b815988ce37e2cae6dcdf020c92553df8c3c53d01b87ea2eb62618ee90253"
+      },
+      "trained_beside_head_strengths": "results/event_lm/coasting_heads/readout/heads.json",
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_round2-same.json",
+        "decoder_alone": 1.6139484654327727,
+        "with_refitted_v11_synapses": 1.4892208097896706,
+        "with_refitted_heads": 1.420527683089646
+      }
+    },
+    "v12-scratch/heads_s20001.pt": {
+      "bytes": 139400842,
+      "sha256": "c8996a3710c1d6c6975c1370c513b1c3b4c37d525f58fcf54229e62689f57a41",
+      "archive": "spiking-byte-lm-v12-checkpoints-scratch.tar.gz",
+      "run_name": "event_correction_code_s20001_v12_heads",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/coasting_heads/v12-scratch/event_correction_code_s20001_v12_heads.json",
+      "parameters": 34845184,
+      "trained_beside_head_strengths": "results/event_lm/coasting_heads/readout/heads.json",
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_scratch-heads.json",
+        "decoder_alone": 1.6072530132106588,
+        "with_refitted_v11_synapses": 1.483057514570591,
+        "with_refitted_heads": 1.4138457010184167
+      }
+    },
+    "v12-snaps/clock-syn_45000.pt": {
+      "bytes": 139404439,
+      "sha256": "0d861dcb985055e8ed86a6ddb8d851ee597d1862dcbec97664dee588b843d015",
+      "archive": "spiking-byte-lm-v12-checkpoints-followups.tar.gz",
+      "run_name": "event_correction_code_s20001_scratch_clock_syn",
+      "seed": 20001,
+      "updates": 45000,
+      "training_targets": 184320000,
+      "training_mixture": "training-v1",
+      "parameters": 34845184,
+      "stopped_run": "snapshot of scratch-study/clock-syn_s20001.pt after 45,000 of 90,000 updates",
+      "trained_beside_synapse_strengths": "checkpoints/donor/clock-synapses-readout.pt"
+    },
+    "v12-v2pair/heads_s40001.pt": {
+      "bytes": 139402023,
+      "sha256": "48b1dd8dcd69c5e4fffefa9843fb1aff8029335c84f9fbe65f0c2684f1640ceb",
+      "archive": "spiking-byte-lm-v12-checkpoints-followups.tar.gz",
+      "run_name": "event_correction_code_s40001_v12_heads",
+      "seed": 40001,
+      "updates": 19200,
+      "training_targets": 78643200,
+      "training_mixture": "training-v2",
+      "training_record": "results/event_lm/coasting_heads/v12-v2pair/event_correction_code_s40001_v12_heads.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "scratch-v2-study/clock-syn_s20001.pt.partial",
+        "sha256": "5af138fd5bb147cc363ab0030a6410aa4786e1f2e078b2bf51397ec57e0e2762"
+      },
+      "trained_beside_head_strengths": "results/event_lm/coasting_heads/readout/heads.json",
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_v2-heads.json",
+        "decoder_alone": 1.701586334724893,
+        "with_refitted_v11_synapses": 1.562586445006568,
+        "with_refitted_heads": 1.4815538263347765
+      }
+    },
+    "v12-v2pair/syn_s40001.pt": {
+      "bytes": 139404981,
+      "sha256": "21e75fa11d18a7d33a5d8d9184301e2ec287085c3e265ec2c526329454c4486f",
+      "archive": "spiking-byte-lm-v12-checkpoints-followups.tar.gz",
+      "run_name": "event_correction_code_s40001_v12_syn",
+      "seed": 40001,
+      "updates": 19200,
+      "training_targets": 78643200,
+      "training_mixture": "training-v2",
+      "training_record": "results/event_lm/coasting_heads/v12-v2pair/event_correction_code_s40001_v12_syn.json",
+      "parameters": 34845184,
+      "parent": {
+        "checkpoint": "scratch-v2-study/clock-syn_s20001.pt.partial",
+        "sha256": "5af138fd5bb147cc363ab0030a6410aa4786e1f2e078b2bf51397ec57e0e2762"
+      },
+      "trained_beside_synapse_strengths": "checkpoints/donor/clock-synapses-readout.pt",
+      "enwik8_test_replay_bpb": {
+        "record": "results/event_lm/coasting_heads/recall_v2-syn.json",
+        "decoder_alone": 1.697621997560354,
+        "with_refitted_v11_synapses": 1.5564576891010788,
+        "with_refitted_heads": 1.4860034575382404
+      }
+    }
+  },
+  "resaved_checkpoints": "results/event_lm/coasting_heads/resaved_checkpoints.json",
+  "upstream_manifest": "models/spiking-byte-lm-v11/manifest.json",
+  "training_mixtures": {
+    "training-v1": {
+      "catalogue": "results/event_lm/training_mixture/prepared_v1.json",
+      "sources": "results/event_lm/training_mixture/sources_v1.json"
+    },
+    "training-v2": {
+      "catalogue": "results/event_lm/training_mixture/prepared_v2.json",
+      "sources": "results/event_lm/training_mixture/sources_v2.json",
+      "heldout": "results/event_lm/training_mixture/heldout_v2.json"
+    },
+    "window_receipts": "results/event_lm/coasting_heads/training_windows.json"
+  }
+}
