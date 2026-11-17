@@ -49,6 +49,25 @@ train() { # CHECKPOINT STEPS LR WARMUP SEED TAG MIXTURE [arguments]
   rm -f "$checkpoint.partial"
 }
 
+pg19=(--books-dir data/pg19-test --manifest results/event_lm/correction_pg19_full_book_manifest.json
+  --calibration-books data/pg19-validation
+  --calibration-manifest results/event_lm/correction_pg19_validation_manifest.json
+  --temperatures 0.8 1.0 1.15 1.25 1.4 1.5 1.65 1.8 2.0 2.25)
+
+score() { # CHECKPOINT CONTEXT
+  local checkpoint=$1 context=$2 folder name
+  folder=$(dirname "$checkpoint")/results
+  name=$(basename "$checkpoint" .pt)
+  local run=("$python_exe" -u experiments/eval_event_lm.py --device "$device" --context "$context" --history 256
+    --batch-size 8 --checkpoint "$checkpoint")
+  skip "$folder/enwik8_$name.json" || "${run[@]}" --enwik8 data/enwik8 --json "$folder/enwik8_$name.json"
+  skip "$folder/pg19_$name.json" || "${run[@]}" "${pg19[@]}" --json "$folder/pg19_$name.json"
+  # Full attention reads 256-byte windows after 256 bytes of history and has no pulses to count.
+  [[ $context == 256 ]] && return
+  skip "$folder/native_$name.json" || "$python_exe" -u experiments/audit_spike_code.py --device "$device" \
+    --split test --enwik8 data/enwik8 --activity-profile --checkpoint "$checkpoint" --json "$folder/native_$name.json"
+}
+
 replay() { # LABEL CHECKPOINT [probe arguments]
   local label=$1 checkpoint=$2
   shift 2
@@ -106,13 +125,11 @@ train "$scratch/clock-syn_s20001.pt" 90000 0.0003 1000 20001 scratch_clock_syn "
 train "$scratch/transformer_s20001.pt" 90000 0.0003 1000 20001 scratch_transformer "$mixture" "${transformer[@]}"
 train "$root/v12-scratch/heads_s20001.pt" 90000 0.0003 1000 20001 v12_heads "$mixture" "${snn[@]}" \
   --head-readout "$heads"
-for arm in clock clock-syn transformer; do
-  context=8192
-  [[ $arm == transformer ]] && context=256
-  skip "$scratch/results/enwik8_${arm}_s20001.json" || "$python_exe" -u experiments/eval_event_lm.py \
-    --device "$device" --context "$context" --history 256 --batch-size 8 --checkpoint "$scratch/${arm}_s20001.pt" \
-    --enwik8 data/enwik8 --json "$scratch/results/enwik8_${arm}_s20001.json"
-done
+# Streaming scores on enwik8 and PG-19 and the native pulse audit. The head decoder carries its tape in the stream.
+score "$scratch/clock_s20001.pt" 8192
+score "$scratch/clock-syn_s20001.pt" 8192
+score "$scratch/transformer_s20001.pt" 256
+score "$root/v12-scratch/heads_s20001.pt" 8192
 
 # 4. Three continuations of the 16× clock decoder on identical windows.
 parent=$long/clock_s10007.pt
@@ -132,13 +149,18 @@ replay long16-clock "$long/clock_s10007.pt"
 replay long16-transformer "$long/transformer_s10007.pt"
 replay scratch-clock "$scratch/clock_s20001.pt"
 replay scratch-clock-syn "$scratch/clock-syn_s20001.pt"
-replay scratch-heads "$root/v12-scratch/heads_s20001.pt"
+replay scratch-heads "$root/v12-scratch/heads_s20001.pt" --readout-dir "$records/readout-scratch-heads"
 replay scratch-transformer "$scratch/transformer_s20001.pt"
 replay long-plain "$root/v12-long/plain_s30001.pt"
 replay long-syn "$root/v12-long/syn_s30001.pt"
 replay long-heads "$root/v12-long/heads_s30001.pt" --readout-dir "$records/readout-long-heads"
 replay rep-plain "$root/v12-rep/plain_s30003.pt"
 replay rep-heads "$root/v12-rep/heads_s30003.pt"
+# The from-scratch head decoder again with the strengths refitted to it, scored in the stream like the replay.
+fitted=$root/v12-scratch/heads-fitted_s20001.pt
+skip "$fitted" || "$python_exe" experiments/attach_head_readout.py --checkpoint "$root/v12-scratch/heads_s20001.pt" \
+  --readout "${SCRATCH_READOUT:-$committed/readout/scratch-heads/heads_0.json}" --output "$fitted"
+score "$fitted" 8192
 
 # 7. Round 2 from the head continuation: the first round's strengths, or strengths refitted to its decoder.
 parent=$root/v12-long/heads_s30001.pt

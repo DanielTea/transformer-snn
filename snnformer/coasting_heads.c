@@ -66,3 +66,61 @@ void coast(const uint8_t *data, const int16_t *surprise, int64_t n, int order, i
     stats[0] = moves; stats[1] = lookups; stats[2] = placements; stats[3] = alive_rows;
     free(synapse);
 }
+
+static inline uint32_t ring_key(const uint8_t *ring, int64_t tape, int64_t first, int order, uint32_t seed) {
+    uint32_t h = seed;
+    for (int i = 0; i < order; i++) h = (h ^ ring[(first + i) % tape]) * 16777619u;
+    h ^= h >> 15; h *= 2246822519u; h ^= h >> 13;
+    return h;
+}
+
+/* The same heads with bounded state, for a stream that arrives in chunks.
+
+   A head never falls more than `tape` cells behind the stream, so the ring holds every byte it reads. The
+   result equals coast() with the same `tape` for every head whose context fits on the ring.
+
+   bytes, surprise  the n bytes of this chunk and the error spikes each left
+   orders, seeds    [heads] context bytes and key seed of each head
+   ring             [tape] the last bytes of the stream. Byte t sits in cell t % tape
+   cell             the ring cell of bytes[0]
+   seen             bytes consumed before this chunk, saturated at the longest context
+   synapse          [heads * cells] the tape cell each key neuron's synapse reaches
+   written          [heads * ((cells + 7) / 8)] one bit per key neuron that has a synapse
+   pointer, held    [heads] the tape cell under each head, -1 for none, and its confirmed bytes
+   pred, charge     [heads * n] as in coast() */
+void coast_chunk(const uint8_t *bytes, const int16_t *surprise, int64_t n, int heads, const int32_t *orders,
+                 const uint32_t *seeds, int64_t cells, int gate, int64_t tape, int lookup_gate, int miss,
+                 int relock_below, uint8_t *ring, int64_t cell, int64_t seen, uint16_t *synapse, uint8_t *written,
+                 int32_t *pointer, int32_t *held, int16_t *pred, int32_t *charge) {
+    int64_t mask_bytes = (cells + 7) / 8;
+    for (int64_t i = 0; i < n; i++, cell = (cell + 1) % tape, seen++) {
+        uint8_t byte = bytes[i];
+        for (int h = 0; h < heads; h++) {
+            int order = orders[h];
+            if (pointer[h] >= 0) {
+                /* The cell under the head still holds its old byte: the arriving byte is written afterwards. */
+                if (ring[pointer[h]] == byte) { if (held[h] < 1000000) held[h]++; pointer[h] = (pointer[h] + 1) % tape; }
+                else if (miss > 0 && (held[h] >> miss) > 0) { held[h] >>= miss; pointer[h] = (pointer[h] + 1) % tape; }
+                else { pointer[h] = -1; held[h] = 0; }
+            }
+            if (seen >= order && surprise[i] >= gate) {
+                int64_t key = ring_key(ring, tape, cell - order + tape, order, seeds[h]) & (cells - 1);
+                synapse[h * cells + key] = (uint16_t)cell;
+                written[h * mask_bytes + (key >> 3)] |= (uint8_t)(1u << (key & 7));
+            }
+        }
+        ring[cell] = byte;
+        for (int h = 0; h < heads; h++) {
+            int order = orders[h];
+            int wants = pointer[h] < 0 || (relock_below > 0 && held[h] < relock_below && surprise[i] >= 1);
+            if (wants && seen + 1 >= order && surprise[i] >= lookup_gate) {
+                int64_t key = ring_key(ring, tape, cell - order + 1 + tape, order, seeds[h]) & (cells - 1);
+                if (written[h * mask_bytes + (key >> 3)] & (1u << (key & 7))) {
+                    pointer[h] = synapse[h * cells + key]; held[h] = 0;
+                }
+            }
+            if (pointer[h] >= 0) { pred[h * n + i] = ring[pointer[h]]; charge[h * n + i] = held[h]; }
+            else { pred[h * n + i] = -1; charge[h * n + i] = 0; }
+        }
+    }
+}

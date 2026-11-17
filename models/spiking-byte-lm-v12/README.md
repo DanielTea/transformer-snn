@@ -49,29 +49,38 @@ the cell its synapse reaches. A live head fires the recall
 neuron of the byte in its cell, with a strength set by its
 charge in 13 levels.
 
-| State | Size per stream | Measured |
+| State | Size per stream | Holds |
 |---|---:|---|
-| Decoder | 43,796 B | By the streaming evaluator, on the plain decoder of the same architecture |
-| Tape | 65,536 B | Counted, one byte per cell |
-| Key synapses | 65,536 B | Counted, 8 × 4,096 synapses of 16 bits |
+| Decoder | 43,796 B | Delay lines, held charge, error bank and clock |
+| Tape | 65,536 B | One byte per cell |
+| Key synapses | 65,536 B | 8 × 4,096 synapses of 16 bits |
+| Synapse marks | 4,096 B | One bit per key neuron that has a synapse |
+| Heads | 64 B | A tape cell and a charge for each head |
+| Total | 179,028 B | Measured by the streaming evaluator |
 
 ## Measured scope
 
-On the full enwik8 test split the checkpoint scores 1.4138 bpb
-with heads and 1.6073 without. The same architecture trained
-without a recall circuit scores 1.6110 alone and 1.4297 with
-heads fitted afterwards. Trained beside the v11 fast synapses it
-scores 1.4857 with them. The full-attention Transformer of the
-same size and training scores 1.2068 with its 512-byte context
-and 1.1756 with the same heads on its output.
+On the full enwik8 test split the checkpoint scores 1.4137 bpb
+in the streaming evaluator, and 1.6456 on 16 PG-19 books. Both
+use the strengths it was trained beside. The same architecture
+trained without a recall circuit scores 1.6110 and 1.7205, and
+trained beside the v11 fast synapses 1.4859 and 1.6863. The
+full-attention Transformer of the same size and training scores
+1.2068 and 1.4821 with its 512-byte context.
+[Leaderboard](../../docs/LEADERBOARD.md)
+
+With strengths refitted to its own decoder on enwik8 validation
+the checkpoint scores 1.4138 on enwik8. A replay of the heads
+over the decoder's recorded outputs gives the same score, and
+1.6073 without heads. The plain decoder with heads fitted
+afterwards scores 1.4297 in that replay, and the Transformer
+with the same heads on its output 1.1756.
 [Full results, controls and limits](../../docs/COASTING_HEADS.md#complete-enwik8-test)
 
-The enwik8 scores are replays. The decoder's outputs and error
-spikes are recorded over the continuous stream, the heads are
-replayed over the record, and their strengths are refitted on
-enwik8 validation. The streaming evaluator, the native integer
-decoder and the generator do not accept this checkpoint. It has
-no pulse count, no PG-19 score and no measured head state. Every
+The native integer decoder fires 309,469 pulses per byte on the
+first 4,096 bytes of the enwik8 test split, 241 of them in the
+head circuit. Over the whole test stream the head circuit fires
+513 spikes per byte. The generator steps the same decoder. Every
 number is one seed.
 
 On held-out web pages, mathematics and source code the
@@ -82,6 +91,17 @@ strengths it was trained beside. The plain decoder scores
 
 ## Rescore
 
+The streaming evaluator scores the checkpoint as released.
+
+```bash
+python experiments/eval_event_lm.py --device cuda --context 8192 --history 256 --batch-size 8 \
+  --checkpoint checkpoints/v12-scratch/heads_s20001.pt --enwik8 data/enwik8 \
+  --json checkpoints/work/enwik8_heads_s20001.json
+```
+
+The replay refits the strengths on enwik8 validation and scores
+the decoder alone, with the v11 synapses and with the heads.
+
 ```bash
 python experiments/probe_coasting_heads.py --enwik8 data/enwik8 --device cuda \
   --checkpoint checkpoints/v12-scratch/heads_s20001.pt \
@@ -91,4 +111,6 @@ python experiments/probe_coasting_heads.py --enwik8 data/enwik8 --device cuda \
 ```
 
 [Head circuit](../../snnformer/coasting_heads.py) ·
-[Replay record](../../results/event_lm/coasting_heads/recall_scratch-heads.json)
+[Stream record](../../results/event_lm/coasting_heads/v12-scratch/enwik8_heads_s20001.json) ·
+[Replay record](../../results/event_lm/coasting_heads/recall_scratch-heads.json) ·
+[Pulse audit](../../results/event_lm/coasting_heads/v12-scratch/native_heads_s20001.json)

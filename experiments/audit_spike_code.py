@@ -210,11 +210,15 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
     ))
     if integer.fast_synapses is not None:
         integer.fast_synapses.capture = []
+    if integer.read_heads is not None:
+        integer.read_heads.capture = []
     with _IntegerExecution() as guard:
         counts = integer(tokens, memory_pulses=memory_pulses)
-        synapse_activity = None
+        synapse_activity = head_activity = None
         if integer.fast_synapses is not None:
             synapse_activity, integer.fast_synapses.capture = integer.fast_synapses.capture[0], None
+        if integer.read_heads is not None:
+            head_activity, integer.read_heads.capture = integer.read_heads.capture[0], None
         for handle in handles:
             handle.remove()
         state = None
@@ -363,6 +367,22 @@ def _audit(path, device, tokens, frequencies, parent, activity_profile=False, co
             "synapse_state_bytes": state.synapses.successor.numel(),
         }
         row["total_pulses_per_byte"] += (key_spikes + added) / tokens.numel()
+    if head_activity is not None:
+        pred, charge, errors = head_activity
+        heads = integer.read_heads
+        spikes = heads.activity(pred, charge)
+        row["read_heads"] = {
+            "context_bytes_by_head": list(heads.orders), "key_neurons_per_head": heads.cells,
+            "tape_cells": heads.tape, "store_gate_forecast_spikes": heads.gate,
+            "readout_spikes_by_head_and_charge_level": heads.readout[:, 1:].tolist(),
+            "stored_byte_share": float((errors >= heads.gate).mean()),
+            "live_head_share": spikes["tape"] / (len(heads.orders) * tokens.numel()),
+            "key_spikes_per_byte": spikes["key"] / tokens.numel(),
+            "tape_spikes_per_byte": spikes["tape"] / tokens.numel(),
+            "recall_spikes_per_byte": spikes["recall"] / tokens.numel(),
+            "head_state_bytes": state_bytes(state.heads),
+        }
+        row["total_pulses_per_byte"] += sum(spikes.values()) / tokens.numel()
     if integer.cfg.trace_arrival is not None:
         if len(arrival_activity) != len(integer.blocks):
             raise AssertionError("the audit did not visit every arrival projection")

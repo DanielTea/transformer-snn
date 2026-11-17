@@ -64,6 +64,9 @@ RESIDUAL_SCALE_CHECKPOINTS = "event_lm/residual_scale_checkpoints.sha256"
 SURPRISE_CLOCK = "event_lm/surprise_clock"
 SURPRISE_CLOCK_GROUP = "surprise_clock_140902k"
 SURPRISE_CLOCK_CHECKPOINTS = "event_lm/surprise_clock_checkpoints.sha256"
+COASTING_HEADS = "event_lm/coasting_heads"
+COASTING_HEADS_GROUP = "coasting_heads_368640k"
+COASTING_HEADS_CHECKPOINTS = "event_lm/coasting_heads_checkpoints.sha256"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -208,6 +211,15 @@ SURPRISE_CLOCK_ARMS = (
      f"{SURPRISE_CLOCK}/native_clock-synapses_s10007.json", "#c2410c"),
     ("25.79M full attention", SURPRISE_CLOCK, "control-transformer_s10007", None, GRAY),
     ("34.85M full attention", SURPRISE_CLOCK, "transformer_s10007", None, ORANGE),
+)
+COASTING_HEADS_ARMS = (
+    ("34.85M SNN, surprise clock", f"{COASTING_HEADS}/scratch-study", "clock_s20001",
+     f"{COASTING_HEADS}/scratch-study/native_clock_s20001.json", VIOLET),
+    ("34.85M SNN, surprise clock and fast synapses", f"{COASTING_HEADS}/scratch-study", "clock-syn_s20001",
+     f"{COASTING_HEADS}/scratch-study/native_clock-syn_s20001.json", "#c2410c"),
+    ("34.85M SNN, surprise clock and read heads", f"{COASTING_HEADS}/v12-scratch", "heads_s20001",
+     f"{COASTING_HEADS}/v12-scratch/native_heads_s20001.json", "#187b62"),
+    ("34.85M full attention", f"{COASTING_HEADS}/scratch-study", "transformer_s20001", None, ORANGE),
 )
 TRACE_READ_DRIVE_116326K = (
     ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
@@ -405,6 +417,15 @@ def width_gap_by_prefix_age(narrow, wide, narrow_full, wide_full):
 
 def build_research():
     groups = {}
+    if (RESULTS / COASTING_HEADS_CHECKPOINTS).is_file():
+        rows = read_comparison(COASTING_HEADS_ARMS, seed=20001, context=512, exposure=(0, 368_640_000))
+        if [row["parameters"] for row in rows] != [34_845_184, 34_845_184, 34_845_184, 34_845_696]:
+            raise ValueError("the coasting-head study must use its four audited sizes")
+        groups[COASTING_HEADS_GROUP] = {
+            "title": "Coasting read heads, trained from scratch", "seeds": [20001], "rows": rows,
+            "training_context_bytes": 512, "training_summary": "368,640,000 training targets · seed 20001",
+            "parent_training_targets": 0, "additional_training_targets": 368_640_000,
+        }
     if (RESULTS / SURPRISE_CLOCK_CHECKPOINTS).is_file():
         rows = read_comparison(SURPRISE_CLOCK_ARMS, seed=10007, context=512, exposure=(131_072_000, 9_830_400))
         if [row["parameters"] for row in rows] != [25_788_928, 25_788_928, 34_845_184, 34_845_184, 34_845_184,
@@ -578,10 +599,16 @@ def write_leaderboards(data, depth, research, transfers):
         "a native 4,096-byte enwik8 test sample. "
         "Each PG-19 temperature is fitted on eight separate validation books. "
         "The teacher-guided SNN uses additional training compute from a frozen Transformer.",
-        "The coasting read heads of v12 are scored by replay over a recorded stream and have no row here. "
-        "[Coasting-head study](COASTING_HEADS.md)",
     ]
     study_figures = {
+        COASTING_HEADS_GROUP: (
+            "![Held-out enwik8 and PG-19 loss of the decoders trained from scratch]"
+            "(../results/figures/event_lm_coasting_heads_leaderboard.png)",
+            "![enwik8 test loss of each decoder alone, with fast synapses and with read heads]"
+            "(../results/figures/event_lm_coasting_heads.png)",
+            "![Gap to full attention by bytes of history](../results/figures/event_lm_coasting_heads_history.png)",
+            "[Head circuit, controls and limits](COASTING_HEADS.md)",
+        ),
         SURPRISE_CLOCK_GROUP: (
             "![Held-out loss with the surprise clock and fast synapses](../results/figures/event_lm_surprise_clock.png)",
             "![Where surprise falls inside words and where the trained clock ticks]"
@@ -647,6 +674,13 @@ def write_leaderboards(data, depth, research, transfers):
             markdown_table(rows, include_ranks=True, include_raw_pg19=True),
         ])
         paragraphs.extend(study_figures.get(name, ()))
+        if name == COASTING_HEADS_GROUP:
+            paragraphs.append(
+                "The four models received identical windows from random weights. The read heads and the fast "
+                "synapses carry one stream of any length. Full attention reads 512 bytes. Each recall circuit "
+                "uses the strengths its decoder was trained beside. They were fitted on enwik8 validation with "
+                "the released v11 decoder, and no row trains on test text."
+            )
         if name == SURPRISE_CLOCK_GROUP:
             paragraphs.append(
                 "Fast synapses carry one stream of any length. Full attention rows read 512 bytes. "
@@ -1293,6 +1327,11 @@ def main():
     plot_arrival_early_context(early, run_labels, output)
     if scale:
         plot_residual_scale(scale, scale_early, output)
+    heads = research["groups"].get(COASTING_HEADS_GROUP)
+    if heads:
+        plot_heldout(heads["rows"], output, title="Coasting read heads, trained from scratch",
+                     subtitle="368.64M training targets · identical windows · seed 20001",
+                     filename="event_lm_coasting_heads_leaderboard.png", precision=5)
     surprise = research["groups"].get(SURPRISE_CLOCK_GROUP)
     if surprise:
         from plot_surprise_clock import plot_surprise_study

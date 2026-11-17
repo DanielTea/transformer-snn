@@ -22,6 +22,8 @@ compiler.
 The training runs used two NVIDIA RTX PRO 6000 Blackwell GPUs
 with Python 3.12 and the CUDA build of PyTorch 2.15.0. The
 fit-only sweeps on the frozen v11 decoder ran on an Apple M3 Max.
+So did the streaming scores of the head decoder, the PG-19
+scores and the pulse audits of the from-scratch runs.
 Two CUDA runs with one seed are not bit-identical, so a retrained
 arm will not reproduce a checkpoint hash.
 
@@ -96,12 +98,47 @@ DEVICE=cuda bash experiments/run_coasting_heads.sh checkpoints
 The launcher was assembled from the job scripts of the recorded
 runs after they finished. Its control flow was checked in a dry
 run, and one head continuation was started from it for 120
-updates. It has not been run end to end.
+updates. It has not been run end to end. The streaming scores
+and pulse audits of the from-scratch runs were produced by the
+launcher's commands outside the launcher. The head decoder's
+enwik8 records were scored with `--memory-stats`.
 
-A single head decoder is rescored by replay. The probe records
-the decoder over enwik8 validation and test, fits the strengths
-of the v11 synapses and of the heads on validation, and replays
-both over the test split.
+A head decoder runs in the stream like every other decoder.
+`forward_chunk` and `step` carry the tape, the key synapses and
+the heads, so the streaming evaluator, the pulse audit and the
+generator accept a head checkpoint. `--memory-stats` also counts
+the live heads and their recall spikes over the whole stream.
+
+```bash
+python experiments/eval_event_lm.py --device cuda --context 8192 --history 256 --batch-size 8 \
+  --checkpoint checkpoints/v12-scratch/heads_s20001.pt --enwik8 data/enwik8 --memory-stats \
+  --json checkpoints/work/enwik8_heads_s20001.json
+python experiments/audit_spike_code.py --device cuda --split test --enwik8 data/enwik8 --activity-profile \
+  --checkpoint checkpoints/v12-scratch/heads_s20001.pt --json checkpoints/work/native_heads_s20001.json
+python experiments/generate_event_lm.py checkpoints/v12-scratch/heads_s20001.pt \
+  --prompt 'The first chapter' --bytes 128
+```
+
+The checkpoint carries the strengths it was trained beside.
+Strengths that a replay fitted to another decoder are attached
+without changing a weight. The readout below holds the strengths
+refitted to this decoder, and the attached checkpoint scores the
+replay's 1.41385 bpb in the stream. The readout file was
+written from the strengths in the
+[replay record](../results/event_lm/coasting_heads/recall_scratch-heads.json).
+The attached checkpoint is not a release asset. It is rebuilt
+from the released one.
+
+```bash
+python experiments/attach_head_readout.py --checkpoint checkpoints/v12-scratch/heads_s20001.pt \
+  --readout results/event_lm/coasting_heads/readout/scratch-heads/heads_0.json \
+  --output checkpoints/v12-scratch/heads-fitted_s20001.pt
+```
+
+The replay fits such strengths. The probe records the decoder
+over enwik8 validation and test, fits the strengths of the v11
+synapses and of the heads on validation, and replays both over
+the test split. `--readout-dir` writes the fitted strengths.
 
 ```bash
 python experiments/probe_coasting_heads.py --enwik8 data/enwik8 --device cuda \
@@ -124,11 +161,14 @@ python experiments/train_event_lm.py --head-readout results/event_lm/coasting_he
   --load-weights checkpoints/long16-study/clock_s10007.pt ...
 ```
 
-`forward_chunk` and `step` raise for a decoder with heads. The
-streaming evaluator, the native integer decoder and the generator
-therefore do not accept a head checkpoint yet. Windows that
-start from an empty stream work, which is how the history split
-and the held-out documents are scored.
+The compiled replay has two entry points. `coast` replays one
+head over a recorded stream and also runs windows that start
+from an empty tape, which is how training, the history split and
+the held-out documents use the heads. `coast_chunk` advances all
+heads of one stream with a bounded state. The tests check that
+both give the same spikes, and that the decoder's batched,
+chunked and single-byte forms agree exactly.
+[Tests](../tests/test_coasting_heads.py)
 
 ## Regenerate the figures
 
@@ -138,6 +178,7 @@ python experiments/plot_coasting_heads.py --tables
 ```
 
 The second command prints the tables of the
-[study page](COASTING_HEADS.md). The
-[leaderboard](LEADERBOARD.md) is unchanged, because a head
-decoder has no streaming score to rank.
+[study page](COASTING_HEADS.md).
+`python experiments/plot_event_lm_study.py` regenerates the
+[leaderboard](LEADERBOARD.md), which ranks the four from-scratch
+runs on enwik8 and PG-19.

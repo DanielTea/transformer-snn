@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from .coasting_heads import CoastingHeads
+from .coasting_heads import CoastingHeads, HeadState
 from .fast_synapses import FastSynapses, SynapseState
 from .correction_memory import (
     CorrectionState, _scan_charge, _scan_translated_charge, correction_reads, correction_step, interval_spikes,
@@ -588,6 +588,7 @@ class _CorrectionAccess:
     local_position: int = 0
     clock: ClockState | None = None
     synapses: SynapseState | None = None
+    heads: HeadState | None = None
 
 
 class _SpikeCorrection(nn.Module):
@@ -1696,6 +1697,7 @@ class EventLMState:
     prediction_memory: CorrectionState | None = None
     clock: ClockState | None = None
     synapses: SynapseState | None = None
+    heads: HeadState | None = None
 
 
 @dataclass
@@ -1706,6 +1708,7 @@ class EventChunkState:
     position: int = 0
     clock: ClockState | None = None
     synapses: SynapseState | None = None
+    heads: HeadState | None = None
 
 
 class EventLM(nn.Module):
@@ -2031,6 +2034,8 @@ class EventLM(nn.Module):
                 previous = None if access.clock is None else access.clock.forecast
             elif access.synapses is not None:
                 previous = access.synapses.forecast
+            elif access.heads is not None:
+                previous = access.heads.forecast
         with torch.no_grad():
             return _unmatched_winner_spikes(forecast.detach(), tokens, previous).to("cpu", torch.int64)
 
@@ -2053,6 +2058,17 @@ class EventLM(nn.Module):
                 state.forecast = forecast[:, -1].detach().to("cpu", _spike_storage_dtype(self.forecast_emit.cap))
             access.synapses = state
         return self._add_recall_spikes(counts, votes, levels)
+
+    def _read_tape(self, tokens, surprise, forecast, access):
+        """Recall spikes of the read heads, which continue the stream when the trace is carried."""
+        if access is None or access.local_layers is None:
+            return self.read_heads(tokens, surprise)
+        if access.heads is None:
+            access.heads = self.read_heads.new_state(tokens.shape[0])
+        if self.cfg.clock_start is None and self.fast_synapses is None:
+            # Without a clock or fast synapses, the heads keep the forecast for the next chunk's error spikes.
+            access.heads.forecast = forecast[:, -1].detach().to("cpu", _spike_storage_dtype(self.forecast_emit.cap))
+        return self.read_heads(tokens, surprise, access.heads, access.stats)
 
     def _event_level(self, blocks, packed, lengths, layers, pulse_counts):
         if layers is None or packed.shape[0] == 1 or bool((lengths == lengths[0]).all()):
@@ -2179,10 +2195,8 @@ class EventLM(nn.Module):
         if self.fast_synapses is not None:
             counts = self._excite_vocabulary(counts, tokens, surprise, early, correction_access)
         if self.read_heads is not None:
-            if correction_access is not None and correction_access.local_layers is not None:
-                raise NotImplementedError("coasting heads are replayed over a recorded stream, not carried between chunks")
             # The heads' recall spikes are counted like those of the fast synapses.
-            counts = counts + self.read_heads(tokens, surprise).to(counts.device, counts.dtype)
+            counts = counts + self._read_tape(tokens, surprise, early, correction_access).to(counts.device, counts.dtype)
         if return_prediction:
             if corrected_prediction:
                 # The bank emits corrections in the same signed count units as the forecast.
@@ -2223,10 +2237,11 @@ class EventLM(nn.Module):
             position = 0 if state is None else state.position
             access = _CorrectionAccess(correction, 0, hide_age, stats, shuffle_keys, local_layers=layers,
                                        local_position=position, clock=None if state is None else state.clock,
-                                       synapses=None if state is None else state.synapses)
+                                       synapses=None if state is None else state.synapses,
+                                       heads=None if state is None else state.heads)
             counts = self(tokens, correction_access=access)
             return counts, EventChunkState(None, access.state, layers, position + tokens.shape[1], access.clock,
-                                           access.synapses)
+                                           access.synapses, access.heads)
         if state is not None and state.local_prefix is None:
             raise ValueError("chunk state must contain the local byte prefix")
         prefix = 0 if state is None else state.local_prefix.shape[1]
@@ -2429,8 +2444,6 @@ class EventLM(nn.Module):
             raise ValueError("step requires an eval-mode integer export from to_integer()")
         if tokens.ndim != 1 or tokens.device.type != "cpu":
             raise ValueError("step expects a CPU tensor of shape [batch]")
-        if self.read_heads is not None:
-            raise NotImplementedError("coasting heads are replayed over a recorded stream, not stepped")
         if state is None:
             state = EventLMState([_DelayState() for _ in self.blocks])
         else:
@@ -2463,6 +2476,13 @@ class EventLM(nn.Module):
                 forecast = self._forecast_counts(spikes)
                 surprise = self._step_surprise(tokens, state.synapses.forecast)
                 state.synapses.forecast = forecast.to(_spike_storage_dtype(self.forecast_emit.cap))
+        if self.read_heads is not None:
+            if state.heads is None:
+                state.heads = self.read_heads.new_state(tokens.shape[0])
+            if self.cfg.clock_start is None and self.fast_synapses is None:
+                forecast = self._forecast_counts(spikes)
+                surprise = self._step_surprise(tokens, state.heads.forecast)
+                state.heads.forecast = forecast.to(_spike_storage_dtype(self.forecast_emit.cap))
         if self.prediction_memory is not None:
             recall, state.prediction_memory = self.prediction_memory.step(
                 spikes, state.prediction_memory, observed=observed, prediction_code=self._prediction_code(spikes),
@@ -2475,6 +2495,9 @@ class EventLM(nn.Module):
         if self.fast_synapses is not None:
             votes, levels, state.synapses = self.fast_synapses.step(tokens, surprise, state.synapses)
             counts = self._add_recall_spikes(counts, votes, levels)
+        if self.read_heads is not None:
+            fired, state.heads = self.read_heads.step(tokens, surprise, state.heads)
+            counts = counts + fired.to(counts.dtype)
         state.position += 1
         return counts, state
 

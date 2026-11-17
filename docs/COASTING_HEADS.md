@@ -28,6 +28,14 @@ recorded outputs, and with strengths refitted on enwik8
 validation. The four decoders received identical 512-byte
 windows. Every decoder is one seed.
 
+The head decoder also runs in the stream by itself. The
+streaming evaluator gives 1.41385 bpb with the refitted
+strengths, which is the replay's score, and 1.41375 with the
+strengths the decoder was trained beside. On 16 PG-19 books it
+scores 1.6456, against 1.7205 for the plain decoder and 1.4821
+for the Transformer.
+[In the stream](#in-the-stream)
+
 Two limits come first.
 
 **Full attention is far ahead at this budget.** The Transformer
@@ -38,16 +46,16 @@ training that order reverses. The best spiking score here is
 0.207 bpb above the Transformer alone and 0.238 above the
 Transformer with the same heads.
 
-**The head decoders are scored by replay.** The decoder's outputs
-and error spikes are recorded over the continuous stream, and the
+**Most head scores are replays.** The decoder's outputs and
+error spikes are recorded over the continuous stream, and the
 heads are replayed over that record. Head spikes only add to the
 output counts, so the replay gives the counts the complete model
-would produce. The streaming evaluator and the native integer
-decoder do not carry heads yet. There is no native pulse count,
-no PG-19 score and no measured state size for a head decoder, and
-none of them is on the [leaderboard](LEADERBOARD.md). Inside
-512-byte windows the heads run in the model itself. The history
-split and the held-out documents below are measured that way.
+would produce. The from-scratch head decoder is the one decoder
+whose replay was checked in the stream. It is also the only head
+decoder with PG-19 scores, a pulse count and a row on the
+[leaderboard](LEADERBOARD.md). Inside 512-byte windows the heads
+run in the model itself. The history split and the held-out
+documents below are measured that way.
 
 ![enwik8 test loss of each decoder alone, with fast synapses and with read heads](../results/figures/event_lm_coasting_heads.png)
 
@@ -190,15 +198,77 @@ same heads to the plain decoder afterwards, 1.4138 against
 1.4297. The decoder alone is also not worse for it, 1.6073
 against 1.6110.
 
-The two arms without heads have native streaming scores. The
-plain decoder scores 1.61100 bpb with 43,796 bytes of state, and
-the replay of the same decoder alone gives the same 1.61100. The
-synapse decoder scores 1.48587 bpb with 68,388 bytes and the
-strengths it was trained beside. The replay with refitted
-strengths gives 1.48573. The synapse decoder is the best spiking
-decoder with a native score.
-[Native records](../results/event_lm/coasting_heads/scratch-study) ·
+[Training records](../results/event_lm/coasting_heads/scratch-study) ·
 [Head run](../results/event_lm/coasting_heads/v12-scratch/event_correction_code_s20001_v12_heads.json)
+
+## In the stream
+
+The streaming evaluator feeds each test corpus to a decoder as
+one continuous stream and keeps a bounded state between chunks.
+For the heads that state is the tape, the key synapses and the
+heads themselves.
+
+| State per stream | Bytes |
+|---|---:|
+| Decoder: delay lines, held charge, error bank and clock | 43,796 |
+| Tape, one byte per cell | 65,536 |
+| Key synapses, 8 × 4,096 of 16 bits | 65,536 |
+| One mark per key neuron that has a synapse | 4,096 |
+| Eight heads, a tape cell and a charge each | 64 |
+| Total, measured by the streaming evaluator | 179,028 |
+
+A head is never further behind the stream than the tape is long.
+A ring of 65,536 bytes therefore holds every byte a head reads,
+and a synapse names its cell in 16 bits. The tests compare the
+program that advances this state with the replay over streams
+many times longer than the tape, and the decoder's batched pass
+with its chunked pass and its single-byte integer step. All
+agree exactly.
+[Tests](../tests/test_coasting_heads.py)
+
+| Trained from scratch, 368.64M targets | enwik8 | PG-19 | State per stream | Pulses per byte |
+|---|---:|---:|---:|---:|
+| Plain | 1.61100 | 1.72052 | 43,796 B | 311,540 |
+| Beside fast synapses | 1.48587 | 1.68629 | 68,388 B | 318,451 |
+| Beside read heads | 1.41375 | 1.64562 | 179,028 B | 309,469 |
+| Beside read heads, strengths refitted | 1.41385 | 1.64401 | 179,028 B | 309,470 |
+| Full attention | 1.20684 | 1.48212 | 6 MiB | |
+
+The synapse row and the first head row use the strengths their
+decoders were trained beside, as the released checkpoints hold
+them. The refitted row attaches the strengths that the replay
+fitted to the head decoder itself. It scores 1.4138457 bpb in
+the stream and 1.4138457 in the replay, 2e-8 apart. Refitting
+the strengths to the trained decoder does not help on enwik8 and
+is worth 0.0016 bpb on PG-19. The plain arm's stream score is
+its replay score without a recall circuit, 1.61100. The synapse
+arm's replay with refitted strengths gives 1.48573.
+
+On PG-19 the head arm is 0.075 bpb below the plain arm and the
+synapse arm 0.034. On enwik8 the two differences are 0.197 and
+0.125. The Transformer is 0.164 bpb below the head arm on PG-19
+and 0.207 on enwik8. The PG-19 temperature fitted on the
+validation books is 1.0 in every row.
+
+The pulse audit runs the native integer decoder over the first
+4,096 bytes of the enwik8 test split. The head circuit fires 241
+of the 309,469 pulses per byte there: 8 key spikes, 3 spikes of
+the tape cells under live heads and 230 recall spikes. The tape
+is almost empty that early, and a head is alive on 39% of its
+bytes. Over the whole test stream a head is alive on 99.7% of
+its bytes, and the head circuit fires 513 spikes per byte: 8 key
+spikes, 8 tape spikes and 497 recall spikes. The leaderboard
+uses the audit's sample for every row.
+
+The enwik8 scores of the plain arm, the synapse arm and the
+Transformer were measured on the training machine. The head
+arm's scores, every PG-19 score and the pulse audits were
+measured on an Apple M3 Max. Spike counts are integers, and the
+audit checks that the native counts equal the accelerated ones
+on its sample.
+[Stream records of the head arm](../results/event_lm/coasting_heads/v12-scratch) ·
+[Stream records of the other arms](../results/event_lm/coasting_heads/scratch-study) ·
+[Refitted strengths](../results/event_lm/coasting_heads/readout/scratch-heads/heads_0.json)
 
 ## Staged training
 
@@ -351,16 +421,14 @@ Every arm is one seed. The advantage of training beside the heads
 is 0.016 to 0.018 bpb in three pairs, and the pairs are not
 repeats of one experiment.
 
-The head decoders have no streaming evaluator and no native
-integer path. Their enwik8 scores are replays. There are no
-PG-19 scores, no pulse counts and no fixed transfer suite for a
-head decoder.
+Only the from-scratch head decoder has streaming scores, PG-19
+scores and a pulse count. The continuations, the second pair,
+round 2 and the second mixture are scored by replay. No head
+decoder has the fixed transfer suite.
 
-The head state is not in the measured state accounting. By
-direct count the tape holds 65,536 bytes and the 8 × 4,096 key
-neurons hold a 16-bit synapse each, about 131 kB per stream. The
-v11 synapses hold 24.6 kB. The decoder under the heads holds
-43,796 bytes.
+The head state is 135,232 bytes per stream. The v11 synapses
+hold 24,592 and the decoder under the heads 43,796. A stream
+with heads keeps 4.1 times the state of the plain decoder.
 
 In training every window starts from an empty tape, so a head
 never follows a passage for more than 512 bytes there. On the
@@ -373,8 +441,11 @@ The held-out documents use the strengths each decoder was trained
 beside.
 
 The key neuron of a context is computed as a hash of its bytes,
-as in v11. The tape, the key synapses and the heads are replayed
-by an integer program and are not simulated as membranes.
+as in v11. The tape, the key synapses and the heads are advanced
+by a compiled integer program and are not simulated as
+membranes. Their pulse count is the number of spikes that
+circuit would fire: one key neuron per head and byte, the tape
+cell under each live head, and the recall spikes.
 
 The comparison with full attention is against one Transformer
 per recipe, with one seed and a 512-byte window.
@@ -396,8 +467,10 @@ record that already exists.
 bash experiments/run_coasting_heads.sh checkpoints
 ```
 
-The launcher writes its records to
-`checkpoints/coasting-heads-results`. The committed copies are in
+The launcher writes its replay records to
+`checkpoints/coasting-heads-results` and the streaming scores
+and pulse audits beside each checkpoint. The committed copies
+are in
 [`results/event_lm/coasting_heads`](../results/event_lm/coasting_heads).
 The figures and the tables on this page come from
 `python experiments/plot_coasting_heads.py` and
