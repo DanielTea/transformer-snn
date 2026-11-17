@@ -604,6 +604,7 @@ def write_leaderboards(data, depth, research, transfers):
         COASTING_HEADS_GROUP: (
             "![Held-out enwik8 and PG-19 loss of the decoders trained from scratch]"
             "(../results/figures/event_lm_coasting_heads_leaderboard.png)",
+            "![Held-out loss against the state of one stream](../results/figures/event_lm_coasting_heads_state.png)",
             "![enwik8 test loss of each decoder alone, with fast synapses and with read heads]"
             "(../results/figures/event_lm_coasting_heads.png)",
             "![Gap to full attention by bytes of history](../results/figures/event_lm_coasting_heads_history.png)",
@@ -836,6 +837,37 @@ def plot_heldout(rows, output, *, title, subtitle, filename, precision=3, height
         ax.margins(x=0.25)
     fig.text(0.035, 0.043, "Lower is better. PG-19 uses temperatures fitted on separate validation books.",
              color=MUTED, size=9)
+    save(fig, output, filename)
+
+
+def plot_state(rows, labels, output, *, title, subtitle, filename):
+    """Held-out loss against the persistent state of one stream, with one panel per corpus."""
+    fig, axes = plt.subplots(1, 2, figsize=(12.2, 5.3))
+    fig.subplots_adjust(left=0.075, right=0.973, bottom=0.215, top=0.775, wspace=0.2)
+    heading(fig, title, subtitle)
+    ticks = {2 ** 15: "32 KiB", 2 ** 17: "128 KiB", 2 ** 19: "512 KiB", 2 ** 21: "2 MiB", 2 ** 23: "8 MiB"}
+    largest = max(row["state_bytes"] for row in rows)
+    for ax, (corpus, name, _) in zip(axes, CORPORA, strict=True):
+        style(ax, grid_axis="both")
+        ax.set_title(name, fontsize=11, loc="left", color=TEXT)
+        ax.set_xscale("log")
+        ax.set_xlabel("State per stream", color=MUTED, labelpad=8)
+        ax.set_ylabel("Bits per byte", color=MUTED, labelpad=8)
+        for row, label in zip(rows, labels, strict=True):
+            state, bpb = row["state_bytes"], row["scores"][corpus]["mean"]
+            last = state == largest
+            ax.scatter(state, bpb, color=row["color"], s=62, edgecolors="white", linewidth=0.9, zorder=3)
+            ax.annotate(label, (state, bpb), xytext=(-10 if last else 10, 6), textcoords="offset points",
+                        ha="right" if last else "left", va="center", size=9.5, color=TEXT)
+            ax.annotate(f"{bpb:.5f} · {state_size(state)}", (state, bpb), xytext=(-10 if last else 10, -7),
+                        textcoords="offset points", ha="right" if last else "left", va="center", size=8.5,
+                        color=MUTED)
+        ax.set_xticks(list(ticks), list(ticks.values()))
+        ax.minorticks_off()
+        ax.set_xlim(2 ** 15 * 0.8, 2 ** 23 * 1.25)
+        ax.margins(y=0.14)
+    fig.text(0.035, 0.043, "Lower is better. The state axis is logarithmic. Full attention stores FP32 keys and "
+             "values for its 512-byte context.", color=MUTED, size=9)
     save(fig, output, filename)
 
 
@@ -1332,6 +1364,11 @@ def main():
         plot_heldout(heads["rows"], output, title="Coasting read heads, trained from scratch",
                      subtitle="368.64M training targets · identical windows · seed 20001",
                      filename="event_lm_coasting_heads_leaderboard.png", precision=5)
+        plot_state(heads["rows"], ("Plain decoder", "Fast synapses", "Read heads", "Full attention"), output,
+                   title="Loss against the state of one stream",
+                   subtitle="368.64M training targets · identical windows · seed 20001 · "
+                            "state is persistent tensor storage per stream",
+                   filename="event_lm_coasting_heads_state.png")
     surprise = research["groups"].get(SURPRISE_CLOCK_GROUP)
     if surprise:
         from plot_surprise_clock import plot_surprise_study

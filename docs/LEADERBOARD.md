@@ -15,6 +15,8 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 ![Held-out enwik8 and PG-19 loss of the decoders trained from scratch](../results/figures/event_lm_coasting_heads_leaderboard.png)
 
+![Held-out loss against the state of one stream](../results/figures/event_lm_coasting_heads_state.png)
+
 ![enwik8 test loss of each decoder alone, with fast synapses and with read heads](../results/figures/event_lm_coasting_heads.png)
 
 ![Gap to full attention by bytes of history](../results/figures/event_lm_coasting_heads_history.png)
