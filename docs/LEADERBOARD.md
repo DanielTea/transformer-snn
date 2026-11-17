@@ -4,6 +4,8 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+The coasting read heads of v12 are scored by replay over a recorded stream and have no row here. [Coasting-head study](COASTING_HEADS.md)
+
 ## Surprise clock and fast synapses · 140,902,400 training targets · seed 10007
 
 | Model | Parameters | State | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw | Pulses/byte |

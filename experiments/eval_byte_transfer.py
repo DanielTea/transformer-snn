@@ -153,14 +153,16 @@ def main():
     source = args.prepared / CATALOGUE
     catalogue = json.loads(source.read_text(encoding="utf-8"))
     corpora = corpus_windows(args.prepared, catalogue)
-    questions = lambada_windows(args.prepared, catalogue)
+    # A suite of held-out documents alone carries no LAMBADA questions.
+    questions = lambada_windows(args.prepared, catalogue) if "lambada" in catalogue else {}
     header = {"suite": catalogue["suite"], "catalogue_sha256": file_hash(source),
               "manifest_sha256": catalogue["manifest_sha256"], "device": str(device),
               "batch_size": args.batch_size, "context_bytes": catalogue["context_bytes"],
-              "targets_per_window": catalogue["targets_per_window"],
-              "lambada_examples": catalogue["lambada"]["scored_examples"],
-              "lambada_max_passage_bytes": catalogue["lambada"]["max_passage_bytes"],
-              "lambada_word_boundary_bytes": list(WORD_BOUNDARIES)}
+              "targets_per_window": catalogue["targets_per_window"]}
+    if questions:
+        header.update({"lambada_examples": catalogue["lambada"]["scored_examples"],
+                       "lambada_max_passage_bytes": catalogue["lambada"]["max_passage_bytes"],
+                       "lambada_word_boundary_bytes": list(WORD_BOUNDARIES)})
     checkpoints = [(path, file_hash(path)) for path in args.checkpoint]
     partial = args.json.with_suffix(args.json.suffix + ".partial")
     rows = []
@@ -183,7 +185,8 @@ def main():
             lambada[name] = score
             print(f"{path.name} | LAMBADA {name} | {score['bpb']:.6f} bpb | "
                   f"{score['exact_match_accuracy']:.2%} exact", flush=True)
-        metrics["lambada"] = lambada
+        if questions:
+            metrics["lambada"] = lambada
         rows.append({"checkpoint": str(path), "checkpoint_sha256": digest, "run_name": metadata["run_name"],
                      "model_type": type(model).__name__, "attention": metadata["cfg"].get("attn"),
                      "parameters": sum(parameter.numel() for parameter in model.parameters()),

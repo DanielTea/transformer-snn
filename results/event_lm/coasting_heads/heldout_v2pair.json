@@ -1,0 +1,89 @@
+{
+  "suite": "domain-heldout-v2",
+  "catalogue_sha256": "2259ecad3d961d680d08797671416489168b67d3ebf189230351094a51d7e0c1",
+  "manifest_sha256": "d871ad0e197ed5de80051fc8c9c14680f5bda943feff415010a29d2455bd5e5b",
+  "device": "cuda",
+  "batch_size": 24,
+  "context_bytes": 512,
+  "targets_per_window": 256,
+  "models": [
+    {
+      "checkpoint": "checkpoints/v12-v2pair/syn_s40001.pt",
+      "checkpoint_sha256": "21e75fa11d18a7d33a5d8d9184301e2ec287085c3e265ec2c526329454c4486f",
+      "run_name": "event_correction_code_s40001_v12_syn",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 34845184,
+      "training_targets": 78643200,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 4948868.930324152,
+          "bpb": 1.6983745996021082
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 5252799.541244835,
+          "bpb": 1.7996086100131905
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 4720605.4047928415,
+          "bpb": 1.6115034356610216
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/v12-v2pair/heads_s40001.pt",
+      "checkpoint_sha256": "48b1dd8dcd69c5e4fffefa9843fb1aff8029335c84f9fbe65f0c2684f1640ceb",
+      "run_name": "event_correction_code_s40001_v12_heads",
+      "model_type": "EventLM",
+      "attention": null,
+      "parameters": 34845184,
+      "training_targets": 78643200,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 4883296.604442075,
+          "bpb": 1.6758712004854828
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 5081461.73483713,
+          "bpb": 1.7409082942651795
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 4392971.8218893455,
+          "bpb": 1.4996570517309324
+        }
+      }
+    },
+    {
+      "checkpoint": "checkpoints/scratch-v2-study/transformer_s20001.pt.partial",
+      "checkpoint_sha256": "8ede2286a7967df3c9649adf072a7bedc772e2430e01d45fb3d8f3c25f74bfe3",
+      "run_name": "transformer_s20001_scratch_transformer_v2",
+      "model_type": "TransformerLM",
+      "attention": "transformer",
+      "parameters": 34845696,
+      "training_targets": 270336000,
+      "benchmarks": {
+        "fineweb_edu": {
+          "target_bytes": 4203848,
+          "nll_nats": 4142827.297127705,
+          "bpb": 1.4217536877702448
+        },
+        "finemath": {
+          "target_bytes": 4211020,
+          "nll_nats": 4169513.8856183738,
+          "bpb": 1.4284750501539534
+        },
+        "stack_edu": {
+          "target_bytes": 4226112,
+          "nll_nats": 3126132.733057125,
+          "bpb": 1.0671880421394835
+        }
+      }
+    }
+  ]
+}

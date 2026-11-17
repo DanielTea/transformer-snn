@@ -18,6 +18,17 @@
 | [vision](vision) | Historical CIFAR-10 runs |
 | [figures](figures) | Plots generated from these records |
 
+The [coasting-head study](../docs/COASTING_HEADS.md) uses
+`event_lm/coasting_heads`. Its `recall_*.json` records hold the
+replayed enwik8 scores of one decoder each, `history_gap_*.json`
+the split by bytes of history and `heldout_*.json` the held-out
+web, mathematics and code documents. `fit_only` holds the sweeps
+on the frozen v11 decoder and `readout` the fitted head
+strengths. The other subdirectories are named after the
+checkpoint directories and hold their training and scoring
+records. `coasting_heads_checkpoints.sha256` lists every
+checkpoint of the study.
+
 The recall figure uses `recall_distance/*_gap_v1_*.json` and
 `recall_distance/dendrite_event_s0_anchored_extrapolation.json`.
 The successor loss figure uses `lm_successor/scaled_v2_continuous.json`

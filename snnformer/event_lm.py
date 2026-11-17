@@ -10,6 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from .coasting_heads import CoastingHeads
 from .fast_synapses import FastSynapses, SynapseState
 from .correction_memory import (
     CorrectionState, _scan_charge, _scan_translated_charge, correction_reads, correction_step, interval_spikes,
@@ -116,6 +117,13 @@ class EventLMConfig:
     synapse_cells: int = 4096
     synapse_levels: int = 4
     synapse_gate: int = 1
+    head_orders: tuple[int, ...] | None = None
+    head_cells: int = 4096
+    head_gate: int = 1
+    head_tape: int = 8192
+    head_lookup: int = 0
+    head_miss: int = 0
+    head_relock: int = 0
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -1920,6 +1928,12 @@ class EventLM(nn.Module):
                 raise ValueError("fast synapses need reset-per-byte routing with chunkable held charge")
             self.fast_synapses = FastSynapses(cfg.synapse_orders, cfg.synapse_groups, cfg.synapse_cells,
                                               cfg.synapse_levels, cfg.synapse_gate)
+        self.read_heads = None
+        if cfg.head_orders is not None:
+            if cfg.carry or cfg.continuous or not cfg.local_trace or cfg.output_reference:
+                raise ValueError("coasting heads need reset-per-byte routing with chunkable held charge")
+            self.read_heads = CoastingHeads(cfg.head_orders, cfg.head_cells, cfg.head_gate, cfg.head_tape,
+                                            cfg.head_lookup, cfg.head_miss, cfg.head_relock)
         self.output_reference = None
         if cfg.output_reference:
             self.output_reference = _IntegrateFire(output_cap, output_bits + _VOCAB.bit_length() - 1, False)
@@ -2134,7 +2148,7 @@ class EventLM(nn.Module):
         clock_start = self.cfg.clock_start
         # The forecast neurons read the stream under the clock, or the top stream of an unclocked decoder.
         forecast_tap = clock_start
-        if forecast_tap is None and self.fast_synapses is not None:
+        if forecast_tap is None and (self.fast_synapses is not None or self.read_heads is not None):
             forecast_tap = len(self.blocks)
         tap = forecast_tap if early_readout is None else early_readout
         if tap is not None and (not 0 < tap <= len(self.blocks) or (forecast_tap is not None and tap != forecast_tap)):
@@ -2164,6 +2178,11 @@ class EventLM(nn.Module):
         counts = self.output_emit(current, reference=self._reference_counts(current))
         if self.fast_synapses is not None:
             counts = self._excite_vocabulary(counts, tokens, surprise, early, correction_access)
+        if self.read_heads is not None:
+            if correction_access is not None and correction_access.local_layers is not None:
+                raise NotImplementedError("coasting heads are replayed over a recorded stream, not carried between chunks")
+            # The heads' recall spikes are counted like those of the fast synapses.
+            counts = counts + self.read_heads(tokens, surprise).to(counts.device, counts.dtype)
         if return_prediction:
             if corrected_prediction:
                 # The bank emits corrections in the same signed count units as the forecast.
@@ -2410,6 +2429,8 @@ class EventLM(nn.Module):
             raise ValueError("step requires an eval-mode integer export from to_integer()")
         if tokens.ndim != 1 or tokens.device.type != "cpu":
             raise ValueError("step expects a CPU tensor of shape [batch]")
+        if self.read_heads is not None:
+            raise NotImplementedError("coasting heads are replayed over a recorded stream, not stepped")
         if state is None:
             state = EventLMState([_DelayState() for _ in self.blocks])
         else:
