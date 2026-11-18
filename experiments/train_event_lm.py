@@ -256,6 +256,7 @@ def build_model(args):
                             granule_budget=getattr(args, "granule_budget", EventLMConfig.granule_budget),
                             granule_races=getattr(args, "granule_races", EventLMConfig.granule_races),
                             granule_soften=getattr(args, "granule_soften", EventLMConfig.granule_soften),
+                            granule_soft=getattr(args, "granule_soft", EventLMConfig.granule_soft),
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
@@ -609,6 +610,9 @@ def main():
     parser.add_argument("--granule-soften", type=float, default=EventLMConfig.granule_soften,
                         help="factor by which a race of granule cells is softened where its gradient is taken; "
                              "the spikes stay those of the race as it is")
+    parser.add_argument("--granule-soft", action="store_true",
+                        help="diagnosis only: granule cells that answer with real numbers and do not race, "
+                             "which makes the decoder a hybrid and no spiking network")
     parser.add_argument("--granule-delays", type=int, default=EventLMConfig.granule_delays,
                         help="conduction delays among a granule cluster's fibres: each brings its channel as it was "
                              "zero to one less than this many bytes ago")

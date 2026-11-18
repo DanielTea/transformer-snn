@@ -177,6 +177,7 @@ class EventLMConfig:
     granule_budget: int | None = None
     granule_races: int = 1
     granule_soften: float = 1.0
+    granule_soft: bool = False
     granule_delays: int = 1
     granule_relays: int = 0
     granule_traces: int = 0
@@ -2314,6 +2315,11 @@ class _GranuleLayer(nn.Module):
     cluster answers with a cell of every group instead of a single cell.
     With ``granule_soften`` the cells learn from a softer race than the one
     they fire in, so that a cell far behind can still be drawn into use.
+    With ``granule_soft`` the cells neither race nor spike: each answers
+    with a real number, a smooth threshold of its own charge, through the
+    synapses and the gains of the race. That is a stand-in for diagnosis,
+    which shows what the race costs. A decoder with soft cells is not a
+    spiking network.
 
     With ``granule_delays`` the fibres of a cluster conduct at different
     speeds: each brings its channel as it was zero to ``granule_delays - 1``
@@ -2420,6 +2426,7 @@ class _GranuleLayer(nn.Module):
             self.fire = _RaceFire(cap, self.bits, self.budget, phase, cfg.granule_races, cfg.granule_soften)
             # Each cluster has its own gain on its cells' charges.
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
+        self.soft = cfg.granule_soft
         self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
         self.emit = _IntegrateFire(cap, self.bits, False)
 
@@ -2505,6 +2512,10 @@ class _GranuleLayer(nn.Module):
         charge = charge - self.rest_quarters().squeeze(-1) * quanta * quarter
         if self.budget is None:
             return self.fire(charge, quanta)
+        if self.soft:
+            # The charge in thresholds, as the race takes it, and no competition between the cells.
+            thresholds = charge / (quanta * (self.fire.threshold // self.fire.quanta_per_threshold))
+            return F.gelu(thresholds * self.sharpness.exp())
         return self.fire(charge, quanta, sharpness=self.sharpness.exp())
 
     def forward(self, spikes, tokens=None):
@@ -2813,6 +2824,8 @@ class EventLM(nn.Module):
                     or not 0 <= cfg.granule_price <= 1):
                 raise ValueError("granule layers need positive sizes, a fan within the stream, a rest within its "
                                  "limit and a price share from 0 to 1")
+            if cfg.granule_soft and cfg.granule_budget is None:
+                raise ValueError("soft granule cells stand in for racing cells and take their cluster gains")
             if cfg.granule_reach is not None and (
                     not isinstance(cfg.granule_reach, int) or not 1 <= cfg.granule_reach <= cfg.dim):
                 raise ValueError("the axons of a granule cluster reach a whole number of the stream's channels")

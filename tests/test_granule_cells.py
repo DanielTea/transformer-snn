@@ -748,6 +748,25 @@ def test_the_axons_of_a_cluster_can_reach_more_or_fewer_channels_than_it_hears()
             _granules(granule_reach=reach)
 
 
+def test_soft_cells_stand_in_for_the_race_with_the_same_parameters():
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    race, soft = _grow(_granules(granule_budget=3)), _grow(_granules(granule_budget=3, granule_soft=True))
+    assert {name: value.shape for name, value in race.state_dict().items()} == {
+        name: value.shape for name, value in soft.state_dict().items()}
+    layer, stream = soft.granule_layers["0"], _stream()
+    answers, spikes = layer.cells(stream), race.granule_layers["0"].cells(stream)
+    # The cells of a race share whole spikes. Soft cells answer each for itself, with real numbers.
+    assert torch.equal(spikes, spikes.round()) and not torch.equal(answers, answers.round())
+    assert not torch.equal(race(tokens), soft(tokens))
+    counts = soft(tokens)
+    counts.square().mean().backward()
+    for layer in soft.granule_layers.values():
+        for parameter in (layer.receive, layer.send, layer.rest, layer.sharpness):
+            assert torch.isfinite(parameter.grad).all() and parameter.grad.abs().sum() > 0
+    with pytest.raises(ValueError, match="soft granule cells"):
+        _granules(granule_soft=True)
+
+
 def test_granule_settings_are_checked():
     with pytest.raises(ValueError, match="byte-rate blocks"):
         _granules(granule_after=(4,))
