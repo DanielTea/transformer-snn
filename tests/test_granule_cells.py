@@ -717,6 +717,37 @@ def test_beat_fibres_leave_other_layers_and_old_weights_as_they_were():
                                                     for name in ("clock.weight", "clock_rest")}
 
 
+def test_the_axons_of_a_cluster_can_reach_more_or_fewer_channels_than_it_hears():
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    same, named = _grow(_granules(granule_budget=3)), _grow(_granules(granule_budget=3, granule_reach=24))
+    # A reach equal to the fan is the layer as it was.
+    assert same.state_dict().keys() == named.state_dict().keys()
+    assert torch.equal(same(tokens), named(tokens))
+    for reach in (8, 96):
+        model = _grow(_granules(granule_budget=3, granule_reach=reach))
+        for layer in model.granule_layers.values():
+            assert layer.inputs.shape == (6, 24) and layer.receive.shape == (6, 20, 24)
+            assert layer.outputs.shape == (6, reach) and layer.send.shape == (6, reach, 20)
+            assert all(len(set(row.tolist())) == reach for row in layer.outputs)
+        counts = model(tokens)
+        assert counts.shape == (2, 80, 256) and torch.isfinite(counts).all()
+        counts.square().mean().backward()
+        for layer in model.granule_layers.values():
+            assert torch.isfinite(layer.send.grad).all() and layer.send.grad.abs().sum() > 0
+            assert torch.isfinite(layer.receive.grad).all() and layer.receive.grad.abs().sum() > 0
+        # The cells write to the channels their axons reach and to no others.
+        layer, stream = model.granule_layers["0"], _stream()
+        reached = torch.zeros(96, dtype=torch.bool)
+        reached[layer.outputs.flatten()] = True
+        with torch.no_grad():
+            layer.send.mul_(40)
+        changed = (layer(stream) != stream).flatten(0, 1).any(0)
+        assert changed.any() and not changed[~reached].any()
+    for reach in (0, 97, 2.0):
+        with pytest.raises(ValueError, match="reach a whole number"):
+            _granules(granule_reach=reach)
+
+
 def test_granule_settings_are_checked():
     with pytest.raises(ValueError, match="byte-rate blocks"):
         _granules(granule_after=(4,))

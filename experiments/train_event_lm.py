@@ -248,6 +248,7 @@ def build_model(args):
                             granule_clusters=getattr(args, "granule_clusters", EventLMConfig.granule_clusters),
                             granule_cells=getattr(args, "granule_cells", EventLMConfig.granule_cells),
                             granule_fan=getattr(args, "granule_fan", EventLMConfig.granule_fan),
+                            granule_reach=getattr(args, "granule_reach", EventLMConfig.granule_reach),
                             granule_gain=getattr(args, "granule_gain", EventLMConfig.granule_gain),
                             granule_rest=getattr(args, "granule_rest", EventLMConfig.granule_rest),
                             granule_price=getattr(args, "granule_price", EventLMConfig.granule_price),
@@ -590,6 +591,9 @@ def main():
     parser.add_argument("--granule-cells", type=int, default=EventLMConfig.granule_cells, help="cells of a cluster")
     parser.add_argument("--granule-fan", type=int, default=EventLMConfig.granule_fan,
                         help="stream channels a cluster listens to, and channels its axons reach")
+    parser.add_argument("--granule-reach", type=int, default=EventLMConfig.granule_reach,
+                        help="stream channels the axons of a cluster reach, where that differs from the channels "
+                             "it listens to")
     parser.add_argument("--granule-gain", type=float, default=EventLMConfig.granule_gain,
                         help="starting scale of the granule cells' input synapses")
     parser.add_argument("--granule-rest", type=float, default=EventLMConfig.granule_rest,

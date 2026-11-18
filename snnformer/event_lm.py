@@ -169,6 +169,7 @@ class EventLMConfig:
     granule_clusters: int = 32
     granule_cells: int = 256
     granule_fan: int = 128
+    granule_reach: int | None = None
     granule_gain: float = 0.25
     granule_rest: float = 0.5
     granule_price: float = 0.0
@@ -2300,6 +2301,9 @@ class _GranuleLayer(nn.Module):
     the charge passed the threshold. Its axon reaches ``fan`` other channels,
     where the spikes join the stream through a firing population like a
     block's correction. The layer is silent until its output synapses grow.
+    With ``granule_reach`` the axons of a cluster reach that many channels
+    instead, so that a cell can hear more of the stream than it writes to,
+    or less.
 
     With a ``granule_budget`` the cells of a cluster race for that many
     spikes per byte instead, and a cell's rest is its handicap in the race.
@@ -2366,7 +2370,8 @@ class _GranuleLayer(nn.Module):
             self.relay_fire = _IntegrateFire(cap, cfg.router_charge_bits, False)
             sources = cfg.granule_relays
         self.register_buffer("inputs", _spread_channels(sources, clusters, fan, generator))
-        self.register_buffer("outputs", _spread_channels(cfg.dim, clusters, fan, generator))
+        reach = fan if cfg.granule_reach is None else cfg.granule_reach
+        self.register_buffer("outputs", _spread_channels(cfg.dim, clusters, reach, generator))
         self.delays, self.traces = cfg.granule_delays, cfg.granule_traces
         # Beat fibres come in one order for the present stretch and one for each held stretch.
         self.orders = cfg.granule_beats + 1 if cfg.granule_beats else 0
@@ -2400,7 +2405,7 @@ class _GranuleLayer(nn.Module):
                 self.tick = _ClockFire(cfg.router_charge_bits + _CLOCK_BITS, self.beat_fibres.shape[1])
         self.receive = nn.Parameter(torch.empty(clusters, cells, fan))
         nn.init.normal_(self.receive, std=cfg.granule_gain / math.sqrt(fan))
-        self.send = nn.Parameter(torch.zeros(clusters, fan, cells))
+        self.send = nn.Parameter(torch.zeros(clusters, reach, cells))
         # Spikes of charge a cell needs before its threshold counts, stored in quarter spikes.
         self.rest = nn.Parameter(torch.full((clusters, cells, 1), float(cfg.granule_rest)))
         self.budget = cfg.granule_budget
@@ -2808,6 +2813,9 @@ class EventLM(nn.Module):
                     or not 0 <= cfg.granule_price <= 1):
                 raise ValueError("granule layers need positive sizes, a fan within the stream, a rest within its "
                                  "limit and a price share from 0 to 1")
+            if cfg.granule_reach is not None and (
+                    not isinstance(cfg.granule_reach, int) or not 1 <= cfg.granule_reach <= cfg.dim):
+                raise ValueError("the axons of a granule cluster reach a whole number of the stream's channels")
             if cfg.granule_bits is not None and (
                     not isinstance(cfg.granule_bits, int) or cfg.granule_bits < _CHARGE_BITS
                     or (_HIDDEN_CAP * cfg.resolution) << cfg.granule_bits > _FP32_EXACT):
