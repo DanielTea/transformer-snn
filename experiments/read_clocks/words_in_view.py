@@ -29,8 +29,8 @@ from train_lm import load_splits  # noqa: E402
 VIEWS = ((0, 0), (1, 1), (2, 3), (4, 9), (10, 39), (40, 9999))
 
 
-def main():
-    parser = argparse.ArgumentParser()
+def arguments(description):
+    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("checkpoints", nargs="+")
     parser.add_argument("--windows", type=int, default=512)
     parser.add_argument("--averaged", action="store_true",
@@ -38,24 +38,34 @@ def main():
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--json", type=Path, help="also write the rows to this file")
-    args = parser.parse_args()
-    torch.set_num_threads(args.threads)
-    device = torch.device(args.device)
+    return parser.parse_args()
+
+
+def validation_windows(count):
+    """Evenly spaced windows of 513 bytes of the enwik8 validation split: 512 inputs and their targets."""
     _, validation, _ = load_splits(Path("data/enwik8"))
     data = np.array(validation)
-    starts = np.linspace(0, len(data) - 514, args.windows).astype(np.int64)
-    tokens = np.stack([data[start:start + 513] for start in starts]).astype(np.int64)
-    length, copyable = earlier_matches(tokens, 512)
-    copyable = (length >= 4) & copyable
+    starts = np.linspace(0, len(data) - 514, count).astype(np.int64)
+    return np.stack([data[start:start + 513] for start in starts]).astype(np.int64)
+
+
+def load_weights(path, averaged, device):
+    """A checkpoint's model, with the running weight average in place where asked for and stored."""
+    model, checkpoint = load_checkpoint(Path(path), device)
+    stored = checkpoint.get("averaged_parameters") if averaged else None
+    if stored is not None:
+        with torch.no_grad():
+            for name, parameter in model.named_parameters():
+                parameter.copy_(stored[name].to(parameter))
+    return model, stored is not None
+
+
+def paired_bits(paths, tokens, averaged, device):
+    """The bits of every target of the windows under every checkpoint, and the checkpoints' names."""
     windows = torch.from_numpy(tokens).to(device)
     bits, names = [], []
-    for path in args.checkpoints:
-        model, checkpoint = load_checkpoint(Path(path), device)
-        averaged = checkpoint.get("averaged_parameters") if args.averaged else None
-        if averaged is not None:
-            with torch.no_grad():
-                for name, parameter in model.named_parameters():
-                    parameter.copy_(averaged[name].to(parameter))
+    for path in paths:
+        model, took_average = load_weights(path, averaged, device)
         event = isinstance(model, EventLM)
         resolution = model.cfg.resolution if event else 1
         rows = []
@@ -66,25 +76,32 @@ def main():
                 rows.append(loss.view(batch.shape[0], -1).cpu().numpy() / math.log(2))
         bits.append(np.concatenate(rows))
         names.append(f"{Path(path).parent.name}/{Path(path).name}")
-        print(f"[{len(bits) - 1}] {names[-1]} | {'averaged' if averaged is not None else 'as stored'} | "
+        print(f"[{len(bits) - 1}] {names[-1]} | {'averaged' if took_average else 'as stored'} | "
               f"{bits[-1].mean():.4f} bpb", flush=True)
         del model
+    return bits, names
+
+
+def word_places(tokens):
+    """For every byte: whether it is inside a word, whether it starts one, and its place in its word (0 outside)."""
     word = np.zeros(256, dtype=bool)
     for low, high in ((48, 57), (65, 90), (97, 122), (128, 255)):
         word[low:high + 1] = True
     inside = word[tokens]
     start = inside.copy()
     start[:, 1:] &= ~inside[:, :-1]
-    # The words that started before each target, and the target's place in its word (0 outside a word).
-    seen = start.cumsum(1)[:, :-1]
     place = np.zeros_like(tokens)
     for column in range(tokens.shape[1]):
         place[:, column] = np.where(inside[:, column], (place[:, column - 1] if column else 0) + 1, 0)
-    first, later = place[:, 1:] == 1, place[:, 1:] >= 2
+    return inside, start, place
+
+
+def paired_rows(bits, width=40):
+    """A function that prints one row for a mask of targets and keeps it, and the list of the kept rows."""
     generator = np.random.default_rng(0)
-    draws = generator.integers(0, len(tokens), (2000, len(tokens)))
+    draws = generator.integers(0, len(bits[0]), (2000, len(bits[0])))
     total = bits[0].size
-    print(f"\n{'targets':<40} {'share':>6} " + " ".join(f"{'[' + str(i) + ']':>8}" for i in range(len(bits)))
+    print(f"\n{'targets':<{width}} {'share':>6} " + " ".join(f"{'[' + str(i) + ']':>8}" for i in range(len(bits)))
           + " | over [0], with the 95% interval over windows")
     rows = []
 
@@ -93,7 +110,7 @@ def main():
         if not count.sum():
             return
         means = [float(b[mask].mean()) for b in bits]
-        record = {"targets": name, "share": float(mask.sum() / total), "bits": means, "over_reference": []}
+        record = {"targets": name.strip(), "share": float(mask.sum() / total), "bits": means, "over_reference": []}
         text = []
         for other in bits[1:]:
             gap = ((other - bits[0]) * mask).sum(1)
@@ -103,8 +120,31 @@ def main():
                                              "high": float(high)})
             text.append(f"{gap.sum() / count.sum():+.4f} ({low:+.4f} to {high:+.4f})")
         rows.append(record)
-        print(f"{name:<40} {record['share']:6.3f} " + " ".join(f"{m:8.4f}" for m in means) + " | " + "  ".join(text))
+        print(f"{name:<{width}} {record['share']:6.3f} " + " ".join(f"{m:8.4f}" for m in means)
+              + " | " + "  ".join(text))
 
+    return row, rows
+
+
+def write_rows(path, names, args, rows):
+    if path is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"checkpoints": names, "windows": args.windows, "averaged": args.averaged,
+                                    "rows": rows}, indent=1) + "\n")
+
+
+def main():
+    args = arguments(__doc__)
+    torch.set_num_threads(args.threads)
+    tokens = validation_windows(args.windows)
+    length, copyable = earlier_matches(tokens, 512)
+    copyable = (length >= 4) & copyable
+    bits, names = paired_bits(args.checkpoints, tokens, args.averaged, torch.device(args.device))
+    _, start, place = word_places(tokens)
+    # The words that started before each target.
+    seen = start.cumsum(1)[:, :-1]
+    first, later = place[:, 1:] == 1, place[:, 1:] >= 2
+    row, rows = paired_rows(bits)
     row("all", np.ones_like(copyable))
     row("copyable (match >= 4)", copyable)
     row("not copyable", ~copyable)
@@ -115,10 +155,7 @@ def main():
         for low, high in VIEWS:
             label = f"{low}" + ("" if high == low else "+" if high > 999 else f"-{high}")
             row(f"{name}, {label} words in view", mask & ~copyable & (seen >= low) & (seen <= high))
-    if args.json is not None:
-        args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(json.dumps({"checkpoints": names, "windows": args.windows,
-                                         "averaged": args.averaged, "rows": rows}, indent=1) + "\n")
+    write_rows(args.json, names, args, rows)
 
 
 if __name__ == "__main__":
