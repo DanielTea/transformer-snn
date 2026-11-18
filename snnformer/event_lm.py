@@ -47,7 +47,7 @@ _CLOCK_SOURCES = ("surprise", "periodic")
 _READ_MODES = ("soft", "race", "age")
 # The most words a state read counts a cell's age in.
 _READ_BEATS = 16
-_READ_CLOCKS = ("word", "learned")
+_READ_CLOCKS = ("word", "end", "learned")
 # Signed probe and tag pulses give a cell this many times ``resolution`` root channels of charge spread at the start.
 _RACE_UNIT = 1.5
 # Multiples of the golden ratio spread the starting phases of a race's cells evenly.
@@ -1791,6 +1791,11 @@ def _word_starts(inside):
     return inside & ~F.pad(inside, (1, 0))[:, :inside.shape[1]]
 
 
+def _word_ends(inside):
+    """The first byte after every word: a byte that is no word byte after one that is, as [batch, bytes]."""
+    return ~inside & F.pad(inside, (1, 0))[:, :inside.shape[1]]
+
+
 class _StateRead(nn.Module):
     """A read of the stream's own earlier cells, addressed by what they hold.
 
@@ -1855,7 +1860,9 @@ class _StateRead(nn.Module):
                 with torch.no_grad():
                     own = torch.arange(self.heads) % (self.beats + 1)
                     self.beat_age[torch.arange(self.heads), own] = cfg.read_beat_start / self.rate
-            if cfg.read_clock == "word":
+            if cfg.read_clock != "learned":
+                # A fixed clock reads the bytes: it beats where a word starts, or at the first byte after one.
+                self.beat_at = _word_starts if cfg.read_clock == "word" else _word_ends
                 self.register_buffer("word_bytes", _word_bytes(), persistent=False)
             else:
                 # The clock cells start deaf, so that they first beat at their own pace.
@@ -1895,8 +1902,9 @@ class _StateRead(nn.Module):
         return self._address(spikes, tokens)[:2]
 
     def word_ages(self, tokens):
-        """The words that started after each cell up to each byte, as [batch, bytes, cells] counted up to the limit."""
-        started = _word_starts(self.word_bytes[tokens]).cumsum(1)
+        """The beats of the fixed clock after each cell up to each byte, as [batch, bytes, cells] counted up to the
+        limit: the words that started since the cell, or with the clock at word ends the words that ended."""
+        started = self.beat_at(self.word_bytes[tokens]).cumsum(1)
         return (started[:, :, None] - started[:, None, :]).clamp(0, self.beats)
 
     def clock_beats(self, spikes):
@@ -2699,8 +2707,9 @@ class EventLM(nn.Module):
                                  "for a head's own age needs such ages")
             if (cfg.read_clock not in _READ_CLOCKS or not 0 < cfg.read_clock_rate < 1
                     or (cfg.read_clock != "word" and not cfg.read_beats)):
-                raise ValueError("a state read counts ages in beats of the word clock or of learned clock cells, "
-                                 "which start at a rate between none and every byte and need such ages")
+                raise ValueError("a state read counts ages in beats of a clock at the starts or the ends of words "
+                                 "or of learned clock cells, which start at a rate between none and every byte; "
+                                 "the clocks other than the default need such ages")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
         if cfg.granule_after is not None:

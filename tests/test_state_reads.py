@@ -181,6 +181,22 @@ def test_a_cell_counts_the_words_that_started_after_it():
     assert read.word_ages(_text("7é x"))[0, -1].tolist() == [1, 1, 1, 1, 0]
 
 
+def test_a_clock_at_word_ends_gives_a_word_one_age_from_every_later_byte():
+    read = _reads("race", read_beats=2, read_clock="end").state_reads["1"]
+    #                 a  b  _  c  d  ,  _  e  f  _  _  g
+    ended = torch.tensor([0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3])
+    tokens = _text("ab cd, ef  g")
+    ages = read.word_ages(tokens)[0]
+    assert torch.equal(ages, (ended[:, None] - ended).clamp(0, 2))
+    # Seen from the byte after "cd", from the gap and from inside "ef", the cells of "cd" have the age one.
+    assert ages[5:9, 3:5].unique().tolist() == [1]
+    # With the clock at word starts the same cells have the age nought from the gap and one from inside "ef".
+    starts = _reads("race", read_beats=2).state_reads["1"].word_ages(tokens)[0]
+    assert starts[5:7, 3:5].unique().tolist() == [0] and starts[7:9, 3:5].unique().tolist() == [1]
+    with pytest.raises(ValueError, match="need such ages"):
+        _reads("race", read_clock="end")
+
+
 def test_a_head_can_prefer_the_word_before_last():
     read = _reads("age", read_beats=3).state_reads["1"]
     with torch.no_grad():

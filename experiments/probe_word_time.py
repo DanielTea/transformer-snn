@@ -14,6 +14,11 @@ a clock that beats at every byte or at every word start, or beat fibres whose
 clock cells learn when to beat. For learned clocks the record also says where
 they beat. In this language a clock cell hears only the present byte, so the
 boundary it can find is the space.
+
+The ``read`` arms train a state read in place of the cells, or in front of
+them: a read that knows a cell's age in bytes, in words of the fixed word
+clock, or in beats of its heads' own clock cells. Their records list each
+head's offsets for the ages in beats and where its clock cell beats.
 """
 
 from __future__ import annotations
@@ -27,7 +32,7 @@ import torch
 from torch.nn import functional as F
 
 from common import _atomic_output
-from snnformer.event_lm import EventLMConfig, _GranuleLayer
+from snnformer.event_lm import EventLMConfig, _GranuleLayer, _StateRead
 
 LETTERS, SPACE = list(b"abcdefghijklmnop"), 32
 ARMS = {
@@ -40,7 +45,21 @@ ARMS = {
     "clock cells, sum": dict(granule_clock="learned", granule_hold="sum"),
     "clock cells, mean": dict(granule_clock="learned", granule_hold="mean"),
     "clock cells, last": dict(granule_clock="learned", granule_hold="last"),
+    "read, ages in bytes": dict(read=True),
+    "read, word clock": dict(read=True, read_clock="word"),
+    "read, word clock, own ages": dict(read=True, read_clock="word", read_beat_start=1.0),
+    "read, clock at word ends": dict(read=True, read_clock="end"),
+    "read, clock at word ends, own ages": dict(read=True, read_clock="end", read_beat_start=1.0),
+    "read, clock cells": dict(read=True, read_clock="learned"),
+    "read, clock cells, own ages": dict(read=True, read_clock="learned", read_beat_start=1.0),
+    "read, ages in bytes, then cells": dict(read=True, then_cells=True),
+    "read, word clock, then cells": dict(read=True, read_clock="word", read_beat_start=1.0, then_cells=True),
+    "read, clock at word ends, then cells": dict(read=True, read_clock="end", read_beat_start=1.0, then_cells=True),
+    "read, clock cells, then cells": dict(read=True, read_clock="learned", read_beat_start=1.0, then_cells=True),
 }
+# The state read of the read arms: four heads over the last 32 bytes.
+READ = dict(read_after=(0,), read_width=32, read_heads=4, read_window=32, read_mode="race", read_budget=64,
+            read_resolution=4)
 
 
 def language(words, generator):
@@ -92,32 +111,54 @@ def text(rows, length, dictionary, partner, generator):
 def run(name, args, dictionary, partner, embedding):
     torch.manual_seed(args.seed)
     settings = dict(ARMS[name])
+    reading, then_cells = settings.pop("read", False), settings.pop("then_cells", False)
     if "granule_clock" in settings:
         settings.update(granule_beats=args.beats, granule_clock_rate=args.clock_rate)
+    if "read_clock" in settings:
+        settings.update(read_beats=args.beats, read_clock_rate=args.clock_rate)
     cfg = EventLMConfig(dim=embedding.shape[1], resolution=16, router_charge_bits=8, granule_after=(0,),
                         granule_clusters=8, granule_cells=48, granule_fan=32, granule_budget=16, granule_gain=1.0,
-                        **settings)
-    layer, head = _GranuleLayer(cfg, 0), torch.nn.Linear(embedding.shape[1], 256)
+                        **(READ if reading else {}), **settings)
+    read = _StateRead(cfg) if reading else None
+    layer = _GranuleLayer(cfg, 0) if then_cells or not reading else None
+    head = torch.nn.Linear(embedding.shape[1], 256)
     with torch.no_grad():
-        layer.send.normal_(std=0.02)
-    optimizer = torch.optim.Adam([*layer.parameters(), *head.parameters()], lr=args.lr)
+        for part, synapses in ((read, "project.weight"), (layer, "send")):
+            if part is not None:
+                part.get_parameter(synapses).normal_(std=0.02)
+    parts = [part for part in (read, layer, head) if part is not None]
+    optimizer = torch.optim.Adam([parameter for part in parts for parameter in part.parameters()], lr=args.lr)
     data = torch.Generator().manual_seed(args.seed + 1)
+
+    def predict(tokens):
+        spikes = embedding[tokens]
+        if read is not None:
+            spikes = read(spikes, None, tokens)
+        if layer is not None:
+            spikes = layer(spikes, tokens)
+        return head(spikes / cfg.resolution)
+
     for _ in range(args.steps):
         tokens, targets, _ = text(args.batch, args.length, dictionary, partner, data)
-        logits = head(layer(embedding[tokens], tokens) / cfg.resolution)
         optimizer.zero_grad()
-        F.cross_entropy(logits.flatten(0, 1), targets.flatten()).backward()
+        F.cross_entropy(predict(tokens).flatten(0, 1), targets.flatten()).backward()
         optimizer.step()
     tokens, targets, decided = text(256, args.length, dictionary, partner, torch.Generator().manual_seed(99))
     with torch.no_grad():
-        logits = head(layer(embedding[tokens], tokens) / cfg.resolution)
-        bits = F.cross_entropy(logits.flatten(0, 1), targets.flatten(), reduction="none").view(targets.shape)
+        bits = F.cross_entropy(predict(tokens).flatten(0, 1), targets.flatten(), reduction="none").view(targets.shape)
         bits = bits / math.log(2)
         record = {"arm": name, "first_letter_bits": bits[decided].mean().item(), "bits_per_byte": bits.mean().item()}
-        if layer.clock is not None:
+        space = tokens == SPACE
+        if read is not None and read.beats:
+            record["heads"] = [{"offsets_by_age_in_beats": offsets.tolist()} for offsets in read.beat_age * read.rate]
+            if read.clock is not None:
+                for row, mine in zip(record["heads"], read.clock_beats(embedding[tokens])[0].unbind(-1), strict=True):
+                    row.update(beats_per_byte=mine.mean().item(), beats_per_space=mine[space].mean().item(),
+                               share_of_beats_on_spaces=(mine[space].sum() / mine.sum().clamp_min(1e-9)).item())
+                record["share_of_bytes_that_are_spaces"] = space.float().mean().item()
+        if layer is not None and layer.clock is not None:
             # The share of a cluster's clock cells that beat at each byte.
             beating = layer.beats(embedding[tokens], tokens)[0].mean(-1)
-            space = tokens == SPACE
             record["clusters"] = [{
                 "beats_per_byte": mine.mean().item(),
                 "share_of_beats_on_spaces": (mine[space].sum() / mine.sum().clamp_min(1e-9)).item(),
@@ -134,7 +175,8 @@ def main():
     parser.add_argument("--steps", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--words", type=int, default=24)
-    parser.add_argument("--beats", type=int, default=3, help="stretches a beat fibre's chain holds")
+    parser.add_argument("--beats", type=int, default=3,
+                        help="stretches a beat fibre's chain holds, and ages in beats that a read tells apart")
     parser.add_argument("--clock-rate", type=float, default=EventLMConfig.granule_clock_rate)
     parser.add_argument("--lr", type=float, default=3e-3)
     parser.add_argument("--batch", type=int, default=16)
@@ -154,11 +196,12 @@ def main():
     for name in args.arms:
         record = run(name, args, dictionary, partner, embedding)
         records.append(record)
-        line = f"{name:<20} first letters {record['first_letter_bits']:.3f}  all bytes {record['bits_per_byte']:.3f}"
-        if "clusters" in record:
-            line += "  beats per space " + " ".join(f"{c['beats_per_space']:.2f}" for c in record["clusters"])
-            line += "  share of beats on spaces " + " ".join(f"{c['share_of_beats_on_spaces']:.2f}"
-                                                             for c in record["clusters"])
+        line = f"{name:<31} first letters {record['first_letter_bits']:.3f}  all bytes {record['bits_per_byte']:.3f}"
+        for clocks in ("clusters", "heads"):
+            if "beats_per_space" in record.get(clocks, [{}])[0]:
+                line += "  beats per space " + " ".join(f"{c['beats_per_space']:.2f}" for c in record[clocks])
+                line += "  share of beats on spaces " + " ".join(f"{c['share_of_beats_on_spaces']:.2f}"
+                                                                 for c in record[clocks])
         print(line, flush=True)
     if args.output is not None:
         result = {"words": [bytes(word).decode() for word in dictionary], "partner": partner,

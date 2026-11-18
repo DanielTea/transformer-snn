@@ -571,9 +571,9 @@ def main():
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
                         help="charge that each head starts with for one age in beats of its own")
-    parser.add_argument("--read-clock", choices=("word", "learned"), default=EventLMConfig.read_clock,
-                        help="what beats for a state read's ages: the start of every word, or a clock cell of "
-                             "each head that learns when to beat")
+    parser.add_argument("--read-clock", choices=("word", "end", "learned"), default=EventLMConfig.read_clock,
+                        help="what beats for a state read's ages: the start of every word, the first byte after "
+                             "every word, or a clock cell of each head that learns when to beat")
     parser.add_argument("--read-clock-rate", type=float, default=EventLMConfig.read_clock_rate,
                         help="the share of bytes at which a learned read clock beats before it has learned")
     parser.add_argument("--read-signed", action=argparse.BooleanOptionalAction, default=EventLMConfig.read_signed,
