@@ -342,6 +342,10 @@ def test_the_synapses_of_a_clock_cell_cannot_leave_the_range_of_exact_sums():
     assert torch.isfinite(model(tokens)).all()
     # A narrow read keeps the limit of every other synapse.
     assert _clocked("race").state_reads["1"].clock_limit == 508
+    # And a read so wide that a clock cell could not hear a single tick of each tag is refused.
+    with pytest.raises(ValueError, match="cannot hear this many read channels"):
+        _decoder(read_after=(1,), read_width=2048, read_heads=4, read_window=24, read_mode="race", read_beats=3,
+                 read_clock="learned", resolution=256)
 
 
 @pytest.mark.parametrize("marks", [False, True])

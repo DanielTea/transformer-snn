@@ -678,7 +678,7 @@ def main():
                              "the synapses of granule cells")
     parser.add_argument("--lr-scale", type=_lr_scales, default=(), metavar="PART=FACTOR,...",
                         help="multiply the learning rate of every parameter whose name contains a part by that "
-                             "part's factor; the first matching part counts")
+                             "part's factor; of several matching parts the longest counts")
     parser.add_argument("--weight-average", type=float,
                         help="also keep a running average of the weights with this decay, score it at every "
                              "evaluation and save it beside the checkpoint")
@@ -823,9 +823,10 @@ def main():
             # A read's offsets for the age in beats start at zero, and a new read or cell layer starts silent. Each
             # leaves the decoder as it was, so a trained decoder may gain them here. A checkpoint from before the
             # reads had such ages has none.
-            ages = ("read_beats", "read_beat_start", "read_clock", "read_clock_rate", "read_marks")
+            ages = ("read_beats", "read_beat_start", "read_clock", "read_clock_rate", "read_marks",
+                    "read_address_rate")
             earlier = {**{name: getattr(EventLMConfig, name) for name in ages}, **(parent.get("cfg") or {})}
-            grown = {"read_beats", "read_marks"}
+            grown = {"read_beats", "read_marks", "read_address_rate"}
             silent = [".beat_age", ".beat_mark"]
             if not earlier["read_beats"]:
                 # With the ages it may choose their clock: the clock cells of a read start deaf.
@@ -842,6 +843,13 @@ def main():
             if different:
                 raise ValueError(f"{args.load_weights}: the decoder differs in {', '.join(different)}")
             weights = {name: value for name, value in parent["state_dict"].items() if not name.startswith(recall)}
+            # A read stores its offsets and gains as shares of its address rate. Under another rate the shares
+            # change so that the offsets and gains, and with them the decoder, stay as they were.
+            share = earlier["read_address_rate"] / own["read_address_rate"]
+            if share != 1.0:
+                shares = {f"state_reads.{index}.{name}" for index in earlier.get("read_after") or ()
+                          for name in ("age", "gain", "spacing", "beat_age", "beat_mark")}
+                weights = {name: value * share if name in shares else value for name, value in weights.items()}
             missing, unexpected = model.load_state_dict(weights, strict=False)
             if unexpected or any(not name.startswith(recall) and not any(part in name for part in silent)
                                  for name in missing):

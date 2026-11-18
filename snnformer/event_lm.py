@@ -1894,6 +1894,9 @@ class _StateRead(nn.Module):
                 self.clock_rest_ticks = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * _PACKET_UNITS * quarter // cap)
                 self.clock_limit = min(_WEIGHT_LIMIT << (bits - _CHARGE_BITS),
                                        (_FP32_EXACT // cap - self.clock_rest_ticks) // cfg.read_width)
+                if self.clock_limit < 1:
+                    raise ValueError("a clock cell cannot hear this many read channels within the range of exact "
+                                     "sums; lower the read width or the spike resolution")
         # The read is silent until its output synapses grow.
         self.project = _Synapse(cfg.read_width, cfg.dim, gain=0.0, charge_bits=bits)
         self.emit = _IntegrateFire(cap, bits, False)

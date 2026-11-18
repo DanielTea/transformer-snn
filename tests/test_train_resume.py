@@ -97,6 +97,22 @@ def test_a_trained_decoder_may_gain_word_ages_and_nothing_else(trainer, tmp_path
     assert "the decoder differs in read_clock" in capsys.readouterr().err
 
 
+def test_a_trained_decoder_stays_as_it_is_under_another_address_rate(trainer, tmp_path):
+    parent, faster = tmp_path / "parent", tmp_path / "faster"
+    trainer(parent)
+    # Steps too small to move a weight show the decoder as it was loaded.
+    trainer(faster, "--load-weights", str(parent / "model.pt"), "--read-address-rate", "8", "--lr", "1e-12")
+    before = torch.load(parent / "model.pt", weights_only=True)["state_dict"]
+    after = torch.load(faster / "model.pt", weights_only=True)["state_dict"]
+    # The stored offsets and gains are an eighth of what they were, and nothing else has changed.
+    stored = {f"state_reads.0.{name}" for name in ("age", "gain", "beat_age")}
+    assert stored <= before.keys() and before.keys() == after.keys()
+    assert all(before[name].abs().max() > 1e-4 for name in stored)
+    for name, value in before.items():
+        assert torch.allclose(after[name] * (8.0 if name in stored else 1.0), value.float(), rtol=0, atol=1e-9), name
+    assert record(faster)["curve"][0]["val_bpb"] == record(parent)["curve"][-1]["val_bpb"]
+
+
 def test_a_trained_decoder_may_gain_reads_and_cell_layers_and_not_lose_one(trainer, tmp_path, capsys):
     parent = tmp_path / "parent"
     trainer(parent)

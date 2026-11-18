@@ -169,9 +169,11 @@ def make_optimizer(model, lr, wd, betas=(0.9, 0.99), rotated=None, stacks=False,
 
     With ``stacks`` the rotated optimizer also turns every matrix of a three-dimensional weight. ``scales``
     holds pairs of a name part and a factor: a parameter whose name contains a part steps with the learning
-    rate times the factor of the first such pair. Every group keeps its factor as ``lr_scale`` for a schedule.
+    rate times that part's factor, and of several such parts the longest counts, so ``age`` leaves ``beat_age``
+    to a pair of its own. Every group keeps its factor as ``lr_scale`` for a schedule.
     """
     groups = {}
+    scales = sorted(scales, key=lambda pair: -len(pair[0]))
     for n, p in model.named_parameters():
         decay = wd if p.ndim >= 2 and "pos" not in n else 0.0
         scale = next((factor for part, factor in scales if part in n), 1.0)

@@ -158,6 +158,11 @@ def test_named_weights_step_with_their_own_share_of_the_learning_rate(experiment
                          "1.bias": (1.0, 0.0, 1e-2)}
     plain = make_optimizer(model, 1e-2, 0.1)
     assert [(group["lr_scale"], group["weight_decay"]) for group in plain.param_groups] == [(1.0, 0.1), (1.0, 0.0)]
+    # Of several parts in a name the longest counts, in whatever order they are given.
+    for pairs in ((("weight", 2.0), ("1.weight", 3.0)), (("1.weight", 3.0), ("weight", 2.0))):
+        optimizer = make_optimizer(model, 1e-2, 0.1, scales=pairs)
+        found = {names[parameter]: group["lr_scale"] for group in optimizer.param_groups for parameter in group["params"]}
+        assert found == {"0.weight": 2.0, "0.bias": 1.0, "1.weight": 3.0, "1.bias": 1.0}
     # A scaled weight moves that much farther in one step from the same gradient.
     torch.manual_seed(0)
     twins = [torch.nn.Linear(6, 5) for _ in range(2)]
