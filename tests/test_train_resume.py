@@ -85,3 +85,15 @@ def test_a_trained_decoder_may_gain_word_ages_and_nothing_else(trainer, tmp_path
     with pytest.raises(SystemExit):
         trainer(tmp_path / "wider", "--load-weights", str(parent / "model.pt"), "--read-width", "32")
     assert "the decoder differs in read_width" in capsys.readouterr().err
+
+
+def test_a_trained_decoder_may_gain_reads_and_cell_layers_and_not_lose_one(trainer, tmp_path, capsys):
+    parent = tmp_path / "parent"
+    trainer(parent)
+    more = ("--load-weights", str(parent / "model.pt"), "--read-after", "0,1", "--granule-after", "0,1")
+    trainer(tmp_path / "more", *more)
+    grown = torch.load(tmp_path / "more" / "model.pt", weights_only=True)
+    assert tuple(grown["cfg"]["read_after"]) == (0, 1) and "state_reads.1.project.weight" in grown["state_dict"]
+    with pytest.raises(SystemExit):
+        trainer(tmp_path / "fewer", "--load-weights", str(tmp_path / "more" / "model.pt"))
+    assert "the decoder differs in granule_after, read_after" in capsys.readouterr().err

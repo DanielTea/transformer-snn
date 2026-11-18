@@ -804,17 +804,25 @@ def main():
             recall = ("fast_synapses.", "read_heads.")
             parent = torch.load(args.load_weights.expanduser(), map_location="cpu", weights_only=True)
             own = asdict(cfg)
-            # A read's offsets for the age in words start at zero and leave the decoder as it was, so a trained
-            # decoder may gain them here.
-            grown = ("read_beats",)
-            different = sorted(name for name, value in (parent.get("cfg") or {}).items()
+            # A read's offsets for the age in words start at zero, and a new read or cell layer starts silent. Each
+            # leaves the decoder as it was, so a trained decoder may gain them here.
+            earlier = parent.get("cfg") or {}
+            grown = {"read_beats"}
+            silent = [".beat_age"]
+            for place, part in (("read_after", "state_reads"), ("granule_after", "granule_layers")):
+                before, now = set(earlier.get(place) or ()), set(own[place] or ())
+                if before < now:
+                    grown.add(place)
+                    silent += [f"{part}.{index}." for index in sorted(now - before)]
+            different = sorted(name for name, value in earlier.items()
                                if not name.startswith(("synapse_", "head_")) and name in own and name not in grown
                                and json.dumps(value) != json.dumps(own[name]))
             if different:
                 raise ValueError(f"{args.load_weights}: the decoder differs in {', '.join(different)}")
             weights = {name: value for name, value in parent["state_dict"].items() if not name.startswith(recall)}
             missing, unexpected = model.load_state_dict(weights, strict=False)
-            if unexpected or any(not name.startswith(recall) and not name.endswith(".beat_age") for name in missing):
+            if unexpected or any(not name.startswith(recall) and not any(part in name for part in silent)
+                                 for name in missing):
                 raise ValueError(f"{args.load_weights}: expected the weights of the same decoder")
             with args.load_weights.expanduser().open("rb") as stream:
                 loaded_weights = {"checkpoint": str(args.load_weights), "run_name": parent.get("run_name"),
