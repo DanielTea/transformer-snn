@@ -63,13 +63,15 @@ stand with their streaming scores of 1.4137 and 1.6110.
 **PG-19.** On 16 complete PG-19 test books, 8,404,368 targets,
 the best decoder scores 1.5516 bpb and the AdamW Transformer
 1.4821. The decoder is 0.0695 behind, with a paired 95% interval
-of 0.0690 to 0.0701. The scoring is the one above, with every
-book a passage of its own. One temperature per model is fitted
-on eight separate validation books, and the fit is 1 for both.
-The training mixture holds PG-19 training books, so these are
-held-out books of a trained domain. The soft-read hybrid and the
-v12 decoders were not scored on PG-19 in windows.
-[PG-19 record](../results/event_lm/state_reads/scores/pg19_spike_reads_and_cells.json)
+of 0.0690 to 0.0701. The decoder with spike reads alone scores
+1.5798 and the Transformer under the rotated optimizer 1.4820.
+The scoring is the one above, with every book a passage of its
+own. One temperature per model is fitted on eight separate
+validation books, and the fit is 1 for all four. The training
+mixture holds PG-19 training books, so these are held-out books
+of a trained domain. The soft-read hybrid and the v12 decoders
+were not scored on PG-19 in windows.
+[PG-19 records](../results/event_lm/state_reads/scores)
 
 ![enwik8 test loss of the Transformer, the new decoders and the v12 decoders](../results/figures/event_lm_state_reads.png)
 

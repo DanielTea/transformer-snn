@@ -46,12 +46,12 @@ trained by gradient descent with the decoder.
 | Trained from scratch, 368.64M targets | Optimizer | enwik8 | PG-19 |
 |---|---|---:|---:|
 | 34.82M SNN, spike reads and race cells | Rotated, averaged | 1.26226 | 1.55162 |
-| 34.65M SNN, spike reads | Rotated, averaged | 1.29908 | — |
+| 34.65M SNN, spike reads | Rotated, averaged | 1.29908 | 1.57978 |
 | 34.65M hybrid, soft reads | AdamW | 1.31975 | — |
 | 34.85M SNN, surprise clock and read heads | AdamW | 1.46686 | — |
 | 34.85M SNN, surprise clock | AdamW | 1.59726 | — |
-| 34.85M full attention | AdamW | 1.20684 | **1.48212** |
-| 34.85M full attention | Rotated, averaged | **1.20407** | — |
+| 34.85M full attention | AdamW | 1.20684 | 1.48212 |
+| 34.85M full attention | Rotated, averaged | **1.20407** | **1.48204** |
 
 The Transformer is still ahead, by 0.055 bpb on enwik8 and by
 0.070 on 16 PG-19 books. Every score in this table is in windows

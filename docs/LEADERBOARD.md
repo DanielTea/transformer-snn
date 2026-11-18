@@ -8,13 +8,13 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 | Model | Parameters | Optimizer | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw |
 |---|---:|---|---:|---:|---:|---:|---:|
-| 34.82M SNN, spike reads and race cells | 34,819,544 | Rotated, averaged | 1.26226 | 3 | 1.55162 | 2 | 1.55162 |
-| 34.65M SNN, spike reads | 34,648,600 | Rotated, averaged | 1.29908 | 4 | — | — | — |
+| 34.82M SNN, spike reads and race cells | 34,819,544 | Rotated, averaged | 1.26226 | 3 | 1.55162 | 3 | 1.55162 |
+| 34.65M SNN, spike reads | 34,648,600 | Rotated, averaged | 1.29908 | 4 | 1.57978 | 4 | 1.57978 |
 | 34.65M hybrid, soft reads | 34,648,588 | AdamW | 1.31975 | 5 | — | — | — |
 | 34.85M SNN, surprise clock and read heads | 34,845,184 | AdamW | 1.46686 | 6 | — | — | — |
 | 34.85M SNN, surprise clock | 34,845,184 | AdamW | 1.59726 | 7 | — | — | — |
-| 34.85M full attention | 34,845,696 | AdamW | 1.20684 | 2 | **1.48212** | 1 | **1.48212** |
-| 34.85M full attention | 34,845,696 | Rotated, averaged | **1.20407** | 1 | — | — | — |
+| 34.85M full attention | 34,845,696 | AdamW | 1.20684 | 2 | 1.48212 | 2 | 1.48212 |
+| 34.85M full attention | 34,845,696 | Rotated, averaged | **1.20407** | 1 | **1.48204** | 1 | **1.48204** |
 
 ![enwik8 test loss of the Transformer, the new decoders and the v12 decoders](../results/figures/event_lm_state_reads.png)
 
@@ -26,7 +26,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 This comparison is scored in windows, not in a stream. Every window starts from an empty state and holds 256 unscored bytes before its 256 scored ones, which is how full attention is scored in every comparison. The decoders with state reads and race cells run in windows only. They have no stream state and no native pulse count, so the table has neither column. The two v12 decoders are the checkpoints of the comparison below, where they carry their state through one stream and score 1.41375 and 1.61100 on enwik8.
 
-The seven models received identical windows from random weights. Rows marked rotated were trained with the rotated optimizer and are scored at the running average of their weights. PG-19 was scored for two rows, and its ranks count those rows only. Every row is one seed.
+The seven models received identical windows from random weights. Rows marked rotated were trained with the rotated optimizer and are scored at the running average of their weights. PG-19 was scored for four rows, and its ranks count those rows only. Every row is one seed.
 
 ## Coasting read heads, trained from scratch · 368,640,000 training targets · seed 20001
 
