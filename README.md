@@ -1,43 +1,62 @@
 # ShuntFormer
 
-ShuntFormer is an integer spiking byte language model. The v11
-checkpoint has **25.79M parameters**, 11 spiking blocks and
-**53,432 bytes of persistent tensor state per stream**. Its fixed
-axons carry signed spike counts. Their local charge holds history,
-and a tagged error bank drives a correction into the vocabulary
-neurons. In v11 a population of forecast neurons predicts every
-byte, and the spikes it gets wrong write **fast synapses** that
-recall the byte which last followed the same context. They lower
-held-out enwik8 loss from 1.790 to **1.645 bits per byte** without
-a gradient step. The same error spikes also clocked four added
-blocks. That clock did not lower held-out loss and is published
-as a negative result with its controls.
+ShuntFormer is an integer spiking byte language model. Its
+neurons exchange signed spike counts over fixed axons, local
+charge holds history, and a tagged error bank drives a
+correction into the vocabulary neurons. Every release is
+measured against a full-attention Transformer of the same size
+and training.
 
-[Model card and circuit diagram](models/spiking-byte-lm-v11/README.md) ·
-[Research handoff](docs/V11_HANDOFF.md) ·
-[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v11)
-
-![Held-out enwik8 and PG-19 loss with the surprise clock and fast synapses](results/figures/event_lm_surprise_clock.png)
-
-## v13: state reads and race cells
-
-The v13 study trains a spike-only decoder from random weights
-that scores **1.262 bits per byte** on the full enwik8 test
-split. The full-attention Transformer of the same size and
-training scores 1.207. Under the same scoring the v12 decoder
-with read heads scores 1.467, so the distance to the Transformer
-fell from 0.260 to 0.055 bpb.
+The newest decoder, **v13**, scores **1.262 bits per byte** on
+the full enwik8 test split. The Transformer scores 1.207. Under
+the same scoring the v12 decoder scores 1.467, so the distance
+fell from 0.260 to 0.055 bpb in one release. v13 adds **state
+reads**, which let the present byte address the stream's own
+earlier states, and **race cells** on **delayed fibres**,
+clusters of cells that compete for a fixed number of spikes per
+byte.
 
 ![enwik8 test loss of the Transformer, the new decoders and the v12 decoders](results/figures/event_lm_state_reads.png)
 
-Three parts are new. A **state read** lets the present byte
-address the stream's own earlier states by what they hold. The
-states of the last 512 bytes race for a budget of spikes, and
-the ones that fire pass their payload on. **Race cells** are
-clusters of 350 cells that compete for 64 spikes per byte. They
-listen on **delayed fibres** that bring the stream as it was up
-to three bytes ago. All three are built from spike counts and
-trained by gradient descent with the decoder.
+The Transformer is still ahead. The v13 decoder runs in
+512-byte windows only. It has no stream form yet, so it has no
+streaming score, no native integer run and no generator. Its
+weights are release assets, and the model that runs from a
+clone is v11.
+
+| Release | Adds | enwik8 test | Transformer | Scored in |
+|---|---|---:|---:|---|
+| [v13](#v13-state-reads-and-race-cells) | State reads and race cells on delayed fibres | **1.262** | 1.207 | 512-byte windows |
+| [v12](#v12-coasting-read-heads) | Read heads on a tape of the stream | 1.414 | 1.207 | One continuous stream |
+| [v11](#v11-surprise-clock-and-fast-synapses) | Fast synapses written by error spikes | 1.645 | 1.704 | One continuous stream |
+
+Each Transformer has the size and the training of its row and
+reads 512 bytes. v13 and v12 have about 34.8M parameters and
+368.64M training targets from random weights. In v13's windows
+the v12 decoder scores 1.467, because it gives up the stream it
+carries. v11 has 25.79M parameters and 140.90M targets. Its
+fast synapses carry the whole stream, and with the same
+synapses on its output the v11 Transformer scores 1.578. Every
+arm is one seed.
+
+[State-read study](docs/STATE_READS.md) ·
+[Model card](models/spiking-byte-lm-v13/README.md) ·
+[Leaderboard](docs/LEADERBOARD.md) ·
+[Research handoff](docs/V13_HANDOFF.md) ·
+[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v13)
+
+## v13: state reads and race cells
+
+The v13 study trains a 34.82M-parameter spike-only decoder from
+random weights for 368.64M targets. Three parts are new. A
+**state read** lets the present byte address the stream's own
+earlier states by what they hold. The states of the last 512
+bytes race for a budget of spikes, and the ones that fire pass
+their payload on. **Race cells** are clusters of 350 cells that
+compete for 64 spikes per byte. They listen on **delayed
+fibres** that bring the stream as it was up to three bytes ago.
+All three are built from spike counts and trained by gradient
+descent with the decoder.
 
 ![The decoder: a stream of 1,408 channels through eight blocks, with race cells after four of them and state reads after three](results/figures/event_lm_state_reads_circuit.png)
 
@@ -61,10 +80,11 @@ not measured. The new decoder runs in such windows only. It has
 no stream form yet, so it has no streaming score, no native
 integer run, no pulse audit and no generator. The seven rows
 received identical windows from random weights. The rows marked
-rotated were trained with a rotated optimizer and are scored at
-the running average of their weights. Every arm is one seed.
-The v13 weights are release assets, and the model that runs
-from a clone is v11.
+rotated were trained with a rotated optimizer, which runs Adam
+in the eigenbasis of each weight matrix's gradient moments, and
+are scored at the running average of their weights. Every arm
+is one seed. The v13 weights are release assets, and the model
+that runs from a clone is v11.
 
 ![Averaged validation loss over training: the decoders lead early, then the Transformer pulls away](results/figures/event_lm_state_reads_training.png)
 
@@ -78,9 +98,17 @@ decoder predicts it as well as the Transformer, and with three
 it is 0.070 bpb behind. The Transformer's lead is the use it
 makes of the second to fifth word back.
 
+![The gap by bytes in view, and for the first letter of a word by the words in view](results/figures/event_lm_state_reads_context.png)
+
 The study ran 89 training arms in one night. Its page gives the
 circuit, the controls, the probes behind each statement and the
 changes that did not help.
+
+![Validation loss of every arm by family](results/figures/event_lm_state_reads_iterations.png)
+
+The next step is built and not yet run at full size: fibres
+whose delay counts words where a delayed fibre counts bytes.
+[Next pilots](docs/V13_HANDOFF.md#next-pilots)
 
 [State-read study](docs/STATE_READS.md) ·
 [Every training arm](docs/STATE_READS_ARMS.md) ·
@@ -136,6 +164,25 @@ synapses and with read heads.
 [Model card](models/spiking-byte-lm-v12/README.md) ·
 [Research handoff](docs/V12_HANDOFF.md) ·
 [Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v12)
+
+## v11: surprise clock and fast synapses
+
+The model that runs from a clone is v11. Its checkpoint has
+**25.79M parameters**, 11 spiking blocks and **53,432 bytes of
+persistent tensor state per stream**. A population of forecast
+neurons predicts every byte, and the spikes it gets wrong write
+**fast synapses** that recall the byte which last followed the
+same context. They lower held-out enwik8 loss from 1.790 to
+**1.645 bits per byte** without a gradient step. The same error
+spikes also clocked four added blocks. That clock did not lower
+held-out loss and is published as a negative result with its
+controls.
+
+![Held-out enwik8 and PG-19 loss with the surprise clock and fast synapses](results/figures/event_lm_surprise_clock.png)
+
+[Model card and circuit diagram](models/spiking-byte-lm-v11/README.md) ·
+[Research handoff](docs/V11_HANDOFF.md) ·
+[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v11)
 
 ## Run the bundled model
 
