@@ -174,6 +174,7 @@ class EventLMConfig:
     granule_price: float = 0.0
     granule_bits: int | None = None
     granule_budget: int | None = None
+    granule_races: int = 1
     granule_delays: int = 1
     granule_relays: int = 0
     granule_traces: int = 0
@@ -2129,17 +2130,23 @@ class _RaceFire(_IntegrateFire):
     inhibition ends the race after ``budget`` spikes. The cells' membranes
     start at evenly spread phases, so a rate below one spike still fires in a
     part of the cells. The spikes a race spends do not depend on how large
-    its charges are.
+    its charges are. With ``races`` the cells run that many races side by
+    side, each among the cells of one equal group and each for the budget.
     """
 
-    def __init__(self, cap: int, charge_bits: int, budget: int, phase: torch.Tensor):
+    def __init__(self, cap: int, charge_bits: int, budget: int, phase: torch.Tensor, races: int = 1):
         super().__init__(cap, charge_bits, False)
         self.budget = budget
+        self.races = races
         self.register_buffer("phase", phase, persistent=False)
 
     def forward(self, current, quanta=None, *, reference=None, sharpness=1.0):
         thresholds = current / (quanta * (self.threshold // self.quanta_per_threshold))
-        rate = (thresholds * sharpness).softmax(-1) * self.budget
+        charges = thresholds * sharpness
+        if self.races > 1:
+            rate = charges.unflatten(-1, (self.races, -1)).softmax(-1).flatten(-2) * self.budget
+        else:
+            rate = charges.softmax(-1) * self.budget
         return rate + ((rate + self.phase).floor() - rate).detach()
 
 
@@ -2286,7 +2293,9 @@ class _GranuleLayer(nn.Module):
     spikes per byte instead, and a cell's rest is its handicap in the race.
     A cluster then holds learned cells that the stream addresses by what it
     carries, as a state read addresses the stream's own earlier cells, and
-    no price on pulses can silence it.
+    no price on pulses can silence it. With ``granule_races`` the cells of a
+    cluster race in that many equal groups, each for the budget, so the
+    cluster answers with a cell of every group instead of a single cell.
 
     With ``granule_delays`` the fibres of a cluster conduct at different
     speeds: each brings its channel as it was zero to ``granule_delays - 1``
@@ -2389,7 +2398,7 @@ class _GranuleLayer(nn.Module):
         else:
             # The starting phases are spread evenly over a cluster's cells and shifted from cluster to cluster.
             phase = (torch.arange(1, cells + 1) * _GOLDEN + torch.arange(clusters)[:, None] / clusters) % 1
-            self.fire = _RaceFire(cap, self.bits, self.budget, phase)
+            self.fire = _RaceFire(cap, self.bits, self.budget, phase, cfg.granule_races)
             # Each cluster has its own gain on its cells' charges.
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
         self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
@@ -2793,6 +2802,10 @@ class EventLM(nn.Module):
                     not isinstance(cfg.granule_budget, int)
                     or not 1 <= cfg.granule_budget <= _HIDDEN_CAP * cfg.resolution):
                 raise ValueError("a race of granule cells spends a whole budget of spikes within a cell's largest count")
+            if (not isinstance(cfg.granule_races, int) or cfg.granule_races < 1
+                    or cfg.granule_cells % cfg.granule_races
+                    or (cfg.granule_races > 1 and cfg.granule_budget is None)):
+                raise ValueError("the cells of a granule cluster race in equal groups, each for the budget")
             if not isinstance(cfg.granule_delays, int) or not 1 <= cfg.granule_delays <= cfg.granule_fan:
                 raise ValueError("granule fibres need at least one delay and at most one delay per fibre")
             if (not isinstance(cfg.granule_traces, int) or not 0 <= cfg.granule_traces <= _GRANULE_TRACES

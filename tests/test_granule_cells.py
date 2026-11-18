@@ -231,6 +231,40 @@ def test_racing_cells_spend_their_budget_whatever_their_charges_are():
             _granules(granule_budget=budget)
 
 
+def test_the_cells_of_a_cluster_can_race_in_equal_groups():
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    assert torch.equal(_granules(granule_budget=3, granule_races=4)(tokens), _decoder()(tokens))
+    model = _grow(_granules(granule_gain=1.0, granule_budget=3, granule_races=4))
+    layer = model.granule_layers["0"]
+    spikes = _stream()
+    cells = layer.cells(spikes)
+    assert cells.shape == (2, 40, 6, 20) and torch.equal(cells, cells.round()) and cells.min() == 0
+    # Each group of five cells spends the budget of three spikes.
+    spent = cells.unflatten(-1, (4, 5)).sum(-1)
+    assert spent.min() >= 1 and spent.max() <= 5 and abs(spent.mean().item() - 3) < 0.1
+    # A cell races only against the cells of its own group.
+    with torch.no_grad():
+        busiest = 5 + cells[..., 0, 5:10].sum((0, 1)).argmax()
+        layer.rest[0, busiest] = 8.0
+        handicapped = layer.cells(spikes)
+    assert handicapped[..., 0, busiest].sum() < 0.5 * cells[..., 0, busiest].sum()
+    assert not torch.equal(handicapped[..., 0, 5:10], cells[..., 0, 5:10])
+    assert torch.equal(handicapped[..., 0, :5], cells[..., 0, :5])
+    assert torch.equal(handicapped[..., 0, 10:], cells[..., 0, 10:]) and torch.equal(handicapped[..., 1:, :], cells[..., 1:, :])
+    # The decoder with grouped races stays causal and trains.
+    later = tokens.clone()
+    later[:, 40:] = (later[:, 40:] + 7) % 256
+    with torch.no_grad():
+        first, second = model(tokens), model(later)
+    assert torch.equal(first[:, :40], second[:, :40]) and not torch.equal(first[:, 40:], second[:, 40:])
+    F.cross_entropy(model.train()(tokens).flatten(0, 1) / 16, tokens.flatten()).backward()
+    assert all(torch.isfinite(parameter.grad).all() and parameter.grad.abs().max() > 0
+               for name, parameter in layer.named_parameters() if name in ("receive", "send"))
+    for settings in ({"granule_races": 0}, {"granule_races": 3}, {"granule_races": 2.0}, {"granule_budget": None}):
+        with pytest.raises(ValueError, match="equal groups"):
+            _granules(**dict({"granule_budget": 3, "granule_races": 4}, **settings))
+
+
 def test_fibres_bring_their_channels_after_their_own_delays():
     tokens = torch.randint(0, 256, (2, 48), generator=torch.Generator().manual_seed(3))
     assert torch.equal(_granules(granule_delays=4)(tokens), _decoder()(tokens))
