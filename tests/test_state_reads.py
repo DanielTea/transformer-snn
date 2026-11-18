@@ -1,8 +1,10 @@
+import itertools
+
 import pytest
 import torch
 from torch.nn import functional as F
 
-from snnformer.event_lm import EventLM, EventLMConfig
+from snnformer.event_lm import EventLM, EventLMConfig, _beat_age_chances
 
 
 def _decoder(seed=0, **settings):
@@ -215,3 +217,91 @@ def test_heads_can_start_with_an_age_in_words_of_their_own():
     assert read.beat_age.tolist() == [[1.5, 0, 0], [0, 1.5, 0], [0, 0, 1.5], [1.5, 0, 0]]
     with pytest.raises(ValueError, match="needs such ages"):
         _reads("race", read_beat_start=1.5)
+
+
+def test_the_chances_of_beat_ages_are_those_over_all_clocks():
+    rates = torch.tensor([0.2, 0.9, 0.5, 0.0, 0.7, 0.3], dtype=torch.float64)
+    chances = _beat_age_chances(rates, 4)
+    counted = torch.zeros(4, 6, 6, dtype=torch.float64)
+    for pattern in itertools.product((0, 1), repeat=6):
+        beats = torch.tensor(pattern)
+        chance = torch.where(beats.bool(), rates, 1 - rates).prod()
+        started = beats.cumsum(0)
+        ages = started[:, None] - started
+        for age in range(4):
+            counted[age] += chance * (ages == age)
+    for age in range(4):
+        assert torch.allclose(chances[age], counted[age].tril(), atol=1e-9)
+
+
+def _clocked(mode, **settings):
+    return _reads(mode, read_beats=3, read_clock="learned", **settings)
+
+
+def test_the_clock_cells_of_a_read_start_deaf_and_beat_at_their_own_pace():
+    read = _clocked("race").state_reads["1"]
+    spikes = torch.randint(-20, 21, (2, 400, 96), generator=torch.Generator().manual_seed(2)).float()
+    beats, rates = read.clock_beats(spikes)
+    assert beats.shape == (2, 400, 4) and set(beats.unique().tolist()) == {0.0, 1.0}
+    # A quarter of the bytes, as near as a resting charge in quarter spikes comes to it.
+    assert torch.allclose(rates, torch.full_like(rates, torch.tensor(-1.0).sigmoid().item()))
+    assert (beats.mean((0, 1)) - rates.mean((0, 1))).abs().max() < 0.01
+    # The heads' clock cells beat at different bytes.
+    assert not torch.equal(beats[..., 0], beats[..., 1])
+    with torch.no_grad():
+        assert read.clock_beats(spikes)[1] is None
+    with pytest.raises(ValueError, match="need such ages"):
+        _reads("race", read_clock="learned")
+    with pytest.raises(ValueError, match="need such ages"):
+        _clocked("race", read_clock_rate=1.0)
+
+
+def test_a_head_counts_a_cells_age_in_the_beats_of_its_clock_cell():
+    read = _clocked("age").state_reads["1"]
+    tokens = _text("one two three four five six")
+    starts = [0, 4, 8, 14, 19, 24]
+    # Channel 0 marks the word starts, and every clock cell hears only that channel.
+    spikes = torch.zeros(1, tokens.shape[1], 96)
+    spikes[0, starts, 0] = 320.0
+    with torch.no_grad():
+        read.clock.weight.zero_()
+        read.clock.weight[:, 0] = 1.9
+        read.clock_rest.fill_(8.0)
+        read.beat_age[:, 2] = 30.0
+    beats, _ = read.clock_beats(spikes)
+    assert beats[0].nonzero()[:, 0].unique().tolist() == starts and beats[0, starts].min() == 1
+    shares, _ = read.shares(spikes)
+    # At the last byte the word before last is "four " at bytes 14 to 18, as with the word clock and no bytes read.
+    assert shares[0, :, -1, 14:19].sum(-1).min() > 0.999
+
+
+def test_learned_read_clocks_use_only_the_stream_so_far():
+    model = _grow(_clocked("race"))
+    generator = torch.Generator().manual_seed(5)
+    with torch.no_grad():
+        for read in model.state_reads.values():
+            read.beat_age.copy_(torch.randn(read.beat_age.shape, generator=generator))
+            read.clock.weight.copy_(torch.randn(read.clock.weight.shape, generator=generator) * 0.3)
+    tokens = torch.randint(0, 256, (2, 80), generator=generator)
+    later = tokens.clone()
+    later[:, 50:] = torch.randint(0, 256, (2, 30), generator=generator)
+    first, second = model(tokens), model(later)
+    assert torch.equal(first[:, :50], second[:, :50])
+    assert not torch.equal(first[:, 50:], second[:, 50:])
+    model._check_accumulator()
+
+
+@pytest.mark.parametrize("mode", ["soft", "race", "age"])
+def test_the_clock_cells_of_a_read_learn_from_the_mean_offsets_over_their_chances(mode):
+    model = _grow(_clocked(mode, read_beat_start=1.0)).train()
+    tokens = torch.randint(0, 256, (2, 64), generator=torch.Generator().manual_seed(1))
+    F.cross_entropy(model(tokens).flatten(0, 1) / 16, tokens.flatten()).backward()
+    for name, parameter in model.state_reads.named_parameters():
+        assert parameter.grad is not None and torch.isfinite(parameter.grad).all(), name
+        assert parameter.grad.abs().sum() > 0, name
+    # The whole beats decide the output: the mean offsets add a slope and nothing else.
+    read = model.state_reads["1"]
+    spikes = torch.randint(-20, 21, (2, 40, 96), generator=torch.Generator().manual_seed(2)).float()
+    with torch.no_grad():
+        scored = read(spikes)
+    assert torch.equal(read(spikes), scored)

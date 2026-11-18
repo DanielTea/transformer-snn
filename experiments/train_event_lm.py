@@ -240,6 +240,8 @@ def build_model(args):
                             read_synapse_gain=getattr(args, "read_synapse_gain", EventLMConfig.read_synapse_gain),
                             read_beats=getattr(args, "read_beats", EventLMConfig.read_beats),
                             read_beat_start=getattr(args, "read_beat_start", EventLMConfig.read_beat_start),
+                            read_clock=getattr(args, "read_clock", EventLMConfig.read_clock),
+                            read_clock_rate=getattr(args, "read_clock_rate", EventLMConfig.read_clock_rate),
                             granule_after=(None if getattr(args, "granule_after", None) is None
                                            else tuple(map(int, args.granule_after.split(",")))),
                             granule_clusters=getattr(args, "granule_clusters", EventLMConfig.granule_clusters),
@@ -566,9 +568,14 @@ def main():
     parser.add_argument("--read-address-rate", type=float, default=EventLMConfig.read_address_rate,
                         help="factor on the stored age offsets and gains of a state read")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
-                        help="a state read also knows each cell's age in words, counted up to this many")
+                        help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
-                        help="charge that each head starts with for one age in words of its own")
+                        help="charge that each head starts with for one age in beats of its own")
+    parser.add_argument("--read-clock", choices=("word", "learned"), default=EventLMConfig.read_clock,
+                        help="what beats for a state read's ages: the start of every word, or a clock cell of "
+                             "each head that learns when to beat")
+    parser.add_argument("--read-clock-rate", type=float, default=EventLMConfig.read_clock_rate,
+                        help="the share of bytes at which a learned read clock beats before it has learned")
     parser.add_argument("--read-signed", action=argparse.BooleanOptionalAction, default=EventLMConfig.read_signed,
                         help="keep the negative pulses of a race read's probe and tag")
     parser.add_argument("--granule-after", help="comma-separated byte-rate blocks that a layer of granule cells follows")
@@ -807,11 +814,17 @@ def main():
             recall = ("fast_synapses.", "read_heads.")
             parent = torch.load(args.load_weights.expanduser(), map_location="cpu", weights_only=True)
             own = asdict(cfg)
-            # A read's offsets for the age in words start at zero, and a new read or cell layer starts silent. Each
-            # leaves the decoder as it was, so a trained decoder may gain them here.
-            earlier = parent.get("cfg") or {}
+            # A read's offsets for the age in beats start at zero, and a new read or cell layer starts silent. Each
+            # leaves the decoder as it was, so a trained decoder may gain them here. A checkpoint from before the
+            # reads had such ages has none.
+            ages = ("read_beats", "read_beat_start", "read_clock", "read_clock_rate")
+            earlier = {**{name: getattr(EventLMConfig, name) for name in ages}, **(parent.get("cfg") or {})}
             grown = {"read_beats"}
             silent = [".beat_age"]
+            if not earlier["read_beats"]:
+                # With the ages it may choose their clock: the clock cells of a read start deaf.
+                grown |= {"read_clock", "read_clock_rate"}
+                silent += [f"state_reads.{index}.clock" for index in own["read_after"] or ()]
             for place, part in (("read_after", "state_reads"), ("granule_after", "granule_layers")):
                 before, now = set(earlier.get(place) or ()), set(own[place] or ())
                 if before < now:

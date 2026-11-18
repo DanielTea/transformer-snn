@@ -47,6 +47,7 @@ _CLOCK_SOURCES = ("surprise", "periodic")
 _READ_MODES = ("soft", "race", "age")
 # The most words a state read counts a cell's age in.
 _READ_BEATS = 16
+_READ_CLOCKS = ("word", "learned")
 # Signed probe and tag pulses give a cell this many times ``resolution`` root channels of charge spread at the start.
 _RACE_UNIT = 1.5
 # Multiples of the golden ratio spread the starting phases of a race's cells evenly.
@@ -159,6 +160,8 @@ class EventLMConfig:
     read_synapse_gain: float = 1.0
     read_beats: int = 0
     read_beat_start: float = 0.0
+    read_clock: str = "word"
+    read_clock_rate: float = 0.25
     granule_after: tuple[int, ...] | None = None
     granule_clusters: int = 32
     granule_cells: int = 256
@@ -1809,14 +1812,20 @@ class _StateRead(nn.Module):
     probe and the tag keep only their positive pulses. ``age`` is the control
     without an address: every cell's share follows from its age alone.
 
-    With ``read_beats`` a cell also has an age in words: the number of words
-    that started after it, counted up to that many. Each head has a learned
-    offset for every such age beside its offsets for the age in bytes, so a
+    With ``read_beats`` a cell also has an age in beats of a clock: the number
+    of beats after it, counted up to that many. Each head has a learned offset
+    for every such age beside its offsets for the age in bytes. The ``word``
+    clock beats where a word starts, which the bytes themselves tell, so a
     head can prefer the cells of the word before last however long the words
-    between are. The word starts are read from the bytes themselves. With
-    ``read_beat_start`` every head starts with that much charge for one age
-    of its own, the first head for the present word, the next for the word
-    before, and so on, so the heads do not all turn to the same word.
+    between are. With a ``learned`` clock every head has a clock cell of its
+    own that hears the whole stream, as the clock cells of the granule layers
+    do, and its spike is the beat. A head then counts a cell's age in whatever
+    its clock cell has learned to mark. The whole beats decide the ages, and
+    the clock cells learn from the mean offsets over clocks that beat with
+    their chances. With ``read_beat_start`` every head starts with that much
+    charge for one age of its own, the first head for the present stretch, the
+    next for the one before, and so on, so the heads do not all turn to the
+    same one.
     """
 
     def __init__(self, cfg: EventLMConfig):
@@ -1838,15 +1847,25 @@ class _StateRead(nn.Module):
         self.payload = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
         # A cell's charge starts from a learned offset for its age.
         self.age = nn.Parameter(torch.zeros(self.heads, self.window))
-        self.beats = cfg.read_beats
+        self.beats, self.clock = cfg.read_beats, None
         if self.beats:
-            # And from a learned offset for its age in words, where the last one stands for all older cells.
+            # And from a learned offset for its age in beats, where the last one stands for all older cells.
             self.beat_age = nn.Parameter(torch.zeros(self.heads, self.beats + 1))
             if cfg.read_beat_start:
                 with torch.no_grad():
                     own = torch.arange(self.heads) % (self.beats + 1)
                     self.beat_age[torch.arange(self.heads), own] = cfg.read_beat_start / self.rate
-            self.register_buffer("word_bytes", _word_bytes(), persistent=False)
+            if cfg.read_clock == "word":
+                self.register_buffer("word_bytes", _word_bytes(), persistent=False)
+            else:
+                # The clock cells start deaf, so that they first beat at their own pace.
+                self.clock = _Synapse(cfg.dim, self.heads, gain=cfg.read_synapse_gain, charge_bits=bits)
+                nn.init.zeros_(self.clock.weight)
+                # Spikes of charge a clock cell lacks before a beat becomes as likely as none, in quarter spikes.
+                rest = math.log((1 - cfg.read_clock_rate) / cfg.read_clock_rate)
+                self.clock_rest = nn.Parameter(torch.full((self.heads,), rest))
+                self.tick = _ClockFire(bits + _CLOCK_BITS, 1)
+                self.clock_pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
         # The read is silent until its output synapses grow.
         self.project = _Synapse(cfg.read_width, cfg.dim, gain=0.0, charge_bits=bits)
         self.emit = _IntegrateFire(cap, bits, False)
@@ -1880,6 +1899,39 @@ class _StateRead(nn.Module):
         started = _word_starts(self.word_bytes[tokens]).cumsum(1)
         return (started[:, :, None] - started[:, None, :]).clamp(0, self.beats)
 
+    def clock_beats(self, spikes):
+        """The bytes at which each head's clock cell beats as [batch, bytes, heads], and the chances of those beats
+        where the clock cells learn."""
+        quanta = _PACKET_UNITS + self.clock_pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+        quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
+        rest = self.clock_rest.clamp(-_GRANULE_REST_LIMIT, _GRANULE_REST_LIMIT) * _PACKET_UNITS
+        rest = rest.detach().round() + (rest - rest.detach())
+        charge = self.clock(spikes) - rest * quanta * quarter
+        fired = self.tick(charge, quanta).squeeze(-1)
+        return fired.detach(), self.tick.rates(charge, quanta) if fired.requires_grad else None
+
+    def beat_offsets(self, spikes, tokens=None):
+        """Each cell's offset for its age in beats as [batch, heads, bytes, cells], and the number of beats that
+        clock cells spent on it."""
+        charges = self.beat_age * self.rate
+        if self.clock is None:
+            if tokens is None:
+                raise ValueError("a read by word age reads the bytes themselves")
+            ages, rates, spent = self.word_ages(tokens)[:, None], None, 0
+        else:
+            beats, rates = self.clock_beats(spikes)
+            started = beats.to(torch.int64).cumsum(1).transpose(1, 2)
+            ages, spent = (started[..., :, None] - started[..., None, :]).clamp(0, self.beats), beats.sum()
+        # One term per age costs far less to differentiate than indexing the offsets by age.
+        offset = sum((ages == age) * charges[:, age, None, None] for age in range(self.beats + 1))
+        if rates is not None:
+            # The whole beats decide the ages. The clock cells learn from the mean offsets over their chances.
+            spare = (charges[:, :-1] - charges[:, -1:]).detach()
+            mean = sum(chance * spare[:, age, None, None]
+                       for age, chance in enumerate(_beat_age_chances(rates.transpose(1, 2), self.beats)))
+            offset = offset + (mean - mean.detach())
+        return offset, spent
+
     def _address(self, spikes, tokens=None):
         """The shares, the payloads and the number of cell spikes, which is none for a softmax."""
         steps = spikes.shape[1]
@@ -1890,13 +1942,10 @@ class _StateRead(nn.Module):
         # each row by its position, which costs far less to differentiate than indexing by distance.
         ages = F.pad(self.age[:, :steps] * self.rate, (0, max(0, steps - self.window))).flip(-1)
         offset = F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
+        beats = 0
         if self.beats:
-            if tokens is None:
-                raise ValueError("a read by word age reads the bytes themselves")
-            # One term per age in words costs far less to differentiate than indexing the offsets by age.
-            ages = self.word_ages(tokens)[:, None]
-            offset = offset + sum((ages == age) * (self.beat_age[:, age, None, None] * self.rate)
-                                  for age in range(self.beats + 1))
+            by_beat, beats = self.beat_offsets(spikes, tokens)
+            offset = offset + by_beat
         if self.mode == "age":
             shares = offset.masked_fill(~visible, -torch.inf).softmax(-1)
             shares = shares if shares.ndim == 4 else shares[None]
@@ -1929,7 +1978,7 @@ class _StateRead(nn.Module):
             heads = torch.arange(self.heads, device=spikes.device)[:, None, None]
             phase = (cells * _GOLDEN + heads / self.heads) % 1
             fired = rate + ((rate + phase).floor() - rate).detach()
-        return fired / fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum()
+        return fired / fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum() + beats
 
     def forward(self, spikes, pulse_counts=None, tokens=None):
         shares, payload, cell_spikes = self._address(spikes, tokens)
@@ -1956,7 +2005,37 @@ class _StateRead(nn.Module):
         # A head's read neurons count up to a cell's largest count, in read pulses of that head's grain.
         pulses = self.read_resolution * self.grain.detach().exp().flatten() + 0.5 / self.fire.cap
         heads = self.project.weight_ticks().abs().unflatten(-1, (self.heads, -1)).sum(-1)
-        return (*bounds, ((heads * pulses).sum(-1) + self.emit.threshold).amax())
+        bounds.append(((heads * pulses).sum(-1) + self.emit.threshold).amax())
+        if self.clock is not None:
+            # A clock cell's resting charge at the strongest inhibition, in ticks per unit of the largest count.
+            quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
+            most_quanta = _PACKET_UNITS + self.clock_pool.cap
+            rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
+            bounds.append(self.clock.weight_ticks().abs().sum(-1).amax() + rest)
+        return tuple(bounds)
+
+
+def _beat_age_chances(rates, limit):
+    """The chances that no beat, one beat and so on up to ``limit - 1`` beats fall after each cell up to each byte.
+
+    ``rates`` are a clock's chances of a beat at every byte as [..., bytes], and each returned chance is
+    [..., bytes, cells]. No beat falls after a cell up to a byte with the product of the chances of none at the
+    bytes between them. A further beat is the last one up to the byte, at any byte after the cell, with one beat
+    fewer before it, which one triangular matrix product per count gives. These are exact chances over clocks whose
+    beats do not depend on each other. Running sums over the odds of the beats give the same chances in fewer
+    operations, and at 512 bytes they took longer than the products on a processor and on a graphics card.
+    """
+    steps = rates.shape[-1]
+    quiet = torch.log1p(-rates.clamp(max=1 - 1e-6)).cumsum(-1)
+    visible = torch.ones(steps, steps, dtype=torch.bool, device=rates.device).tril()
+    chance = (quiet[..., :, None] - quiet[..., None, :]).masked_fill(~visible, -torch.inf).exp()
+    # last[t, s]: the last beat up to byte t falls at byte s.
+    last = chance * rates[..., None, :]
+    chances = [chance]
+    for _ in range(limit - 1):
+        chance = last @ F.pad(chance, (0, 0, 1, 0))[..., :steps, :]
+        chances.append(chance)
+    return chances
 
 
 def _spread_channels(channels, clusters, fan, generator):
@@ -2618,6 +2697,10 @@ class EventLM(nn.Module):
                     or not math.isfinite(cfg.read_beat_start) or (cfg.read_beat_start and not cfg.read_beats)):
                 raise ValueError("a state read counts a cell's age in words up to sixteen, and a starting charge "
                                  "for a head's own age needs such ages")
+            if (cfg.read_clock not in _READ_CLOCKS or not 0 < cfg.read_clock_rate < 1
+                    or (cfg.read_clock != "word" and not cfg.read_beats)):
+                raise ValueError("a state read counts ages in beats of the word clock or of learned clock cells, "
+                                 "which start at a rate between none and every byte and need such ages")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
         if cfg.granule_after is not None:

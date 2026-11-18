@@ -85,6 +85,16 @@ def test_a_trained_decoder_may_gain_word_ages_and_nothing_else(trainer, tmp_path
     with pytest.raises(SystemExit):
         trainer(tmp_path / "wider", "--load-weights", str(parent / "model.pt"), "--read-width", "32")
     assert "the decoder differs in read_width" in capsys.readouterr().err
+    # With the ages it may gain clock cells for them, which start deaf, and no head may start at an age of its own.
+    trainer(tmp_path / "clocked", "--load-weights", str(parent / "model.pt"), "--read-clock", "learned")
+    clocked = torch.load(tmp_path / "clocked" / "model.pt", weights_only=True)
+    assert clocked["cfg"]["read_clock"] == "learned" and "state_reads.0.clock.weight" in clocked["state_dict"]
+    with pytest.raises(SystemExit):
+        trainer(tmp_path / "started", "--load-weights", str(parent / "model.pt"), "--read-beat-start", "1")
+    assert "the decoder differs in read_beat_start" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        trainer(tmp_path / "reclocked", "--load-weights", str(tmp_path / "aged" / "model.pt"), "--read-clock", "learned")
+    assert "the decoder differs in read_clock" in capsys.readouterr().err
 
 
 def test_a_trained_decoder_may_gain_reads_and_cell_layers_and_not_lose_one(trainer, tmp_path, capsys):
