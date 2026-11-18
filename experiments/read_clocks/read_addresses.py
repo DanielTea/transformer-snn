@@ -6,8 +6,9 @@ A read head addresses a cell by the match of its probe with the cell's tag, time
 the cell's age in bytes and, where the read has a clock, an offset for its age in beats. Offsets and gains are
 charges: one unit multiplies a cell's rate in the race by e. For every head this prints ``near``, the mean
 offset of the eight newest ages in bytes over the mean of the 64 oldest, the range of its offsets by age in
-bytes, its gain, and its offsets by age in beats. The values are the stored ones times the read's address
-rate. Only the checkpoint files are read, so no model is built.
+bytes, its gain, its offsets by age in beats and, where beats mark their cells, the further offsets of the
+marked cells. The values are the stored ones times the read's address rate. Only the checkpoint files are
+read, so no model is built.
 """
 import argparse
 import json
@@ -28,6 +29,7 @@ def addresses(path, averaged):
         age = state[name + "age"].float() * rate
         gain = state.get(name + "gain")
         beats = state.get(name + "beat_age")
+        marks = state.get(name + "beat_mark")
         for head in range(age.shape[0]):
             row = {"read_after": int(index), "head": head,
                    "near": float(age[head, :8].mean() - age[head, -64:].mean()),
@@ -36,6 +38,8 @@ def addresses(path, averaged):
                 row["gain"] = float(gain[head].flatten()[0] * rate)
             if beats is not None:
                 row["by_age_in_beats"] = (beats[head].float() * rate).tolist()
+            if marks is not None:
+                row["marked_by_age_in_beats"] = (marks[head].float() * rate).tolist()
             rows.append(row)
     return rows
 
@@ -60,6 +64,8 @@ def main():
                 line += f"  gain {row['gain']:+.3f}"
             if "by_age_in_beats" in row:
                 line += "  by age in beats " + " ".join(f"{value:+.2f}" for value in row["by_age_in_beats"])
+            if "marked_by_age_in_beats" in row:
+                line += "  marked " + " ".join(f"{value:+.2f}" for value in row["marked_by_age_in_beats"])
             print(line)
     if args.json is not None:
         args.json.parent.mkdir(parents=True, exist_ok=True)
