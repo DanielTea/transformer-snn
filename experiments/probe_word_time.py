@@ -50,7 +50,10 @@ ARMS = {
     "read, word clock, own ages": dict(read=True, read_clock="word", read_beat_start=1.0),
     "read, clock at word ends": dict(read=True, read_clock="end"),
     "read, clock at word ends, own ages": dict(read=True, read_clock="end", read_beat_start=1.0),
+    "read, clock at word ends, marks": dict(read=True, read_clock="end", read_marks=True),
     "read, clock cells": dict(read=True, read_clock="learned"),
+    "read, clock cells, marks": dict(read=True, read_clock="learned", read_marks=True),
+    "read, clock cells, own ages, marks": dict(read=True, read_clock="learned", read_beat_start=1.0, read_marks=True),
     "read, clock cells, own ages": dict(read=True, read_clock="learned", read_beat_start=1.0),
     "read, ages in bytes, then cells": dict(read=True, then_cells=True),
     "read, word clock, then cells": dict(read=True, read_clock="word", read_beat_start=1.0, then_cells=True),
@@ -151,6 +154,9 @@ def run(name, args, dictionary, partner, embedding):
         space = tokens == SPACE
         if read is not None and read.beats:
             record["heads"] = [{"offsets_by_age_in_beats": offsets.tolist()} for offsets in read.beat_age * read.rate]
+            if read.beat_mark is not None:
+                for row, offsets in zip(record["heads"], read.beat_mark * read.rate, strict=True):
+                    row["offsets_of_marked_cells_by_age_in_beats"] = offsets.tolist()
             if read.clock is not None:
                 for row, mine in zip(record["heads"], read.clock_beats(embedding[tokens])[0].unbind(-1), strict=True):
                     row.update(beats_per_byte=mine.mean().item(), beats_per_space=mine[space].mean().item(),

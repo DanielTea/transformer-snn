@@ -164,6 +164,7 @@ class EventLMConfig:
     read_beat_start: float = 0.0
     read_clock: str = "word"
     read_clock_rate: float = 0.25
+    read_marks: bool = False
     granule_after: tuple[int, ...] | None = None
     granule_clusters: int = 32
     granule_cells: int = 256
@@ -1831,10 +1832,17 @@ class _StateRead(nn.Module):
     addressed, through synapses that start silent. A head then counts a
     cell's age in whatever its clock cell has learned to mark. The whole
     beats decide the ages, and the clock cells learn from the mean offsets
-    over clocks that beat with their chances. With ``read_beat_start`` every head starts with that much
-    charge for one age of its own, the first head for the present stretch, the
-    next for the one before, and so on, so the heads do not all turn to the
-    same one.
+    over clocks that beat with their chances. With ``read_beat_start`` every
+    head starts with that much charge for one age of its own, the first head
+    for the present stretch, the next for the one before, and so on, so the
+    heads do not all turn to the same one.
+
+    With ``read_marks`` a beat also marks the cell it falls on, and each head
+    has a second offset for the marked cell of every age. Under the clock at
+    word ends the marked cell of age nought is the first byte after the last
+    complete word, the one of age one the first byte after the word before
+    it, and so on. One offset then addresses the single cell that holds the
+    stream's state at the end of a chosen word.
     """
 
     def __init__(self, cfg: EventLMConfig):
@@ -1856,10 +1864,13 @@ class _StateRead(nn.Module):
         self.payload = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
         # A cell's charge starts from a learned offset for its age.
         self.age = nn.Parameter(torch.zeros(self.heads, self.window))
-        self.beats, self.clock = cfg.read_beats, None
+        self.beats, self.clock, self.beat_mark = cfg.read_beats, None, None
         if self.beats:
             # And from a learned offset for its age in beats, where the last one stands for all older cells.
             self.beat_age = nn.Parameter(torch.zeros(self.heads, self.beats + 1))
+            if cfg.read_marks:
+                # A cell on which a beat fell has a further offset for its age.
+                self.beat_mark = nn.Parameter(torch.zeros(self.heads, self.beats + 1))
             if cfg.read_beat_start:
                 with torch.no_grad():
                     own = torch.arange(self.heads) % (self.beats + 1)
@@ -1911,10 +1922,14 @@ class _StateRead(nn.Module):
         """Each visible cell's share of every read and the payloads, as [batch, heads, cells, cells or channels]."""
         return self._address(spikes, tokens)[:2]
 
+    def word_beats(self, tokens):
+        """The bytes at which the fixed clock beats, as [batch, bytes]."""
+        return self.beat_at(self.word_bytes[tokens])
+
     def word_ages(self, tokens):
         """The beats of the fixed clock after each cell up to each byte, as [batch, bytes, cells] counted up to the
         limit: the words that started since the cell, or with the clock at word ends the words that ended."""
-        started = self.beat_at(self.word_bytes[tokens]).cumsum(1)
+        started = self.word_beats(tokens).cumsum(1)
         return (started[:, :, None] - started[:, None, :]).clamp(0, self.beats)
 
     def packets(self, spikes):
@@ -1962,17 +1977,28 @@ class _StateRead(nn.Module):
             if tokens is None:
                 raise ValueError("a read by word age reads the bytes themselves")
             ages, rates, spent = self.word_ages(tokens)[:, None], None, 0
+            marked = self.word_beats(tokens)[:, None, None]
         else:
             beats, rates = self.clock_beats(spikes, tag)
             started = beats.to(torch.int64).cumsum(1).transpose(1, 2)
             ages, spent = (started[..., :, None] - started[..., None, :]).clamp(0, self.beats), beats.sum()
+            marked = beats.transpose(1, 2)[:, :, None] > 0
         # One term per age costs far less to differentiate than indexing the offsets by age.
         offset = sum((ages == age) * charges[:, age, None, None] for age in range(self.beats + 1))
+        marks = None if self.beat_mark is None else self.beat_mark * self.rate
+        if marks is not None:
+            offset = offset + sum(((ages == age) & marked) * marks[:, age, None, None]
+                                  for age in range(self.beats + 1))
         if rates is not None:
             # The whole beats decide the ages. The clock cells learn from the mean offsets over their chances.
+            chances = _beat_age_chances(rates.transpose(1, 2), self.beats)
             spare = (charges[:, :-1] - charges[:, -1:]).detach()
-            mean = sum(chance * spare[:, age, None, None]
-                       for age, chance in enumerate(_beat_age_chances(rates.transpose(1, 2), self.beats)))
+            mean = sum(chance * spare[:, age, None, None] for age, chance in enumerate(chances))
+            if marks is not None:
+                # A cell is marked with the chance of a beat on it, whatever its age then is.
+                spare, oldest = (marks[:, :-1] - marks[:, -1:]).detach(), marks[:, -1:, None].detach()
+                by_age = sum(chance * spare[:, age, None, None] for age, chance in enumerate(chances)) + oldest
+                mean = mean + rates.transpose(1, 2)[:, :, None] * by_age
             offset = offset + (mean - mean.detach())
         return offset, spent
 
@@ -2737,6 +2763,8 @@ class EventLM(nn.Module):
                                  "the clocks other than the default need such ages")
             if cfg.read_clock == "learned" and cfg.read_mode == "age":
                 raise ValueError("a learned clock hears the tags of its read, which a read by age alone has not")
+            if cfg.read_marks and not cfg.read_beats:
+                raise ValueError("a beat marks its cell only where a state read counts ages in beats")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
         if cfg.granule_after is not None:

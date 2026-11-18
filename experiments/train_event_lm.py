@@ -242,6 +242,7 @@ def build_model(args):
                             read_beat_start=getattr(args, "read_beat_start", EventLMConfig.read_beat_start),
                             read_clock=getattr(args, "read_clock", EventLMConfig.read_clock),
                             read_clock_rate=getattr(args, "read_clock_rate", EventLMConfig.read_clock_rate),
+                            read_marks=getattr(args, "read_marks", EventLMConfig.read_marks),
                             granule_after=(None if getattr(args, "granule_after", None) is None
                                            else tuple(map(int, args.granule_after.split(",")))),
                             granule_clusters=getattr(args, "granule_clusters", EventLMConfig.granule_clusters),
@@ -576,6 +577,9 @@ def main():
                              "every word, or a clock cell of each head that learns when to beat")
     parser.add_argument("--read-clock-rate", type=float, default=EventLMConfig.read_clock_rate,
                         help="the share of bytes at which a learned read clock beats before it has learned")
+    parser.add_argument("--read-marks", action=argparse.BooleanOptionalAction, default=EventLMConfig.read_marks,
+                        help="a beat marks the cell it falls on, and every head has a second offset for the "
+                             "marked cell of each age in beats")
     parser.add_argument("--read-signed", action=argparse.BooleanOptionalAction, default=EventLMConfig.read_signed,
                         help="keep the negative pulses of a race read's probe and tag")
     parser.add_argument("--granule-after", help="comma-separated byte-rate blocks that a layer of granule cells follows")
@@ -817,10 +821,10 @@ def main():
             # A read's offsets for the age in beats start at zero, and a new read or cell layer starts silent. Each
             # leaves the decoder as it was, so a trained decoder may gain them here. A checkpoint from before the
             # reads had such ages has none.
-            ages = ("read_beats", "read_beat_start", "read_clock", "read_clock_rate")
+            ages = ("read_beats", "read_beat_start", "read_clock", "read_clock_rate", "read_marks")
             earlier = {**{name: getattr(EventLMConfig, name) for name in ages}, **(parent.get("cfg") or {})}
-            grown = {"read_beats"}
-            silent = [".beat_age"]
+            grown = {"read_beats", "read_marks"}
+            silent = [".beat_age", ".beat_mark"]
             if not earlier["read_beats"]:
                 # With the ages it may choose their clock: the clock cells of a read start deaf.
                 grown |= {"read_clock", "read_clock_rate"}

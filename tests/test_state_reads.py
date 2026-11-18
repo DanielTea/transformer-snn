@@ -197,6 +197,29 @@ def test_a_clock_at_word_ends_gives_a_word_one_age_from_every_later_byte():
         _reads("race", read_clock="end")
 
 
+def test_a_beat_marks_its_cell_so_a_head_can_address_the_end_of_a_word():
+    read = _reads("age", read_beats=3, read_clock="end", read_marks=True).state_reads["1"]
+    tokens = _text("one two three four five six")
+    spikes = torch.randint(-20, 21, (1, tokens.shape[1], 96), generator=torch.Generator().manual_seed(2)).float()
+    # The marks start silent.
+    unmarked = _reads("age", read_beats=3, read_clock="end").state_reads["1"]
+    assert torch.equal(read.shares(spikes, tokens)[0], unmarked.shares(spikes, tokens)[0])
+    with torch.no_grad():
+        read.beat_mark[:, 1] = 30.0
+    shares, _ = read.shares(spikes, tokens)
+    # The last byte lies in "six". The first bytes after "five" and "four" are the marked cells of the ages
+    # nought and one, at bytes 23 and 18, and one offset picks the single cell after "four".
+    assert shares[0, :, -1, 18].min() > 0.999
+    with torch.no_grad():
+        read.beat_mark[:, 1] = 0.0
+        read.beat_age[:, 1] = 30.0
+    # The offset for the age alone spreads over every cell of that age: the space after "four" and "five" itself.
+    shares, _ = read.shares(spikes, tokens)
+    assert shares[0, :, -1, 18:23].sum(-1).min() > 0.999 and shares[0, :, -1, 18].max() < 0.25
+    with pytest.raises(ValueError, match="marks its cell only"):
+        _reads("race", read_marks=True)
+
+
 def test_a_head_can_prefer_the_word_before_last():
     read = _reads("age", read_beats=3).state_reads["1"]
     with torch.no_grad():
@@ -334,9 +357,13 @@ def test_learned_read_clocks_use_only_the_stream_so_far():
     model._check_accumulator()
 
 
-@pytest.mark.parametrize("mode", ["soft", "race"])
-def test_the_clock_cells_of_a_read_learn_from_the_mean_offsets_over_their_chances(mode):
-    model = _grow(_clocked(mode, read_beat_start=1.0)).train()
+@pytest.mark.parametrize("mode,marks", [("soft", False), ("race", False), ("race", True)])
+def test_the_clock_cells_of_a_read_learn_from_the_mean_offsets_over_their_chances(mode, marks):
+    model = _grow(_clocked(mode, read_beat_start=1.0, read_marks=marks)).train()
+    if marks:
+        with torch.no_grad():
+            for read in model.state_reads.values():
+                read.beat_mark.normal_(std=0.5, generator=torch.Generator().manual_seed(4))
     tokens = torch.randint(0, 256, (2, 64), generator=torch.Generator().manual_seed(1))
     F.cross_entropy(model(tokens).flatten(0, 1) / 16, tokens.flatten()).backward()
     for name, parameter in model.state_reads.named_parameters():
