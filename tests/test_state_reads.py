@@ -233,12 +233,15 @@ def test_a_head_can_prefer_the_word_before_last():
         read.shares(spikes)
 
 
-def test_word_ages_use_only_the_bytes_so_far():
-    model = _grow(_reads("race", read_beats=3))
+@pytest.mark.parametrize("settings", [{}, {"read_clock": "end"}, {"read_clock": "end", "read_marks": True}])
+def test_word_ages_use_only_the_bytes_so_far(settings):
+    model = _grow(_reads("race", read_beats=3, **settings))
     generator = torch.Generator().manual_seed(5)
     with torch.no_grad():
         for read in model.state_reads.values():
             read.beat_age.copy_(torch.randn(read.beat_age.shape, generator=generator))
+            if read.beat_mark is not None:
+                read.beat_mark.copy_(torch.randn(read.beat_mark.shape, generator=generator))
     letters = torch.tensor(list(b"abcde   ,."))
     tokens = letters[torch.randint(0, len(letters), (2, 80), generator=generator)]
     later = tokens.clone()
@@ -341,13 +344,16 @@ def test_the_synapses_of_a_clock_cell_cannot_leave_the_range_of_exact_sums():
     assert _clocked("race").state_reads["1"].clock_limit == 508
 
 
-def test_learned_read_clocks_use_only_the_stream_so_far():
-    model = _grow(_clocked("race"))
+@pytest.mark.parametrize("marks", [False, True])
+def test_learned_read_clocks_use_only_the_stream_so_far(marks):
+    model = _grow(_clocked("race", read_marks=marks))
     generator = torch.Generator().manual_seed(5)
     with torch.no_grad():
         for read in model.state_reads.values():
             read.beat_age.copy_(torch.randn(read.beat_age.shape, generator=generator))
             read.clock.weight.copy_(torch.randn(read.clock.weight.shape, generator=generator) * 0.3)
+            if marks:
+                read.beat_mark.copy_(torch.randn(read.beat_mark.shape, generator=generator))
     tokens = torch.randint(0, 256, (2, 80), generator=generator)
     later = tokens.clone()
     later[:, 50:] = torch.randint(0, 256, (2, 30), generator=generator)
