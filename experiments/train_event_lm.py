@@ -257,6 +257,7 @@ def build_model(args):
                             granule_races=getattr(args, "granule_races", EventLMConfig.granule_races),
                             granule_soften=getattr(args, "granule_soften", EventLMConfig.granule_soften),
                             granule_soft=getattr(args, "granule_soft", EventLMConfig.granule_soft),
+                            granule_slope=getattr(args, "granule_slope", EventLMConfig.granule_slope),
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
@@ -603,8 +604,12 @@ def main():
                         help="share of the pulse budget's price that pushes on the granule cells' own spikes")
     parser.add_argument("--granule-bits", type=int, default=EventLMConfig.granule_bits,
                         help="charge bits of the granule cells' synapses; the router's charge bits when omitted")
-    parser.add_argument("--granule-budget", type=int, default=EventLMConfig.granule_budget,
-                        help="spikes per byte that the cells of a granule cluster race for; threshold cells when omitted")
+    parser.add_argument("--granule-budget", type=lambda text: int(text) or None, default=EventLMConfig.granule_budget,
+                        help="spikes per byte that the cells of a granule cluster race for; threshold cells when "
+                             "omitted or 0")
+    parser.add_argument("--granule-slope", action="store_true",
+                        help="threshold cells keep their spikes and learn from a smooth threshold, so that a "
+                             "silent cell still learns")
     parser.add_argument("--granule-races", type=int, default=EventLMConfig.granule_races,
                         help="equal groups in which the cells of a granule cluster race, each for the budget")
     parser.add_argument("--granule-soften", type=float, default=EventLMConfig.granule_soften,

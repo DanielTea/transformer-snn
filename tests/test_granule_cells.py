@@ -2,8 +2,8 @@ import pytest
 import torch
 from torch.nn import functional as F
 
-from snnformer.event_lm import (EventLM, EventLMConfig, _beat_views, _expected_beat_views, _IntegrateFire,
-                                _spread_channels, _weight_ticks, emitted_pulses)
+from snnformer.event_lm import (EventLM, EventLMConfig, _beat_views, _ExcitatoryFire, _expected_beat_views,
+                                _IntegrateFire, _PACKET_UNITS, _spread_channels, _weight_ticks, emitted_pulses)
 
 
 def _decoder(seed=0, **settings):
@@ -765,6 +765,39 @@ def test_soft_cells_stand_in_for_the_race_with_the_same_parameters():
             assert torch.isfinite(parameter.grad).all() and parameter.grad.abs().sum() > 0
     with pytest.raises(ValueError, match="soft granule cells"):
         _granules(granule_soft=True)
+
+
+def test_threshold_cells_with_a_slope_learn_below_their_threshold():
+    fire = _ExcitatoryFire(32, 8, False)
+    quanta = torch.full((1, 1), float(_PACKET_UNITS))
+    thresholds = torch.tensor([[-3.0, -0.4, 0.3, 0.6, 2.2]])
+    slopes = []
+    for smooth in (False, True):
+        charge = (thresholds * fire.threshold).requires_grad_()
+        spikes = fire(charge, quanta, smooth=smooth)
+        # The spikes are those of the threshold either way: one for every threshold of charge, rounded.
+        assert spikes.tolist() == [[0.0, 0.0, 0.0, 1.0, 2.0]]
+        spikes.sum().backward()
+        slopes.append(charge.grad * fire.threshold)
+    plain, smooth = slopes
+    # A cell below its threshold has no slope of its own. With the smooth threshold a cell just below it is
+    # drawn up, and one far below is left alone.
+    assert plain[0, :2].tolist() == [0.0, 0.0] and torch.allclose(plain[0, 2:], torch.ones(3))
+    assert 0.1 < smooth[0, 1] < 0.4 and smooth[0, 0].abs() < 0.02 and (smooth[0, 2:] > 0.7).all()
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    cells, sloped = _grow(_granules(granule_gain=1.0)), _grow(_granules(granule_gain=1.0, granule_slope=True))
+    assert cells.state_dict().keys() == sloped.state_dict().keys()
+    assert torch.equal(cells(tokens), sloped(tokens))
+    grads = []
+    for model in (cells, sloped):
+        layer = model.granule_layers["0"]
+        fired = layer.cells(_stream())
+        assert (fired == 0).any() and (fired > 0).any()
+        layer(_stream()).square().mean().backward()
+        grads.append(layer.receive.grad.clone())
+    assert torch.isfinite(grads[1]).all() and not torch.equal(grads[0], grads[1])
+    with pytest.raises(ValueError, match="do not race"):
+        _granules(granule_budget=3, granule_slope=True)
 
 
 def test_granule_settings_are_checked():

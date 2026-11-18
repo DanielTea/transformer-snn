@@ -178,6 +178,7 @@ class EventLMConfig:
     granule_races: int = 1
     granule_soften: float = 1.0
     granule_soft: bool = False
+    granule_slope: bool = False
     granule_delays: int = 1
     granule_relays: int = 0
     granule_traces: int = 0
@@ -2120,10 +2121,22 @@ def _spread_channels(channels, clusters, fan, generator):
 
 
 class _ExcitatoryFire(_IntegrateFire):
-    """Integrate-and-fire cells with one excitatory rail: a charge below zero emits nothing."""
+    """Integrate-and-fire cells with one excitatory rail: a charge below zero emits nothing.
 
-    def forward(self, current, quanta=None, *, reference=None):
-        return super().forward(current.clamp_min(0), quanta, reference=reference)
+    A silent cell has no slope: nothing tells it which way its charge should
+    move, so a cell that falls silent stays silent. With ``smooth`` the
+    spikes are the same and the slope is that of a smooth threshold of the
+    charge, which is small and positive just below the threshold. A silent
+    cell then still learns from the bytes that bring it near its threshold.
+    """
+
+    def forward(self, current, quanta=None, *, reference=None, smooth=False):
+        counts = super().forward(current.clamp_min(0), quanta, reference=reference)
+        if not smooth or not current.is_floating_point():
+            return counts
+        threshold = self.threshold if quanta is None else quanta * (self.threshold // self.quanta_per_threshold)
+        learned = F.gelu(current / threshold)
+        return counts.detach() + (learned - learned.detach())
 
 
 class _RaceFire(_IntegrateFire):
@@ -2315,6 +2328,9 @@ class _GranuleLayer(nn.Module):
     cluster answers with a cell of every group instead of a single cell.
     With ``granule_soften`` the cells learn from a softer race than the one
     they fire in, so that a cell far behind can still be drawn into use.
+    With ``granule_slope`` cells that do not race learn below their
+    thresholds as well: their spikes are unchanged and their slope is that
+    of a smooth threshold, so that a silent cell is not lost.
     With ``granule_soft`` the cells neither race nor spike: each answers
     with a real number, a smooth threshold of its own charge, through the
     synapses and the gains of the race. That is a stand-in for diagnosis,
@@ -2426,7 +2442,7 @@ class _GranuleLayer(nn.Module):
             self.fire = _RaceFire(cap, self.bits, self.budget, phase, cfg.granule_races, cfg.granule_soften)
             # Each cluster has its own gain on its cells' charges.
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
-        self.soft = cfg.granule_soft
+        self.soft, self.slope = cfg.granule_soft, cfg.granule_slope
         self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
         self.emit = _IntegrateFire(cap, self.bits, False)
 
@@ -2511,7 +2527,7 @@ class _GranuleLayer(nn.Module):
         quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
         charge = charge - self.rest_quarters().squeeze(-1) * quanta * quarter
         if self.budget is None:
-            return self.fire(charge, quanta)
+            return self.fire(charge, quanta, smooth=self.slope)
         if self.soft:
             # The charge in thresholds, as the race takes it, and no competition between the cells.
             thresholds = charge / (quanta * (self.fire.threshold // self.fire.quanta_per_threshold))
@@ -2826,6 +2842,8 @@ class EventLM(nn.Module):
                                  "limit and a price share from 0 to 1")
             if cfg.granule_soft and cfg.granule_budget is None:
                 raise ValueError("soft granule cells stand in for racing cells and take their cluster gains")
+            if cfg.granule_slope and cfg.granule_budget is not None:
+                raise ValueError("the slope below the threshold belongs to granule cells that do not race")
             if cfg.granule_reach is not None and (
                     not isinstance(cfg.granule_reach, int) or not 1 <= cfg.granule_reach <= cfg.dim):
                 raise ValueError("the axons of a granule cluster reach a whole number of the stream's channels")
