@@ -238,6 +238,7 @@ def build_model(args):
                             read_budget=getattr(args, "read_budget", EventLMConfig.read_budget),
                             read_address_rate=getattr(args, "read_address_rate", EventLMConfig.read_address_rate),
                             read_synapse_gain=getattr(args, "read_synapse_gain", EventLMConfig.read_synapse_gain),
+                            read_beats=getattr(args, "read_beats", EventLMConfig.read_beats),
                             granule_after=(None if getattr(args, "granule_after", None) is None
                                            else tuple(map(int, args.granule_after.split(",")))),
                             granule_clusters=getattr(args, "granule_clusters", EventLMConfig.granule_clusters),
@@ -563,6 +564,8 @@ def main():
                         help="cell spikes that end a race read of rates, the race within reach of the leader if unset")
     parser.add_argument("--read-address-rate", type=float, default=EventLMConfig.read_address_rate,
                         help="factor on the stored age offsets and gains of a state read")
+    parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
+                        help="a state read also knows each cell's age in words, counted up to this many")
     parser.add_argument("--read-signed", action=argparse.BooleanOptionalAction, default=EventLMConfig.read_signed,
                         help="keep the negative pulses of a race read's probe and tag")
     parser.add_argument("--granule-after", help="comma-separated byte-rate blocks that a layer of granule cells follows")
@@ -801,14 +804,17 @@ def main():
             recall = ("fast_synapses.", "read_heads.")
             parent = torch.load(args.load_weights.expanduser(), map_location="cpu", weights_only=True)
             own = asdict(cfg)
+            # A read's offsets for the age in words start at zero and leave the decoder as it was, so a trained
+            # decoder may gain them here.
+            grown = ("read_beats",)
             different = sorted(name for name, value in (parent.get("cfg") or {}).items()
-                               if not name.startswith(("synapse_", "head_")) and name in own
+                               if not name.startswith(("synapse_", "head_")) and name in own and name not in grown
                                and json.dumps(value) != json.dumps(own[name]))
             if different:
                 raise ValueError(f"{args.load_weights}: the decoder differs in {', '.join(different)}")
             weights = {name: value for name, value in parent["state_dict"].items() if not name.startswith(recall)}
             missing, unexpected = model.load_state_dict(weights, strict=False)
-            if unexpected or any(not name.startswith(recall) for name in missing):
+            if unexpected or any(not name.startswith(recall) and not name.endswith(".beat_age") for name in missing):
                 raise ValueError(f"{args.load_weights}: expected the weights of the same decoder")
             with args.load_weights.expanduser().open("rb") as stream:
                 loaded_weights = {"checkpoint": str(args.load_weights), "run_name": parent.get("run_name"),

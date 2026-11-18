@@ -152,3 +152,58 @@ def test_reads_follow_byte_rate_blocks_and_have_no_stream_state_yet():
     model = _reads("soft")
     with pytest.raises(ValueError, match="no carried stream state"):
         model.forward_chunk(torch.zeros(1, 8, dtype=torch.long))
+
+
+def _text(line):
+    return torch.tensor([list(line.encode())])
+
+
+@pytest.mark.parametrize("mode", ["soft", "race", "age"])
+def test_word_ages_leave_a_read_as_it_is_until_they_are_learned(mode):
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    plain, aged = _grow(_reads(mode)), _grow(_reads(mode, read_beats=3))
+    assert torch.equal(aged(tokens), plain(tokens))
+    with torch.no_grad():
+        for read in aged.state_reads.values():
+            read.beat_age[:, 2] = 4.0
+    assert not torch.equal(aged(tokens), plain(tokens))
+
+
+def test_a_cell_counts_the_words_that_started_after_it():
+    read = _reads("race", read_beats=2).state_reads["1"]
+    #                  a  b  _  c  d  ,  _  e  f  _  _  g
+    started = torch.tensor([1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4])
+    ages = read.word_ages(_text("ab cd, ef  g"))[0]
+    assert torch.equal(ages, (started[:, None] - started).clamp(0, 2))
+    # A digit and a byte of a longer character belong to words, and a word at the first byte starts there.
+    assert read.word_ages(_text("7é x"))[0, -1].tolist() == [1, 1, 1, 1, 0]
+
+
+def test_a_head_can_prefer_the_word_before_last():
+    read = _reads("age", read_beats=3).state_reads["1"]
+    with torch.no_grad():
+        read.beat_age[:, 2] = 30.0
+    tokens = _text("one two three four five six")
+    spikes = torch.randint(-20, 21, (1, tokens.shape[1], 96), generator=torch.Generator().manual_seed(2)).float()
+    shares, _ = read.shares(spikes, tokens)
+    # At the last byte the word before last is "four " at bytes 14 to 18, whatever the lengths of the words.
+    assert shares[0, :, -1, 14:19].sum(-1).min() > 0.999
+    with pytest.raises(ValueError, match="reads the bytes"):
+        read.shares(spikes)
+
+
+def test_word_ages_use_only_the_bytes_so_far():
+    model = _grow(_reads("race", read_beats=3))
+    generator = torch.Generator().manual_seed(5)
+    with torch.no_grad():
+        for read in model.state_reads.values():
+            read.beat_age.copy_(torch.randn(read.beat_age.shape, generator=generator))
+    letters = torch.tensor(list(b"abcde   ,."))
+    tokens = letters[torch.randint(0, len(letters), (2, 80), generator=generator)]
+    later = tokens.clone()
+    later[:, 50:] = letters[torch.randint(0, len(letters), (2, 30), generator=generator)]
+    first, second = model(tokens), model(later)
+    assert torch.equal(first[:, :50], second[:, :50])
+    assert not torch.equal(first[:, 50:], second[:, 50:])
+    with pytest.raises(ValueError, match="up to sixteen"):
+        _reads("race", read_beats=17)

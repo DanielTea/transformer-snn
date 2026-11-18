@@ -45,6 +45,8 @@ _TRACE_READ_DRIVE_SOURCES = ("write", "present", "write-rails", "present-rails")
 _TRACE_ARRIVAL_MODES = ("selected", "unmatched")
 _CLOCK_SOURCES = ("surprise", "periodic")
 _READ_MODES = ("soft", "race", "age")
+# The most words a state read counts a cell's age in.
+_READ_BEATS = 16
 # Signed probe and tag pulses give a cell this many times ``resolution`` root channels of charge spread at the start.
 _RACE_UNIT = 1.5
 # Multiples of the golden ratio spread the starting phases of a race's cells evenly.
@@ -155,6 +157,7 @@ class EventLMConfig:
     read_budget: int | None = None
     read_address_rate: float = 1.0
     read_synapse_gain: float = 1.0
+    read_beats: int = 0
     granule_after: tuple[int, ...] | None = None
     granule_clusters: int = 32
     granule_cells: int = 256
@@ -1771,6 +1774,19 @@ class EventChunkState:
     heads: HeadState | None = None
 
 
+def _word_bytes():
+    """The bytes that make up words: letters, digits and the bytes of longer characters."""
+    inside = torch.zeros(_VOCAB, dtype=torch.bool)
+    inside[list(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")] = True
+    inside[128:] = True
+    return inside
+
+
+def _word_starts(inside):
+    """The bytes at which a word starts: a word byte after a byte that is none, as [batch, bytes]."""
+    return inside & ~F.pad(inside, (1, 0))[:, :inside.shape[1]]
+
+
 class _StateRead(nn.Module):
     """A read of the stream's own earlier cells, addressed by what they hold.
 
@@ -1791,6 +1807,12 @@ class _StateRead(nn.Module):
     payload in pulses of their own resolution. Without ``read_signed`` the
     probe and the tag keep only their positive pulses. ``age`` is the control
     without an address: every cell's share follows from its age alone.
+
+    With ``read_beats`` a cell also has an age in words: the number of words
+    that started after it, counted up to that many. Each head has a learned
+    offset for every such age beside its offsets for the age in bytes, so a
+    head can prefer the cells of the word before last however long the words
+    between are. The word starts are read from the bytes themselves.
     """
 
     def __init__(self, cfg: EventLMConfig):
@@ -1812,6 +1834,11 @@ class _StateRead(nn.Module):
         self.payload = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
         # A cell's charge starts from a learned offset for its age.
         self.age = nn.Parameter(torch.zeros(self.heads, self.window))
+        self.beats = cfg.read_beats
+        if self.beats:
+            # And from a learned offset for its age in words, where the last one stands for all older cells.
+            self.beat_age = nn.Parameter(torch.zeros(self.heads, self.beats + 1))
+            self.register_buffer("word_bytes", _word_bytes(), persistent=False)
         # The read is silent until its output synapses grow.
         self.project = _Synapse(cfg.read_width, cfg.dim, gain=0.0, charge_bits=bits)
         self.emit = _IntegrateFire(cap, bits, False)
@@ -1836,11 +1863,16 @@ class _StateRead(nn.Module):
         drive = self._split(drive)
         return drive * drive.square().mean(-1, keepdim=True).add(1e-6).rsqrt()
 
-    def shares(self, spikes):
+    def shares(self, spikes, tokens=None):
         """Each visible cell's share of every read and the payloads, as [batch, heads, cells, cells or channels]."""
-        return self._address(spikes)[:2]
+        return self._address(spikes, tokens)[:2]
 
-    def _address(self, spikes):
+    def word_ages(self, tokens):
+        """The words that started after each cell up to each byte, as [batch, bytes, cells] counted up to the limit."""
+        started = _word_starts(self.word_bytes[tokens]).cumsum(1)
+        return (started[:, :, None] - started[:, None, :]).clamp(0, self.beats)
+
+    def _address(self, spikes, tokens=None):
         """The shares, the payloads and the number of cell spikes, which is none for a softmax."""
         steps = spikes.shape[1]
         distance = torch.arange(steps, device=spikes.device)
@@ -1850,9 +1882,17 @@ class _StateRead(nn.Module):
         # each row by its position, which costs far less to differentiate than indexing by distance.
         ages = F.pad(self.age[:, :steps] * self.rate, (0, max(0, steps - self.window))).flip(-1)
         offset = F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
+        if self.beats:
+            if tokens is None:
+                raise ValueError("a read by word age reads the bytes themselves")
+            # One term per age in words costs far less to differentiate than indexing the offsets by age.
+            ages = self.word_ages(tokens)[:, None]
+            offset = offset + sum((ages == age) * (self.beat_age[:, age, None, None] * self.rate)
+                                  for age in range(self.beats + 1))
         if self.mode == "age":
             shares = offset.masked_fill(~visible, -torch.inf).softmax(-1)
-            return shares[None], self._unit(self.payload(spikes)) * self.read_resolution, None
+            shares = shares if shares.ndim == 4 else shares[None]
+            return shares, self._unit(self.payload(spikes)) * self.read_resolution, None
         if self.mode == "soft":
             probe, tag, payload = (self._unit(synapse(spikes)) for synapse in (self.probe, self.tag, self.payload))
             gain = (self.gain * self.rate).exp()
@@ -1883,8 +1923,8 @@ class _StateRead(nn.Module):
             fired = rate + ((rate + phase).floor() - rate).detach()
         return fired / fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum()
 
-    def forward(self, spikes, pulse_counts=None):
-        shares, payload, cell_spikes = self._address(spikes)
+    def forward(self, spikes, pulse_counts=None, tokens=None):
+        shares, payload, cell_spikes = self._address(spikes, tokens)
         packet = shares @ payload
         if self.mode == "race":
             # Every cell spike raises the threshold of its head's read neurons, so the shunted sum of the payload
@@ -2171,11 +2211,7 @@ class _GranuleLayer(nn.Module):
             self.register_buffer("beat_fibres", on_beat.nonzero()[:, 1].view(clusters, -1), persistent=False)
             self.register_buffer("beat_orders", (self.taps - plain).gather(1, self.beat_fibres), persistent=False)
             if self.clock_kind == "word":
-                # Letters, digits and the bytes of longer characters make up words.
-                inside = torch.zeros(_VOCAB, dtype=torch.bool)
-                inside[list(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")] = True
-                inside[128:] = True
-                self.register_buffer("word_bytes", inside, persistent=False)
+                self.register_buffer("word_bytes", _word_bytes(), persistent=False)
             elif self.clock_kind == "learned":
                 # The clock cells of a cluster hear the whole stream through one set of synapses. They start deaf,
                 # so that they first beat at their own pace.
@@ -2243,8 +2279,7 @@ class _GranuleLayer(nn.Module):
         if self.clock_kind == "word":
             if tokens is None:
                 raise ValueError("the word clock reads the bytes themselves")
-            inside = self.word_bytes[tokens]
-            starts = inside & ~F.pad(inside, (1, 0))[:, :steps]
+            starts = _word_starts(self.word_bytes[tokens])
             return starts[..., None].expand(-1, -1, clusters).to(spikes.dtype), None
         if quanta is None:
             quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
@@ -2571,6 +2606,8 @@ class EventLM(nn.Module):
                     or (cfg.read_mode == "race" and cfg.read_synapse_gain != round(cfg.read_synapse_gain))
                     or cfg.read_width % cfg.read_heads):
                 raise ValueError("state reads need positive sizes and a width that the heads divide")
+            if not isinstance(cfg.read_beats, int) or not 0 <= cfg.read_beats <= _READ_BEATS:
+                raise ValueError("a state read counts a cell's age in words up to sixteen")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
         if cfg.granule_after is not None:
@@ -2851,7 +2888,7 @@ class EventLM(nn.Module):
             if self.state_reads is not None and str(index) in self.state_reads:
                 if local_layers is not None:
                     raise ValueError("state reads have no carried stream state yet")
-                spikes = self.state_reads[str(index)](spikes, memory_pulses)
+                spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens)
             if self.granule_layers is not None and str(index) in self.granule_layers:
                 if local_layers is not None:
                     raise ValueError("granule layers are not wired into the carried stream yet")

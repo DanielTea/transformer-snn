@@ -11,7 +11,7 @@ import torch
 
 TINY = """--variant event_correction_code --no-carry --dim 32 --hidden 16 --depth 2 --memory-heads 2
 --memory-slots 4 --memory-width 8 --spike-resolution 16 --pulse-budget 4000 --code-loss-weight 0.25
---read-after 0 --read-width 16 --read-window 16 --read-mode race --read-budget 16
+--read-after 0 --read-width 16 --read-window 16 --read-mode race --read-budget 16 --read-beats 2
 --granule-after 0 --granule-clusters 2 --granule-cells 8 --granule-fan 8 --granule-budget 4
 --granule-delays 2 --granule-beats 2 --granule-clock learned --rotated-adam 2 --weight-average 0.9
 --ctx 16 --bs 2 --steps 8 --warmup 2 --lr 0.003 --seed 3 --eval-every 2 --eval-bs 2 --eval-batches 1
@@ -74,3 +74,14 @@ def test_stopping_needs_a_saved_state_to_continue_from(trainer, tmp_path, capsys
     with pytest.raises(SystemExit):
         trainer(tmp_path, "--stop-at", "3")
     assert "--stop-at needs --resume" in capsys.readouterr().err
+
+
+def test_a_trained_decoder_may_gain_word_ages_and_nothing_else(trainer, tmp_path, capsys):
+    parent = tmp_path / "parent"
+    trainer(parent, "--read-beats", "0")
+    trainer(tmp_path / "aged", "--load-weights", str(parent / "model.pt"))
+    loaded = record(tmp_path / "aged")["args"]["load_weights"]
+    assert loaded["checkpoint"] == str(parent / "model.pt") and len(loaded["sha256"]) == 64
+    with pytest.raises(SystemExit):
+        trainer(tmp_path / "wider", "--load-weights", str(parent / "model.pt"), "--read-width", "32")
+    assert "the decoder differs in read_width" in capsys.readouterr().err
