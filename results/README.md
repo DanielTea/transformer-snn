@@ -32,6 +32,18 @@ and `pg19_*.json` records are streaming scores and the
 `coasting_heads_checkpoints.sha256` lists every checkpoint of
 the study.
 
+The [state-read study](../docs/STATE_READS.md) uses
+`event_lm/state_reads`. `arms.json` holds the settings and the
+validation curve of every arm, `runs` the training records of
+the eight arms that finished and `scores` the test scores in
+warmed windows. `probes` holds the outputs of the study's probes
+as printed, an index of them and the tables that the figures
+read. `event_lm/beat_fibres` holds the tests of the beat fibres
+on a made-up language and `event_lm/state_attention` the
+thought-tape probe on the frozen v12 decoder.
+`state_reads_checkpoints.sha256` lists the seven released
+checkpoints and the three v12 checkpoints scored beside them.
+
 The recall figure uses `recall_distance/*_gap_v1_*.json` and
 `recall_distance/dendrite_event_s0_anchored_extrapolation.json`.
 The successor loss figure uses `lm_successor/scaled_v2_continuous.json`

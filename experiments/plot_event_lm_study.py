@@ -67,6 +67,8 @@ SURPRISE_CLOCK_CHECKPOINTS = "event_lm/surprise_clock_checkpoints.sha256"
 COASTING_HEADS = "event_lm/coasting_heads"
 COASTING_HEADS_GROUP = "coasting_heads_368640k"
 COASTING_HEADS_CHECKPOINTS = "event_lm/coasting_heads_checkpoints.sha256"
+STATE_READS = "event_lm/state_reads"
+STATE_READS_CHECKPOINTS = "event_lm/state_reads_checkpoints.sha256"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -220,6 +222,23 @@ COASTING_HEADS_ARMS = (
     ("34.85M SNN, surprise clock and read heads", f"{COASTING_HEADS}/v12-scratch", "heads_s20001",
      f"{COASTING_HEADS}/v12-scratch/native_heads_s20001.json", "#187b62"),
     ("34.85M full attention", f"{COASTING_HEADS}/scratch-study", "transformer_s20001", None, ORANGE),
+)
+# Model, optimizer, enwik8 record, PG-19 record and checkpoint of every row scored in warmed windows.
+STATE_READS_ARMS = (
+    ("34.82M SNN, spike reads and race cells", "Rotated, averaged", "test_spike_reads_and_cells",
+     "pg19_spike_reads_and_cells", "checkpoints/state_reads/pilot-race64-d8-c350-dl4/model.pt.averaged", "#187b62"),
+    ("34.65M SNN, spike reads", "Rotated, averaged", "test_spike_reads", "pg19_rotated",
+     "checkpoints/state_reads/full-rate-rot/model.pt.averaged", VIOLET),
+    ("34.65M hybrid, soft reads", "AdamW", "test_soft_reads", None,
+     "checkpoints/state_reads/full-soft-d13w256/model.pt", "#e0a000"),
+    ("34.85M SNN, surprise clock and read heads", "AdamW", "test_v12_decoders", None,
+     "checkpoints/v12-scratch/heads_s20001.pt", GRAY),
+    ("34.85M SNN, surprise clock", "AdamW", "test_v12_decoders", None,
+     "checkpoints/scratch-study/clock_s20001.pt", GRAY),
+    ("34.85M full attention", "AdamW", "test_v12_decoders", "pg19_spike_reads_and_cells",
+     "checkpoints/scratch-study/transformer_s20001.pt", ORANGE),
+    ("34.85M full attention", "Rotated, averaged", "test_transformer_rotated", "pg19_rotated",
+     "checkpoints/state_reads/full-transformer-rot/model.pt.averaged", ORANGE),
 )
 TRACE_READ_DRIVE_116326K = (
     ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
@@ -398,6 +417,40 @@ def read_comparison(definitions, *, seed, context, exposure, test_inputs=None):
             rows[-1]["teacher"] = training["teacher"]
     rank_scores(rows)
     return rows
+
+
+def read_warmed_windows():
+    """The state-read comparison, with every checkpoint scored in windows that start from an empty state."""
+    records = {}
+
+    def scored(name, checkpoint, targets):
+        if name not in records:
+            record = records[name] = read_result(f"{STATE_READS}/scores/{name}.json")
+            protocol = (record["protocol"], record["split"], record["context_bytes"], record["unscored_history_bytes"])
+            if protocol != ("causal_warmed_windows", "test", 256, 256):
+                raise ValueError(f"{name}: expected test scores in windows of 256 unscored and 256 scored bytes")
+        row = next(row for row in records[name]["checkpoints"] if row["checkpoint"] == checkpoint)
+        if (row["targets"], row["training_targets"]) != (targets, 368_640_000):
+            raise ValueError(f"{name}: {checkpoint} must score {targets:,} targets after 368,640,000 training targets")
+        return row
+
+    rows = []
+    for model, optimizer, enwik8, pg19, checkpoint, color in STATE_READS_ARMS:
+        row = scored(enwik8, checkpoint, CORPORA[0][2])
+        scores = {"enwik8": {"mean": row["bpb"]}}
+        if pg19 and (RESULTS / f"{STATE_READS}/scores/{pg19}.json").is_file():
+            books = scored(pg19, checkpoint, CORPORA[1][2])
+            scores["pg19_full"] = {"mean": books["calibrated_bpb"], "raw_bpb": books["bpb"],
+                                   "temperature": books["temperature"]}
+        rows.append({"model": model, "optimizer": optimizer, "parameters": row["parameters"],
+                     "checkpoint": checkpoint, "scores": scores, "color": color})
+    for corpus, _, _ in CORPORA:
+        ordered = sorted((row["scores"][corpus] for row in rows if corpus in row["scores"]),
+                         key=lambda score: score["mean"])
+        for rank, score in enumerate(ordered, start=1):
+            score["rank"] = rank
+    return {"unit": "bits per byte", "protocol": "causal_warmed_windows", "context_bytes": 256,
+            "unscored_history_bytes": 256, "training_targets": 368_640_000, "seeds": [20001], "rows": rows}
 
 
 def width_gap_by_prefix_age(narrow, wide, narrow_full, wide_full):
@@ -588,12 +641,28 @@ def markdown_table(rows, *, include_ranks, include_raw_pg19=False):
     return "\n".join(lines)
 
 
-def write_leaderboards(data, depth, research, transfers):
+def warmed_table(rows):
+    lines = ["| Model | Parameters | Optimizer | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw |",
+             "|---|---:|---|---:|---:|---:|---:|---:|"]
+    best_raw = min(row["scores"]["pg19_full"]["raw_bpb"] for row in rows if "pg19_full" in row["scores"])
+    for row in rows:
+        enwik8, pg19 = row["scores"]["enwik8"], row["scores"].get("pg19_full")
+        books = "— | — | —"
+        if pg19:
+            raw = f'{pg19["raw_bpb"]:.5f}'
+            books = f'{score_cell(pg19)} | {pg19["rank"]} | ' + (f"**{raw}**" if pg19["raw_bpb"] == best_raw else raw)
+        lines.append(f'| {row["model"]} | {row["parameters"]:,} | {row["optimizer"]} | {score_cell(enwik8)} | '
+                     f'{enwik8["rank"]} | {books} |')
+    return "\n".join(lines)
+
+
+def write_leaderboards(data, depth, research, transfers, warmed=None):
     latest = depth["groups"]["depth"]
     paragraphs = [
         "# Spiking byte model leaderboards",
         "Lower bits per byte rank higher. Every row in a comparison has the same number of training targets and scores "
-        "4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books.",
+        "4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books. A dash marks a score that was "
+        "not measured.",
         "State is persistent tensor storage for one stream. Full attention reports FP32 "
         "key and value storage at the context length in each comparison. Pulse counts use "
         "a native 4,096-byte enwik8 test sample. "
@@ -668,6 +737,32 @@ def write_leaderboards(data, depth, research, transfers):
             "![Generated pulses with identical output counts within each pair](../results/figures/event_lm_residual_emissions.png)",
         ),
     }
+    if warmed:
+        stream = {row["model"]: row["scores"]["enwik8"]["mean"]
+                  for row in research["groups"][COASTING_HEADS_GROUP]["rows"]}
+        with_books = sum("pg19_full" in row["scores"] for row in warmed["rows"])
+        with_books = ("no", "one", "two", "three", "four", "five", "six", "all seven")[with_books]
+        paragraphs.extend([
+            "## State reads and race cells, trained from scratch · 368,640,000 training targets · seed 20001",
+            warmed_table(warmed["rows"]),
+            "![enwik8 test loss of the Transformer, the new decoders and the v12 decoders]"
+            "(../results/figures/event_lm_state_reads.png)",
+            "![The decoder: a stream of 1,408 channels through eight blocks, with race cells after four of them and "
+            "state reads after three](../results/figures/event_lm_state_reads_circuit.png)",
+            "![Averaged validation loss over training: the decoders lead early, then the Transformer pulls away]"
+            "(../results/figures/event_lm_state_reads_training.png)",
+            "[Circuit, controls, probes and limits](STATE_READS.md) · [Every training arm](STATE_READS_ARMS.md)",
+            "This comparison is scored in windows, not in a stream. Every window starts from an empty state and "
+            "holds 256 unscored bytes before its 256 scored ones, which is how full attention is scored in every "
+            "comparison. The decoders with state reads and race cells run in windows only. They have no stream "
+            "state and no native pulse count, so the table has neither column. The two v12 decoders are the "
+            "checkpoints of the comparison below, where they carry their state through one stream and score "
+            f"{stream['34.85M SNN, surprise clock and read heads']:.5f} and "
+            f"{stream['34.85M SNN, surprise clock']:.5f} on enwik8.",
+            "The seven models received identical windows from random weights. Rows marked rotated were trained "
+            "with the rotated optimizer and are scored at the running average of their weights. PG-19 was scored "
+            f"for {with_books} rows, and its ranks count those rows only. Every row is one seed.",
+        ])
     for name, group in research["groups"].items():
         rows = group["rows"]
         paragraphs.extend([
@@ -1306,7 +1401,11 @@ def main():
     summary.write_text(json.dumps(depth, indent=2) + "\n", encoding="utf-8")
     summary = RESULTS / "event_lm/continuation_leaderboard.json"
     summary.write_text(json.dumps(research, indent=2) + "\n", encoding="utf-8")
-    write_leaderboards(data, depth, research, transfers)
+    warmed = read_warmed_windows() if (RESULTS / STATE_READS_CHECKPOINTS).is_file() else None
+    if warmed:
+        summary = RESULTS / STATE_READS / "leaderboard.json"
+        summary.write_text(json.dumps(warmed, indent=2) + "\n", encoding="utf-8")
+    write_leaderboards(data, depth, research, transfers, warmed)
     output = RESULTS / "figures"
     output.mkdir(parents=True, exist_ok=True)
     plot_loss(data, output)

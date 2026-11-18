@@ -1,0 +1,584 @@
+{
+  "note": "Outputs of the probes run during the study, as printed, with machine paths, listings and status lines removed. Checkpoint names are relative to the study's checkpoint folder: snapN.pt is an arm's snapshot after N updates, model.pt.partial its last saved weights when the probe ran, and a snapshot's averaged weights are the running weight average stored in it. Only the final checkpoints of four arms are released. The probes score enwik8 validation windows of 512 bytes from an empty state unless they say otherwise.",
+  "probes": [
+    {
+      "file": "headroom_17T1852.txt",
+      "started_utc": "2026-11-17T18:52:41Z",
+      "scripts": [
+        "experiments/state_reads/headroom.py"
+      ],
+      "asks": "How much of the exact-integer accumulator range a saved decoder uses, and the mean size of its weights in ticks.",
+      "checkpoints": [
+        "scratch-study/clock_s20001.pt"
+      ]
+    },
+    {
+      "file": "copy_task_soft_17T1857.txt",
+      "started_utc": "2026-11-17T18:57:35Z",
+      "scripts": [
+        "experiments/state_reads/copy_task.py"
+      ],
+      "asks": "Can a small decoder with state reads learn a sharp lookup? Sequences whose second part repeats the first; `soft` is the softmax read and `rate` the race of rates."
+    },
+    {
+      "file": "copy_task_rate_17T1904.txt",
+      "started_utc": "2026-11-17T19:04:37Z",
+      "scripts": [
+        "experiments/state_reads/copy_task.py"
+      ],
+      "asks": "Can a small decoder with state reads learn a sharp lookup? Sequences whose second part repeats the first; `soft` is the softmax read and `rate` the race of rates."
+    },
+    {
+      "file": "sensitivity_transformer_17T1908.txt",
+      "started_utc": "2026-11-17T19:08:45Z",
+      "scripts": [
+        "experiments/state_reads/sensitivity.py"
+      ],
+      "asks": "How far the validation loss moves when the weights of one group take a step of the given size in a random direction.",
+      "checkpoints": [
+        "transformer/model.pt"
+      ]
+    },
+    {
+      "file": "sensitivity_decoder_17T1908.txt",
+      "started_utc": "2026-11-17T19:08:45Z",
+      "scripts": [
+        "experiments/state_reads/sensitivity.py"
+      ],
+      "asks": "How far the validation loss moves when the weights of one group take a step of the given size in a random direction.",
+      "checkpoints": [
+        "full-soft-d13w256/snap12000.pt"
+      ]
+    },
+    {
+      "file": "sensitivity_transformer_larger_17T1915.txt",
+      "started_utc": "2026-11-17T19:15:28Z",
+      "scripts": [
+        "experiments/state_reads/sensitivity.py"
+      ],
+      "asks": "How far the validation loss moves when the weights of one group take a step of the given size in a random direction.",
+      "checkpoints": [
+        "transformer/model.pt"
+      ]
+    },
+    {
+      "file": "sensitivity_decoder_larger_17T1915.txt",
+      "started_utc": "2026-11-17T19:15:28Z",
+      "scripts": [
+        "experiments/state_reads/sensitivity.py"
+      ],
+      "asks": "How far the validation loss moves when the weights of one group take a step of the given size in a random direction.",
+      "checkpoints": [
+        "full-soft-d13w256/snap12000.pt"
+      ]
+    },
+    {
+      "file": "match_split_12k_budget_17T1926.txt",
+      "started_utc": "2026-11-17T19:26:44Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference.",
+      "checkpoints": [
+        "plain/model.pt",
+        "reads-d13w256/model.pt",
+        "transformer/model.pt"
+      ]
+    },
+    {
+      "file": "match_split_v12_17T1926.txt",
+      "started_utc": "2026-11-17T19:26:44Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference.",
+      "checkpoints": [
+        "fork12k-soft-lr1e4/model.pt.partial",
+        "scratch-study/clock_s20001.pt",
+        "scratch-study/transformer_s20001.pt"
+      ]
+    },
+    {
+      "file": "averaging_attribution_17T1931.txt",
+      "started_utc": "2026-11-17T19:31:21Z",
+      "scripts": [
+        "experiments/state_reads/attribute_jitter.py"
+      ],
+      "asks": "Which weight groups carry the loss that averaging the weights removes: the averaged weights in one group only, and the raw weights in one group only.",
+      "checkpoints": [
+        "fork12k-avg-save/both1000.pt"
+      ]
+    },
+    {
+      "file": "common_mode_17T1932.txt",
+      "started_utc": "2026-11-17T19:32:44Z",
+      "scripts": [
+        "experiments/state_reads/common_mode.py"
+      ],
+      "asks": "The share of every synapse's input energy that is the same at all bytes."
+    },
+    {
+      "file": "sensitivity_rotated_17T1957.txt",
+      "started_utc": "2026-11-17T19:57:38Z",
+      "scripts": [
+        "experiments/state_reads/sensitivity.py"
+      ],
+      "asks": "How far the validation loss moves when the weights of one group take a step of the given size in a random direction.",
+      "checkpoints": [
+        "fork12k-rot-lr3e4/snapcheck.pt"
+      ],
+      "note": "The output was cut to the rows of the weight groups. The column is the change of the loss after a random step of size 0.012, one direction."
+    },
+    {
+      "file": "headroom_17T2032.txt",
+      "started_utc": "2026-11-17T20:32:39Z",
+      "scripts": [
+        "experiments/state_reads/headroom.py"
+      ],
+      "asks": "How much of the exact-integer accumulator range a saved decoder uses, and the mean size of its weights in ticks.",
+      "checkpoints": [
+        "full-soft-a8-h316-rot/snap6000.pt",
+        "full-soft-d13w256/model.pt.partial"
+      ]
+    },
+    {
+      "file": "cell_statistics_17T2101.txt",
+      "started_utc": "2026-11-17T21:01:23Z",
+      "scripts": [
+        "experiments/state_reads/granule_stats.py"
+      ],
+      "asks": "How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget.",
+      "checkpoints": [
+        "full-rate-gran128-h200-rot/model.pt.partial",
+        "full-rate-gran256-rot/model.pt.partial"
+      ]
+    },
+    {
+      "file": "cell_statistics_17T2117.txt",
+      "started_utc": "2026-11-17T21:17:40Z",
+      "scripts": [
+        "experiments/state_reads/granule_stats.py"
+      ],
+      "asks": "How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget.",
+      "checkpoints": [
+        "full-rate-gran128-h200-rot/snap-last.pt",
+        "full-rate-gran128-rot/snap-last.pt",
+        "full-rate-gran256-rot/snap3000.pt"
+      ]
+    },
+    {
+      "file": "cell_statistics_17T2131.txt",
+      "started_utc": "2026-11-17T21:31:19Z",
+      "scripts": [
+        "experiments/state_reads/granule_stats.py"
+      ],
+      "asks": "How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget.",
+      "checkpoints": [
+        "full-rate-gran256-rot/snap4500.pt"
+      ]
+    },
+    {
+      "file": "cell_statistics_17T2140.txt",
+      "started_utc": "2026-11-17T21:40:59Z",
+      "scripts": [
+        "experiments/state_reads/granule_stats.py"
+      ],
+      "asks": "How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget.",
+      "checkpoints": [
+        "full-rate-gran256-free-rot/snap1500.pt"
+      ]
+    },
+    {
+      "file": "cell_statistics_17T2151.txt",
+      "started_utc": "2026-11-17T21:51:12Z",
+      "scripts": [
+        "experiments/state_reads/granule_stats.py"
+      ],
+      "asks": "How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget.",
+      "checkpoints": [
+        "full-rate-gran256-free-rot/snap3000.pt",
+        "pilot-gran128-h200-free/snap1500.pt"
+      ]
+    },
+    {
+      "file": "cell_silencing_17T2154.txt",
+      "started_utc": "2026-11-17T21:54:09Z",
+      "scripts": [
+        "experiments/state_reads/probe_silencing.py"
+      ],
+      "asks": "Which part of the training signal pushes threshold cells silent: the worth of one more spike to the task and to the priced pulses, and the firing after 50 steps along each gradient.",
+      "checkpoints": [
+        "full-rate-gran256-free-rot/snap1500.pt"
+      ]
+    },
+    {
+      "file": "cell_silencing_17T2155.txt",
+      "started_utc": "2026-11-17T21:55:37Z",
+      "scripts": [
+        "experiments/state_reads/probe_silencing.py"
+      ],
+      "asks": "Which part of the training signal pushes threshold cells silent: the worth of one more spike to the task and to the priced pulses, and the firing after 50 steps along each gradient.",
+      "checkpoints": [
+        "full-rate-gran256-free-rot/snap3000.pt",
+        "full-rate-gran256-rot/snap4500.pt"
+      ]
+    },
+    {
+      "file": "gradient_agreement_17T2204.txt",
+      "started_utc": "2026-11-17T22:04:53Z",
+      "scripts": [
+        "experiments/state_reads/probe_coherence.py"
+      ],
+      "asks": "How well the task gradient and the pulse gradient of single batches agree, per weight group.",
+      "checkpoints": [
+        "full-rate-gran256-free-rot/snap1500.pt"
+      ]
+    },
+    {
+      "file": "cell_ablation_17T2205.txt",
+      "started_utc": "2026-11-17T22:05:46Z",
+      "scripts": [
+        "experiments/state_reads/ablate_granule.py"
+      ],
+      "asks": "What the cell layers are worth: validation loss with the output synapses of one layer, or of all, cut.",
+      "checkpoints": [
+        "full-rate-gran256-free-rot/snap1500.pt",
+        "full-rate-gran256-free-rot/snap3000.pt",
+        "full-rate-gran256-rot/snap4500.pt"
+      ]
+    },
+    {
+      "file": "cell_statistics_and_ablation_17T2217.txt",
+      "started_utc": "2026-11-17T22:17:38Z",
+      "scripts": [
+        "experiments/state_reads/granule_stats.py",
+        "experiments/state_reads/ablate_granule.py"
+      ],
+      "asks": "How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget. What the cell layers are worth: validation loss with the output synapses of one layer, or of all, cut.",
+      "checkpoints": [
+        "full-rate-race64-rot/snap1500.pt",
+        "pilot-gran256-nobudget/snap1500.pt"
+      ]
+    },
+    {
+      "file": "cell_statistics_and_ablation_17T2225.txt",
+      "started_utc": "2026-11-17T22:25:01Z",
+      "scripts": [
+        "experiments/state_reads/granule_stats.py",
+        "experiments/state_reads/ablate_granule.py"
+      ],
+      "asks": "How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget. What the cell layers are worth: validation loss with the output synapses of one layer, or of all, cut.",
+      "checkpoints": [
+        "pilot-gran256-nobudget/snap3000.pt"
+      ]
+    },
+    {
+      "file": "cell_silencing_17T2225.txt",
+      "started_utc": "2026-11-17T22:25:56Z",
+      "scripts": [
+        "experiments/state_reads/probe_silencing.py"
+      ],
+      "asks": "Which part of the training signal pushes threshold cells silent: the worth of one more spike to the task and to the priced pulses, and the firing after 50 steps along each gradient.",
+      "checkpoints": [
+        "pilot-gran256-nobudget/snap1500.pt"
+      ]
+    },
+    {
+      "file": "cell_statistics_and_ablation_17T2230.txt",
+      "started_utc": "2026-11-17T22:30:11Z",
+      "scripts": [
+        "experiments/state_reads/granule_stats.py",
+        "experiments/state_reads/ablate_granule.py"
+      ],
+      "asks": "How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget. What the cell layers are worth: validation loss with the output synapses of one layer, or of all, cut.",
+      "checkpoints": [
+        "full-rate-race64-rot/snap3000.pt"
+      ]
+    },
+    {
+      "file": "cell_statistics_and_ablation_17T2307.txt",
+      "started_utc": "2026-11-17T23:07:55Z",
+      "scripts": [
+        "experiments/state_reads/granule_stats.py",
+        "experiments/state_reads/ablate_granule.py"
+      ],
+      "asks": "How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget. What the cell layers are worth: validation loss with the output synapses of one layer, or of all, cut.",
+      "checkpoints": [
+        "pilot-gran256-rs/snap3000.pt"
+      ]
+    },
+    {
+      "file": "weight_grid_17T2322.txt",
+      "started_utc": "2026-11-17T23:22:54Z",
+      "scripts": [
+        "experiments/state_reads/quantize_transformer.py"
+      ],
+      "asks": "What the trained Transformer loses when its weights are rounded to a grid as coarse as the decoder's synapses, without retraining.",
+      "checkpoints": [
+        "full-transformer-rot/model.pt"
+      ]
+    },
+    {
+      "file": "step_fidelity_17T2334.txt",
+      "started_utc": "2026-11-17T23:34:43Z",
+      "scripts": [
+        "experiments/state_reads/probe_fidelity.py"
+      ],
+      "asks": "What one step along the task gradient buys on the bytes it was taken from and on other bytes, against what the gradient promises.",
+      "checkpoints": [
+        "full-rate-rot/snap42000.pt",
+        "full-transformer-rot/snap42000.pt"
+      ]
+    },
+    {
+      "file": "step_sharpness_17T2336.txt",
+      "started_utc": "2026-11-17T23:36:35Z",
+      "scripts": [
+        "experiments/state_reads/probe_sharpness.py"
+      ],
+      "asks": "How far the task gradient's promise holds when one weight group steps alone.",
+      "checkpoints": [
+        "full-rate-rot/snap42000.pt",
+        "full-transformer-rot/snap42000.pt"
+      ]
+    },
+    {
+      "file": "shared_step_17T2338.txt",
+      "started_utc": "2026-11-17T23:38:34Z",
+      "scripts": [
+        "experiments/state_reads/probe_shared.py"
+      ],
+      "asks": "How far the task gradient's promise holds when several weight groups step together, with the output scale refitted.",
+      "checkpoints": [
+        "full-rate-rot/snap42000.pt",
+        "full-transformer-rot/snap42000.pt"
+      ]
+    },
+    {
+      "file": "step_sharpness_17T2342.txt",
+      "started_utc": "2026-11-17T23:42:26Z",
+      "scripts": [
+        "experiments/state_reads/probe_sharpness.py"
+      ],
+      "asks": "How far the task gradient's promise holds when one weight group steps alone.",
+      "checkpoints": [
+        "full-rate-race64-rot/snap12000.pt"
+      ]
+    },
+    {
+      "file": "match_split_17T2349.txt",
+      "started_utc": "2026-11-17T23:49:49Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference.",
+      "checkpoints": [
+        "early-transformer-rot/snap3000.pt",
+        "early-transformer-rot/snap6000.pt",
+        "full-rate-race64-rot/snap3000.pt",
+        "full-rate-race64-rot/snap6000.pt"
+      ],
+      "validation_windows": 512
+    },
+    {
+      "file": "match_split_17T2351.txt",
+      "started_utc": "2026-11-17T23:51:22Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference.",
+      "checkpoints": [
+        "full-rate-race64-rot/snap12000.pt",
+        "full-rate-rot/snap12000.pt",
+        "full-soft-a8-h316-rot/snap12000.pt"
+      ],
+      "validation_windows": 512,
+      "note": "@cut is the same snapshot with the output synapses of all its cells cut."
+    },
+    {
+      "file": "match_split_and_delay_use_18T0030.txt",
+      "started_utc": "2026-11-18T00:30:31Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py",
+        "experiments/state_reads/tap_use.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference. How the cells use their delayed fibres: the mean size of the input synapses by delay, and the loss with the fibres of one delay silenced.",
+      "checkpoints": [
+        "early-transformer-rot/snap3000.pt",
+        "full-rate-race64-rot/snap3000.pt",
+        "pilot-race64-dl4/snap3000.pt",
+        "pilot-race64-rep/snap3000.pt"
+      ],
+      "validation_windows": 512
+    },
+    {
+      "file": "match_split_18T0053.txt",
+      "started_utc": "2026-11-18T00:53:12Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference.",
+      "checkpoints": [
+        "early-transformer-rot/snap6000.pt",
+        "full-rate-race64-rot/snap6000.pt",
+        "pilot-race64-dl4/snap6000.pt",
+        "pilot-race64-rep/snap6000.pt"
+      ],
+      "validation_windows": 512
+    },
+    {
+      "file": "stream_statistics_18T0117.txt",
+      "started_utc": "2026-11-18T01:17:43Z",
+      "scripts": [
+        "experiments/state_reads/stream_stats.py"
+      ],
+      "asks": "The stream as each block hears it, and for every firing population the share of drives beyond its cap, the share of silent neurons and the mean count.",
+      "checkpoints": [
+        "full-rate-race64-rot/snap12000.pt"
+      ]
+    },
+    {
+      "file": "match_split_18T0127.txt",
+      "started_utc": "2026-11-18T01:27:56Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference.",
+      "checkpoints": [
+        "full-rate-race64-rot/snap24000.pt",
+        "full-rate-rot/snap24000.pt",
+        "full-transformer-rot/snap24000.pt",
+        "pilot-race64-d8-c350-dl4/snap24000.pt"
+      ],
+      "validation_windows": 512
+    },
+    {
+      "file": "dither_18T0143.txt",
+      "started_utc": "2026-11-18T01:43:41Z",
+      "scripts": [
+        "experiments/state_reads/probe_dither.py"
+      ],
+      "asks": "What whole-spike rounding costs: every neuron's firing phase drawn at random, in one pass and averaged over four.",
+      "checkpoints": [
+        "full-rate-rot/snap42000.pt"
+      ],
+      "validation_windows": 64
+    },
+    {
+      "file": "class_split_18T0145.txt",
+      "started_utc": "2026-11-18T01:45:48Z",
+      "scripts": [
+        "experiments/state_reads/class_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another by the kind of the target byte, its place in a word, the markup around it and the bytes before it.",
+      "checkpoints": [
+        "full-rate-rot/snap30000.pt",
+        "full-transformer-rot/snap30000.pt",
+        "pilot-race64-d8-c350-dl4/snap30000.pt"
+      ],
+      "validation_windows": 512
+    },
+    {
+      "file": "class_split_18T0154.txt",
+      "started_utc": "2026-11-18T01:54:15Z",
+      "scripts": [
+        "experiments/state_reads/class_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another by the kind of the target byte, its place in a word, the markup around it and the bytes before it.",
+      "validation_windows": 512,
+      "note": "The rows by bytes before the target of the split at 01:45, printed for the same three snapshots."
+    },
+    {
+      "file": "match_split_18T0215.txt",
+      "started_utc": "2026-11-18T02:15:53Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference.",
+      "checkpoints": [
+        "full-rate-rot/snap42000.pt",
+        "full-soft-a8-h316-rot/snap42000.pt",
+        "full-transformer-rot/snap42000.pt",
+        "pilot-race64-d8-c350-dl4/snap42000.pt"
+      ],
+      "validation_windows": 512
+    },
+    {
+      "file": "class_split_18T0234.txt",
+      "started_utc": "2026-11-18T02:34:32Z",
+      "scripts": [
+        "experiments/state_reads/class_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another by the kind of the target byte, its place in a word, the markup around it and the bytes before it.",
+      "checkpoints": [
+        "early-transformer-rot/snap6000.pt",
+        "pilot-race64-d8-c350-dl4-tr3/snap6000.pt",
+        "pilot-race64-d8-c350-dl4/snap6000.pt"
+      ],
+      "validation_windows": 512
+    },
+    {
+      "file": "match_and_class_split_18T0320.txt",
+      "started_utc": "2026-11-18T03:20:28Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py",
+        "experiments/state_reads/class_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference. Where one checkpoint is ahead of another by the kind of the target byte, its place in a word, the markup around it and the bytes before it.",
+      "checkpoints": [
+        "full-rate-rot/snap84000.pt",
+        "full-transformer-rot/snap84000.pt",
+        "pilot-race64-d8-c350-dl4/snap84000.pt"
+      ],
+      "validation_windows": 512
+    },
+    {
+      "file": "delay_use_and_cell_statistics_18T0336.txt",
+      "started_utc": "2026-11-18T03:36:47Z",
+      "scripts": [
+        "experiments/state_reads/tap_use.py",
+        "experiments/state_reads/granule_stats.py"
+      ],
+      "asks": "How the cells use their delayed fibres: the mean size of the input synapses by delay, and the loss with the fibres of one delay silenced. How the cells of every layer fire: the share of cell-bytes with a spike, spikes per cell-byte, silent cells, the change they make to the stream, and for race cells how many cells share a cluster's budget.",
+      "checkpoints": [
+        "pilot-race64-d8-c350-dl4/model.pt.averaged"
+      ],
+      "note": "model.pt.averaged holds the running weight average. The probe loads the file as it is and prints raw."
+    },
+    {
+      "file": "match_split_18T0357.txt",
+      "started_utc": "2026-11-18T03:57:57Z",
+      "scripts": [
+        "experiments/state_reads/match_split.py"
+      ],
+      "asks": "Where one checkpoint is ahead of another: bits per target by the longest earlier match of the bytes just read, by whether the byte after that match is the target, and by the bytes before the target. The first checkpoint is the reference.",
+      "checkpoints": [
+        "early-transformer-rot/snap12000.pt",
+        "pilot-race64-d8-c350-dl4/snap12000.pt",
+        "pilot-race64-d8-g7x200-dl4/snap12000.pt"
+      ],
+      "validation_windows": 512
+    },
+    {
+      "file": "context_split_18T0735.txt",
+      "started_utc": "2026-11-18T07:35:53Z",
+      "scripts": [
+        "experiments/state_reads/context_split.py"
+      ],
+      "asks": "The gap to the Transformer by the number of bytes in view and by the number of words that ended in view. Windows of 1 to 64 bytes and of 512 bytes from an empty state, final averaged weights.",
+      "checkpoints": [
+        "full-rate-rot/model.pt.averaged",
+        "full-transformer-rot/model.pt.averaged",
+        "pilot-race64-d8-c350-dl4/model.pt.averaged"
+      ]
+    },
+    {
+      "file": "count_tables_18T0744.txt",
+      "started_utc": "2026-11-18T07:44:58Z",
+      "scripts": [
+        "experiments/state_reads/expert_mix.py"
+      ],
+      "asks": "How many bits a count table of the training text saves when it is mixed into a model's prediction, for tables of the last bytes and of the last words."
+    }
+  ]
+}

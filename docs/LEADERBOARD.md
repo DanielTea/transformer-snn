@@ -1,8 +1,32 @@
 # Spiking byte model leaderboards
 
-Lower bits per byte rank higher. Every row in a comparison has the same number of training targets and scores 4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books.
+Lower bits per byte rank higher. Every row in a comparison has the same number of training targets and scores 4,999,999 enwik8 targets and 8,404,368 targets from 16 complete PG-19 books. A dash marks a score that was not measured.
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
+
+## State reads and race cells, trained from scratch · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | Optimizer | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw |
+|---|---:|---|---:|---:|---:|---:|---:|
+| 34.82M SNN, spike reads and race cells | 34,819,544 | Rotated, averaged | 1.26226 | 3 | 1.55162 | 2 | 1.55162 |
+| 34.65M SNN, spike reads | 34,648,600 | Rotated, averaged | 1.29908 | 4 | — | — | — |
+| 34.65M hybrid, soft reads | 34,648,588 | AdamW | 1.31975 | 5 | — | — | — |
+| 34.85M SNN, surprise clock and read heads | 34,845,184 | AdamW | 1.46686 | 6 | — | — | — |
+| 34.85M SNN, surprise clock | 34,845,184 | AdamW | 1.59726 | 7 | — | — | — |
+| 34.85M full attention | 34,845,696 | AdamW | 1.20684 | 2 | **1.48212** | 1 | **1.48212** |
+| 34.85M full attention | 34,845,696 | Rotated, averaged | **1.20407** | 1 | — | — | — |
+
+![enwik8 test loss of the Transformer, the new decoders and the v12 decoders](../results/figures/event_lm_state_reads.png)
+
+![The decoder: a stream of 1,408 channels through eight blocks, with race cells after four of them and state reads after three](../results/figures/event_lm_state_reads_circuit.png)
+
+![Averaged validation loss over training: the decoders lead early, then the Transformer pulls away](../results/figures/event_lm_state_reads_training.png)
+
+[Circuit, controls, probes and limits](STATE_READS.md) · [Every training arm](STATE_READS_ARMS.md)
+
+This comparison is scored in windows, not in a stream. Every window starts from an empty state and holds 256 unscored bytes before its 256 scored ones, which is how full attention is scored in every comparison. The decoders with state reads and race cells run in windows only. They have no stream state and no native pulse count, so the table has neither column. The two v12 decoders are the checkpoints of the comparison below, where they carry their state through one stream and score 1.41375 and 1.61100 on enwik8.
+
+The seven models received identical windows from random weights. Rows marked rotated were trained with the rotated optimizer and are scored at the running average of their weights. PG-19 was scored for two rows, and its ranks count those rows only. Every row is one seed.
 
 ## Coasting read heads, trained from scratch · 368,640,000 training targets · seed 20001
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from dataclasses import asdict, replace
 import hashlib
 import json
@@ -96,6 +97,21 @@ def guided_language_loss(logits, targets, teacher_logits, weight):
     divergence = (teacher.exp() * (teacher - student)).sum(-1)
     loss = torch.where(use_teacher, (1 - weight) * hard + weight * divergence, hard)
     return loss.mean(), hard.mean(), use_teacher.float().mean()
+
+
+@contextmanager
+def averaged_weights(model, average):
+    """Run the model on the running average of its weights and give it its own weights back afterwards."""
+    own = [parameter.detach().clone() for parameter in model.parameters()]
+    try:
+        with torch.no_grad():
+            for parameter, mean in zip(model.parameters(), average, strict=True):
+                parameter.copy_(mean)
+        yield
+    finally:
+        with torch.no_grad():
+            for parameter, saved in zip(model.parameters(), own, strict=True):
+                parameter.copy_(saved)
 
 
 @torch.inference_mode()
@@ -194,7 +210,37 @@ def build_model(args):
                             compact_trace_state=args.compact_trace_state,
                             tag_phase_address=args.tag_phase_address,
                             clock_start=args.clock_start, clock_threshold=args.clock_threshold,
-                            clock_leak=args.clock_leak, clock_source=args.clock_source, **synapses, **heads)
+                            clock_leak=args.clock_leak, clock_source=args.clock_source,
+                            read_after=(None if getattr(args, "read_after", None) is None
+                                        else tuple(map(int, args.read_after.split(",")))),
+                            read_width=getattr(args, "read_width", EventLMConfig.read_width),
+                            read_heads=getattr(args, "read_heads", EventLMConfig.read_heads),
+                            read_window=getattr(args, "read_window", EventLMConfig.read_window),
+                            read_mode=getattr(args, "read_mode", EventLMConfig.read_mode),
+                            read_levels=getattr(args, "read_levels", EventLMConfig.read_levels),
+                            read_resolution=getattr(args, "read_resolution", EventLMConfig.read_resolution),
+                            read_signed=getattr(args, "read_signed", EventLMConfig.read_signed),
+                            read_budget=getattr(args, "read_budget", EventLMConfig.read_budget),
+                            read_address_rate=getattr(args, "read_address_rate", EventLMConfig.read_address_rate),
+                            read_synapse_gain=getattr(args, "read_synapse_gain", EventLMConfig.read_synapse_gain),
+                            granule_after=(None if getattr(args, "granule_after", None) is None
+                                           else tuple(map(int, args.granule_after.split(",")))),
+                            granule_clusters=getattr(args, "granule_clusters", EventLMConfig.granule_clusters),
+                            granule_cells=getattr(args, "granule_cells", EventLMConfig.granule_cells),
+                            granule_fan=getattr(args, "granule_fan", EventLMConfig.granule_fan),
+                            granule_gain=getattr(args, "granule_gain", EventLMConfig.granule_gain),
+                            granule_rest=getattr(args, "granule_rest", EventLMConfig.granule_rest),
+                            granule_price=getattr(args, "granule_price", EventLMConfig.granule_price),
+                            granule_bits=getattr(args, "granule_bits", EventLMConfig.granule_bits),
+                            granule_budget=getattr(args, "granule_budget", EventLMConfig.granule_budget),
+                            granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
+                            granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
+                            granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
+                            granule_beats=getattr(args, "granule_beats", EventLMConfig.granule_beats),
+                            granule_clock=getattr(args, "granule_clock", EventLMConfig.granule_clock),
+                            granule_hold=getattr(args, "granule_hold", EventLMConfig.granule_hold),
+                            granule_clock_rate=getattr(args, "granule_clock_rate", EventLMConfig.granule_clock_rate),
+                            **synapses, **heads)
         model = EventLM(cfg)
         with torch.no_grad():
             if readout is not None:
@@ -381,6 +427,17 @@ def initialize_from_checkpoint(model, model_kwargs, path, *, freeze_router, grow
     }
 
 
+def _lr_scales(text):
+    """Pairs of a parameter name part and a learning-rate factor, from ``PART=FACTOR,...``."""
+    pairs = []
+    for item in text.split(","):
+        part, _, factor = item.partition("=")
+        if not part or not math.isfinite(float(factor)) or float(factor) <= 0:
+            raise ValueError(f"{item!r} is not a name part and a positive factor")
+        pairs.append((part, float(factor)))
+    return tuple(pairs)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--variant", choices=(*EVENT_ROUTES, "transformer_local", "transformer"),
@@ -475,6 +532,61 @@ def main():
                         help="inhibitory spikes per byte against the clock membrane")
     parser.add_argument("--clock-source", choices=_CLOCK_SOURCES, default="surprise",
                         help="integrate surprise, or one unit per byte as the fixed-stride control")
+    parser.add_argument("--read-after", help="comma-separated byte-rate blocks that a state read follows")
+    parser.add_argument("--read-width", type=int, default=EventLMConfig.read_width, help="channels of a state read")
+    parser.add_argument("--read-heads", type=int, default=EventLMConfig.read_heads)
+    parser.add_argument("--read-window", type=int, default=EventLMConfig.read_window, help="cells a state read can address")
+    parser.add_argument("--read-mode", choices=("soft", "race", "age"), default=EventLMConfig.read_mode,
+                        help="softmax shares as the reference, cell spikes above a lateral inhibition, "
+                             "or shares by the cells' age alone as the control without an address")
+    parser.add_argument("--read-levels", type=int, default=EventLMConfig.read_levels, help="most spikes of one cell per read")
+    parser.add_argument("--read-resolution", type=int, default=EventLMConfig.read_resolution,
+                        help="read pulses per payload pulse of a single addressed cell, the stream's resolution if unset")
+    parser.add_argument("--read-synapse-gain", type=float, default=EventLMConfig.read_synapse_gain,
+                        help="starting scale of a state read's probe, tag and payload synapses")
+    parser.add_argument("--read-budget", type=int, default=EventLMConfig.read_budget,
+                        help="cell spikes that end a race read of rates, the race within reach of the leader if unset")
+    parser.add_argument("--read-address-rate", type=float, default=EventLMConfig.read_address_rate,
+                        help="factor on the stored age offsets and gains of a state read")
+    parser.add_argument("--read-signed", action=argparse.BooleanOptionalAction, default=EventLMConfig.read_signed,
+                        help="keep the negative pulses of a race read's probe and tag")
+    parser.add_argument("--granule-after", help="comma-separated byte-rate blocks that a layer of granule cells follows")
+    parser.add_argument("--granule-clusters", type=int, default=EventLMConfig.granule_clusters,
+                        help="clusters of granule cells in a layer, each on its own stream channels")
+    parser.add_argument("--granule-cells", type=int, default=EventLMConfig.granule_cells, help="cells of a cluster")
+    parser.add_argument("--granule-fan", type=int, default=EventLMConfig.granule_fan,
+                        help="stream channels a cluster listens to, and channels its axons reach")
+    parser.add_argument("--granule-gain", type=float, default=EventLMConfig.granule_gain,
+                        help="starting scale of the granule cells' input synapses")
+    parser.add_argument("--granule-rest", type=float, default=EventLMConfig.granule_rest,
+                        help="starting spikes of charge a granule cell needs before its threshold counts")
+    parser.add_argument("--granule-price", type=float, default=EventLMConfig.granule_price,
+                        help="share of the pulse budget's price that pushes on the granule cells' own spikes")
+    parser.add_argument("--granule-bits", type=int, default=EventLMConfig.granule_bits,
+                        help="charge bits of the granule cells' synapses; the router's charge bits when omitted")
+    parser.add_argument("--granule-budget", type=int, default=EventLMConfig.granule_budget,
+                        help="spikes per byte that the cells of a granule cluster race for; threshold cells when omitted")
+    parser.add_argument("--granule-delays", type=int, default=EventLMConfig.granule_delays,
+                        help="conduction delays among a granule cluster's fibres: each brings its channel as it was "
+                             "zero to one less than this many bytes ago")
+    parser.add_argument("--granule-traces", type=int, default=EventLMConfig.granule_traces,
+                        help="kinds of slow fibres in a granule cluster: the first passes a quarter of the charge it "
+                             "holds on per byte, the second a sixteenth, and so on")
+    parser.add_argument("--granule-beats", type=int, default=EventLMConfig.granule_beats,
+                        help="stretches of bytes that a granule cluster's beat fibres hold: a fibre brings its "
+                             "channel over the present stretch or over one of this many stretches before it, and a "
+                             "beat of the cluster's clock opens a new stretch; no beat fibres when zero")
+    parser.add_argument("--granule-clock", choices=("word", "every", "learned"), default=EventLMConfig.granule_clock,
+                        help="what beats for a granule cluster's beat fibres: the start of every word, every byte "
+                             "(which makes them delayed fibres), or a clock cell of the cluster that learns when")
+    parser.add_argument("--granule-hold", choices=("sum", "mean", "last"), default=EventLMConfig.granule_hold,
+                        help="what a beat fibre brings of a stretch: its summed count, its mean count per byte, or "
+                             "the count at its last byte")
+    parser.add_argument("--granule-clock-rate", type=float, default=EventLMConfig.granule_clock_rate,
+                        help="beats per byte at which a learned clock cell starts")
+    parser.add_argument("--granule-relays", type=int, default=EventLMConfig.granule_relays,
+                        help="relay neurons of a granule layer that hear the whole stream and whose axons are the "
+                             "cells' fibres; the fibres come from stream channels when zero")
     parser.add_argument("--synapse-readout", type=Path,
                         help="decoder with fitted fast synapses whose key neurons and fixed strengths run in training")
     parser.add_argument("--head-readout", type=Path,
@@ -517,6 +629,20 @@ def main():
     parser.add_argument("--warmup", type=int, default=100)
     parser.add_argument("--lr", type=float, default=0.003)
     parser.add_argument("--wd", type=float, default=0.05)
+    parser.add_argument("--adam-beta2", type=float, default=0.99,
+                        help="memory of the optimizer's squared-gradient average")
+    parser.add_argument("--rotated-adam", type=int, metavar="STEPS",
+                        help="run Adam in the eigenbasis of each weight matrix's gradient statistics and "
+                             "update the bases every this many steps")
+    parser.add_argument("--rotate-stacks", action="store_true",
+                        help="with --rotated-adam, also turn every matrix of a three-dimensional weight, such as "
+                             "the synapses of granule cells")
+    parser.add_argument("--lr-scale", type=_lr_scales, default=(), metavar="PART=FACTOR,...",
+                        help="multiply the learning rate of every parameter whose name contains a part by that "
+                             "part's factor; the first matching part counts")
+    parser.add_argument("--weight-average", type=float,
+                        help="also keep a running average of the weights with this decay, score it at every "
+                             "evaluation and save it beside the checkpoint")
     parser.add_argument("--eval-every", type=int, default=250)
     parser.add_argument("--eval-bs", type=int, default=12)
     parser.add_argument("--eval-batches", type=int, default=8)
@@ -552,6 +678,12 @@ def main():
         parser.error("--local-lookback needs a positive total width and a local Transformer")
     if not (math.isfinite(args.lr) and args.lr > 0 and math.isfinite(args.wd) and args.wd >= 0):
         parser.error("learning rate must be positive and weight decay must be nonnegative")
+    if not 0 <= args.adam_beta2 < 1 or (args.weight_average is not None and not 0 <= args.weight_average < 1):
+        parser.error("--adam-beta2 and --weight-average must be in [0, 1)")
+    if args.rotated_adam is not None and args.rotated_adam < 1:
+        parser.error("--rotated-adam needs a positive number of steps")
+    if args.rotate_stacks and args.rotated_adam is None:
+        parser.error("--rotate-stacks needs --rotated-adam")
     if not 0 < args.teacher_weight <= 1:
         parser.error("--teacher-weight must be in (0, 1]")
     if args.freeze_router and args.initialize_from is None:
@@ -677,12 +809,12 @@ def main():
 
     pulse_counts = None
     if args.pulse_budget is not None:
-        from snnformer.event_lm import _IntegrateFire
+        from snnformer.event_lm import _IntegrateFire, emitted_pulses
 
         pulse_counts = []
 
-        def count_spikes(_module, _inputs, counts):
-            pulse_counts.append(counts.abs().sum())
+        def count_spikes(module, _inputs, counts):
+            pulse_counts.append(emitted_pulses(module, counts))
 
         for module in model.modules():
             if isinstance(module, _IntegrateFire):
@@ -691,7 +823,9 @@ def main():
 
     evaluate_options = dict(context=args.ctx, batch_size=args.eval_bs, device=device, event=event,
                             pulse_counts=pulse_counts)
-    optimizer = make_optimizer(model, args.lr, args.wd)
+    optimizer = make_optimizer(model, args.lr, args.wd, betas=(0.9, args.adam_beta2), rotated=args.rotated_adam,
+                               stacks=args.rotate_stacks, scales=args.lr_scale)
+    average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
     generator = torch.Generator(device="cpu").manual_seed(args.seed)
     timer, curve = Timer(), []
     parameters = count_params(model)
@@ -701,7 +835,7 @@ def main():
     teacher_resolution = teacher.cfg.resolution if teacher_event else 1
     for step in range(1, args.steps + 1):
         for group in optimizer.param_groups:
-            group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr)
+            group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
         inputs, labels = (random_batch(train, args.bs, args.ctx, generator) if mixture is None
                           else mixture.batch(args.bs, generator))
         inputs = inputs.to(device)
@@ -753,11 +887,23 @@ def main():
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
+        if average is not None:
+            # The average follows the weights closely at first, so the starting weights do not linger in it.
+            decay = min(args.weight_average, step / (step + 10))
+            with torch.no_grad():
+                for mean, parameter in zip(average, model.parameters(), strict=True):
+                    mean.lerp_(parameter, 1 - decay)
         if step % args.eval_every == 0 or step == args.steps:
             metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
+            averaged_metrics = None
+            if average is not None:
+                with averaged_weights(model, average):
+                    averaged_metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
+                print(f"{name} averaged weights at {step}: {averaged_metrics['bpb']:.4f} bpb", flush=True)
             curve.append(dict(step=step, tokens=step * args.bs * args.ctx,
                               train_bpb=language_loss.item() / math.log(2), val_bpb=metrics["bpb"],
                               val_argmax_accuracy=metrics["argmax_accuracy"],
+                              **({} if averaged_metrics is None else {"averaged_val_bpb": averaged_metrics["bpb"]}),
                               **({"train_pulses_per_byte": pulses.item(), "val_pulses_per_byte": metrics["pulses_per_byte"],
                                   "spike_price": spike_price.item()} if pulse_counts is not None else {}),
                               **({"teacher_selected_fraction": teacher_fraction.item()} if teacher is not None else {}),
@@ -776,13 +922,22 @@ def main():
             torch.save(dict(format_version=1, model_type=type(model).__name__, task="event_lm", run_name=name,
                             cfg=asdict(cfg), model_kwargs=model_kwargs, args=dict(reached, steps=step),
                             initialization=initialization,
-                            state_dict={key: value.detach().cpu() for key, value in model.state_dict().items()}),
+                            state_dict={key: value.detach().cpu() for key, value in model.state_dict().items()},
+                            **({} if average is None else {"averaged_parameters": {
+                                key: mean.cpu() for (key, _), mean in zip(model.named_parameters(), average, strict=True)
+                            }})),
                        f"{partial}.tmp")
             os.replace(f"{partial}.tmp", partial)
 
     val_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,
                                                             **evaluate_options)
+    averaged_score = None
+    if average is not None:
+        with averaged_weights(model, average):
+            averaged_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
+            averaged_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+        print(f"{name} averaged weights: validation={averaged_score['bpb']:.4f} bpb", flush=True)
     args_record = dict(vars(args), data=str(args.data), results_dir=None if results_dir is None else str(results_dir),
                        synapse_readout=None if args.synapse_readout is None else str(args.synapse_readout),
                        head_readout=None if args.head_readout is None else str(args.head_readout),
@@ -799,10 +954,14 @@ def main():
                        **teacher_details, **mixture_details)
         with _atomic_output(checkpoint, "wb", overwrite=args.force) as out:
             torch.save(payload, out)
+        if average is not None:
+            with _atomic_output(Path(f"{checkpoint}.averaged"), "wb", overwrite=args.force) as out:
+                torch.save(dict(payload, state_dict=averaged_state), out)
     record = dict(args=args_record, cfg=config, device=str(device), params=parameters,
                   trainable_params=trainable_params, initialization=initialization,
                   data_sha1=ENWIK8_SHA1, train_target_bytes=args.steps * args.bs * args.ctx, curve=curve,
                   val_bpb=val_score["bpb"], test_bpb=test_score["bpb"] if test_score else None,
+                  **({} if averaged_score is None else {"averaged_val_bpb": averaged_score["bpb"]}),
                   val=val_score, test=test_score,
                   scoring=("normalized exponential of scaled output" if event else "softmax over logits"),
                   seconds=timer(), **teacher_details, **mixture_details)

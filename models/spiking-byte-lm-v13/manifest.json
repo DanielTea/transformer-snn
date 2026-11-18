@@ -1,0 +1,549 @@
+{
+  "release": "spiking-byte-lm-v13",
+  "model": {
+    "file": null,
+    "note": "The weights are not in the repository. They are in the cells archive of the release.",
+    "source_checkpoint": "state_reads/pilot-race64-d8-c350-dl4/model.pt.averaged",
+    "sha256": "516db4f5872b42e1e2379a622a9b7c152017aae0b0b56dde66fed227bd8d89c9",
+    "bytes": 139700685,
+    "archive": "spiking-byte-lm-v13-checkpoints-cells.tar.gz",
+    "parameters": 34819544,
+    "training_targets": 368640000,
+    "seed": 20001,
+    "training_record": "results/event_lm/state_reads/runs/pilot-race64-d8-c350-dl4.json",
+    "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates",
+    "weights": "running average with decay 0.999",
+    "warmed_window_scores": {
+      "pg19_test": [
+        {
+          "record": "results/event_lm/state_reads/scores/pg19_spike_reads_and_cells.json",
+          "device": "cpu",
+          "targets": 8404368,
+          "bpb": 1.5516226284463488,
+          "temperature": 1.0,
+          "over": "scratch-study/transformer_s20001.pt",
+          "bpb_over_it_on_whole_windows": 0.06953173690605645,
+          "paired_95": [
+            0.06900084846651675,
+            0.07006114885356401
+          ]
+        }
+      ],
+      "enwik8_test": [
+        {
+          "record": "results/event_lm/state_reads/scores/test_spike_reads_and_cells.json",
+          "device": "cuda",
+          "targets": 4999999,
+          "bpb": 1.2622566245297797,
+          "over": "scratch-study/transformer_s20001.pt",
+          "bpb_over_it_on_whole_windows": 0.05541846222491846,
+          "paired_95": [
+            0.05461249950714028,
+            0.05621001753888118
+          ]
+        },
+        {
+          "record": "results/event_lm/state_reads/scores/test_spike_reads_and_cells_cpu.json",
+          "device": "cpu",
+          "targets": 4999999,
+          "bpb": 1.262236549666426
+        }
+      ]
+    },
+    "architecture": {
+      "dim": 1408,
+      "hidden": 243,
+      "depth": 8,
+      "route": "steered_correction_code",
+      "carry": false,
+      "continuous": false,
+      "memory_heads": 4,
+      "memory_slots": 14,
+      "resolution": 16,
+      "memory_width": 32,
+      "forecast_key_channels": 2,
+      "match_forecast_key": true,
+      "learn_context_keys": true,
+      "learn_packet_thresholds": false,
+      "output_reference": false,
+      "compact_delays": true,
+      "departure_coincidence": false,
+      "delay_window": 1,
+      "delay_residual": false,
+      "router_charge_bits": 8,
+      "activity_inhibition": true,
+      "inhibition_by_expansion": true,
+      "local_trace": true,
+      "trace_write_credit": true,
+      "bank_write_credit": false,
+      "trace_read_veto": false,
+      "delay_filter": false,
+      "opponent_steering": false,
+      "spread_coincidence": false,
+      "residual_membrane": false,
+      "compact_axon_state": true,
+      "tag_phase_address": false,
+      "trace_coincidence_start": null,
+      "trace_write_confirm": false,
+      "steering_gradient_at_zero": false,
+      "redistribute_inhibition": false,
+      "tag_read_competition": false,
+      "late_steering": false,
+      "residual_correction_start": 7,
+      "trace_integration": false,
+      "learn_inhibition_thresholds": false,
+      "inhibition_threshold_bits": 2,
+      "trace_tap_read": null,
+      "compact_trace_state": true,
+      "steering_transfer": null,
+      "delay_group_widths": [
+        75,
+        75,
+        47,
+        46
+      ],
+      "trace_read_drive": null,
+      "trace_read_drive_bits": 6,
+      "trace_read_drive_carry": false,
+      "trace_read_share_steering": false,
+      "trace_arrival": "selected",
+      "trace_arrival_groups": 2,
+      "clock_start": 7,
+      "clock_threshold": 35,
+      "clock_leak": 0,
+      "clock_source": "surprise",
+      "synapse_orders": null,
+      "synapse_groups": 4,
+      "synapse_cells": 4096,
+      "synapse_levels": 4,
+      "synapse_gate": 1,
+      "head_orders": null,
+      "head_cells": 4096,
+      "head_gate": 1,
+      "head_tape": 8192,
+      "head_lookup": 0,
+      "head_miss": 0,
+      "head_relock": 0,
+      "read_after": [
+        2,
+        4,
+        6
+      ],
+      "read_width": 256,
+      "read_heads": 4,
+      "read_window": 512,
+      "read_mode": "race",
+      "read_levels": 4,
+      "read_resolution": 4,
+      "read_signed": true,
+      "read_budget": 256,
+      "read_address_rate": 1.0,
+      "read_synapse_gain": 1.0,
+      "granule_after": [
+        0,
+        1,
+        3,
+        5
+      ],
+      "granule_clusters": 16,
+      "granule_cells": 350,
+      "granule_fan": 256,
+      "granule_gain": 0.25,
+      "granule_rest": 0.5,
+      "granule_price": 0.0,
+      "granule_bits": null,
+      "granule_budget": 64,
+      "granule_delays": 4
+    },
+    "state_reads": {
+      "after_blocks": [
+        2,
+        4,
+        6
+      ],
+      "mode": "race",
+      "heads": 4,
+      "channels": 256,
+      "window_bytes": 512,
+      "spikes_per_head_and_byte": 256,
+      "read_pulses_per_payload_pulse": 4
+    },
+    "race_cells": {
+      "after_blocks": [
+        0,
+        1,
+        3,
+        5
+      ],
+      "clusters_per_layer": 16,
+      "cells_per_cluster": 350,
+      "channels_per_cluster": 256,
+      "spikes_per_cluster_and_byte": 64,
+      "fibre_delays_bytes": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    "validation_pulses_per_byte_counted_by_the_trainer": 313015.78369140625,
+    "scoring": "512-byte windows that start from an empty state; state reads and race cells carry no stream state, so there is no streaming evaluation, no native integer run and no pulse audit"
+  },
+  "archives": {
+    "spiking-byte-lm-v13-checkpoints-cells.tar.gz": {
+      "sha256": "242ed01ac1a0943e7de80a09b5eb8da59bf8dcd7a2b8f55c569faf412798555b",
+      "bytes": 258724380,
+      "contents_checksums": "checkpoints/SHA256SUMS-v13-cells"
+    },
+    "spiking-byte-lm-v13-checkpoints-reads.tar.gz": {
+      "sha256": "e897e5de4b5d459c67e4171542cd1156e7f31500f787873ff7e6f38e9b927c43",
+      "bytes": 386193746,
+      "contents_checksums": "checkpoints/SHA256SUMS-v13-reads"
+    },
+    "spiking-byte-lm-v13-checkpoints-transformer.tar.gz": {
+      "sha256": "358c2058473313dd790944d39610127984cc756f13e8c8e53ac5cc4f46d5348c",
+      "bytes": 259206887,
+      "contents_checksums": "checkpoints/SHA256SUMS-v13-transformer"
+    }
+  },
+  "checkpoints": {
+    "state_reads/full-rate-rot/model.pt": {
+      "bytes": 138615250,
+      "sha256": "b0b654dba23dfecbe4f8413da21be556066476c41ac04d3ff77584e6da62e71d",
+      "archive": "spiking-byte-lm-v13-checkpoints-reads.tar.gz",
+      "arm": "full-rate-rot",
+      "run_name": "event_correction_code_s20001_n2_full_rate_rot",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/state_reads/runs/full-rate-rot.json",
+      "parameters": 34648600,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates",
+      "weights": "last update",
+      "warmed_window_scores": {
+        "enwik8_test": [
+          {
+            "record": "results/event_lm/state_reads/scores/test_spike_reads.json",
+            "device": "cuda",
+            "targets": 4999999,
+            "bpb": 1.299767973275101,
+            "over": "scratch-study/transformer_s20001.pt",
+            "bpb_over_it_on_whole_windows": 0.09292800514215081,
+            "paired_95": [
+              0.09202166469372214,
+              0.09383838300391112
+            ]
+          }
+        ]
+      }
+    },
+    "state_reads/full-rate-rot/model.pt.averaged": {
+      "bytes": 138619239,
+      "sha256": "0823fbc21f6045b598841abb4b1202ea17a450b8296335221fd3a34afabb1072",
+      "archive": "spiking-byte-lm-v13-checkpoints-reads.tar.gz",
+      "arm": "full-rate-rot",
+      "run_name": "event_correction_code_s20001_n2_full_rate_rot",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/state_reads/runs/full-rate-rot.json",
+      "parameters": 34648600,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates",
+      "weights": "running average with decay 0.999",
+      "warmed_window_scores": {
+        "enwik8_test": [
+          {
+            "record": "results/event_lm/state_reads/scores/test_spike_reads.json",
+            "device": "cuda",
+            "targets": 4999999,
+            "bpb": 1.2990796806504945,
+            "over": "scratch-study/transformer_s20001.pt",
+            "bpb_over_it_on_whole_windows": 0.09224006560156589,
+            "paired_95": [
+              0.0913199922741956,
+              0.09313756414535126
+            ]
+          }
+        ]
+      }
+    },
+    "state_reads/full-soft-d13w256/model.pt": {
+      "bytes": 138614177,
+      "sha256": "e1b08cf4d802e599454e84a75f645358037bd974a4c686bdc31db4457e61281f",
+      "archive": "spiking-byte-lm-v13-checkpoints-reads.tar.gz",
+      "arm": "full-soft-d13w256",
+      "run_name": "event_correction_code_s20001_n2_full_soft_d13w256",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/state_reads/runs/full-soft-d13w256.json",
+      "parameters": 34648588,
+      "optimizer": "AdamW",
+      "weights": "last update",
+      "warmed_window_scores": {
+        "enwik8_test": [
+          {
+            "record": "results/event_lm/state_reads/scores/test_soft_reads.json",
+            "device": "cuda",
+            "targets": 4999999,
+            "bpb": 1.319747465169275,
+            "over": "scratch-study/transformer_s20001.pt",
+            "bpb_over_it_on_whole_windows": 0.11291200119168666,
+            "paired_95": [
+              0.11186970943958864,
+              0.11396449537292572
+            ]
+          }
+        ]
+      }
+    },
+    "state_reads/full-transformer-rot/model.pt": {
+      "bytes": 139662419,
+      "sha256": "d66f14a4b36ab4198319c7e2972bea2f3f0cc283dc82feb2687bfc8e84860110",
+      "archive": "spiking-byte-lm-v13-checkpoints-transformer.tar.gz",
+      "arm": "full-transformer-rot",
+      "run_name": "transformer_s20001_n2_full_transformer_rot",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/state_reads/runs/full-transformer-rot.json",
+      "parameters": 34845696,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates",
+      "weights": "last update",
+      "warmed_window_scores": {
+        "enwik8_test": [
+          {
+            "record": "results/event_lm/state_reads/scores/test_transformer_rotated.json",
+            "device": "cuda",
+            "targets": 4999999,
+            "bpb": 1.204249679688641,
+            "over": "scratch-study/transformer_s20001.pt",
+            "bpb_over_it_on_whole_windows": -0.0025857408040940895,
+            "paired_95": [
+              -0.0032264754494842032,
+              -0.0019082699049461464
+            ]
+          }
+        ]
+      }
+    },
+    "state_reads/full-transformer-rot/model.pt.averaged": {
+      "bytes": 139665921,
+      "sha256": "c83c8d48b5ba85ad8ca84af5d075072a92c61f3c0acdad0e6203b13033ccfc84",
+      "archive": "spiking-byte-lm-v13-checkpoints-transformer.tar.gz",
+      "arm": "full-transformer-rot",
+      "run_name": "transformer_s20001_n2_full_transformer_rot",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/state_reads/runs/full-transformer-rot.json",
+      "parameters": 34845696,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates",
+      "weights": "running average with decay 0.999",
+      "warmed_window_scores": {
+        "enwik8_test": [
+          {
+            "record": "results/event_lm/state_reads/scores/test_transformer_rotated.json",
+            "device": "cuda",
+            "targets": 4999999,
+            "bpb": 1.2040744246186463,
+            "over": "scratch-study/transformer_s20001.pt",
+            "bpb_over_it_on_whole_windows": -0.002760757777581616,
+            "paired_95": [
+              -0.003394136068629349,
+              -0.002076759039482894
+            ]
+          }
+        ]
+      }
+    },
+    "state_reads/pilot-race64-d8-c350-dl4/model.pt": {
+      "bytes": 139695825,
+      "sha256": "bfb904b574d052b5340770486268f4fb9c5c035e0c34870190252511d2cc41b4",
+      "archive": "spiking-byte-lm-v13-checkpoints-cells.tar.gz",
+      "arm": "pilot-race64-d8-c350-dl4",
+      "run_name": "event_correction_code_s20001_n2_pilot_race64_d8_c350_dl4",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/state_reads/runs/pilot-race64-d8-c350-dl4.json",
+      "parameters": 34819544,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates",
+      "weights": "last update",
+      "warmed_window_scores": {
+        "enwik8_test": [
+          {
+            "record": "results/event_lm/state_reads/scores/test_spike_reads_and_cells.json",
+            "device": "cuda",
+            "targets": 4999999,
+            "bpb": 1.2629023623626996,
+            "over": "scratch-study/transformer_s20001.pt",
+            "bpb_over_it_on_whole_windows": 0.05606425579752492,
+            "paired_95": [
+              0.05526377485139247,
+              0.05684615859279991
+            ]
+          }
+        ]
+      }
+    },
+    "state_reads/pilot-race64-d8-c350-dl4/model.pt.averaged": {
+      "bytes": 139700685,
+      "sha256": "516db4f5872b42e1e2379a622a9b7c152017aae0b0b56dde66fed227bd8d89c9",
+      "archive": "spiking-byte-lm-v13-checkpoints-cells.tar.gz",
+      "arm": "pilot-race64-d8-c350-dl4",
+      "run_name": "event_correction_code_s20001_n2_pilot_race64_d8_c350_dl4",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/state_reads/runs/pilot-race64-d8-c350-dl4.json",
+      "parameters": 34819544,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates",
+      "weights": "running average with decay 0.999",
+      "warmed_window_scores": {
+        "pg19_test": [
+          {
+            "record": "results/event_lm/state_reads/scores/pg19_spike_reads_and_cells.json",
+            "device": "cpu",
+            "targets": 8404368,
+            "bpb": 1.5516226284463488,
+            "temperature": 1.0,
+            "over": "scratch-study/transformer_s20001.pt",
+            "bpb_over_it_on_whole_windows": 0.06953173690605645,
+            "paired_95": [
+              0.06900084846651675,
+              0.07006114885356401
+            ]
+          }
+        ],
+        "enwik8_test": [
+          {
+            "record": "results/event_lm/state_reads/scores/test_spike_reads_and_cells.json",
+            "device": "cuda",
+            "targets": 4999999,
+            "bpb": 1.2622566245297797,
+            "over": "scratch-study/transformer_s20001.pt",
+            "bpb_over_it_on_whole_windows": 0.05541846222491846,
+            "paired_95": [
+              0.05461249950714028,
+              0.05621001753888118
+            ]
+          },
+          {
+            "record": "results/event_lm/state_reads/scores/test_spike_reads_and_cells_cpu.json",
+            "device": "cpu",
+            "targets": 4999999,
+            "bpb": 1.262236549666426
+          }
+        ]
+      }
+    }
+  },
+  "reference_checkpoints": {
+    "note": "Scored in the same windows and released with v12.",
+    "upstream_manifest": "models/spiking-byte-lm-v12/manifest.json",
+    "checkpoints": {
+      "scratch-study/transformer_s20001.pt": {
+        "sha256": "de13da3ee9fe715bd59e227716252fc1fabe956ee4337e6bed82e59d5d2aa733",
+        "warmed_window_scores": {
+          "pg19_test": [
+            {
+              "record": "results/event_lm/state_reads/scores/pg19_spike_reads_and_cells.json",
+              "device": "cpu",
+              "targets": 8404368,
+              "bpb": 1.482120971807171,
+              "temperature": 1.0
+            }
+          ],
+          "enwik8_test": [
+            {
+              "record": "results/event_lm/state_reads/scores/test_soft_reads.json",
+              "device": "cuda",
+              "targets": 4999999,
+              "bpb": 1.2068393599648921
+            },
+            {
+              "record": "results/event_lm/state_reads/scores/test_spike_reads.json",
+              "device": "cuda",
+              "targets": 4999999,
+              "bpb": 1.2068393599648921
+            },
+            {
+              "record": "results/event_lm/state_reads/scores/test_spike_reads_and_cells.json",
+              "device": "cuda",
+              "targets": 4999999,
+              "bpb": 1.2068393599648921
+            },
+            {
+              "record": "results/event_lm/state_reads/scores/test_transformer_rotated.json",
+              "device": "cuda",
+              "targets": 4999999,
+              "bpb": 1.2068393599648921
+            },
+            {
+              "record": "results/event_lm/state_reads/scores/test_v12_decoders.json",
+              "device": "cuda",
+              "targets": 4999999,
+              "bpb": 1.2068393599648921
+            }
+          ]
+        }
+      },
+      "scratch-study/clock_s20001.pt": {
+        "sha256": "c5efe54aafa75dff33a0c47e164a65a8fbdf68455d0f35535b53ab4657026979",
+        "warmed_window_scores": {
+          "enwik8_test": [
+            {
+              "record": "results/event_lm/state_reads/scores/test_v12_decoders.json",
+              "device": "cuda",
+              "targets": 4999999,
+              "bpb": 1.5972626832601493,
+              "over": "scratch-study/transformer_s20001.pt",
+              "bpb_over_it_on_whole_windows": 0.3904293436143727,
+              "paired_95": [
+                0.38687914790004185,
+                0.3939261672537022
+              ]
+            }
+          ]
+        }
+      },
+      "v12-scratch/heads_s20001.pt": {
+        "sha256": "c8996a3710c1d6c6975c1370c513b1c3b4c37d525f58fcf54229e62689f57a41",
+        "warmed_window_scores": {
+          "enwik8_test": [
+            {
+              "record": "results/event_lm/state_reads/scores/test_v12_decoders.json",
+              "device": "cuda",
+              "targets": 4999999,
+              "bpb": 1.4668647342589485,
+              "over": "scratch-study/transformer_s20001.pt",
+              "bpb_over_it_on_whole_windows": 0.26002581110424505,
+              "paired_95": [
+                0.25815831155503216,
+                0.26182176741755087
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "resaved_checkpoints": "results/event_lm/state_reads/resaved_checkpoints.json",
+  "upstream_manifest": "models/spiking-byte-lm-v12/manifest.json",
+  "training_mixtures": {
+    "training-v1": {
+      "catalogue": "results/event_lm/training_mixture/prepared_v1.json",
+      "sources": "results/event_lm/training_mixture/sources_v1.json"
+    },
+    "ordered_input_and_target_windows_sha256": "3eda0822fa56122bc9cf631ed730c87b22347fb67122fae786c122eb941b1a68",
+    "window_receipts": "results/event_lm/coasting_heads/training_windows.json"
+  }
+}

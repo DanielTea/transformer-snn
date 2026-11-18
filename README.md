@@ -19,6 +19,76 @@ as a negative result with its controls.
 
 ![Held-out enwik8 and PG-19 loss with the surprise clock and fast synapses](results/figures/event_lm_surprise_clock.png)
 
+## v13: state reads and race cells
+
+The v13 study trains a spike-only decoder from random weights
+that scores **1.262 bits per byte** on the full enwik8 test
+split. The full-attention Transformer of the same size and
+training scores 1.207. Under the same scoring the v12 decoder
+with read heads scores 1.467, so the distance to the Transformer
+fell from 0.260 to 0.055 bpb.
+
+![enwik8 test loss of the Transformer, the new decoders and the v12 decoders](results/figures/event_lm_state_reads.png)
+
+Three parts are new. A **state read** lets the present byte
+address the stream's own earlier states by what they hold. The
+states of the last 512 bytes race for a budget of spikes, and
+the ones that fire pass their payload on. **Race cells** are
+clusters of 350 cells that compete for 64 spikes per byte. They
+listen on **delayed fibres** that bring the stream as it was up
+to three bytes ago. All three are built from spike counts and
+trained by gradient descent with the decoder.
+
+![The decoder: a stream of 1,408 channels through eight blocks, with race cells after four of them and state reads after three](results/figures/event_lm_state_reads_circuit.png)
+
+![A cluster of race cells on delayed fibres, and a state read](results/figures/event_lm_state_reads_mechanisms.png)
+
+| Trained from scratch, 368.64M targets | Optimizer | enwik8 | PG-19 |
+|---|---|---:|---:|
+| 34.82M SNN, spike reads and race cells | Rotated, averaged | 1.26226 | 1.55162 |
+| 34.65M SNN, spike reads | Rotated, averaged | 1.29908 | — |
+| 34.65M hybrid, soft reads | AdamW | 1.31975 | — |
+| 34.85M SNN, surprise clock and read heads | AdamW | 1.46686 | — |
+| 34.85M SNN, surprise clock | AdamW | 1.59726 | — |
+| 34.85M full attention | AdamW | 1.20684 | **1.48212** |
+| 34.85M full attention | Rotated, averaged | **1.20407** | — |
+
+The Transformer is still ahead, by 0.055 bpb on enwik8 and by
+0.070 on 16 PG-19 books. Every score in this table is in windows
+of 512 bytes that start from an empty state, with 256 unscored
+bytes before the 256 scored ones. A dash marks a score that was
+not measured. The new decoder runs in such windows only. It has
+no stream form yet, so it has no streaming score, no native
+integer run, no pulse audit and no generator. The seven rows
+received identical windows from random weights. The rows marked
+rotated were trained with a rotated optimizer and are scored at
+the running average of their weights. Every arm is one seed.
+The v13 weights are release assets, and the model that runs
+from a clone is v11.
+
+![Averaged validation loss over training: the decoders lead early, then the Transformer pulls away](results/figures/event_lm_state_reads_training.png)
+
+For the first 6,000 updates the decoder learns faster than the
+Transformer. At 9,000 the two are level, and from 12,000 on the
+Transformer is ahead. At 84,000 updates the decoder is ahead on
+bytes that an earlier match in the window offers for copying
+and behind on the others. The first letter of a word shows
+where the rest comes from. With one earlier word in view the
+decoder predicts it as well as the Transformer, and with three
+it is 0.070 bpb behind. The Transformer's lead is the use it
+makes of the second to fifth word back.
+
+The study ran 89 training arms in one night. Its page gives the
+circuit, the controls, the probes behind each statement and the
+changes that did not help.
+
+[State-read study](docs/STATE_READS.md) ·
+[Every training arm](docs/STATE_READS_ARMS.md) ·
+[Leaderboard](docs/LEADERBOARD.md) ·
+[Model card](models/spiking-byte-lm-v13/README.md) ·
+[Research handoff](docs/V13_HANDOFF.md) ·
+[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v13)
+
 ## v12: coasting read heads
 
 The v12 study trains the 34.85M decoder from random weights
@@ -163,6 +233,13 @@ its strengths.
 [Restore and replay](docs/V12_HANDOFF.md#restore-the-checkpoints) ·
 [Exact manifest](models/spiking-byte-lm-v12/manifest.json)
 
+The v13 archives hold the seven checkpoints of the state-read
+study. Its handoff has the restore commands, the scoring in
+warmed windows, the probes that run on the released files and
+the next pilots.
+[Restore and rescore](docs/V13_HANDOFF.md#restore-the-checkpoints) ·
+[Exact manifest](models/spiking-byte-lm-v13/manifest.json)
+
 Regenerate the leaderboards, scientific figures and browser report
 from the checked-in records.
 
@@ -170,6 +247,7 @@ from the checked-in records.
 python experiments/plot_event_lm_study.py
 python experiments/plot_depth_inhibition.py
 python experiments/plot_coasting_heads.py
+python experiments/plot_state_reads.py
 python experiments/make_report.py docs/report.html
 ```
 
