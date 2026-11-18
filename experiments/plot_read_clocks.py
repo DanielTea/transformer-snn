@@ -6,11 +6,30 @@ import argparse
 
 from matplotlib.colors import LinearSegmentedColormap
 
-from plot_dendrite import GRAY, GRID, MUTED, ORANGE, PAPER, RESULTS, TEXT, heading, np, plt, read_result, save
+from plot_dendrite import GRAY, GRID, MUTED, ORANGE, PAPER, RESULTS, TEXT, heading, np, plt, read_result, save, style
+from plot_state_reads import LIGHT, VIOLET, tall_heading
 
 STUDY = "event_lm/read_clocks"
 GREEN = "#0f8f6c"
 REACH = ("self", "1", "2-3", "4-7", "8-15", "16-63", "64+")
+# Arm and label of the rows of the made-up language, the reads alone first.
+LANGUAGE_ARMS = (
+    ("read, ages in bytes", "Ages in bytes"),
+    ("read, word clock", "Clock at word starts"),
+    ("read, word clock, own ages", "Clock at word starts, heads start apart"),
+    ("read, clock at word ends", "Clock at word ends"),
+    ("read, clock at word ends, own ages", "Clock at word ends, heads start apart"),
+    ("read, clock cells", "Learned clock cells"),
+    ("read, clock cells, own ages", "Learned clock cells, heads start apart"),
+    ("read, ages in bytes, then cells", "Ages in bytes"),
+    ("read, word clock, then cells", "Clock at word starts"),
+    ("read, clock at word ends, then cells", "Clock at word ends"),
+    ("read, clock cells, then cells", "Learned clock cells"),
+)
+LINE = "the old man saw the ca"
+# Offsets by age in beats of one head of the pilot decoder, for the sketch.
+SKETCH_HEAD = (0.40, 2.55, 1.54, 0.77, 0.17, -0.27)
+AGE_SHADES = ("#8f83e2", "#a69ce9", "#bcb4ef", "#d0caf4", "#e2def8", "#f0eefb")
 
 
 def ramp(color):
@@ -83,11 +102,119 @@ def plot_heads(output):
     save(fig, output, "event_lm_read_clocks_heads.png")
 
 
+def language_rows():
+    """Bits per first letter of every read arm for both seeds, and the two bounds of the made-up language."""
+    records = [read_result(f"{STUDY}/word_time_reads_s{seed}.json") for seed in (0, 1)]
+    bounds = {(record["first_letter_bits_without_the_word_before_last"],
+               record["first_letter_bits_with_the_word_before_last"]) for record in records}
+    if len(bounds) != 1:
+        raise ValueError("the two seeds must share one language")
+    scores = [{arm["arm"]: arm["first_letter_bits"] for arm in record["arms"]} for record in records]
+    return [(label, [seed[arm] for seed in scores]) for arm, label in LANGUAGE_ARMS], bounds.pop(), records[0]["settings"]
+
+
+def beat_ages(line):
+    """Every cell's age in beats seen from the last byte, with a beat at the first byte after each word."""
+    beats = [index > 0 and line[index] == " " and line[index - 1] != " " for index in range(len(line))]
+    started = np.cumsum(beats)
+    return started[-1] - started, beats
+
+
+def plot_language(output):
+    rows, (without, with_word), settings = language_rows()
+    fig = plt.figure(figsize=(13.6, 6.6))
+    tall_heading(fig, "A read head counts time in beats",
+                 f"Left: how a head addresses a cell. Right: a made-up language where a word depends on the word "
+                 f"before last · bits per first letter after {settings['steps']:,} updates · two seeds")
+    sketch = fig.add_axes([0.03, 0.1, 0.43, 0.66])
+    sketch.set_xlim(0, 44)
+    sketch.set_ylim(0, 34)
+    sketch.axis("off")
+    ages, beats = beat_ages(LINE)
+    left, width, tall = 1.0, 1.8, 2.6
+
+    def strip(y, fills, outlined=()):
+        for index, letter in enumerate(LINE):
+            sketch.add_patch(plt.Rectangle((left + width * index, y), width, tall, facecolor=fills[index],
+                                           edgecolor=GRID, linewidth=0.8, zorder=1))
+            sketch.text(left + width * (index + 0.5), y + tall / 2, "·" if letter == " " else letter, ha="center",
+                        va="center", size=10.5, color=TEXT, family="DejaVu Sans Mono", zorder=3)
+        for index in outlined:
+            sketch.add_patch(plt.Rectangle((left + width * index, y), width, tall, facecolor="none", edgecolor=TEXT,
+                                           linewidth=1.5, zorder=2))
+        end = left + width * len(LINE)
+        sketch.annotate("", (end + 2.3, y + tall / 2), (end + 0.3, y + tall / 2),
+                        arrowprops={"arrowstyle": "-|>", "color": MUTED, "linewidth": 1})
+        sketch.text(end + 2.6, y + tall / 2, "?", ha="left", va="center", size=12, color=TEXT, weight="bold")
+
+    sketch.text(left, 32.6, "Age in bytes", size=10, color=TEXT, weight="bold", va="center")
+    sketch.text(left, 30.6, "Every earlier byte is a cell. A head has one learned offset per age in bytes.",
+                size=9, color=MUTED, va="center")
+    last = len(LINE) - 1
+    byte_shades = [AGE_SHADES[min(len(AGE_SHADES) - 1, (last - index) // 4)] for index in range(len(LINE))]
+    strip(25.4, byte_shades)
+    for back in (0, 4, 8, 12, 16, 20):
+        sketch.text(left + width * (last - back + 0.5), 24.6, "now" if back == 0 else str(back), ha="center",
+                    va="top", size=8, color=MUTED)
+    sketch.text(left, 19.0, "Age in beats of the head's clock cell", size=10, color=TEXT, weight="bold", va="center")
+    sketch.text(left, 16.3, "A beat at the first byte after a word opens a stretch. The head has one more\n"
+                "learned offset per age in beats, and one for the cell that a beat marked.", size=9, color=MUTED,
+                va="center", linespacing=1.45)
+    base = 4.6
+    strip(base, [AGE_SHADES[min(len(AGE_SHADES) - 1, int(age))] for age in ages],
+          outlined=[index for index, beat in enumerate(beats) if beat])
+    scale, floor = 1.25, base + tall + 2.2
+    sketch.plot([left, left + width * len(LINE)], [floor, floor], color=GRID, linewidth=0.9, zorder=1)
+    for age in range(int(ages.max()) + 1):
+        cells = np.flatnonzero(ages == age)
+        first, after = left + width * cells[0], left + width * (cells[-1] + 1)
+        offset = SKETCH_HEAD[age]
+        sketch.add_patch(plt.Rectangle((first + 0.25, floor), after - first - 0.5, scale * offset,
+                                       facecolor=VIOLET if offset > 0 else GRAY, linewidth=0, zorder=2))
+        sketch.text((first + after) / 2, floor + scale * offset + (0.35 if offset > 0 else -0.35),
+                    f"{offset:+.1f}".replace("-", "\u2212"), ha="center", va="bottom" if offset > 0 else "top",
+                    size=8, color=TEXT)
+        sketch.text((first + after) / 2, base - 0.6, f"age {age}", ha="center", va="top", size=8, color=MUTED)
+    for index, beat in enumerate(beats):
+        if beat:
+            sketch.plot([left + width * (index + 0.5)] * 2, [base + tall + 0.15, base + tall + 1.0], color=TEXT,
+                        linewidth=1.3, zorder=3)
+    sketch.text(left, 1.4, "Bars: the offsets of one head of the full-size decoder at 6,000 updates. Outlined: "
+                "marked cells,\nwhere the stream has just read a whole word.", size=8.5, color=MUTED, va="center",
+                linespacing=1.45)
+    ax = fig.add_axes([0.705, 0.17, 0.265, 0.57])
+    style(ax, grid_axis="x")
+    place = [index + (0.9 if index >= 7 else 0) for index in range(len(rows))]
+    for y, (label, values), (arm, _) in zip(place, rows, LANGUAGE_ARMS):
+        ax.plot([min(values), max(values)], [y, y], color=LIGHT, linewidth=2.2, zorder=1)
+        ax.scatter(values, [y] * len(values), s=46, color=GREEN if "clock cells" in arm else GRAY, zorder=2,
+                   edgecolor="white", linewidth=0.8)
+        ax.annotate(" · ".join(f"{value:.2f}" for value in values), (max(values), y), xytext=(8, 0),
+                    textcoords="offset points", ha="left", va="center", size=8.5, color=TEXT)
+    for bound, label in ((without, "without the word\nbefore last"), (with_word, "with it")):
+        ax.axvline(bound, color=TEXT, linewidth=0.9, linestyle=(0, (3, 3)), zorder=1)
+        ax.annotate(f"{label}\n{bound:.2f}", (bound, -0.8), ha="center", va="bottom", size=8.5, color=MUTED,
+                    linespacing=1.35)
+    ax.set_yticks(place, [label for label, _ in rows])
+    ax.tick_params(axis="y", labelcolor=TEXT, labelsize=9.5)
+    for y, title in ((-0.05, "A read alone"), (7.85, "A read, then race cells")):
+        ax.text(-0.02, y - 0.62, title, transform=ax.get_yaxis_transform(), ha="right", va="center", size=9,
+                color=MUTED, style="italic")
+    ax.set_ylim(place[-1] + 0.6, -1.0)
+    ax.set_xlim(2.4, 3.95)
+    ax.set_xticks([2.5, 3.0, 3.5])
+    ax.set_xlabel("Bits per first letter of a word", color=MUTED, labelpad=8)
+    fig.text(0.035, 0.028, "24 made-up words; half of the words are chosen by the word before last. One state "
+             "read of four heads on a bare byte embedding. Green: every head has a learned clock cell.\nBeside "
+             "each row: seed 0 · seed 1.", color=MUTED, size=9, linespacing=1.5)
+    save(fig, output, "event_lm_read_clocks_language.png")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only", nargs="+", help="names of the figures to draw, all by default")
     args = parser.parse_args()
-    figures = {"heads": plot_heads}
+    figures = {"heads": plot_heads, "language": plot_language}
     output = RESULTS / "figures"
     for name in args.only or figures:
         figures[name](output)
