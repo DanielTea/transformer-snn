@@ -99,6 +99,21 @@ def guided_language_loss(logits, targets, teacher_logits, weight):
     return loss.mean(), hard.mean(), use_teacher.float().mean()
 
 
+# A continued run may change these without changing what it trains.
+_RESUME_FREE = frozenset(("stop_at", "force", "threads", "device"))
+
+
+def _on_cpu(value):
+    """The tensors of a nested state on the CPU, so a saved run can continue on another device."""
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu()
+    if isinstance(value, dict):
+        return {key: _on_cpu(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(_on_cpu(item) for item in value)
+    return value
+
+
 @contextmanager
 def averaged_weights(model, average):
     """Run the model on the running average of its weights and give it its own weights back afterwards."""
@@ -595,6 +610,11 @@ def main():
                         help="start from the weights of a checkpoint of the same decoder, whatever its recall circuits")
     parser.add_argument("--save-every", type=int, default=0,
                         help="also write the weights to <checkpoint>.partial after every this many steps")
+    parser.add_argument("--resume", action="store_true",
+                        help="write the whole training state to <checkpoint>.resume with every partial "
+                             "and continue from that file when it exists")
+    parser.add_argument("--stop-at", type=int, metavar="STEP",
+                        help="leave after this update with its training state saved; --resume continues the schedule")
     parser.add_argument("--early-readout", type=int,
                         help="number of leading blocks whose stream also drives the vocabulary neurons")
     parser.add_argument("--early-readout-weight", type=float, default=0.0,
@@ -747,6 +767,11 @@ def main():
         parser.error("packet thresholds, pulse budgets and delay or output options need a steered spike router")
     if args.pulse_budget is not None and (not math.isfinite(args.pulse_budget) or args.pulse_budget <= 0):
         parser.error("pulse budget must be positive and finite")
+    if args.resume and (args.checkpoint is None or args.save_every < 1):
+        parser.error("--resume needs --checkpoint and --save-every")
+    if args.stop_at is not None and (not args.resume or not 0 < args.stop_at < args.steps
+                                     or args.stop_at % args.save_every):
+        parser.error("--stop-at needs --resume and an update below --steps at which --save-every writes")
     event = args.variant in EVENT_ROUTES
     name = "_".join(part for part in (args.variant, f"s{args.seed}", args.tag) if part)
     results_dir = None if args.results_dir is None else args.results_dir.expanduser()
@@ -831,9 +856,37 @@ def main():
     parameters = count_params(model)
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"{name}: params={parameters} trainable={trainable_params}", flush=True)
+    reached = {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}
+    start, earlier_seconds, resumed_at = 0, 0.0, []
+    resume_path = Path(f"{checkpoint}.resume") if args.resume else None
+    if resume_path is not None and resume_path.exists():
+        state = torch.load(resume_path, map_location="cpu", weights_only=True)
+        different = sorted(key for key in {*state["args"], *reached} - _RESUME_FREE
+                           if json.dumps(state["args"].get(key)) != json.dumps(reached.get(key)))
+        if different:
+            parser.error(f"{resume_path}: the run differs in {', '.join(different)}")
+        if args.stop_at is not None and args.stop_at <= state["step"]:
+            parser.error(f"{resume_path}: the run is already at update {state['step']}")
+        model.load_state_dict(state["state_dict"])
+        optimizer.load_state_dict(state["optimizer"])
+        if average is not None:
+            with torch.no_grad():
+                for mean, saved in zip(average, state["average"], strict=True):
+                    mean.copy_(saved)
+        if pulse_counts is not None:
+            spike_price = state["spike_price"].to(device)
+        curve, start, earlier_seconds = state["curve"], state["step"], state["seconds"]
+        resumed_at = [*state["resumed_at"], start]
+        # Drawing the earlier batches again puts the generator and the mixture's receipt where they were.
+        for _ in range(start):
+            if mixture is None:
+                random_batch(train, args.bs, args.ctx, generator)
+            else:
+                mixture.batch(args.bs, generator)
+        print(f"{name}: continuing after {start} of {args.steps} updates", flush=True)
     teacher_event = isinstance(teacher, EventLM)
     teacher_resolution = teacher.cfg.resolution if teacher_event else 1
-    for step in range(1, args.steps + 1):
+    for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
         inputs, labels = (random_batch(train, args.bs, args.ctx, generator) if mixture is None
@@ -913,12 +966,12 @@ def main():
                                  if args.early_readout_weight else {})))
             activity = f" pulses/byte={metrics['pulses_per_byte']:.0f}" if pulse_counts is not None else ""
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
-                  f"accuracy={metrics['argmax_accuracy']:.4f} ({timer():.1f}s){activity}", flush=True)
+                  f"accuracy={metrics['argmax_accuracy']:.4f} ({earlier_seconds + timer():.1f}s){activity}", flush=True)
 
         if args.save_every and checkpoint is not None and step % args.save_every == 0 and step < args.steps:
             # A long run that is stopped early keeps its last weights under another name.
             partial = Path(f"{checkpoint}.partial")
-            reached = {name: str(value) if isinstance(value, Path) else value for name, value in vars(args).items()}
+            partial.parent.mkdir(parents=True, exist_ok=True)
             torch.save(dict(format_version=1, model_type=type(model).__name__, task="event_lm", run_name=name,
                             cfg=asdict(cfg), model_kwargs=model_kwargs, args=dict(reached, steps=step),
                             initialization=initialization,
@@ -928,6 +981,18 @@ def main():
                             }})),
                        f"{partial}.tmp")
             os.replace(f"{partial}.tmp", partial)
+            if resume_path is not None:
+                torch.save(dict(format_version=1, step=step, args=reached, resumed_at=resumed_at,
+                                state_dict={key: value.detach().cpu() for key, value in model.state_dict().items()},
+                                average=None if average is None else [mean.cpu() for mean in average],
+                                optimizer=_on_cpu(optimizer.state_dict()),
+                                spike_price=None if pulse_counts is None else spike_price.cpu(),
+                                curve=curve, seconds=earlier_seconds + timer()),
+                           f"{resume_path}.tmp")
+                os.replace(f"{resume_path}.tmp", resume_path)
+        if step == args.stop_at:
+            print(f"{name} stopped after {step} of {args.steps} updates", flush=True)
+            return
 
     val_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,
@@ -964,8 +1029,11 @@ def main():
                   **({} if averaged_score is None else {"averaged_val_bpb": averaged_score["bpb"]}),
                   val=val_score, test=test_score,
                   scoring=("normalized exponential of scaled output" if event else "softmax over logits"),
-                  seconds=timer(), **teacher_details, **mixture_details)
+                  seconds=earlier_seconds + timer(), **({"resumed_at_steps": resumed_at} if resumed_at else {}),
+                  **teacher_details, **mixture_details)
     destination = save_result("event_lm", name, record, overwrite=args.force, directory=results_dir)
+    if resume_path is not None:
+        resume_path.unlink(missing_ok=True)
     split, metric = ("validation", val_score) if test_score is None else ("test", test_score)
     print(f"{name} {split}={metric['bpb']:.4f} bpb accuracy={metric['argmax_accuracy']:.4f} ({destination})")
 
