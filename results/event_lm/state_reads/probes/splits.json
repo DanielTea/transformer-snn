@@ -1,0 +1,4154 @@
+{
+  "note": "Tables of match_split.py and class_split.py. The first model of a table is the reference. gap_times_share is a model's bits per target over the reference times the share of the targets, so a column sums to the gap over all targets. gap is the difference per target of the group.",
+  "tables": [
+    {
+      "source": "match_split_12k_budget_17T1926.txt",
+      "models": [
+        {
+          "checkpoint": "transformer/model.pt",
+          "updates": 12000,
+          "weights": "raw",
+          "bpb": 1.6572
+        },
+        {
+          "checkpoint": "reads-d13w256/model.pt",
+          "updates": 12000,
+          "weights": "raw",
+          "bpb": 1.61
+        },
+        {
+          "checkpoint": "plain/model.pt",
+          "updates": 12000,
+          "weights": "raw",
+          "bpb": 1.8294
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.6572,
+            1.61,
+            1.8294
+          ],
+          "gap_times_share": [
+            -0.0472,
+            0.1722
+          ]
+        },
+        {
+          "targets": "match 0",
+          "share": 0.093,
+          "bpb": [
+            1.8756,
+            1.9186,
+            1.9942
+          ],
+          "gap_times_share": [
+            0.004,
+            0.0111
+          ]
+        },
+        {
+          "targets": "match 1, follower is the target",
+          "share": 0.043,
+          "bpb": [
+            0.9888,
+            0.9085,
+            1.1818
+          ],
+          "gap_times_share": [
+            -0.0034,
+            0.0083
+          ]
+        },
+        {
+          "targets": "match 1, follower is not",
+          "share": 0.286,
+          "bpb": [
+            1.7273,
+            1.8238,
+            1.882
+          ],
+          "gap_times_share": [
+            0.0276,
+            0.0442
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is the target",
+          "share": 0.115,
+          "bpb": [
+            0.9589,
+            0.6134,
+            1.14
+          ],
+          "gap_times_share": [
+            -0.0398,
+            0.0209
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is not",
+          "share": 0.248,
+          "bpb": [
+            2.0601,
+            2.2067,
+            2.235
+          ],
+          "gap_times_share": [
+            0.0363,
+            0.0434
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is the target",
+          "share": 0.09,
+          "bpb": [
+            0.8288,
+            0.2818,
+            1.0284
+          ],
+          "gap_times_share": [
+            -0.0493,
+            0.018
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is not",
+          "share": 0.047,
+          "bpb": [
+            3.2359,
+            3.4748,
+            3.413
+          ],
+          "gap_times_share": [
+            0.0112,
+            0.0083
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is the target",
+          "share": 0.041,
+          "bpb": [
+            0.8024,
+            0.2358,
+            0.995
+          ],
+          "gap_times_share": [
+            -0.0235,
+            0.008
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is not",
+          "share": 0.013,
+          "bpb": [
+            2.8369,
+            3.2378,
+            3.1545
+          ],
+          "gap_times_share": [
+            0.0051,
+            0.004
+          ]
+        },
+        {
+          "targets": "match 16+, follower is the target",
+          "share": 0.022,
+          "bpb": [
+            0.9705,
+            0.247,
+            1.2044
+          ],
+          "gap_times_share": [
+            -0.0159,
+            0.0051
+          ]
+        },
+        {
+          "targets": "match 16+, follower is not",
+          "share": 0.002,
+          "bpb": [
+            3.7704,
+            3.9777,
+            4.1989
+          ],
+          "gap_times_share": [
+            0.0005,
+            0.0011
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.153,
+          "bpb": [
+            0.8419,
+            0.2644,
+            1.0446
+          ],
+          "gap_times_share": [
+            -0.0886,
+            0.0311
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.847,
+          "bpb": [
+            1.8049,
+            1.8539,
+            1.9716
+          ],
+          "gap_times_share": [
+            0.0414,
+            0.1411
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            2.019,
+            2.0542,
+            2.0908
+          ],
+          "gap_times_share": [
+            0.0022,
+            0.0045
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.6429,
+            1.6379,
+            1.7947
+          ],
+          "gap_times_share": [
+            -0.0009,
+            0.0284
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.6374,
+            1.5916,
+            1.8104
+          ],
+          "gap_times_share": [
+            -0.0115,
+            0.0432
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.6272,
+            1.5532,
+            1.8192
+          ],
+          "gap_times_share": [
+            -0.037,
+            0.096
+          ]
+        }
+      ],
+      "validation_windows": 256
+    },
+    {
+      "source": "match_split_v12_17T1926.txt",
+      "models": [
+        {
+          "checkpoint": "scratch-study/transformer_s20001.pt",
+          "updates": 90000,
+          "weights": "raw",
+          "bpb": 1.2858
+        },
+        {
+          "checkpoint": "scratch-study/clock_s20001.pt",
+          "updates": 90000,
+          "weights": "raw",
+          "bpb": 1.623
+        },
+        {
+          "checkpoint": "fork12k-soft-lr1e4/model.pt.partial",
+          "updates": 6000,
+          "weights": "raw",
+          "bpb": 1.6085
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.2858,
+            1.623,
+            1.6085
+          ],
+          "gap_times_share": [
+            0.3372,
+            0.3227
+          ]
+        },
+        {
+          "targets": "match 0",
+          "share": 0.093,
+          "bpb": [
+            1.5986,
+            1.8138,
+            1.9258
+          ],
+          "gap_times_share": [
+            0.0201,
+            0.0305
+          ]
+        },
+        {
+          "targets": "match 1, follower is the target",
+          "share": 0.043,
+          "bpb": [
+            0.6877,
+            1.0177,
+            0.9331
+          ],
+          "gap_times_share": [
+            0.0141,
+            0.0105
+          ]
+        },
+        {
+          "targets": "match 1, follower is not",
+          "share": 0.286,
+          "bpb": [
+            1.4132,
+            1.6614,
+            1.8144
+          ],
+          "gap_times_share": [
+            0.0709,
+            0.1146
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is the target",
+          "share": 0.115,
+          "bpb": [
+            0.4772,
+            0.9935,
+            0.6272
+          ],
+          "gap_times_share": [
+            0.0595,
+            0.0173
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is not",
+          "share": 0.248,
+          "bpb": [
+            1.7613,
+            2.0021,
+            2.1977
+          ],
+          "gap_times_share": [
+            0.0597,
+            0.1081
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is the target",
+          "share": 0.09,
+          "bpb": [
+            0.2372,
+            0.847,
+            0.2858
+          ],
+          "gap_times_share": [
+            0.0549,
+            0.0044
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is not",
+          "share": 0.047,
+          "bpb": [
+            2.9298,
+            3.1751,
+            3.4682
+          ],
+          "gap_times_share": [
+            0.0115,
+            0.0251
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is the target",
+          "share": 0.041,
+          "bpb": [
+            0.191,
+            0.794,
+            0.2457
+          ],
+          "gap_times_share": [
+            0.025,
+            0.0023
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is not",
+          "share": 0.013,
+          "bpb": [
+            2.6536,
+            2.857,
+            3.2092
+          ],
+          "gap_times_share": [
+            0.0026,
+            0.0071
+          ]
+        },
+        {
+          "targets": "match 16+, follower is the target",
+          "share": 0.022,
+          "bpb": [
+            0.1753,
+            0.995,
+            0.2539
+          ],
+          "gap_times_share": [
+            0.018,
+            0.0017
+          ]
+        },
+        {
+          "targets": "match 16+, follower is not",
+          "share": 0.002,
+          "bpb": [
+            3.4631,
+            3.8905,
+            3.9219
+          ],
+          "gap_times_share": [
+            0.0011,
+            0.0011
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.153,
+          "bpb": [
+            0.2159,
+            0.8538,
+            0.2704
+          ],
+          "gap_times_share": [
+            0.0979,
+            0.0084
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.847,
+          "bpb": [
+            1.4797,
+            1.7624,
+            1.851
+          ],
+          "gap_times_share": [
+            0.2393,
+            0.3144
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            1.8272,
+            1.9352,
+            2.0611
+          ],
+          "gap_times_share": [
+            0.0067,
+            0.0146
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.3183,
+            1.6033,
+            1.6388
+          ],
+          "gap_times_share": [
+            0.0534,
+            0.0601
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.2713,
+            1.6078,
+            1.5934
+          ],
+          "gap_times_share": [
+            0.0841,
+            0.0805
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.2132,
+            1.5989,
+            1.5482
+          ],
+          "gap_times_share": [
+            0.1929,
+            0.1675
+          ]
+        }
+      ],
+      "validation_windows": 256
+    },
+    {
+      "source": "match_split_17T2349.txt",
+      "models": [
+        {
+          "checkpoint": "early-transformer-rot/snap3000.pt",
+          "updates": 3000,
+          "weights": "averaged",
+          "bpb": 1.9679
+        },
+        {
+          "checkpoint": "full-rate-race64-rot/snap3000.pt",
+          "updates": 3000,
+          "weights": "averaged",
+          "bpb": 1.7997
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.9679,
+            1.7997
+          ],
+          "gap_times_share": [
+            -0.1683
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.156,
+          "bpb": [
+            1.2571,
+            0.3963
+          ],
+          "gap_times_share": [
+            -0.134
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.844,
+          "bpb": [
+            2.0989,
+            2.0583
+          ],
+          "gap_times_share": [
+            -0.0343
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            2.2233,
+            2.2324
+          ],
+          "gap_times_share": [
+            0.0006
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.9568,
+            1.872
+          ],
+          "gap_times_share": [
+            -0.0159
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.9787,
+            1.8028
+          ],
+          "gap_times_share": [
+            -0.044
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.9348,
+            1.7169
+          ],
+          "gap_times_share": [
+            -0.1089
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "match_split_17T2349.txt",
+      "models": [
+        {
+          "checkpoint": "early-transformer-rot/snap6000.pt",
+          "updates": 6000,
+          "weights": "averaged",
+          "bpb": 1.7665
+        },
+        {
+          "checkpoint": "full-rate-race64-rot/snap6000.pt",
+          "updates": 6000,
+          "weights": "averaged",
+          "bpb": 1.6809
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.7665,
+            1.6809
+          ],
+          "gap_times_share": [
+            -0.0856
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.156,
+          "bpb": [
+            0.9745,
+            0.313
+          ],
+          "gap_times_share": [
+            -0.1029
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.844,
+          "bpb": [
+            1.9124,
+            1.933
+          ],
+          "gap_times_share": [
+            0.0174
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            2.0923,
+            2.1378
+          ],
+          "gap_times_share": [
+            0.0028
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.7692,
+            1.7488
+          ],
+          "gap_times_share": [
+            -0.0038
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.7754,
+            1.6877
+          ],
+          "gap_times_share": [
+            -0.0219
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.7202,
+            1.5949
+          ],
+          "gap_times_share": [
+            -0.0627
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "match_split_17T2351.txt",
+      "models": [
+        {
+          "checkpoint": "full-rate-rot/snap12000.pt",
+          "updates": 12000,
+          "weights": "averaged",
+          "bpb": 1.6148
+        },
+        {
+          "checkpoint": "full-rate-race64-rot/snap12000.pt",
+          "updates": 12000,
+          "weights": "averaged",
+          "bpb": 1.6005
+        },
+        {
+          "checkpoint": "full-rate-race64-rot/snap12000.pt",
+          "updates": 12000,
+          "weights": "averaged",
+          "bpb": 2.4772,
+          "cells_cut": true
+        },
+        {
+          "checkpoint": "full-soft-a8-h316-rot/snap12000.pt",
+          "updates": 12000,
+          "weights": "averaged",
+          "bpb": 1.5944
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.6148,
+            1.6005,
+            2.4772,
+            1.5944
+          ],
+          "gap_times_share": [
+            -0.0143,
+            0.8625,
+            -0.0204
+          ]
+        },
+        {
+          "targets": "match 0",
+          "share": 0.093,
+          "bpb": [
+            1.9365,
+            1.9236,
+            3.015,
+            1.9202
+          ],
+          "gap_times_share": [
+            -0.0012,
+            0.1002,
+            -0.0015
+          ]
+        },
+        {
+          "targets": "match 1, follower is the target",
+          "share": 0.042,
+          "bpb": [
+            0.8969,
+            0.902,
+            2.1855,
+            0.9096
+          ],
+          "gap_times_share": [
+            0.0002,
+            0.0538,
+            0.0005
+          ]
+        },
+        {
+          "targets": "match 1, follower is not",
+          "share": 0.285,
+          "bpb": [
+            1.8084,
+            1.7921,
+            2.7848,
+            1.783
+          ],
+          "gap_times_share": [
+            -0.0046,
+            0.2782,
+            -0.0072
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is the target",
+          "share": 0.113,
+          "bpb": [
+            0.6159,
+            0.6109,
+            1.2735,
+            0.6123
+          ],
+          "gap_times_share": [
+            -0.0006,
+            0.0744,
+            -0.0004
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is not",
+          "share": 0.25,
+          "bpb": [
+            2.1888,
+            2.1734,
+            3.1613,
+            2.1633
+          ],
+          "gap_times_share": [
+            -0.0038,
+            0.2433,
+            -0.0064
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is the target",
+          "share": 0.088,
+          "bpb": [
+            0.306,
+            0.3002,
+            0.6996,
+            0.3017
+          ],
+          "gap_times_share": [
+            -0.0005,
+            0.0348,
+            -0.0004
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is not",
+          "share": 0.047,
+          "bpb": [
+            3.5704,
+            3.535,
+            4.6013,
+            3.5258
+          ],
+          "gap_times_share": [
+            -0.0017,
+            0.0482,
+            -0.0021
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is the target",
+          "share": 0.043,
+          "bpb": [
+            0.2826,
+            0.2574,
+            0.4942,
+            0.2572
+          ],
+          "gap_times_share": [
+            -0.0011,
+            0.0091,
+            -0.0011
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is not",
+          "share": 0.012,
+          "bpb": [
+            3.3325,
+            3.3491,
+            4.5512,
+            3.2896
+          ],
+          "gap_times_share": [
+            0.0002,
+            0.0148,
+            -0.0005
+          ]
+        },
+        {
+          "targets": "match 16+, follower is the target",
+          "share": 0.024,
+          "bpb": [
+            0.2943,
+            0.2492,
+            0.4202,
+            0.2404
+          ],
+          "gap_times_share": [
+            -0.0011,
+            0.003,
+            -0.0013
+          ]
+        },
+        {
+          "targets": "match 16+, follower is not",
+          "share": 0.003,
+          "bpb": [
+            4.2555,
+            4.2217,
+            5.2479,
+            4.2469
+          ],
+          "gap_times_share": [
+            -0.0001,
+            0.0026,
+            -0.0
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.156,
+          "bpb": [
+            0.2977,
+            0.2804,
+            0.5995,
+            0.2799
+          ],
+          "gap_times_share": [
+            -0.0027,
+            0.047,
+            -0.0028
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.844,
+          "bpb": [
+            1.8575,
+            1.8438,
+            2.8233,
+            1.8367
+          ],
+          "gap_times_share": [
+            -0.0116,
+            0.8155,
+            -0.0176
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            2.0782,
+            2.0701,
+            3.0062,
+            2.0566
+          ],
+          "gap_times_share": [
+            -0.0005,
+            0.058,
+            -0.0013
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.6803,
+            1.6693,
+            2.565,
+            1.6624
+          ],
+          "gap_times_share": [
+            -0.002,
+            0.1659,
+            -0.0033
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.6189,
+            1.6058,
+            2.4781,
+            1.6007
+          ],
+          "gap_times_share": [
+            -0.0033,
+            0.2148,
+            -0.0046
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.5302,
+            1.5134,
+            2.3778,
+            1.5079
+          ],
+          "gap_times_share": [
+            -0.0084,
+            0.4238,
+            -0.0111
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "match_split_and_delay_use_18T0030.txt",
+      "models": [
+        {
+          "checkpoint": "early-transformer-rot/snap3000.pt",
+          "updates": 3000,
+          "weights": "averaged",
+          "bpb": 1.9679
+        },
+        {
+          "checkpoint": "full-rate-race64-rot/snap3000.pt",
+          "updates": 3000,
+          "weights": "averaged",
+          "bpb": 1.7997
+        },
+        {
+          "checkpoint": "pilot-race64-rep/snap3000.pt",
+          "updates": 3000,
+          "weights": "averaged",
+          "bpb": 1.8027
+        },
+        {
+          "checkpoint": "pilot-race64-dl4/snap3000.pt",
+          "updates": 3000,
+          "weights": "averaged",
+          "bpb": 1.782
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.9679,
+            1.7997,
+            1.8027,
+            1.782
+          ],
+          "gap_times_share": [
+            -0.1683,
+            -0.1652,
+            -0.1859
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.156,
+          "bpb": [
+            1.2571,
+            0.3963,
+            0.4094,
+            0.4131
+          ],
+          "gap_times_share": [
+            -0.134,
+            -0.1319,
+            -0.1313
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.844,
+          "bpb": [
+            2.0989,
+            2.0583,
+            2.0595,
+            2.0343
+          ],
+          "gap_times_share": [
+            -0.0343,
+            -0.0333,
+            -0.0546
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            2.2233,
+            2.2324,
+            2.2252,
+            2.202
+          ],
+          "gap_times_share": [
+            0.0006,
+            0.0001,
+            -0.0013
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.9568,
+            1.872,
+            1.8737,
+            1.8507
+          ],
+          "gap_times_share": [
+            -0.0159,
+            -0.0156,
+            -0.0199
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.9787,
+            1.8028,
+            1.8047,
+            1.7849
+          ],
+          "gap_times_share": [
+            -0.044,
+            -0.0435,
+            -0.0485
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.9348,
+            1.7169,
+            1.7222,
+            1.7024
+          ],
+          "gap_times_share": [
+            -0.1089,
+            -0.1063,
+            -0.1162
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "match_split_18T0053.txt",
+      "models": [
+        {
+          "checkpoint": "early-transformer-rot/snap6000.pt",
+          "updates": 6000,
+          "weights": "averaged",
+          "bpb": 1.7665
+        },
+        {
+          "checkpoint": "full-rate-race64-rot/snap6000.pt",
+          "updates": 6000,
+          "weights": "averaged",
+          "bpb": 1.6809
+        },
+        {
+          "checkpoint": "pilot-race64-rep/snap6000.pt",
+          "updates": 6000,
+          "weights": "averaged",
+          "bpb": 1.6838
+        },
+        {
+          "checkpoint": "pilot-race64-dl4/snap6000.pt",
+          "updates": 6000,
+          "weights": "averaged",
+          "bpb": 1.6581
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.7665,
+            1.6809,
+            1.6838,
+            1.6581
+          ],
+          "gap_times_share": [
+            -0.0856,
+            -0.0826,
+            -0.1084
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.156,
+          "bpb": [
+            0.9745,
+            0.313,
+            0.3128,
+            0.3137
+          ],
+          "gap_times_share": [
+            -0.1029,
+            -0.103,
+            -0.1028
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.844,
+          "bpb": [
+            1.9124,
+            1.933,
+            1.9365,
+            1.9058
+          ],
+          "gap_times_share": [
+            0.0174,
+            0.0203,
+            -0.0056
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            2.0923,
+            2.1378,
+            2.1381,
+            2.1006
+          ],
+          "gap_times_share": [
+            0.0028,
+            0.0029,
+            0.0005
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.7692,
+            1.7488,
+            1.7515,
+            1.7277
+          ],
+          "gap_times_share": [
+            -0.0038,
+            -0.0033,
+            -0.0078
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.7754,
+            1.6877,
+            1.6911,
+            1.6642
+          ],
+          "gap_times_share": [
+            -0.0219,
+            -0.0211,
+            -0.0278
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.7202,
+            1.5949,
+            1.598,
+            1.5736
+          ],
+          "gap_times_share": [
+            -0.0627,
+            -0.0611,
+            -0.0733
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "match_split_18T0127.txt",
+      "models": [
+        {
+          "checkpoint": "full-transformer-rot/snap24000.pt",
+          "updates": 24000,
+          "weights": "averaged",
+          "bpb": 1.435
+        },
+        {
+          "checkpoint": "full-rate-rot/snap24000.pt",
+          "updates": 24000,
+          "weights": "averaged",
+          "bpb": 1.5474
+        },
+        {
+          "checkpoint": "full-rate-race64-rot/snap24000.pt",
+          "updates": 24000,
+          "weights": "averaged",
+          "bpb": 1.5335
+        },
+        {
+          "checkpoint": "pilot-race64-d8-c350-dl4/snap24000.pt",
+          "updates": 24000,
+          "weights": "averaged",
+          "bpb": 1.5084
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.435,
+            1.5474,
+            1.5335,
+            1.5084
+          ],
+          "gap_times_share": [
+            0.1124,
+            0.0985,
+            0.0734
+          ]
+        },
+        {
+          "targets": "match 0",
+          "share": 0.093,
+          "bpb": [
+            1.7478,
+            1.8654,
+            1.852,
+            1.8292
+          ],
+          "gap_times_share": [
+            0.0109,
+            0.0097,
+            0.0076
+          ]
+        },
+        {
+          "targets": "match 1, follower is the target",
+          "share": 0.042,
+          "bpb": [
+            0.786,
+            0.8693,
+            0.8434,
+            0.8398
+          ],
+          "gap_times_share": [
+            0.0035,
+            0.0024,
+            0.0022
+          ]
+        },
+        {
+          "targets": "match 1, follower is not",
+          "share": 0.285,
+          "bpb": [
+            1.575,
+            1.726,
+            1.7137,
+            1.6767
+          ],
+          "gap_times_share": [
+            0.043,
+            0.0395,
+            0.029
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is the target",
+          "share": 0.113,
+          "bpb": [
+            0.5353,
+            0.5927,
+            0.566,
+            0.5729
+          ],
+          "gap_times_share": [
+            0.0065,
+            0.0035,
+            0.0042
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is not",
+          "share": 0.25,
+          "bpb": [
+            1.9447,
+            2.1,
+            2.0913,
+            2.0467
+          ],
+          "gap_times_share": [
+            0.0389,
+            0.0367,
+            0.0255
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is the target",
+          "share": 0.088,
+          "bpb": [
+            0.2909,
+            0.2903,
+            0.2772,
+            0.2923
+          ],
+          "gap_times_share": [
+            -0.0001,
+            -0.0012,
+            0.0001
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is not",
+          "share": 0.047,
+          "bpb": [
+            3.2702,
+            3.4482,
+            3.4538,
+            3.3711
+          ],
+          "gap_times_share": [
+            0.0083,
+            0.0086,
+            0.0047
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is the target",
+          "share": 0.043,
+          "bpb": [
+            0.2803,
+            0.2518,
+            0.2199,
+            0.2498
+          ],
+          "gap_times_share": [
+            -0.0012,
+            -0.0026,
+            -0.0013
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is not",
+          "share": 0.012,
+          "bpb": [
+            2.9872,
+            3.228,
+            3.2457,
+            3.1485
+          ],
+          "gap_times_share": [
+            0.0029,
+            0.0031,
+            0.002
+          ]
+        },
+        {
+          "targets": "match 16+, follower is the target",
+          "share": 0.024,
+          "bpb": [
+            0.2806,
+            0.247,
+            0.2039,
+            0.2332
+          ],
+          "gap_times_share": [
+            -0.0008,
+            -0.0018,
+            -0.0011
+          ]
+        },
+        {
+          "targets": "match 16+, follower is not",
+          "share": 0.003,
+          "bpb": [
+            3.893,
+            4.077,
+            4.1777,
+            4.069
+          ],
+          "gap_times_share": [
+            0.0005,
+            0.0008,
+            0.0005
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.156,
+          "bpb": [
+            0.2864,
+            0.2729,
+            0.25,
+            0.2714
+          ],
+          "gap_times_share": [
+            -0.0021,
+            -0.0057,
+            -0.0023
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.844,
+          "bpb": [
+            1.6467,
+            1.7823,
+            1.7701,
+            1.7363
+          ],
+          "gap_times_share": [
+            0.1145,
+            0.1042,
+            0.0757
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            1.9361,
+            2.0237,
+            2.0113,
+            1.9809
+          ],
+          "gap_times_share": [
+            0.0055,
+            0.0047,
+            0.0028
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.4918,
+            1.612,
+            1.6004,
+            1.574
+          ],
+          "gap_times_share": [
+            0.0225,
+            0.0204,
+            0.0154
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.4327,
+            1.5496,
+            1.5369,
+            1.5101
+          ],
+          "gap_times_share": [
+            0.0292,
+            0.026,
+            0.0193
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.3522,
+            1.4626,
+            1.4471,
+            1.4238
+          ],
+          "gap_times_share": [
+            0.0552,
+            0.0474,
+            0.0358
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "class_split_18T0145.txt",
+      "models": [
+        {
+          "checkpoint": "full-transformer-rot/snap30000.pt",
+          "updates": 30000,
+          "weights": "averaged",
+          "bpb": 1.4084
+        },
+        {
+          "checkpoint": "full-rate-rot/snap30000.pt",
+          "updates": 30000,
+          "weights": "averaged",
+          "bpb": 1.5242
+        },
+        {
+          "checkpoint": "pilot-race64-d8-c350-dl4/snap30000.pt",
+          "updates": 30000,
+          "weights": "averaged",
+          "bpb": 1.4846
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.4084,
+            1.5242,
+            1.4846
+          ],
+          "gap_times_share": [
+            0.1157,
+            0.0762
+          ],
+          "gap": [
+            0.1157,
+            0.0762
+          ]
+        },
+        {
+          "targets": "lower-case letter",
+          "share": 0.684,
+          "bpb": [
+            1.3991,
+            1.5271,
+            1.4832
+          ],
+          "gap_times_share": [
+            0.0876,
+            0.0575
+          ],
+          "gap": [
+            0.128,
+            0.0841
+          ]
+        },
+        {
+          "targets": "capital letter",
+          "share": 0.037,
+          "bpb": [
+            4.1869,
+            4.4042,
+            4.3302
+          ],
+          "gap_times_share": [
+            0.0081,
+            0.0054
+          ],
+          "gap": [
+            0.2173,
+            0.1433
+          ]
+        },
+        {
+          "targets": "digit",
+          "share": 0.019,
+          "bpb": [
+            2.8783,
+            3.0326,
+            3.0273
+          ],
+          "gap_times_share": [
+            0.003,
+            0.0029
+          ],
+          "gap": [
+            0.1543,
+            0.1489
+          ]
+        },
+        {
+          "targets": "space",
+          "share": 0.135,
+          "bpb": [
+            0.4662,
+            0.5102,
+            0.4649
+          ],
+          "gap_times_share": [
+            0.0059,
+            -0.0002
+          ],
+          "gap": [
+            0.0439,
+            -0.0013
+          ]
+        },
+        {
+          "targets": "newline",
+          "share": 0.01,
+          "bpb": [
+            1.0017,
+            1.0159,
+            1.1047
+          ],
+          "gap_times_share": [
+            0.0001,
+            0.0011
+          ],
+          "gap": [
+            0.0142,
+            0.103
+          ]
+        },
+        {
+          "targets": "punctuation",
+          "share": 0.043,
+          "bpb": [
+            1.8519,
+            2.0267,
+            1.989
+          ],
+          "gap_times_share": [
+            0.0076,
+            0.0059
+          ],
+          "gap": [
+            0.1748,
+            0.1371
+          ]
+        },
+        {
+          "targets": "markup sign",
+          "share": 0.064,
+          "bpb": [
+            0.9798,
+            1.0257,
+            1.0375
+          ],
+          "gap_times_share": [
+            0.0029,
+            0.0037
+          ],
+          "gap": [
+            0.0459,
+            0.0578
+          ]
+        },
+        {
+          "targets": "byte of a longer character",
+          "share": 0.006,
+          "bpb": [
+            3.4326,
+            3.4942,
+            3.4128
+          ],
+          "gap_times_share": [
+            0.0004,
+            -0.0001
+          ],
+          "gap": [
+            0.0616,
+            -0.0198
+          ]
+        },
+        {
+          "targets": "other",
+          "share": 0.0,
+          "bpb": [
+            4.6369,
+            4.8128,
+            4.6425
+          ],
+          "gap_times_share": [
+            0.0001,
+            0.0
+          ],
+          "gap": [
+            0.1759,
+            0.0056
+          ]
+        },
+        {
+          "targets": "letter after 0 letters",
+          "share": 0.146,
+          "bpb": [
+            3.5289,
+            3.6704,
+            3.6198
+          ],
+          "gap_times_share": [
+            0.0207,
+            0.0133
+          ],
+          "gap": [
+            0.1415,
+            0.0909
+          ]
+        },
+        {
+          "targets": "letter after 1 letters",
+          "share": 0.141,
+          "bpb": [
+            1.5922,
+            1.7049,
+            1.6738
+          ],
+          "gap_times_share": [
+            0.0159,
+            0.0115
+          ],
+          "gap": [
+            0.1127,
+            0.0816
+          ]
+        },
+        {
+          "targets": "letter after 2 letters",
+          "share": 0.116,
+          "bpb": [
+            1.3669,
+            1.5326,
+            1.4864
+          ],
+          "gap_times_share": [
+            0.0192,
+            0.0139
+          ],
+          "gap": [
+            0.1658,
+            0.1195
+          ]
+        },
+        {
+          "targets": "letter after 3-4 letters",
+          "share": 0.16,
+          "bpb": [
+            0.8169,
+            0.9582,
+            0.9142
+          ],
+          "gap_times_share": [
+            0.0226,
+            0.0156
+          ],
+          "gap": [
+            0.1413,
+            0.0973
+          ]
+        },
+        {
+          "targets": "letter after 5-7 letters",
+          "share": 0.12,
+          "bpb": [
+            0.5427,
+            0.6547,
+            0.6006
+          ],
+          "gap_times_share": [
+            0.0135,
+            0.007
+          ],
+          "gap": [
+            0.112,
+            0.0579
+          ]
+        },
+        {
+          "targets": "letter after 8+ letters",
+          "share": 0.039,
+          "bpb": [
+            0.5122,
+            0.6129,
+            0.5576
+          ],
+          "gap_times_share": [
+            0.0039,
+            0.0018
+          ],
+          "gap": [
+            0.1007,
+            0.0455
+          ]
+        },
+        {
+          "targets": "not a letter, after a letter (a word ends)",
+          "share": 0.146,
+          "bpb": [
+            0.8351,
+            0.9133,
+            0.8821
+          ],
+          "gap_times_share": [
+            0.0114,
+            0.0068
+          ],
+          "gap": [
+            0.0782,
+            0.0469
+          ]
+        },
+        {
+          "targets": "not a letter, after another",
+          "share": 0.133,
+          "bpb": [
+            1.3048,
+            1.3698,
+            1.3532
+          ],
+          "gap_times_share": [
+            0.0086,
+            0.0064
+          ],
+          "gap": [
+            0.065,
+            0.0484
+          ]
+        },
+        {
+          "targets": "plain text",
+          "share": 0.808,
+          "bpb": [
+            1.4181,
+            1.5262,
+            1.4914
+          ],
+          "gap_times_share": [
+            0.0874,
+            0.0593
+          ],
+          "gap": [
+            0.1081,
+            0.0733
+          ]
+        },
+        {
+          "targets": "plain text: letters there",
+          "share": 0.579,
+          "bpb": [
+            1.5714,
+            1.6949,
+            1.6547
+          ],
+          "gap_times_share": [
+            0.0715,
+            0.0483
+          ],
+          "gap": [
+            0.1235,
+            0.0833
+          ]
+        },
+        {
+          "targets": "inside a tag <...>",
+          "share": 0.014,
+          "bpb": [
+            0.0182,
+            0.0233,
+            0.023
+          ],
+          "gap_times_share": [
+            0.0001,
+            0.0001
+          ],
+          "gap": [
+            0.0051,
+            0.0049
+          ]
+        },
+        {
+          "targets": "inside a tag <...>: letters there",
+          "share": 0.011,
+          "bpb": [
+            0.0222,
+            0.0278,
+            0.0275
+          ],
+          "gap_times_share": [
+            0.0001,
+            0.0001
+          ],
+          "gap": [
+            0.0056,
+            0.0053
+          ]
+        },
+        {
+          "targets": "inside a link [[...]]",
+          "share": 0.163,
+          "bpb": [
+            1.4857,
+            1.6394,
+            1.5792
+          ],
+          "gap_times_share": [
+            0.0251,
+            0.0152
+          ],
+          "gap": [
+            0.1537,
+            0.0934
+          ]
+        },
+        {
+          "targets": "inside a link [[...]]: letters there",
+          "share": 0.122,
+          "bpb": [
+            1.5717,
+            1.7501,
+            1.6817
+          ],
+          "gap_times_share": [
+            0.0218,
+            0.0134
+          ],
+          "gap": [
+            0.1784,
+            0.1099
+          ]
+        },
+        {
+          "targets": "inside a template {{...}}",
+          "share": 0.015,
+          "bpb": [
+            1.3412,
+            1.5582,
+            1.4487
+          ],
+          "gap_times_share": [
+            0.0032,
+            0.0016
+          ],
+          "gap": [
+            0.217,
+            0.1075
+          ]
+        },
+        {
+          "targets": "inside a template {{...}}: letters there",
+          "share": 0.009,
+          "bpb": [
+            1.2097,
+            1.4658,
+            1.3365
+          ],
+          "gap_times_share": [
+            0.0023,
+            0.0012
+          ],
+          "gap": [
+            0.2561,
+            0.1269
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "class_split_18T0154.txt",
+      "models": [
+        {
+          "checkpoint": "full-transformer-rot/snap30000.pt",
+          "updates": 30000,
+          "weights": "averaged",
+          "bpb": 1.4084
+        },
+        {
+          "checkpoint": "full-rate-rot/snap30000.pt",
+          "updates": 30000,
+          "weights": "averaged",
+          "bpb": 1.5242
+        },
+        {
+          "checkpoint": "pilot-race64-d8-c350-dl4/snap30000.pt",
+          "updates": 30000,
+          "weights": "averaged",
+          "bpb": 1.4846
+        }
+      ],
+      "rows": [
+        {
+          "targets": "bytes before 0-31: first letter of a word",
+          "share": 0.009,
+          "bpb": [
+            4.0032,
+            4.1206,
+            4.0644
+          ],
+          "gap_times_share": [
+            0.0011,
+            0.0006
+          ],
+          "gap": [
+            0.1174,
+            0.0612
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: letter after 1-2",
+          "share": 0.017,
+          "bpb": [
+            2.0404,
+            2.1174,
+            2.0969
+          ],
+          "gap_times_share": [
+            0.0013,
+            0.001
+          ],
+          "gap": [
+            0.077,
+            0.0565
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: letter after 3+",
+          "share": 0.019,
+          "bpb": [
+            1.0098,
+            1.1339,
+            1.0727
+          ],
+          "gap_times_share": [
+            0.0023,
+            0.0012
+          ],
+          "gap": [
+            0.124,
+            0.0629
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: not a letter",
+          "share": 0.017,
+          "bpb": [
+            1.6078,
+            1.711,
+            1.6689
+          ],
+          "gap_times_share": [
+            0.0018,
+            0.0011
+          ],
+          "gap": [
+            0.1032,
+            0.0611
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: first letter of a word",
+          "share": 0.027,
+          "bpb": [
+            3.5937,
+            3.7389,
+            3.6785
+          ],
+          "gap_times_share": [
+            0.004,
+            0.0023
+          ],
+          "gap": [
+            0.1452,
+            0.0848
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: letter after 1-2",
+          "share": 0.048,
+          "bpb": [
+            1.5523,
+            1.6854,
+            1.6443
+          ],
+          "gap_times_share": [
+            0.0063,
+            0.0044
+          ],
+          "gap": [
+            0.1331,
+            0.092
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: letter after 3+",
+          "share": 0.061,
+          "bpb": [
+            0.7324,
+            0.872,
+            0.8213
+          ],
+          "gap_times_share": [
+            0.0084,
+            0.0054
+          ],
+          "gap": [
+            0.1396,
+            0.0889
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: not a letter",
+          "share": 0.052,
+          "bpb": [
+            1.1261,
+            1.2275,
+            1.1819
+          ],
+          "gap_times_share": [
+            0.0053,
+            0.0029
+          ],
+          "gap": [
+            0.1014,
+            0.0558
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: first letter of a word",
+          "share": 0.11,
+          "bpb": [
+            3.4728,
+            3.6154,
+            3.5677
+          ],
+          "gap_times_share": [
+            0.0156,
+            0.0104
+          ],
+          "gap": [
+            0.1426,
+            0.0949
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: letter after 1-2",
+          "share": 0.192,
+          "bpb": [
+            1.4253,
+            1.5683,
+            1.5295
+          ],
+          "gap_times_share": [
+            0.0274,
+            0.02
+          ],
+          "gap": [
+            0.143,
+            0.1042
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: letter after 3+",
+          "share": 0.24,
+          "bpb": [
+            0.6367,
+            0.7585,
+            0.7107
+          ],
+          "gap_times_share": [
+            0.0292,
+            0.0177
+          ],
+          "gap": [
+            0.1219,
+            0.074
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: not a letter",
+          "share": 0.209,
+          "bpb": [
+            0.9962,
+            1.0581,
+            1.0407
+          ],
+          "gap_times_share": [
+            0.0129,
+            0.0093
+          ],
+          "gap": [
+            0.0619,
+            0.0445
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "match_split_18T0215.txt",
+      "models": [
+        {
+          "checkpoint": "full-transformer-rot/snap42000.pt",
+          "updates": 42000,
+          "weights": "averaged",
+          "bpb": 1.3671
+        },
+        {
+          "checkpoint": "full-rate-rot/snap42000.pt",
+          "updates": 42000,
+          "weights": "averaged",
+          "bpb": 1.4864
+        },
+        {
+          "checkpoint": "full-soft-a8-h316-rot/snap42000.pt",
+          "updates": 42000,
+          "weights": "averaged",
+          "bpb": 1.4694
+        },
+        {
+          "checkpoint": "pilot-race64-d8-c350-dl4/snap42000.pt",
+          "updates": 42000,
+          "weights": "averaged",
+          "bpb": 1.4431
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.3671,
+            1.4864,
+            1.4694,
+            1.4431
+          ],
+          "gap_times_share": [
+            0.1193,
+            0.1023,
+            0.076
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.156,
+          "bpb": [
+            0.2541,
+            0.2524,
+            0.2393,
+            0.2504
+          ],
+          "gap_times_share": [
+            -0.0003,
+            -0.0023,
+            -0.0006
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.844,
+          "bpb": [
+            1.5722,
+            1.7138,
+            1.6961,
+            1.6629
+          ],
+          "gap_times_share": [
+            0.1195,
+            0.1046,
+            0.0766
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            1.8749,
+            1.9834,
+            1.9682,
+            1.9254
+          ],
+          "gap_times_share": [
+            0.0068,
+            0.0058,
+            0.0032
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.4229,
+            1.5518,
+            1.5361,
+            1.5041
+          ],
+          "gap_times_share": [
+            0.0242,
+            0.0212,
+            0.0152
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.3619,
+            1.4858,
+            1.4712,
+            1.4433
+          ],
+          "gap_times_share": [
+            0.031,
+            0.0273,
+            0.0203
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.2853,
+            1.4,
+            1.3812,
+            1.3599
+          ],
+          "gap_times_share": [
+            0.0573,
+            0.0479,
+            0.0373
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "class_split_18T0234.txt",
+      "models": [
+        {
+          "checkpoint": "early-transformer-rot/snap6000.pt",
+          "updates": 6000,
+          "weights": "averaged",
+          "bpb": 1.7665
+        },
+        {
+          "checkpoint": "pilot-race64-d8-c350-dl4/snap6000.pt",
+          "updates": 6000,
+          "weights": "averaged",
+          "bpb": 1.6624
+        },
+        {
+          "checkpoint": "pilot-race64-d8-c350-dl4-tr3/snap6000.pt",
+          "updates": 6000,
+          "weights": "averaged",
+          "bpb": 1.6632
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.7665,
+            1.6624,
+            1.6632
+          ],
+          "gap_times_share": [
+            -0.1041,
+            -0.1033
+          ],
+          "gap": [
+            -0.1041,
+            -0.1033
+          ]
+        },
+        {
+          "targets": "lower-case letter",
+          "share": 0.684,
+          "bpb": [
+            1.7647,
+            1.6568,
+            1.6616
+          ],
+          "gap_times_share": [
+            -0.0738,
+            -0.0706
+          ],
+          "gap": [
+            -0.1079,
+            -0.1032
+          ]
+        },
+        {
+          "targets": "capital letter",
+          "share": 0.037,
+          "bpb": [
+            4.9456,
+            4.6358,
+            4.6381
+          ],
+          "gap_times_share": [
+            -0.0116,
+            -0.0115
+          ],
+          "gap": [
+            -0.3098,
+            -0.3075
+          ]
+        },
+        {
+          "targets": "digit",
+          "share": 0.019,
+          "bpb": [
+            3.4485,
+            3.2846,
+            3.3268
+          ],
+          "gap_times_share": [
+            -0.0032,
+            -0.0023
+          ],
+          "gap": [
+            -0.164,
+            -0.1217
+          ]
+        },
+        {
+          "targets": "space",
+          "share": 0.135,
+          "bpb": [
+            0.5962,
+            0.5727,
+            0.5618
+          ],
+          "gap_times_share": [
+            -0.0032,
+            -0.0047
+          ],
+          "gap": [
+            -0.0235,
+            -0.0345
+          ]
+        },
+        {
+          "targets": "newline",
+          "share": 0.01,
+          "bpb": [
+            1.3209,
+            1.2647,
+            1.2587
+          ],
+          "gap_times_share": [
+            -0.0006,
+            -0.0006
+          ],
+          "gap": [
+            -0.0562,
+            -0.0622
+          ]
+        },
+        {
+          "targets": "punctuation",
+          "share": 0.043,
+          "bpb": [
+            2.3795,
+            2.316,
+            2.2411
+          ],
+          "gap_times_share": [
+            -0.0028,
+            -0.006
+          ],
+          "gap": [
+            -0.0635,
+            -0.1384
+          ]
+        },
+        {
+          "targets": "markup sign",
+          "share": 0.064,
+          "bpb": [
+            1.2841,
+            1.1733,
+            1.1925
+          ],
+          "gap_times_share": [
+            -0.0071,
+            -0.0059
+          ],
+          "gap": [
+            -0.1108,
+            -0.0916
+          ]
+        },
+        {
+          "targets": "byte of a longer character",
+          "share": 0.006,
+          "bpb": [
+            4.1788,
+            3.927,
+            3.9733
+          ],
+          "gap_times_share": [
+            -0.0016,
+            -0.0013
+          ],
+          "gap": [
+            -0.2518,
+            -0.2055
+          ]
+        },
+        {
+          "targets": "other",
+          "share": 0.0,
+          "bpb": [
+            6.3212,
+            5.5211,
+            5.3888
+          ],
+          "gap_times_share": [
+            -0.0004,
+            -0.0004
+          ],
+          "gap": [
+            -0.8,
+            -0.9323
+          ]
+        },
+        {
+          "targets": "letter after 0 letters",
+          "share": 0.146,
+          "bpb": [
+            3.9324,
+            3.8262,
+            3.8253
+          ],
+          "gap_times_share": [
+            -0.0155,
+            -0.0156
+          ],
+          "gap": [
+            -0.1062,
+            -0.1071
+          ]
+        },
+        {
+          "targets": "letter after 1 letters",
+          "share": 0.141,
+          "bpb": [
+            1.9006,
+            1.8287,
+            1.8302
+          ],
+          "gap_times_share": [
+            -0.0101,
+            -0.0099
+          ],
+          "gap": [
+            -0.0718,
+            -0.0704
+          ]
+        },
+        {
+          "targets": "letter after 2 letters",
+          "share": 0.116,
+          "bpb": [
+            1.8506,
+            1.6792,
+            1.6797
+          ],
+          "gap_times_share": [
+            -0.0199,
+            -0.0198
+          ],
+          "gap": [
+            -0.1714,
+            -0.1709
+          ]
+        },
+        {
+          "targets": "letter after 3-4 letters",
+          "share": 0.16,
+          "bpb": [
+            1.2419,
+            1.0775,
+            1.0854
+          ],
+          "gap_times_share": [
+            -0.0263,
+            -0.025
+          ],
+          "gap": [
+            -0.1644,
+            -0.1565
+          ]
+        },
+        {
+          "targets": "letter after 5-7 letters",
+          "share": 0.12,
+          "bpb": [
+            0.8773,
+            0.7877,
+            0.8044
+          ],
+          "gap_times_share": [
+            -0.0108,
+            -0.0088
+          ],
+          "gap": [
+            -0.0896,
+            -0.0729
+          ]
+        },
+        {
+          "targets": "letter after 8+ letters",
+          "share": 0.039,
+          "bpb": [
+            0.8197,
+            0.746,
+            0.7443
+          ],
+          "gap_times_share": [
+            -0.0028,
+            -0.0029
+          ],
+          "gap": [
+            -0.0738,
+            -0.0754
+          ]
+        },
+        {
+          "targets": "not a letter, after a letter (a word ends)",
+          "share": 0.146,
+          "bpb": [
+            1.0977,
+            1.065,
+            1.0546
+          ],
+          "gap_times_share": [
+            -0.0048,
+            -0.0063
+          ],
+          "gap": [
+            -0.0327,
+            -0.0431
+          ]
+        },
+        {
+          "targets": "not a letter, after another",
+          "share": 0.133,
+          "bpb": [
+            1.6156,
+            1.5106,
+            1.5032
+          ],
+          "gap_times_share": [
+            -0.0139,
+            -0.0149
+          ],
+          "gap": [
+            -0.105,
+            -0.1124
+          ]
+        },
+        {
+          "targets": "plain text",
+          "share": 0.808,
+          "bpb": [
+            1.7353,
+            1.6527,
+            1.6542
+          ],
+          "gap_times_share": [
+            -0.0668,
+            -0.0655
+          ],
+          "gap": [
+            -0.0827,
+            -0.0811
+          ]
+        },
+        {
+          "targets": "plain text: letters there",
+          "share": 0.579,
+          "bpb": [
+            1.9141,
+            1.8199,
+            1.8254
+          ],
+          "gap_times_share": [
+            -0.0546,
+            -0.0514
+          ],
+          "gap": [
+            -0.0942,
+            -0.0888
+          ]
+        },
+        {
+          "targets": "inside a tag <...>",
+          "share": 0.014,
+          "bpb": [
+            0.0232,
+            0.0273,
+            0.0279
+          ],
+          "gap_times_share": [
+            0.0001,
+            0.0001
+          ],
+          "gap": [
+            0.0041,
+            0.0047
+          ]
+        },
+        {
+          "targets": "inside a tag <...>: letters there",
+          "share": 0.011,
+          "bpb": [
+            0.0283,
+            0.0318,
+            0.0322
+          ],
+          "gap_times_share": [
+            0.0,
+            0.0
+          ],
+          "gap": [
+            0.0035,
+            0.0039
+          ]
+        },
+        {
+          "targets": "inside a link [[...]]",
+          "share": 0.163,
+          "bpb": [
+            2.0386,
+            1.8317,
+            1.8294
+          ],
+          "gap_times_share": [
+            -0.0337,
+            -0.0341
+          ],
+          "gap": [
+            -0.2069,
+            -0.2093
+          ]
+        },
+        {
+          "targets": "inside a link [[...]]: letters there",
+          "share": 0.122,
+          "bpb": [
+            2.1687,
+            1.9345,
+            1.9348
+          ],
+          "gap_times_share": [
+            -0.0286,
+            -0.0286
+          ],
+          "gap": [
+            -0.2343,
+            -0.234
+          ]
+        },
+        {
+          "targets": "inside a template {{...}}",
+          "share": 0.015,
+          "bpb": [
+            2.1065,
+            1.8661,
+            1.8594
+          ],
+          "gap_times_share": [
+            -0.0036,
+            -0.0037
+          ],
+          "gap": [
+            -0.2404,
+            -0.247
+          ]
+        },
+        {
+          "targets": "inside a template {{...}}: letters there",
+          "share": 0.009,
+          "bpb": [
+            1.9751,
+            1.7291,
+            1.7439
+          ],
+          "gap_times_share": [
+            -0.0022,
+            -0.0021
+          ],
+          "gap": [
+            -0.246,
+            -0.2312
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: first letter of a word",
+          "share": 0.009,
+          "bpb": [
+            4.2081,
+            4.1886,
+            4.1987
+          ],
+          "gap_times_share": [
+            -0.0002,
+            -0.0001
+          ],
+          "gap": [
+            -0.0195,
+            -0.0093
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: letter after 1-2",
+          "share": 0.017,
+          "bpb": [
+            2.2048,
+            2.2052,
+            2.2281
+          ],
+          "gap_times_share": [
+            0.0,
+            0.0004
+          ],
+          "gap": [
+            0.0004,
+            0.0233
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: letter after 3+",
+          "share": 0.019,
+          "bpb": [
+            1.2248,
+            1.2278,
+            1.2536
+          ],
+          "gap_times_share": [
+            0.0001,
+            0.0005
+          ],
+          "gap": [
+            0.003,
+            0.0288
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: not a letter",
+          "share": 0.017,
+          "bpb": [
+            1.7802,
+            1.8207,
+            1.7911
+          ],
+          "gap_times_share": [
+            0.0007,
+            0.0002
+          ],
+          "gap": [
+            0.0405,
+            0.0108
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: first letter of a word",
+          "share": 0.027,
+          "bpb": [
+            3.9123,
+            3.8854,
+            3.8793
+          ],
+          "gap_times_share": [
+            -0.0007,
+            -0.0009
+          ],
+          "gap": [
+            -0.0269,
+            -0.0329
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: letter after 1-2",
+          "share": 0.048,
+          "bpb": [
+            1.8711,
+            1.8198,
+            1.8279
+          ],
+          "gap_times_share": [
+            -0.0024,
+            -0.002
+          ],
+          "gap": [
+            -0.0513,
+            -0.0431
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: letter after 3+",
+          "share": 0.061,
+          "bpb": [
+            1.057,
+            1.008,
+            1.0183
+          ],
+          "gap_times_share": [
+            -0.003,
+            -0.0023
+          ],
+          "gap": [
+            -0.049,
+            -0.0387
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: not a letter",
+          "share": 0.052,
+          "bpb": [
+            1.3847,
+            1.3612,
+            1.3536
+          ],
+          "gap_times_share": [
+            -0.0012,
+            -0.0016
+          ],
+          "gap": [
+            -0.0235,
+            -0.0311
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: first letter of a word",
+          "share": 0.11,
+          "bpb": [
+            3.9141,
+            3.7809,
+            3.7803
+          ],
+          "gap_times_share": [
+            -0.0146,
+            -0.0147
+          ],
+          "gap": [
+            -0.1332,
+            -0.1338
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: letter after 1-2",
+          "share": 0.192,
+          "bpb": [
+            1.8501,
+            1.7064,
+            1.7037
+          ],
+          "gap_times_share": [
+            -0.0276,
+            -0.0281
+          ],
+          "gap": [
+            -0.1437,
+            -0.1464
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: letter after 3+",
+          "share": 0.24,
+          "bpb": [
+            1.039,
+            0.8847,
+            0.8934
+          ],
+          "gap_times_share": [
+            -0.037,
+            -0.0349
+          ],
+          "gap": [
+            -0.1543,
+            -0.1456
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: not a letter",
+          "share": 0.209,
+          "bpb": [
+            1.2979,
+            1.211,
+            1.2033
+          ],
+          "gap_times_share": [
+            -0.0182,
+            -0.0198
+          ],
+          "gap": [
+            -0.087,
+            -0.0946
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "match_and_class_split_18T0320.txt",
+      "models": [
+        {
+          "checkpoint": "full-transformer-rot/snap84000.pt",
+          "updates": 84000,
+          "weights": "averaged",
+          "bpb": 1.3031
+        },
+        {
+          "checkpoint": "full-rate-rot/snap84000.pt",
+          "updates": 84000,
+          "weights": "averaged",
+          "bpb": 1.4083
+        },
+        {
+          "checkpoint": "pilot-race64-d8-c350-dl4/snap84000.pt",
+          "updates": 84000,
+          "weights": "averaged",
+          "bpb": 1.3679
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.3031,
+            1.4083,
+            1.3679
+          ],
+          "gap_times_share": [
+            0.1051,
+            0.0647
+          ]
+        },
+        {
+          "targets": "match 0",
+          "share": 0.093,
+          "bpb": [
+            1.6135,
+            1.7271,
+            1.6809
+          ],
+          "gap_times_share": [
+            0.0105,
+            0.0063
+          ]
+        },
+        {
+          "targets": "match 1, follower is the target",
+          "share": 0.042,
+          "bpb": [
+            0.7018,
+            0.7682,
+            0.7354
+          ],
+          "gap_times_share": [
+            0.0028,
+            0.0014
+          ]
+        },
+        {
+          "targets": "match 1, follower is not",
+          "share": 0.285,
+          "bpb": [
+            1.4152,
+            1.5553,
+            1.5006
+          ],
+          "gap_times_share": [
+            0.0399,
+            0.0243
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is the target",
+          "share": 0.113,
+          "bpb": [
+            0.4907,
+            0.5275,
+            0.5109
+          ],
+          "gap_times_share": [
+            0.0042,
+            0.0023
+          ]
+        },
+        {
+          "targets": "match 2-3, follower is not",
+          "share": 0.25,
+          "bpb": [
+            1.7657,
+            1.9122,
+            1.8614
+          ],
+          "gap_times_share": [
+            0.0366,
+            0.0239
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is the target",
+          "share": 0.088,
+          "bpb": [
+            0.2594,
+            0.2566,
+            0.2503
+          ],
+          "gap_times_share": [
+            -0.0002,
+            -0.0008
+          ]
+        },
+        {
+          "targets": "match 4-7, follower is not",
+          "share": 0.047,
+          "bpb": [
+            3.06,
+            3.2401,
+            3.1845
+          ],
+          "gap_times_share": [
+            0.0084,
+            0.0058
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is the target",
+          "share": 0.043,
+          "bpb": [
+            0.2174,
+            0.2058,
+            0.1979
+          ],
+          "gap_times_share": [
+            -0.0005,
+            -0.0008
+          ]
+        },
+        {
+          "targets": "match 8-15, follower is not",
+          "share": 0.012,
+          "bpb": [
+            2.7883,
+            3.0126,
+            2.9571
+          ],
+          "gap_times_share": [
+            0.0027,
+            0.002
+          ]
+        },
+        {
+          "targets": "match 16+, follower is the target",
+          "share": 0.024,
+          "bpb": [
+            0.1957,
+            0.1957,
+            0.1764
+          ],
+          "gap_times_share": [
+            -0.0,
+            -0.0005
+          ]
+        },
+        {
+          "targets": "match 16+, follower is not",
+          "share": 0.003,
+          "bpb": [
+            3.608,
+            3.8754,
+            3.9085
+          ],
+          "gap_times_share": [
+            0.0007,
+            0.0008
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.156,
+          "bpb": [
+            0.2379,
+            0.2331,
+            0.2243
+          ],
+          "gap_times_share": [
+            -0.0008,
+            -0.0021
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.844,
+          "bpb": [
+            1.4994,
+            1.6249,
+            1.5786
+          ],
+          "gap_times_share": [
+            0.1059,
+            0.0669
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            1.8217,
+            1.9141,
+            1.8616
+          ],
+          "gap_times_share": [
+            0.0058,
+            0.0025
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.357,
+            1.4689,
+            1.4244
+          ],
+          "gap_times_share": [
+            0.021,
+            0.0126
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.2976,
+            1.4053,
+            1.3652
+          ],
+          "gap_times_share": [
+            0.0269,
+            0.0169
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.2208,
+            1.3238,
+            1.2863
+          ],
+          "gap_times_share": [
+            0.0515,
+            0.0327
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "match_and_class_split_18T0320.txt",
+      "models": [
+        {
+          "checkpoint": "full-transformer-rot/snap84000.pt",
+          "updates": 84000,
+          "weights": "averaged",
+          "bpb": 1.3031
+        },
+        {
+          "checkpoint": "full-rate-rot/snap84000.pt",
+          "updates": 84000,
+          "weights": "averaged",
+          "bpb": 1.4083
+        },
+        {
+          "checkpoint": "pilot-race64-d8-c350-dl4/snap84000.pt",
+          "updates": 84000,
+          "weights": "averaged",
+          "bpb": 1.3679
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.3031,
+            1.4083,
+            1.3679
+          ],
+          "gap_times_share": [
+            0.1051,
+            0.0647
+          ],
+          "gap": [
+            0.1051,
+            0.0647
+          ]
+        },
+        {
+          "targets": "lower-case letter",
+          "share": 0.684,
+          "bpb": [
+            1.2887,
+            1.4019,
+            1.3603
+          ],
+          "gap_times_share": [
+            0.0774,
+            0.049
+          ],
+          "gap": [
+            0.1132,
+            0.0716
+          ]
+        },
+        {
+          "targets": "capital letter",
+          "share": 0.037,
+          "bpb": [
+            3.9965,
+            4.1793,
+            4.1032
+          ],
+          "gap_times_share": [
+            0.0068,
+            0.004
+          ],
+          "gap": [
+            0.1827,
+            0.1067
+          ]
+        },
+        {
+          "targets": "digit",
+          "share": 0.019,
+          "bpb": [
+            2.7304,
+            2.8799,
+            2.8386
+          ],
+          "gap_times_share": [
+            0.0029,
+            0.0021
+          ],
+          "gap": [
+            0.1496,
+            0.1082
+          ]
+        },
+        {
+          "targets": "space",
+          "share": 0.135,
+          "bpb": [
+            0.432,
+            0.4767,
+            0.4556
+          ],
+          "gap_times_share": [
+            0.006,
+            0.0032
+          ],
+          "gap": [
+            0.0447,
+            0.0236
+          ]
+        },
+        {
+          "targets": "newline",
+          "share": 0.01,
+          "bpb": [
+            0.9297,
+            0.9944,
+            0.9833
+          ],
+          "gap_times_share": [
+            0.0007,
+            0.0005
+          ],
+          "gap": [
+            0.0647,
+            0.0536
+          ]
+        },
+        {
+          "targets": "punctuation",
+          "share": 0.043,
+          "bpb": [
+            1.702,
+            1.8371,
+            1.7864
+          ],
+          "gap_times_share": [
+            0.0059,
+            0.0037
+          ],
+          "gap": [
+            0.1351,
+            0.0844
+          ]
+        },
+        {
+          "targets": "markup sign",
+          "share": 0.064,
+          "bpb": [
+            0.903,
+            0.9728,
+            0.9389
+          ],
+          "gap_times_share": [
+            0.0045,
+            0.0023
+          ],
+          "gap": [
+            0.0698,
+            0.0359
+          ]
+        },
+        {
+          "targets": "byte of a longer character",
+          "share": 0.006,
+          "bpb": [
+            3.0019,
+            3.1312,
+            2.9874
+          ],
+          "gap_times_share": [
+            0.0008,
+            -0.0001
+          ],
+          "gap": [
+            0.1293,
+            -0.0145
+          ]
+        },
+        {
+          "targets": "other",
+          "share": 0.0,
+          "bpb": [
+            3.7581,
+            4.1983,
+            3.9613
+          ],
+          "gap_times_share": [
+            0.0002,
+            0.0001
+          ],
+          "gap": [
+            0.4402,
+            0.2031
+          ]
+        },
+        {
+          "targets": "letter after 0 letters",
+          "share": 0.146,
+          "bpb": [
+            3.3945,
+            3.5199,
+            3.4759
+          ],
+          "gap_times_share": [
+            0.0183,
+            0.0119
+          ],
+          "gap": [
+            0.1253,
+            0.0813
+          ]
+        },
+        {
+          "targets": "letter after 1 letters",
+          "share": 0.141,
+          "bpb": [
+            1.4801,
+            1.5922,
+            1.5548
+          ],
+          "gap_times_share": [
+            0.0158,
+            0.0105
+          ],
+          "gap": [
+            0.1121,
+            0.0746
+          ]
+        },
+        {
+          "targets": "letter after 2 letters",
+          "share": 0.116,
+          "bpb": [
+            1.2339,
+            1.3866,
+            1.3392
+          ],
+          "gap_times_share": [
+            0.0177,
+            0.0122
+          ],
+          "gap": [
+            0.1526,
+            0.1053
+          ]
+        },
+        {
+          "targets": "letter after 3-4 letters",
+          "share": 0.16,
+          "bpb": [
+            0.7117,
+            0.8308,
+            0.7845
+          ],
+          "gap_times_share": [
+            0.019,
+            0.0116
+          ],
+          "gap": [
+            0.1191,
+            0.0728
+          ]
+        },
+        {
+          "targets": "letter after 5-7 letters",
+          "share": 0.12,
+          "bpb": [
+            0.4444,
+            0.5347,
+            0.4887
+          ],
+          "gap_times_share": [
+            0.0109,
+            0.0053
+          ],
+          "gap": [
+            0.0903,
+            0.0443
+          ]
+        },
+        {
+          "targets": "letter after 8+ letters",
+          "share": 0.039,
+          "bpb": [
+            0.4295,
+            0.4955,
+            0.4659
+          ],
+          "gap_times_share": [
+            0.0025,
+            0.0014
+          ],
+          "gap": [
+            0.066,
+            0.0364
+          ]
+        },
+        {
+          "targets": "not a letter, after a letter (a word ends)",
+          "share": 0.146,
+          "bpb": [
+            0.7618,
+            0.8381,
+            0.8013
+          ],
+          "gap_times_share": [
+            0.0111,
+            0.0058
+          ],
+          "gap": [
+            0.0763,
+            0.0396
+          ]
+        },
+        {
+          "targets": "not a letter, after another",
+          "share": 0.133,
+          "bpb": [
+            1.2144,
+            1.2881,
+            1.2597
+          ],
+          "gap_times_share": [
+            0.0098,
+            0.006
+          ],
+          "gap": [
+            0.0736,
+            0.0453
+          ]
+        },
+        {
+          "targets": "plain text",
+          "share": 0.808,
+          "bpb": [
+            1.3268,
+            1.4236,
+            1.3879
+          ],
+          "gap_times_share": [
+            0.0783,
+            0.0494
+          ],
+          "gap": [
+            0.0969,
+            0.0611
+          ]
+        },
+        {
+          "targets": "plain text: letters there",
+          "share": 0.579,
+          "bpb": [
+            1.4701,
+            1.5776,
+            1.5384
+          ],
+          "gap_times_share": [
+            0.0622,
+            0.0396
+          ],
+          "gap": [
+            0.1074,
+            0.0683
+          ]
+        },
+        {
+          "targets": "inside a tag <...>",
+          "share": 0.014,
+          "bpb": [
+            0.0158,
+            0.0192,
+            0.0176
+          ],
+          "gap_times_share": [
+            0.0,
+            0.0
+          ],
+          "gap": [
+            0.0034,
+            0.0019
+          ]
+        },
+        {
+          "targets": "inside a tag <...>: letters there",
+          "share": 0.011,
+          "bpb": [
+            0.0193,
+            0.0228,
+            0.0213
+          ],
+          "gap_times_share": [
+            0.0,
+            0.0
+          ],
+          "gap": [
+            0.0036,
+            0.002
+          ]
+        },
+        {
+          "targets": "inside a link [[...]]",
+          "share": 0.163,
+          "bpb": [
+            1.3139,
+            1.4666,
+            1.4044
+          ],
+          "gap_times_share": [
+            0.0249,
+            0.0148
+          ],
+          "gap": [
+            0.1527,
+            0.0905
+          ]
+        },
+        {
+          "targets": "inside a link [[...]]: letters there",
+          "share": 0.122,
+          "bpb": [
+            1.3944,
+            1.5641,
+            1.4993
+          ],
+          "gap_times_share": [
+            0.0207,
+            0.0128
+          ],
+          "gap": [
+            0.1697,
+            0.1049
+          ]
+        },
+        {
+          "targets": "inside a template {{...}}",
+          "share": 0.015,
+          "bpb": [
+            1.1067,
+            1.2365,
+            1.1477
+          ],
+          "gap_times_share": [
+            0.0019,
+            0.0006
+          ],
+          "gap": [
+            0.1298,
+            0.0411
+          ]
+        },
+        {
+          "targets": "inside a template {{...}}: letters there",
+          "share": 0.009,
+          "bpb": [
+            0.9608,
+            1.0976,
+            1.0226
+          ],
+          "gap_times_share": [
+            0.0012,
+            0.0006
+          ],
+          "gap": [
+            0.1368,
+            0.0617
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: first letter of a word",
+          "share": 0.009,
+          "bpb": [
+            3.9277,
+            4.0281,
+            3.9762
+          ],
+          "gap_times_share": [
+            0.0009,
+            0.0004
+          ],
+          "gap": [
+            0.1003,
+            0.0485
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: letter after 1-2",
+          "share": 0.017,
+          "bpb": [
+            1.9573,
+            2.0462,
+            1.9982
+          ],
+          "gap_times_share": [
+            0.0015,
+            0.0007
+          ],
+          "gap": [
+            0.0888,
+            0.0408
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: letter after 3+",
+          "share": 0.019,
+          "bpb": [
+            0.9098,
+            1.0142,
+            0.9484
+          ],
+          "gap_times_share": [
+            0.0019,
+            0.0007
+          ],
+          "gap": [
+            0.1044,
+            0.0386
+          ]
+        },
+        {
+          "targets": "bytes before 0-31: not a letter",
+          "share": 0.017,
+          "bpb": [
+            1.539,
+            1.6181,
+            1.5747
+          ],
+          "gap_times_share": [
+            0.0014,
+            0.0006
+          ],
+          "gap": [
+            0.0791,
+            0.0357
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: first letter of a word",
+          "share": 0.027,
+          "bpb": [
+            3.4575,
+            3.5806,
+            3.5312
+          ],
+          "gap_times_share": [
+            0.0034,
+            0.002
+          ],
+          "gap": [
+            0.1231,
+            0.0736
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: letter after 1-2",
+          "share": 0.048,
+          "bpb": [
+            1.4276,
+            1.5587,
+            1.5183
+          ],
+          "gap_times_share": [
+            0.0062,
+            0.0043
+          ],
+          "gap": [
+            0.1311,
+            0.0907
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: letter after 3+",
+          "share": 0.061,
+          "bpb": [
+            0.6256,
+            0.7387,
+            0.6912
+          ],
+          "gap_times_share": [
+            0.0068,
+            0.004
+          ],
+          "gap": [
+            0.1131,
+            0.0656
+          ]
+        },
+        {
+          "targets": "bytes before 32-127: not a letter",
+          "share": 0.052,
+          "bpb": [
+            1.0453,
+            1.1324,
+            1.0905
+          ],
+          "gap_times_share": [
+            0.0045,
+            0.0024
+          ],
+          "gap": [
+            0.0871,
+            0.0451
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: first letter of a word",
+          "share": 0.11,
+          "bpb": [
+            3.3339,
+            3.4619,
+            3.4199
+          ],
+          "gap_times_share": [
+            0.014,
+            0.0094
+          ],
+          "gap": [
+            0.128,
+            0.086
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: letter after 1-2",
+          "share": 0.192,
+          "bpb": [
+            1.3011,
+            1.4351,
+            1.3933
+          ],
+          "gap_times_share": [
+            0.0257,
+            0.0177
+          ],
+          "gap": [
+            0.134,
+            0.0922
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: letter after 3+",
+          "share": 0.24,
+          "bpb": [
+            0.5386,
+            0.6374,
+            0.5957
+          ],
+          "gap_times_share": [
+            0.0237,
+            0.0137
+          ],
+          "gap": [
+            0.0988,
+            0.0571
+          ]
+        },
+        {
+          "targets": "bytes before 128-511: not a letter",
+          "share": 0.209,
+          "bpb": [
+            0.9136,
+            0.9853,
+            0.9557
+          ],
+          "gap_times_share": [
+            0.015,
+            0.0088
+          ],
+          "gap": [
+            0.0717,
+            0.0421
+          ]
+        }
+      ],
+      "validation_windows": 512
+    },
+    {
+      "source": "match_split_18T0357.txt",
+      "models": [
+        {
+          "checkpoint": "early-transformer-rot/snap12000.pt",
+          "updates": 12000,
+          "weights": "averaged",
+          "bpb": 1.5432
+        },
+        {
+          "checkpoint": "pilot-race64-d8-c350-dl4/snap12000.pt",
+          "updates": 12000,
+          "weights": "averaged",
+          "bpb": 1.5804
+        },
+        {
+          "checkpoint": "pilot-race64-d8-g7x200-dl4/snap12000.pt",
+          "updates": 12000,
+          "weights": "averaged",
+          "bpb": 1.576
+        }
+      ],
+      "rows": [
+        {
+          "targets": "all",
+          "share": 1.0,
+          "bpb": [
+            1.5432,
+            1.5804,
+            1.576
+          ],
+          "gap_times_share": [
+            0.0373,
+            0.0329
+          ]
+        },
+        {
+          "targets": "copyable (match >= 4)",
+          "share": 0.156,
+          "bpb": [
+            0.4042,
+            0.2958,
+            0.2944
+          ],
+          "gap_times_share": [
+            -0.0169,
+            -0.0171
+          ]
+        },
+        {
+          "targets": "not copyable or match < 4",
+          "share": 0.844,
+          "bpb": [
+            1.7531,
+            1.8172,
+            1.8122
+          ],
+          "gap_times_share": [
+            0.0541,
+            0.0499
+          ]
+        },
+        {
+          "targets": "bytes before the target 0-31",
+          "share": 0.062,
+          "bpb": [
+            2.0056,
+            2.0379,
+            2.0329
+          ],
+          "gap_times_share": [
+            0.002,
+            0.0017
+          ]
+        },
+        {
+          "targets": "bytes before the target 32-127",
+          "share": 0.188,
+          "bpb": [
+            1.5906,
+            1.6457,
+            1.6419
+          ],
+          "gap_times_share": [
+            0.0103,
+            0.0096
+          ]
+        },
+        {
+          "targets": "bytes before the target 128-255",
+          "share": 0.25,
+          "bpb": [
+            1.5467,
+            1.5848,
+            1.5792
+          ],
+          "gap_times_share": [
+            0.0095,
+            0.0081
+          ]
+        },
+        {
+          "targets": "bytes before the target 256-511",
+          "share": 0.5,
+          "bpb": [
+            1.4658,
+            1.4966,
+            1.4926
+          ],
+          "gap_times_share": [
+            0.0154,
+            0.0134
+          ]
+        }
+      ],
+      "validation_windows": 512
+    }
+  ]
+}

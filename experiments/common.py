@@ -164,15 +164,25 @@ def checkpoint_path(args) -> Path | None:
     return path
 
 
-def make_optimizer(model, lr, wd):
-    decay, no_decay = [], []
+def make_optimizer(model, lr, wd, betas=(0.9, 0.99), rotated=None, stacks=False, scales=()):
+    """AdamW, or Adam in each weight matrix's gradient eigenbasis with ``rotated`` steps between basis updates.
+
+    With ``stacks`` the rotated optimizer also turns every matrix of a three-dimensional weight. ``scales``
+    holds pairs of a name part and a factor: a parameter whose name contains a part steps with the learning
+    rate times the factor of the first such pair. Every group keeps its factor as ``lr_scale`` for a schedule.
+    """
+    groups = {}
     for n, p in model.named_parameters():
-        (decay if p.ndim >= 2 and "pos" not in n else no_decay).append(p)
-    return torch.optim.AdamW(
-        [{"params": decay, "weight_decay": wd}, {"params": no_decay, "weight_decay": 0.0}],
-        lr=lr,
-        betas=(0.9, 0.99),
-    )
+        decay = wd if p.ndim >= 2 and "pos" not in n else 0.0
+        scale = next((factor for part, factor in scales if part in n), 1.0)
+        groups.setdefault((decay == 0.0, scale), {"params": [], "weight_decay": decay, "lr_scale": scale,
+                                                  "lr": lr * scale})["params"].append(p)
+    groups = [groups[key] for key in sorted(groups)]
+    if rotated is not None:
+        from rotated_adam import RotatedAdam
+
+        return RotatedAdam(groups, lr=lr, betas=betas, refresh=rotated, stacks=stacks)
+    return torch.optim.AdamW(groups, lr=lr, betas=betas)
 
 
 def cosine_lr(step: int, total: int, warmup: int, base: float) -> float:
