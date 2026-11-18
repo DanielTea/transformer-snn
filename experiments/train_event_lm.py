@@ -608,9 +608,11 @@ def main():
                         help="stretches of bytes that a granule cluster's beat fibres hold: a fibre brings its "
                              "channel over the present stretch or over one of this many stretches before it, and a "
                              "beat of the cluster's clock opens a new stretch; no beat fibres when zero")
-    parser.add_argument("--granule-clock", choices=("word", "every", "learned"), default=EventLMConfig.granule_clock,
-                        help="what beats for a granule cluster's beat fibres: the start of every word, every byte "
-                             "(which makes them delayed fibres), or a clock cell of the cluster that learns when")
+    parser.add_argument("--granule-clock", choices=("word", "end", "every", "learned"),
+                        default=EventLMConfig.granule_clock,
+                        help="what beats for a granule cluster's beat fibres: the start of every word, the first "
+                             "byte after every word, every byte (which makes them delayed fibres), or a clock cell "
+                             "of the cluster that learns when")
     parser.add_argument("--granule-hold", choices=("sum", "mean", "last"), default=EventLMConfig.granule_hold,
                         help="what a beat fibre brings of a stretch: its summed count, its mean count per byte, or "
                              "the count at its last byte")

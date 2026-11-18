@@ -59,7 +59,7 @@ _TRACE_STRETCH = 512
 # The most spikes of resting charge a granule cell can hold below its threshold.
 _GRANULE_REST_LIMIT = 16
 # What opens a new stretch on a granule cluster's beat fibres, and what such a fibre brings of a stretch.
-_GRANULE_CLOCKS = ("word", "every", "learned")
+_GRANULE_CLOCKS = ("word", "end", "every", "learned")
 _GRANULE_HOLDS = ("mean", "sum", "last")
 # The most closed stretches a cluster's beat fibres can hold.
 _GRANULE_BEATS = 8
@@ -2310,8 +2310,11 @@ class _GranuleLayer(nn.Module):
     stretch so far and the held ones side by side, whatever their lengths in
     bytes, and what it hears of a held stretch stays the same until the next
     beat. What is kept of a stretch is its summed count, its mean count or
-    the count at its last byte. The ``word`` clock beats where a word starts,
-    which the bytes themselves tell. A ``learned`` clock is a cell that hears
+    the count at its last byte. The ``word`` clock beats where a word starts
+    and the ``end`` clock at the first byte after a word, which the bytes
+    themselves tell. Seen from the gap after a word and from inside the next
+    word, a held stretch of the ``end`` clock is the same word, which it is
+    not under the ``word`` clock. A ``learned`` clock is a cell that hears
     the whole stream and races a silent rival for one spike per byte: its
     spike is the beat. Every beat fibre has such a clock cell of its own. The
     clock cells of a cluster share their synapses and differ in the phases
@@ -2356,8 +2359,9 @@ class _GranuleLayer(nn.Module):
             self.register_buffer("plain_taps", self.taps.masked_fill(on_beat, 0), persistent=False)
             self.register_buffer("beat_fibres", on_beat.nonzero()[:, 1].view(clusters, -1), persistent=False)
             self.register_buffer("beat_orders", (self.taps - plain).gather(1, self.beat_fibres), persistent=False)
-            if self.clock_kind == "word":
+            if self.clock_kind in ("word", "end"):
                 self.register_buffer("word_bytes", _word_bytes(), persistent=False)
+                self.beat_at = _word_starts if self.clock_kind == "word" else _word_ends
             elif self.clock_kind == "learned":
                 # The clock cells of a cluster hear the whole stream through one set of synapses. They start deaf,
                 # so that they first beat at their own pace.
@@ -2422,11 +2426,11 @@ class _GranuleLayer(nn.Module):
         clusters = self.inputs.shape[0]
         if self.clock_kind == "every":
             return spikes.new_ones(batch, steps, clusters), None
-        if self.clock_kind == "word":
+        if self.clock_kind in ("word", "end"):
             if tokens is None:
                 raise ValueError("the word clock reads the bytes themselves")
-            starts = _word_starts(self.word_bytes[tokens])
-            return starts[..., None].expand(-1, -1, clusters).to(spikes.dtype), None
+            opens = self.beat_at(self.word_bytes[tokens])
+            return opens[..., None].expand(-1, -1, clusters).to(spikes.dtype), None
         if quanta is None:
             quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
@@ -2795,9 +2799,9 @@ class EventLM(nn.Module):
             if (not isinstance(cfg.granule_beats, int) or not 0 <= cfg.granule_beats <= _GRANULE_BEATS
                     or cfg.granule_clock not in _GRANULE_CLOCKS or cfg.granule_hold not in _GRANULE_HOLDS
                     or not 0 < cfg.granule_clock_rate < 1):
-                raise ValueError("beat fibres hold up to eight stretches between the beats of a word, every-byte or "
-                                 "learned clock, as a sum, a mean or a last count, and a learned clock starts at a "
-                                 "rate between zero and one beat per byte")
+                raise ValueError("beat fibres hold up to eight stretches between the beats of a word, word-end, "
+                                 "every-byte or learned clock, as a sum, a mean or a last count, and a learned "
+                                 "clock starts at a rate between zero and one beat per byte")
             if cfg.granule_beats and (cfg.granule_delays + cfg.granule_traces + cfg.granule_beats + 1
                                       > cfg.granule_fan):
                 raise ValueError("granule clusters need a fibre for each delay, each slow synapse, the present "

@@ -109,7 +109,8 @@ def test_cells_only_change_the_channels_their_axons_reach():
     (6, 4, 0, 0, 0, "word", "mean"), (None, 1, 30, 0, 0, "word", "mean"), (6, 4, 24, 0, 0, "word", "mean"),
     (6, 2, 0, 2, 0, "word", "mean"), (None, 1, 0, 1, 0, "word", "mean"), (6, 3, 24, 3, 0, "word", "mean"),
     (6, 1, 0, 0, 3, "word", "mean"), (None, 2, 0, 0, 2, "word", "last"), (6, 1, 24, 0, 3, "every", "sum"),
-    (6, 2, 0, 1, 2, "learned", "mean"), (None, 1, 0, 0, 4, "learned", "sum"), (6, 4, 24, 0, 2, "learned", "last")])
+    (6, 2, 0, 1, 2, "learned", "mean"), (None, 1, 0, 0, 4, "learned", "sum"), (6, 4, 24, 0, 2, "learned", "last"),
+    (6, 2, 0, 0, 3, "end", "sum")])
 def test_granule_layers_keep_the_decoder_causal_and_train(budget, delays, relays, traces, beats, clock, hold):
     model = _grow(_granules(granule_gain=1.0, granule_budget=budget, granule_delays=delays, granule_relays=relays,
                             granule_traces=traces, granule_beats=beats, granule_clock=clock, granule_hold=hold,
@@ -467,6 +468,32 @@ def test_the_word_clock_beats_where_a_word_starts():
     assert not torch.equal(_grow(model)(tokens), _decoder()(tokens))
 
 
+def test_the_end_clock_beats_at_the_first_byte_after_a_word():
+    text = "An  elephant's na\u00efve 2nd re-run.".encode()
+    tokens = torch.tensor([list(text)])
+    model = _granules(granule_gain=1.0, granule_rest=0.0, granule_beats=2, granule_clock="end")
+    layer = model.granule_layers["0"]
+    spikes = torch.randint(-3, 4, (1, len(text), 96), generator=torch.Generator().manual_seed(6)).float()
+    beats, rates = layer.beats(spikes, tokens)
+    assert rates is None and beats.shape == (1, len(text), 6) and (beats == beats[..., :1]).all()
+    assert beats[0, :, 0].nonzero().flatten().tolist() == [2, 12, 14, 21, 25, 28, 32]
+    with pytest.raises(ValueError, match="bytes themselves"):
+        layer.beats(spikes)
+    # From the gap after "2nd" and from inside "re", a fibre of the first order brings the sum over " 2nd" and one of
+    # the second order the sum over " na\u00efve": a held stretch is the same word from both places.
+    heard = layer.heard(spikes, beats)
+    for cluster in range(6):
+        place, order = layer.beat_fibres[cluster], layer.beat_orders[cluster]
+        channel = layer.inputs[cluster, place]
+        for step in range(25, 28):
+            brought = heard[0, step, cluster, place]
+            assert torch.equal(brought[order == 1], spikes[0, 21:25].sum(0)[channel[order == 1]])
+            assert torch.equal(brought[order == 2], spikes[0, 14:21].sum(0)[channel[order == 2]])
+            assert torch.equal(brought[order == 0], spikes[0, 25:step + 1].sum(0)[channel[order == 0]])
+    assert torch.equal(model(tokens), _decoder()(tokens))
+    assert not torch.equal(_grow(model)(tokens), _decoder()(tokens))
+
+
 def test_clock_cells_beat_at_their_pace_until_they_learn_what_to_listen_to():
     model = _granules(granule_gain=1.0, granule_rest=0.0, granule_beats=3, granule_clock="learned",
                       granule_clock_rate=0.25)
@@ -611,7 +638,7 @@ def test_a_learned_clock_gets_its_slope_through_the_cells_and_only_in_training()
 def test_beat_fibres_leave_other_layers_and_old_weights_as_they_were():
     tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
     plain = _decoder()
-    for clock in ("word", "every", "learned"):
+    for clock in ("word", "end", "every", "learned"):
         model = _granules(granule_beats=4, granule_clock=clock, granule_delays=2)
         assert torch.equal(model(tokens), plain(tokens))
         assert not torch.equal(_grow(model)(tokens), plain(tokens))
