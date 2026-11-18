@@ -158,6 +158,7 @@ class EventLMConfig:
     read_address_rate: float = 1.0
     read_synapse_gain: float = 1.0
     read_beats: int = 0
+    read_beat_start: float = 0.0
     granule_after: tuple[int, ...] | None = None
     granule_clusters: int = 32
     granule_cells: int = 256
@@ -1812,7 +1813,10 @@ class _StateRead(nn.Module):
     that started after it, counted up to that many. Each head has a learned
     offset for every such age beside its offsets for the age in bytes, so a
     head can prefer the cells of the word before last however long the words
-    between are. The word starts are read from the bytes themselves.
+    between are. The word starts are read from the bytes themselves. With
+    ``read_beat_start`` every head starts with that much charge for one age
+    of its own, the first head for the present word, the next for the word
+    before, and so on, so the heads do not all turn to the same word.
     """
 
     def __init__(self, cfg: EventLMConfig):
@@ -1838,6 +1842,10 @@ class _StateRead(nn.Module):
         if self.beats:
             # And from a learned offset for its age in words, where the last one stands for all older cells.
             self.beat_age = nn.Parameter(torch.zeros(self.heads, self.beats + 1))
+            if cfg.read_beat_start:
+                with torch.no_grad():
+                    own = torch.arange(self.heads) % (self.beats + 1)
+                    self.beat_age[torch.arange(self.heads), own] = cfg.read_beat_start / self.rate
             self.register_buffer("word_bytes", _word_bytes(), persistent=False)
         # The read is silent until its output synapses grow.
         self.project = _Synapse(cfg.read_width, cfg.dim, gain=0.0, charge_bits=bits)
@@ -2606,8 +2614,10 @@ class EventLM(nn.Module):
                     or (cfg.read_mode == "race" and cfg.read_synapse_gain != round(cfg.read_synapse_gain))
                     or cfg.read_width % cfg.read_heads):
                 raise ValueError("state reads need positive sizes and a width that the heads divide")
-            if not isinstance(cfg.read_beats, int) or not 0 <= cfg.read_beats <= _READ_BEATS:
-                raise ValueError("a state read counts a cell's age in words up to sixteen")
+            if (not isinstance(cfg.read_beats, int) or not 0 <= cfg.read_beats <= _READ_BEATS
+                    or not math.isfinite(cfg.read_beat_start) or (cfg.read_beat_start and not cfg.read_beats)):
+                raise ValueError("a state read counts a cell's age in words up to sixteen, and a starting charge "
+                                 "for a head's own age needs such ages")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
         if cfg.granule_after is not None:

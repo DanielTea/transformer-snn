@@ -239,6 +239,7 @@ def build_model(args):
                             read_address_rate=getattr(args, "read_address_rate", EventLMConfig.read_address_rate),
                             read_synapse_gain=getattr(args, "read_synapse_gain", EventLMConfig.read_synapse_gain),
                             read_beats=getattr(args, "read_beats", EventLMConfig.read_beats),
+                            read_beat_start=getattr(args, "read_beat_start", EventLMConfig.read_beat_start),
                             granule_after=(None if getattr(args, "granule_after", None) is None
                                            else tuple(map(int, args.granule_after.split(",")))),
                             granule_clusters=getattr(args, "granule_clusters", EventLMConfig.granule_clusters),
@@ -566,6 +567,8 @@ def main():
                         help="factor on the stored age offsets and gains of a state read")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in words, counted up to this many")
+    parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
+                        help="charge that each head starts with for one age in words of its own")
     parser.add_argument("--read-signed", action=argparse.BooleanOptionalAction, default=EventLMConfig.read_signed,
                         help="keep the negative pulses of a race read's probe and tag")
     parser.add_argument("--granule-after", help="comma-separated byte-rate blocks that a layer of granule cells follows")

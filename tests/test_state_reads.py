@@ -207,3 +207,11 @@ def test_word_ages_use_only_the_bytes_so_far():
     assert not torch.equal(first[:, 50:], second[:, 50:])
     with pytest.raises(ValueError, match="up to sixteen"):
         _reads("race", read_beats=17)
+
+
+def test_heads_can_start_with_an_age_in_words_of_their_own():
+    read = _reads("race", read_beats=2, read_beat_start=1.5).state_reads["1"]
+    # Four heads and three ages: the fourth head starts where the first does.
+    assert read.beat_age.tolist() == [[1.5, 0, 0], [0, 1.5, 0], [0, 0, 1.5], [1.5, 0, 0]]
+    with pytest.raises(ValueError, match="needs such ages"):
+        _reads("race", read_beat_start=1.5)
