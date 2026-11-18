@@ -175,6 +175,7 @@ class EventLMConfig:
     granule_bits: int | None = None
     granule_budget: int | None = None
     granule_races: int = 1
+    granule_soften: float = 1.0
     granule_delays: int = 1
     granule_relays: int = 0
     granule_traces: int = 0
@@ -2132,22 +2133,33 @@ class _RaceFire(_IntegrateFire):
     part of the cells. The spikes a race spends do not depend on how large
     its charges are. With ``races`` the cells run that many races side by
     side, each among the cells of one equal group and each for the budget.
+
+    A cell far behind in a race has a rate near zero, and the rate's slope is
+    then near zero too: the cell cannot learn that a larger charge would let
+    it win. With ``soften`` above one the cells learn from a race whose
+    charges are divided by it. The spikes are those of the race as it is.
     """
 
-    def __init__(self, cap: int, charge_bits: int, budget: int, phase: torch.Tensor, races: int = 1):
+    def __init__(self, cap: int, charge_bits: int, budget: int, phase: torch.Tensor, races: int = 1,
+                 soften: float = 1.0):
         super().__init__(cap, charge_bits, False)
         self.budget = budget
         self.races = races
+        self.soften = soften
         self.register_buffer("phase", phase, persistent=False)
+
+    def rates(self, charges):
+        if self.races > 1:
+            return charges.unflatten(-1, (self.races, -1)).softmax(-1).flatten(-2) * self.budget
+        return charges.softmax(-1) * self.budget
 
     def forward(self, current, quanta=None, *, reference=None, sharpness=1.0):
         thresholds = current / (quanta * (self.threshold // self.quanta_per_threshold))
         charges = thresholds * sharpness
-        if self.races > 1:
-            rate = charges.unflatten(-1, (self.races, -1)).softmax(-1).flatten(-2) * self.budget
-        else:
-            rate = charges.softmax(-1) * self.budget
-        return rate + ((rate + self.phase).floor() - rate).detach()
+        rate = self.rates(charges)
+        spikes = (rate + self.phase).floor()
+        learned = rate if self.soften == 1 else self.rates(charges / self.soften)
+        return learned + (spikes - learned).detach()
 
 
 class _ClockFire(_IntegrateFire):
@@ -2296,6 +2308,8 @@ class _GranuleLayer(nn.Module):
     no price on pulses can silence it. With ``granule_races`` the cells of a
     cluster race in that many equal groups, each for the budget, so the
     cluster answers with a cell of every group instead of a single cell.
+    With ``granule_soften`` the cells learn from a softer race than the one
+    they fire in, so that a cell far behind can still be drawn into use.
 
     With ``granule_delays`` the fibres of a cluster conduct at different
     speeds: each brings its channel as it was zero to ``granule_delays - 1``
@@ -2398,7 +2412,7 @@ class _GranuleLayer(nn.Module):
         else:
             # The starting phases are spread evenly over a cluster's cells and shifted from cluster to cluster.
             phase = (torch.arange(1, cells + 1) * _GOLDEN + torch.arange(clusters)[:, None] / clusters) % 1
-            self.fire = _RaceFire(cap, self.bits, self.budget, phase, cfg.granule_races)
+            self.fire = _RaceFire(cap, self.bits, self.budget, phase, cfg.granule_races, cfg.granule_soften)
             # Each cluster has its own gain on its cells' charges.
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
         self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
@@ -2806,6 +2820,9 @@ class EventLM(nn.Module):
                     or cfg.granule_cells % cfg.granule_races
                     or (cfg.granule_races > 1 and cfg.granule_budget is None)):
                 raise ValueError("the cells of a granule cluster race in equal groups, each for the budget")
+            if (not isinstance(cfg.granule_soften, (int, float)) or not 1 <= cfg.granule_soften < math.inf
+                    or (cfg.granule_soften != 1 and cfg.granule_budget is None)):
+                raise ValueError("racing granule cells learn from a race softened by a finite factor of at least one")
             if not isinstance(cfg.granule_delays, int) or not 1 <= cfg.granule_delays <= cfg.granule_fan:
                 raise ValueError("granule fibres need at least one delay and at most one delay per fibre")
             if (not isinstance(cfg.granule_traces, int) or not 0 <= cfg.granule_traces <= _GRANULE_TRACES

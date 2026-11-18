@@ -254,6 +254,7 @@ def build_model(args):
                             granule_bits=getattr(args, "granule_bits", EventLMConfig.granule_bits),
                             granule_budget=getattr(args, "granule_budget", EventLMConfig.granule_budget),
                             granule_races=getattr(args, "granule_races", EventLMConfig.granule_races),
+                            granule_soften=getattr(args, "granule_soften", EventLMConfig.granule_soften),
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
@@ -601,6 +602,9 @@ def main():
                         help="spikes per byte that the cells of a granule cluster race for; threshold cells when omitted")
     parser.add_argument("--granule-races", type=int, default=EventLMConfig.granule_races,
                         help="equal groups in which the cells of a granule cluster race, each for the budget")
+    parser.add_argument("--granule-soften", type=float, default=EventLMConfig.granule_soften,
+                        help="factor by which a race of granule cells is softened where its gradient is taken; "
+                             "the spikes stay those of the race as it is")
     parser.add_argument("--granule-delays", type=int, default=EventLMConfig.granule_delays,
                         help="conduction delays among a granule cluster's fibres: each brings its channel as it was "
                              "zero to one less than this many bytes ago")

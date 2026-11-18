@@ -265,6 +265,37 @@ def test_the_cells_of_a_cluster_can_race_in_equal_groups():
             _granules(**dict({"granule_budget": 3, "granule_races": 4}, **settings))
 
 
+def test_cells_learn_from_a_softer_race_and_fire_in_the_race_as_it_is():
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    sharp = _grow(_granules(granule_gain=1.0, granule_budget=3))
+    soft = _grow(_granules(granule_gain=1.0, granule_budget=3, granule_soften=4.0))
+    soft.load_state_dict(sharp.state_dict())
+    # One cell of every cluster is twelve thresholds behind the others, which are level.
+    slopes = []
+    for model in (sharp, soft):
+        fire = model.granule_layers["0"].fire
+        charges = torch.zeros(1, 1, 6, 20)
+        charges[..., 0] = -12.0
+        charges.requires_grad_()
+        cells = fire(charges * (fire.threshold // fire.quanta_per_threshold), torch.ones(1, 1, 6, 1))
+        cells[..., 0].sum().backward()
+        slopes.append((cells.detach(), charges.grad[..., 0].sum().item()))
+    # The spikes are the same: about three per cluster, none from the cell behind. That cell learns from the
+    # softer race.
+    assert torch.equal(slopes[0][0], slopes[1][0]) and torch.equal(slopes[0][0], slopes[0][0].round())
+    spent = slopes[0][0].sum(-1)
+    assert spent.min() >= 2 and spent.max() <= 4 and slopes[0][0][..., 0].sum() == 0
+    assert 0 < slopes[0][1] < 1e-4 and slopes[1][1] > 1e-2
+    with torch.no_grad():
+        assert torch.equal(sharp(tokens), soft(tokens))
+    F.cross_entropy(soft.train()(tokens).flatten(0, 1) / 16, tokens.flatten()).backward()
+    assert all(torch.isfinite(parameter.grad).all() and parameter.grad.abs().max() > 0
+               for name, parameter in soft.granule_layers["0"].named_parameters() if name in ("receive", "send"))
+    for settings in ({"granule_soften": 0.5}, {"granule_soften": float("inf")}, {"granule_budget": None}):
+        with pytest.raises(ValueError, match="softened"):
+            _granules(**dict({"granule_budget": 3, "granule_soften": 2.0}, **settings))
+
+
 def test_fibres_bring_their_channels_after_their_own_delays():
     tokens = torch.randint(0, 256, (2, 48), generator=torch.Generator().manual_seed(3))
     assert torch.equal(_granules(granule_delays=4)(tokens), _decoder()(tokens))
