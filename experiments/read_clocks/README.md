@@ -24,6 +24,8 @@ to a GPU.
 | `later_letters.py` | The same for the letters after a word's first, by what the window showed of the word before |
 | `word_probe.py` | How much a network's stream knows about the word in progress and the five words before it |
 | `cell_use.py` | How the race cells share their spikes: the cells that fire at a byte and the cells in use over a text |
+| `spike_levels.py` | How many spikes every firing population sends at a byte, and so how many values a neuron tells apart |
+| `spike_noise.py` | What one more rounding's worth of spike noise costs, by the kind of population it falls on |
 
 `words_in_view.py`, `later_letters.py` and `word_probe.py` take
 Transformer checkpoints of `train_event_lm.py` as well as
