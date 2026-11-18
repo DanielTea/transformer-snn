@@ -273,22 +273,49 @@ def test_the_clock_cells_of_a_read_start_deaf_and_beat_at_their_own_pace():
 
 
 def test_a_head_counts_a_cells_age_in_the_beats_of_its_clock_cell():
-    read = _clocked("age").state_reads["1"]
+    read = _clocked("race").state_reads["1"]
     tokens = _text("one two three four five six")
     starts = [0, 4, 8, 14, 19, 24]
-    # Channel 0 marks the word starts, and every clock cell hears only that channel.
+    # Channel 0 of the stream marks the word starts, one tag passes it on, and every clock cell hears only that
+    # tag. No probe meets a tag, so the ages alone decide the shares.
     spikes = torch.zeros(1, tokens.shape[1], 96)
     spikes[0, starts, 0] = 320.0
     with torch.no_grad():
+        read.probe.weight.zero_()
+        read.tag.weight.zero_()
+        read.tag.weight[0, 0] = 1.0
         read.clock.weight.zero_()
         read.clock.weight[:, 0] = 1.9
         read.clock_rest.fill_(8.0)
         read.beat_age[:, 2] = 30.0
     beats, _ = read.clock_beats(spikes)
     assert beats[0].nonzero()[:, 0].unique().tolist() == starts and beats[0, starts].min() == 1
+    # The beats are the same where the read has made its tags already.
+    assert torch.equal(read.clock_beats(spikes, read.packets(spikes)[1])[0], beats)
     shares, _ = read.shares(spikes)
     # At the last byte the word before last is "four " at bytes 14 to 18, as with the word clock and no bytes read.
     assert shares[0, :, -1, 14:19].sum(-1).min() > 0.999
+    with pytest.raises(ValueError, match="hears the tags"):
+        _clocked("age")
+
+
+def test_the_synapses_of_a_clock_cell_cannot_leave_the_range_of_exact_sums():
+    # With 256 tags a synapse at the usual limit of 508 ticks would allow sums of 130,048 ticks, where 32,768
+    # times the largest count of 512 pulses is the last exact one.
+    model = _decoder(read_after=(1, 3), read_width=256, read_heads=4, read_window=24, read_mode="race",
+                     read_beats=3, read_clock="learned")
+    for read in model.state_reads.values():
+        with torch.no_grad():
+            read.project.weight.normal_(std=0.01, generator=torch.Generator().manual_seed(3))
+            read.clock.weight.fill_(40.0)
+            read.clock.weight[:, ::2] = -40.0
+            read.clock_rest.fill_(-40.0)
+        assert read.clock_limit == 127 and read.clock_ticks().abs().unique().tolist() == [127]
+    model._check_accumulator()
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    assert torch.isfinite(model(tokens)).all()
+    # A narrow read keeps the limit of every other synapse.
+    assert _clocked("race").state_reads["1"].clock_limit == 508
 
 
 def test_learned_read_clocks_use_only_the_stream_so_far():
@@ -307,7 +334,7 @@ def test_learned_read_clocks_use_only_the_stream_so_far():
     model._check_accumulator()
 
 
-@pytest.mark.parametrize("mode", ["soft", "race", "age"])
+@pytest.mark.parametrize("mode", ["soft", "race"])
 def test_the_clock_cells_of_a_read_learn_from_the_mean_offsets_over_their_chances(mode):
     model = _grow(_clocked(mode, read_beat_start=1.0)).train()
     tokens = torch.randint(0, 256, (2, 64), generator=torch.Generator().manual_seed(1))
