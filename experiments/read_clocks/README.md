@@ -22,7 +22,7 @@ to a GPU.
 | `read_match_stats.py` | How fine the probe and tag pulses of the reads are |
 | `words_in_view.py` | Where one checkpoint is ahead of another: by copyable targets, by the place in a word and by the words in view |
 | `later_letters.py` | The same for the letters after a word's first, by what the window showed of the word before |
-| `word_probe.py` | How much a network's stream knows about the word in progress and the five words before it |
+| `word_probe.py` | How much a network's stream knows about the word in progress and the five words before it; with `--at ends`, at the first byte after a word, about the word that has just ended |
 | `cell_use.py` | How the race cells share their spikes: the cells that fire at a byte and the cells in use over a text |
 | `spike_levels.py` | How many spikes every firing population sends at a byte, and so how many values a neuron tells apart |
 | `spike_noise.py` | What one more rounding's worth of spike noise costs, by the kind of population it falls on |

@@ -1,6 +1,7 @@
 """How much a network's stream knows about the words before the one it is completing.
 
-usage: word_probe.py CHECKPOINT... [--windows 1024] [--averaged] [--threads 8] [--device cpu] [--json OUT]
+usage: word_probe.py CHECKPOINT... [--windows 1024] [--at inside|ends] [--averaged] [--threads 8] [--device cpu]
+                     [--json OUT]
 Run from the repository root.
 
 The bytes looked at are those inside a word whose next byte continues the word, with at least six earlier
@@ -11,7 +12,11 @@ the word itself (the 255 most frequent words of the windows without regard to ca
 others). The readout is fitted on two windows of four, starts from the class frequencies of those windows and
 stops, for every class of its own, at the pass that the third window likes best; the fourth window scores it.
 Every number is the bits that the stream removes from the uncertainty about the class: the loss of a readout
-that sees nothing (the class frequencies) minus the loss of the readout of the stream.
+that sees nothing (the class frequencies) minus the loss of the readout of the stream. The first row of a
+checkpoint gives that uncertainty itself.
+
+With ``--at ends`` the bytes looked at are the first bytes after a word instead, where the word is complete
+and a read that addresses a word's end finds its cell. The word 0 back is then the word that has just ended.
 
 A decoder is read before its first state read, after every state read and where the output synapses read it.
 A Transformer is read after a quarter, a half and three quarters of its blocks and after the last.
@@ -54,7 +59,7 @@ def first_letter(byte):
     return byte - 97 if 97 <= byte <= 122 else LETTERS - 1
 
 
-def word_classes(tokens, inside, fitted):
+def word_classes(tokens, inside, fitted, at="inside"):
     """The bytes to read and their classes.
 
     Returns the mask of the bytes [windows, 512] and, for each of them in row order, the first-letter class and
@@ -80,11 +85,17 @@ def word_classes(tokens, inside, fitted):
     for row, found in enumerate(words):
         for index in range(BACK + 1, len(found)):
             start, end, _ = found[index]
-            # The word's bytes whose next byte continues the word. The first word of a window may be cut, so
-            # the words looked back at start with the second.
-            last = min(end - 1, mask.shape[1])
-            if last <= start:
-                continue
+            if at == "ends":
+                # The first byte after the word, where the word is complete.
+                start, last = end, end + 1
+                if last > mask.shape[1]:
+                    continue
+            else:
+                # The word's bytes whose next byte continues the word. The first word of a window may be cut,
+                # so the words looked back at start with the second.
+                last = min(end - 1, mask.shape[1])
+                if last <= start:
+                    continue
             mask[row, start:last] = True
             back = [found[index - k][2] for k in range(BACK + 1)]
             letters += [[first_letter(word[0]) for word in back]] * (last - start)
@@ -115,7 +126,8 @@ def streams(model, windows, mask):
 
 
 def fit(features, classes, sizes, parts, device, epochs):
-    """Bits removed from every class's uncertainty by a linear readout of the features, on the scored rows.
+    """Bits removed from every class's uncertainty by a linear readout of the features, on the scored rows, and
+    that uncertainty in bits.
 
     ``parts`` names every row's part: 0 fitted, 1 for choosing where to stop, 2 scored.
     """
@@ -158,13 +170,15 @@ def fit(features, classes, sizes, parts, device, epochs):
         now_chosen, now_scored = held()
         better = now_chosen < chosen
         chosen, scored = torch.where(better, now_chosen, chosen), torch.where(better, now_scored, scored)
-    return ((start - scored) / math.log(2)).tolist()
+    return ((start - scored) / math.log(2)).tolist(), (start / math.log(2)).tolist()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("checkpoints", nargs="+")
     parser.add_argument("--windows", type=int, default=1024)
+    parser.add_argument("--at", choices=("inside", "ends"), default="inside",
+                        help="read the stream inside words, or at the first byte after a word")
     parser.add_argument("--averaged", action="store_true",
                         help="read the running weight average where a checkpoint stores one")
     parser.add_argument("--epochs", type=int, default=20)
@@ -178,14 +192,15 @@ def main():
     tokens = validation_windows(args.windows)
     inside, _, _ = word_places(tokens)
     part = np.maximum(np.arange(len(tokens)) % 4 - 1, 0)
-    mask, letters, names = word_classes(tokens, inside, part == 0)
+    mask, letters, names = word_classes(tokens, inside, part == 0, args.at)
     parts = torch.from_numpy(np.repeat(part, mask.sum(1))).to(device)
     classes = torch.from_numpy(np.concatenate([letters, names], axis=1))
     sizes = [LETTERS] * (BACK + 1) + [COMMON + 1] * (BACK + 1)
     windows = torch.from_numpy(tokens).to(device)
     print(f"{args.windows} windows, {int(mask.sum())} bytes read, {int((parts == 0).sum())} of them fitted; "
           f"bits removed from the uncertainty about the word 0 to {BACK} back")
-    record = {"windows": args.windows, "averaged": args.averaged, "bytes": int(mask.sum()), "checkpoints": []}
+    record = {"windows": args.windows, "averaged": args.averaged, "at": args.at, "bytes": int(mask.sum()),
+              "checkpoints": []}
     for path in args.checkpoints:
         model, took_average = load_weights(path, args.averaged, device)
         name = f"{Path(path).parent.name}/{Path(path).name}"
@@ -196,7 +211,12 @@ def main():
         del model
         rows = []
         for tap, features in kept.items():
-            gained = fit(features, classes, sizes, parts, device, args.epochs)
+            gained, blind = fit(features, classes, sizes, parts, device, args.epochs)
+            if not rows:
+                print(f"{'uncertainty without the stream':<34} | {'':<24} "
+                      + " ".join(f"{value:5.2f}" for value in blind[:BACK + 1])
+                      + " | " + f"{'':<8} " + " ".join(f"{value:5.2f}" for value in blind[BACK + 1:]))
+                record["uncertainty"] = {"first_letter": blind[:BACK + 1], "word": blind[BACK + 1:]}
             rows.append({"stream": tap, "channels": features.shape[1], "first_letter": gained[:BACK + 1],
                          "word": gained[BACK + 1:]})
             print(f"{tap:<34} | {'':<24} " + " ".join(f"{value:5.2f}" for value in gained[:BACK + 1])
