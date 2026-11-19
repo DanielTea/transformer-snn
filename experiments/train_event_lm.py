@@ -602,7 +602,9 @@ def main():
                         help="clusters of granule cells in a layer, each on its own stream channels")
     parser.add_argument("--granule-cells", type=int, default=EventLMConfig.granule_cells, help="cells of a cluster")
     parser.add_argument("--granule-fan", type=int, default=EventLMConfig.granule_fan,
-                        help="stream channels a cluster listens to, and channels its axons reach")
+                        help="stream channels a cluster listens to, and channels its axons reach; two or more times "
+                             "the stream gives every channel that many fibres, one for the present and the others "
+                             "each after a delay of its own")
     parser.add_argument("--granule-reach", type=int, default=EventLMConfig.granule_reach,
                         help="stream channels the axons of a cluster reach, where that differs from the channels "
                              "it listens to")

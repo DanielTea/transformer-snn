@@ -2357,7 +2357,11 @@ class _GranuleLayer(nn.Module):
     With ``granule_delays`` the fibres of a cluster conduct at different
     speeds: each brings its channel as it was zero to ``granule_delays - 1``
     bytes ago. A cell then hears the last bytes side by side and can answer
-    to a run of them, which a cell on the present stream cannot.
+    to a run of them, which a cell on the present stream cannot. A fan of two
+    or more times the stream gives every channel that many fibres to each
+    cluster: one brings the channel as it is now, and each of the others
+    brings it after a delay of its own. A cell then hears the whole present
+    stream and a part or all of the last bytes beside it.
 
     With ``granule_traces`` a cluster also has slow fibres. A slow synapse
     holds the charge it receives and passes a fixed share of it on with
@@ -2412,14 +2416,28 @@ class _GranuleLayer(nn.Module):
             self.relay = _Synapse(cfg.dim, cfg.granule_relays, gain=1.0, charge_bits=cfg.router_charge_bits)
             self.relay_fire = _IntegrateFire(cap, cfg.router_charge_bits, False)
             sources = cfg.granule_relays
-        self.register_buffer("inputs", _spread_channels(sources, clusters, fan, generator))
-        reach = fan if cfg.granule_reach is None else cfg.granule_reach
-        self.register_buffer("outputs", _spread_channels(cfg.dim, clusters, reach, generator))
         self.delays, self.traces = cfg.granule_delays, cfg.granule_traces
         # Beat fibres come in one order for the present stretch and one for each held stretch.
         self.orders = cfg.granule_beats + 1 if cfg.granule_beats else 0
         plain = self.delays + self.traces
-        if plain + self.orders > 1:
+        copies = fan // sources
+        if copies > 1:
+            # A fan of several times the stream: every channel sends that many fibres to each cluster.
+            self.register_buffer("inputs", torch.arange(sources).repeat(clusters, copies))
+        else:
+            self.register_buffer("inputs", _spread_channels(sources, clusters, fan, generator))
+        reach = min(fan, cfg.dim) if cfg.granule_reach is None else cfg.granule_reach
+        self.register_buffer("outputs", _spread_channels(cfg.dim, clusters, reach, generator))
+        if copies > 1:
+            # One fibre brings the channel as it is now. Each of the others brings it after a delay of its own,
+            # and every delay is on about the same number of a cluster's fibres.
+            taps = []
+            for _ in range(clusters):
+                first = torch.randperm(sources, generator=generator)
+                later = [(first + copy) % (self.delays - 1) + 1 for copy in range(copies - 1)]
+                taps.append(torch.cat([torch.zeros_like(first), *later]))
+            self.register_buffer("taps", torch.stack(taps))
+        elif plain + self.orders > 1:
             # Every cluster hears each delay, each slow synapse and each order of beat fibre on about the same
             # number of its fibres.
             self.register_buffer("taps", torch.stack([torch.randperm(fan, generator=generator)
@@ -2871,11 +2889,18 @@ class EventLM(nn.Module):
                     or len(set(cfg.granule_after)) != len(cfg.granule_after)
                     or any(not isinstance(index, int) or not 0 <= index < below for index in cfg.granule_after)):
                 raise ValueError("granule layers follow distinct byte-rate blocks of a reset-per-byte decoder")
-            if (min(cfg.granule_clusters, cfg.granule_cells, cfg.granule_fan) < 1 or cfg.granule_fan > cfg.dim
+            copies = cfg.granule_fan // cfg.dim
+            if (min(cfg.granule_clusters, cfg.granule_cells, cfg.granule_fan) < 1
+                    or (cfg.granule_fan > cfg.dim and cfg.granule_fan % cfg.dim)
                     or cfg.granule_gain <= 0 or not 0 <= cfg.granule_rest <= _GRANULE_REST_LIMIT
                     or not 0 <= cfg.granule_price <= 1):
-                raise ValueError("granule layers need positive sizes, a fan within the stream, a rest within its "
-                                 "limit and a price share from 0 to 1")
+                raise ValueError("granule layers need positive sizes, a fan within the stream or of a whole number "
+                                 "of streams, a rest within its limit and a price share from 0 to 1")
+            if copies > 1 and (not isinstance(cfg.granule_delays, int) or copies > cfg.granule_delays
+                               or cfg.granule_traces or cfg.granule_beats or cfg.granule_relays):
+                raise ValueError("with a fan of several streams every channel has one fibre for the present and "
+                                 "one for each of as many delays as the others need, and a cluster has no relays, "
+                                 "slow fibres or beat fibres")
             if cfg.granule_soft and cfg.granule_budget is None:
                 raise ValueError("soft granule cells stand in for racing cells and take their cluster gains")
             if cfg.granule_slope and cfg.granule_budget is not None:

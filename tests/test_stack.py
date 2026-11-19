@@ -125,6 +125,37 @@ def test_a_capped_read_fires_no_more_than_its_cap():
         _stack(read_cap=0)
 
 
+def test_a_fan_of_several_streams_hears_the_present_and_the_last_bytes():
+    model = _stack(granule_fan=128, granule_delays=4)
+    layer = model.granule_layers["1"]
+    # Every channel has two fibres: one for the present and one that is one, two or three bytes late.
+    assert layer.inputs.shape == layer.taps.shape == (1, 128) and layer.outputs.shape == (1, 64)
+    assert torch.equal(layer.inputs[0], torch.arange(64).repeat(2))
+    assert torch.equal(layer.taps[0, :64], torch.zeros(64, dtype=torch.long))
+    assert sorted(torch.bincount(layer.taps[0, 64:]).tolist()) == [0, 21, 21, 22]
+    stream = torch.randint(-9, 10, (2, 12, 64), generator=torch.Generator().manual_seed(4)).float()
+    heard = layer.heard(stream)[:, :, 0]
+    assert torch.equal(heard[..., :64], stream)
+    for delay in (1, 2, 3):
+        late = layer.taps[0, 64:] == delay
+        assert torch.equal(heard[:, delay:, 64:][..., late], stream[:, :-delay][..., late])
+        assert heard[:, :delay, 64:][..., late].abs().sum() == 0
+    # With as many fibres as delays a cell hears every channel at every delay.
+    full = _stack(granule_fan=256, granule_delays=4).granule_layers["0"]
+    assert sorted(zip(full.inputs[0].tolist(), full.taps[0].tolist(), strict=True)) == [
+        (channel, delay) for channel in range(64) for delay in range(4)]
+    assert full.receive.shape == (1, 96, 256) and full.send.shape == (1, 64, 96)
+    # The decoder stays causal and whole.
+    tokens, changed = _bytes(), _bytes()
+    changed[:, 50:] = _bytes(seed=7)[:, 50:]
+    first, second = model(tokens), model(changed)
+    assert torch.equal(first, first.round()) and torch.equal(first[:, :50], second[:, :50])
+    for setting in (dict(granule_fan=100), dict(granule_fan=192, granule_delays=2), dict(granule_fan=128),
+                    dict(granule_fan=128, granule_delays=4, granule_traces=1)):
+        with pytest.raises(ValueError):
+            _stack(**setting)
+
+
 def test_the_pulses_of_a_stack_are_counted():
     model, tokens = _stack(), _bytes()
     fired, reads = [], []
