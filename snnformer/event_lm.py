@@ -328,7 +328,7 @@ class _IntegrateFire(nn.Module):
     price_share = 1.0
 
     def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False,
-                 quanta_per_threshold: int = _PACKET_UNITS, capped: bool = False):
+                 quanta_per_threshold: int = _PACKET_UNITS, capped: bool | int = False):
         super().__init__()
         self.cap = cap
         self.bits = charge_bits
@@ -337,8 +337,8 @@ class _IntegrateFire(nn.Module):
         self.continuous = continuous
         self.quanta_per_threshold = quanta_per_threshold
         # A membrane holds the charge of ``cap`` whole thresholds, so a threshold below a whole one would let
-        # more spikes through than the cap. A capped population fires the cap at most.
-        self.capped = capped
+        # more spikes through than the cap. A capped population fires the cap at most, or the number given.
+        self.capped = cap if capped is True else int(capped)
 
     def _charge(self, bounded):
         rails = torch.stack((bounded.clamp_min(0), (-bounded).clamp_min(0)), dim=-1)
@@ -367,7 +367,7 @@ class _IntegrateFire(nn.Module):
             magnitude = (charge.abs() + threshold // 2) // threshold
             limit = (self.cap * self.quanta_per_threshold) // units
             if self.capped:
-                limit = limit.clamp(max=self.cap)
+                limit = limit.clamp(max=self.capped)
             counts = magnitude.minimum(limit) * charge.sign()
             if current.is_floating_point():
                 surrogate = bounded / (quanta * quantum)
@@ -2390,8 +2390,8 @@ class _GatedFire(_IntegrateFire):
     count within the range of exact sums.
     """
 
-    def __init__(self, cap: int, charge_bits: int, unit: int):
-        super().__init__(cap, charge_bits, False)
+    def __init__(self, cap: int, charge_bits: int, unit: int, quanta_per_threshold: int = _PACKET_UNITS):
+        super().__init__(cap, charge_bits, False, quanta_per_threshold=quanta_per_threshold, capped=True)
         self.unit = unit
 
     def forward(self, current, quanta=None, *, reference=None, opened=None):
@@ -2401,7 +2401,8 @@ class _GatedFire(_IntegrateFire):
         threshold = units * (self.threshold // self.quanta_per_threshold * self.unit)
         charge = passed.to(torch.int32)
         magnitude = (charge.abs() + threshold // 2) // threshold
-        counts = magnitude.minimum((self.cap * self.quanta_per_threshold) // units) * charge.sign()
+        limit = ((self.cap * self.quanta_per_threshold) // units).clamp(max=self.capped)
+        counts = magnitude.minimum(limit) * charge.sign()
         if not current.is_floating_point():
             return counts
         surrogate = passed / (quanta * (self.threshold // self.quanta_per_threshold * self.unit))
@@ -2739,8 +2740,11 @@ class _GranuleLayer(nn.Module):
             # ``receive`` holds the synapses of the value dendrite and ``gate`` those of the gate dendrite.
             self.gate = nn.Parameter(torch.empty(clusters, cells, fan))
             nn.init.normal_(self.gate, std=cfg.granule_gain / math.sqrt(fan))
-            self.open = _ExcitatoryFire(_GATE_CAP, self.bits, False, quanta_per_threshold=_PACKET_UNITS * self.gated)
-            self.fire = _GatedFire(cell_cap, self.bits, self.gated)
+            # A gate counts sixteen thresholds of charge at most, and no more spikes than those are at a whole
+            # threshold.
+            self.open = _ExcitatoryFire(_GATE_CAP, self.bits, False, quanta_per_threshold=cfg.pool_quanta * self.gated,
+                                        capped=_GATE_CAP * self.gated)
+            self.fire = _GatedFire(cell_cap, self.bits, self.gated, cfg.pool_quanta)
             self.open.price_share = self.fire.price_share = cfg.granule_price
         elif self.budget is None:
             self.fire = _ExcitatoryFire(cell_cap, self.bits, False, quanta_per_threshold=cfg.pool_quanta, capped=True)
@@ -3094,10 +3098,9 @@ class EventLM(nn.Module):
             if (cfg.read_after is None and cfg.granule_after is None) or (cfg.read_after is not None
                                                                           and cfg.read_mode != "race"):
                 raise ValueError("a pool with its own quanta inhibits race reads and cell layers")
-            if cfg.granule_after is not None and (cfg.granule_gate or cfg.granule_budget is not None
+            if cfg.granule_after is not None and (cfg.granule_budget is not None
                                                   or cfg.granule_beats and cfg.granule_clock == "learned"):
-                raise ValueError("gated cells, racing cells and learned clocks are not wired to a pool with its "
-                                 "own quanta")
+                raise ValueError("racing cells and learned clocks are not wired to a pool with its own quanta")
             if (cfg.pool_quanta * _PACKET_UNITS) > 1 << min(cfg.router_charge_bits, charge_bits):
                 raise ValueError("a quarter of a quantum must be a whole number of charge ticks: fewer quanta to a "
                                  "threshold or more charge bits")
@@ -3285,6 +3288,10 @@ class EventLM(nn.Module):
                 if collected * _GATE_CAP * cfg.granule_gate > _FP32_EXACT:
                     raise ValueError("the charge that the gate of a gated granule cell lets in at its largest "
                                      "count exceeds the range of exact sums")
+                if cfg.pool_quanta * cfg.granule_gate > 1 << (
+                        cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits):
+                    raise ValueError("a gate spike of a gated granule cell must be a whole number of charge ticks "
+                                     "at one quantum of threshold: fewer gate spikes or quanta to a threshold")
             if cfg.granule_budget is not None and (
                     not isinstance(cfg.granule_budget, int)
                     or not 1 <= cfg.granule_budget <= (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution)):

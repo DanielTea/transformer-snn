@@ -1,13 +1,17 @@
 import pytest
 import torch
 
-from snnformer.event_lm import _GATE_CAP, EventLM, EventLMConfig, _GatedFire, _IntegrateFire, emitted_pulses
+from snnformer.event_lm import (_GATE_CAP, EventLM, EventLMConfig, _ExcitatoryFire, _GatedFire, _IntegrateFire,
+                                emitted_pulses)
 
 _LEVELS = (0, 1)
 _STACK = dict(dim=64, hidden=4, depth=2, route="steered", carry=False, resolution=16, router_charge_bits=8, stack=True,
               read_after=_LEVELS, read_width=32, read_heads=4, read_window=48, read_mode="race", read_budget=64,
               read_resolution=4, read_address_rate=8.0, granule_after=_LEVELS, granule_clusters=1, granule_fan=64,
               granule_cells=64, granule_slope=True, granule_gate=4)
+# Sixty-four quanta to a threshold with four at rest, a pool spike for every eight pulses of 64 channels, and a pool
+# at the output.
+_FINE = dict(pool_fine=16, pool_rest=4, pool_rate=32, output_pool=128)
 
 
 def _stack(seed=0, grown=True, **settings):
@@ -159,3 +163,81 @@ def test_the_pulses_of_gated_cells_are_counted_at_the_gate_and_at_the_body():
 def test_a_layer_refuses_gates_it_cannot_have(setting):
     with pytest.raises(ValueError, match="gated"):
         _stack(**setting)
+
+
+def _quanta(count):
+    return torch.full((1,), float(count))
+
+
+def test_gate_and_body_count_in_the_quanta_of_a_fine_pool():
+    body = _GatedFire(128, 8, 4, 64)
+    value = torch.tensor([512.0, -512.0, 300.0, 127.0, 1000.0])
+    # Sixty-four quanta are a whole threshold of 256 ticks, where four gate spikes pass the charge once.
+    assert body(value, _quanta(64), opened=torch.full((5,), 4.0)).tolist() == [2, -2, 1, 0, 4]
+    assert body(value, _quanta(64), opened=torch.full((5,), 2.0)).tolist() == [1, -1, 1, 0, 2]
+    # Four quanta are a sixteenth of a threshold and the same charge counts sixteen times. Twice the quanta halve it.
+    assert body(value, _quanta(4), opened=torch.full((5,), 4.0)).tolist() == [32, -32, 19, 8, 63]
+    assert body(value, _quanta(128), opened=torch.full((5,), 4.0)).tolist() == [1, -1, 1, 0, 2]
+    # A body fires its largest count at most, and fewer spikes once its threshold is above a whole one.
+    large, wide = torch.tensor([10.0 ** 7, -(10.0 ** 7)]), torch.full((2,), 64.0)
+    assert body(large, _quanta(4), opened=wide).tolist() == [128, -128]
+    assert body(large, _quanta(128), opened=wide).tolist() == [64, -64]
+    whole = body(value.to(torch.int32), _quanta(4).to(torch.int32), opened=torch.full((5,), 4, dtype=torch.int32))
+    assert whole.dtype == torch.int32 and whole.tolist() == [32, -32, 19, 8, 63]
+    # The gate fires four spikes for a threshold of charge whatever the threshold is. It counts sixteen whole
+    # thresholds of charge at most, and no more spikes than those are at a whole threshold.
+    gate = _ExcitatoryFire(_GATE_CAP, 8, False, quanta_per_threshold=256, capped=_GATE_CAP * 4)
+    charge = torch.tensor([256.0, 300.0, 10.0 ** 6, 16.0, -500.0, 33.0])
+    assert gate(charge, _quanta(64)).tolist() == [4, 5, 64, 0, 0, 1]
+    assert gate(charge, _quanta(4)).tolist() == [64, 64, 64, 4, 0, 8]
+    assert gate(charge, _quanta(512)).tolist() == [1, 1, 8, 0, 0, 0]
+    # Under a block's pool a threshold is never below a whole one, and the gate is what it was.
+    capped = _ExcitatoryFire(_GATE_CAP, 8, False, quanta_per_threshold=16, capped=_GATE_CAP * 4)
+    free = _ExcitatoryFire(_GATE_CAP, 8, False, quanta_per_threshold=16)
+    charges = torch.randint(-5000, 5000, (2000,), generator=torch.Generator().manual_seed(3)).float()
+    assert all(torch.equal(capped(charges, _quanta(count)), free(charges, _quanta(count))) for count in range(4, 133))
+
+
+def test_a_fine_pool_holds_the_firing_of_gated_cells_when_the_stream_grows():
+    tokens, growth = _bytes(), {}
+    for name, settings in (("block", {}), ("fine", _FINE)):
+        model = _stack(**settings)
+        layer, stream = model.granule_layers["0"], _stream(model, tokens)
+        once, thrice = (layer.cells(scale * stream).abs().mean() for scale in (1, 3))
+        growth[name] = (thrice / once).item()
+    # A body counts the product of two charges. With three times the pulses it fires nearly three times as much under
+    # a block's pool, and as before under a fine pool.
+    assert growth["block"] > 2.5 and 0.95 < growth["fine"] < 1.05
+
+
+def test_a_gated_stack_with_fine_pools_fires_whole_spikes_learns_and_stays_exact():
+    model, tokens = _stack(**_FINE), _bytes()
+    layer = model.granule_layers["0"]
+    assert (layer.open.quanta_per_threshold, layer.open.capped, layer.fire.quanta_per_threshold) == (256, 64, 64)
+    changed = tokens.clone()
+    changed[:, 50:] = _bytes(seed=7)[:, 50:]
+    first, second = model(tokens), model(changed)
+    assert torch.equal(first, first.round())
+    assert torch.equal(first[:, :50], second[:, :50]) and not torch.equal(first[:, 50:], second[:, 50:])
+    cells = layer.cells(_stream(model, tokens))
+    assert torch.equal(cells, cells.round()) and (cells > 0).any() and (cells < 0).any()
+    first.float().square().mean().backward()
+    assert all(parameter.grad is not None and parameter.grad.abs().sum() > 0 for parameter in model.parameters())
+    model._check_accumulator()
+    # The gate dendrite sums its synapses and sixteen spikes of rest, each a quarter of a quantum of one tick, at the
+    # most quanta, per unit of a stream neuron's 512 spikes.
+    with torch.no_grad():
+        layer.gate.fill_(1.9)
+    assert layer.accumulator_bounds()[0] == 64 * 486 + -(-16 * 4 * (4 + 2048) // 512)
+    # The input, the output and its pool, and in every level the nine populations of a gated stack.
+    fired = []
+    for module in model.modules():
+        if isinstance(module, _IntegrateFire):
+            module.register_forward_hook(lambda population, _, counts: fired.append(emitted_pulses(population, counts)))
+    model(tokens)
+    assert len(fired) == 3 + len(_LEVELS) * 9 and all(count >= 0 for count in fired)
+
+
+def test_a_gate_spike_under_a_fine_pool_is_a_whole_number_of_ticks():
+    with pytest.raises(ValueError, match="gated"):
+        _stack(granule_gate=8, **_FINE)

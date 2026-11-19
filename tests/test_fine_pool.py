@@ -229,7 +229,7 @@ def test_the_pulses_of_fine_pools_are_counted():
 
 @pytest.mark.parametrize("setting", [
     dict(pool_fine=3), dict(pool_fine=0), dict(pool_rate=12), dict(pool_rate=1024), dict(pool_rest=0),
-    dict(pool_rest=2.0), dict(pool_fine=32), dict(pool_fine=16, granule_gate=4, granule_cells=64),
+    dict(pool_rest=2.0), dict(pool_fine=32), dict(pool_fine=16, granule_gate=8, granule_cells=64),
     dict(pool_fine=16, granule_budget=8, granule_slope=False),
     dict(pool_rate=2, read_mode="soft", read_budget=None),
 ])
