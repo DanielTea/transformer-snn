@@ -99,8 +99,9 @@ def guided_language_loss(logits, targets, teacher_logits, weight):
     return loss.mean(), hard.mean(), use_teacher.float().mean()
 
 
-# A continued run may change these without changing what it trains.
-_RESUME_FREE = frozenset(("stop_at", "force", "threads", "device"))
+# A continued run may change these without changing what it trains: where it stops, on what it runs and where it
+# writes. A saved state that is moved with its folder to another machine continues there.
+_RESUME_FREE = frozenset(("stop_at", "force", "threads", "device", "checkpoint", "results_dir"))
 
 
 def _on_cpu(value):

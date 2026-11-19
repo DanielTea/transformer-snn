@@ -60,6 +60,22 @@ def test_a_stopped_run_continues_to_the_weights_of_an_unbroken_run(trainer, tmp_
     assert not (broken / "model.pt.resume").exists() and not (whole / "model.pt.resume").exists()
 
 
+def test_a_stopped_run_continues_in_another_folder(trainer, tmp_path):
+    whole, first, second = tmp_path / "whole", tmp_path / "first", tmp_path / "second"
+    trainer(whole)
+    trainer(first, "--stop-at", "4")
+    second.mkdir()
+    (first / "model.pt.resume").rename(second / "model.pt.resume")
+    trainer(second)
+
+    for name in ("model.pt", "model.pt.averaged"):
+        one = torch.load(whole / name, weights_only=True)["state_dict"]
+        other = torch.load(second / name, weights_only=True)["state_dict"]
+        assert all(torch.equal(one[key], other[key]) for key in one), name
+    assert record(second)["resumed_at_steps"] == [4]
+    assert [point["step"] for point in record(second)["curve"]] == [2, 4, 6, 8]
+
+
 def test_a_run_continues_only_with_the_settings_it_was_started_with(trainer, tmp_path, capsys):
     trainer(tmp_path, "--stop-at", "4")
     with pytest.raises(SystemExit):
