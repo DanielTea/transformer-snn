@@ -270,6 +270,7 @@ def build_model(args):
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
+                            granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
                             **synapses, **heads)
         model = EventLM(cfg)
         with torch.no_grad():
@@ -629,6 +630,10 @@ def main():
     parser.add_argument("--granule-cap", type=int, default=EventLMConfig.granule_cap,
                         help="most spikes a granule cell fires at a byte; a stream neuron's largest count when "
                              "omitted")
+    parser.add_argument("--granule-gate", type=int, default=EventLMConfig.granule_gate, metavar="SPIKES",
+                        help="every granule cell has a gate dendrite and a value dendrite: each gate spike lets "
+                             "the value dendrite's charge into the cell body once, and SPIKES of them are a "
+                             "threshold of the gate; plain threshold cells when omitted or 0")
     parser.add_argument("--granule-slope", action="store_true",
                         help="threshold cells keep their spikes and learn from a smooth threshold, so that a "
                              "silent cell still learns")

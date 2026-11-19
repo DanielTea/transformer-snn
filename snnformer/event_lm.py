@@ -58,6 +58,8 @@ _GRANULE_TRACES = 4
 _TRACE_STRETCH = 512
 # The most spikes of resting charge a granule cell can hold below its threshold.
 _GRANULE_REST_LIMIT = 16
+# The most thresholds of charge that the gate dendrite of a gated cell answers with spikes, before inhibition.
+_GATE_CAP = 16
 # What opens a new stretch on a granule cluster's beat fibres, and what such a fibre brings of a stretch.
 _GRANULE_CLOCKS = ("word", "end", "every", "learned")
 _GRANULE_HOLDS = ("mean", "sum", "last")
@@ -77,6 +79,7 @@ _PHASE_SHORTEST = 3.0
 # about as much as the stream does, and the heads start on a few cells picked by chance. At an eighth the reads
 # start nearly as broad as without pacemakers, and the synapses still hold several ticks each.
 _PHASE_GAIN = 0.125
+
 
 
 def _delay_group_widths(channels, groups):
@@ -197,6 +200,7 @@ class EventLMConfig:
     granule_clock_rate: float = 0.25
     stack: bool = False
     granule_cap: int | None = None
+    granule_gate: int = 0
     read_cap: int | None = None
     read_phases: int = 0
 
@@ -2204,6 +2208,9 @@ class _ExcitatoryFire(_IntegrateFire):
     spikes are the same and the slope is that of a smooth threshold of the
     charge, which is small and positive just below the threshold. A silent
     cell then still learns from the bytes that bring it near its threshold.
+    Where a population fires several fine spikes for a threshold of charge,
+    ``smooth`` is that number, and the smooth threshold is as wide as it is
+    for whole spikes.
     """
 
     def forward(self, current, quanta=None, *, reference=None, smooth=False):
@@ -2211,8 +2218,39 @@ class _ExcitatoryFire(_IntegrateFire):
         if not smooth or not current.is_floating_point():
             return counts
         threshold = self.threshold if quanta is None else quanta * (self.threshold // self.quanta_per_threshold)
-        learned = F.gelu(current / threshold)
+        learned = smooth * F.gelu(current / (threshold * smooth))
         return counts.detach() + (learned - learned.detach())
+
+
+class _GatedFire(_IntegrateFire):
+    """The body of a gated cell: it fires for the charge that its gate lets in.
+
+    The value dendrite of the cell collects charge and does not fire. Every
+    spike of the gate dendrite lets the collected charge into the body once,
+    and the body fires a spike on the rail of the charge's sign for every
+    ``unit`` thresholds of what it was let in. So ``unit`` gate spikes pass the
+    collected charge as a plain cell would count it, more gate spikes pass it
+    more than once and a closed gate passes nothing. The collected charge is
+    bounded as a plain cell's is, which keeps its product with the gate's
+    count within the range of exact sums.
+    """
+
+    def __init__(self, cap: int, charge_bits: int, unit: int):
+        super().__init__(cap, charge_bits, False)
+        self.unit = unit
+
+    def forward(self, current, quanta=None, *, reference=None, opened=None):
+        bounded = current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
+        passed = bounded * opened
+        units = quanta.to(torch.int32)
+        threshold = units * (self.threshold // self.quanta_per_threshold * self.unit)
+        charge = passed.to(torch.int32)
+        magnitude = (charge.abs() + threshold // 2) // threshold
+        counts = magnitude.minimum((self.cap * self.quanta_per_threshold) // units) * charge.sign()
+        if not current.is_floating_point():
+            return counts
+        surrogate = passed / (quanta * (self.threshold // self.quanta_per_threshold * self.unit))
+        return counts.to(current.dtype) + (surrogate - surrogate.detach())
 
 
 class _RaceFire(_IntegrateFire):
@@ -2432,6 +2470,16 @@ class _GranuleLayer(nn.Module):
     neuron's largest count. A channel that hears many cells can then take larger synapses from each within the
     range of exact sums.
 
+    With ``granule_gate`` every cell has two dendrites on the same fibres, each
+    with its own synapses. The gate dendrite has the cell's resting charge
+    and fires above it, ``granule_gate`` spikes for a threshold of charge. The
+    value dendrite collects charge of either sign and does not fire. Every
+    gate spike lets the collected charge into the cell body once, and the
+    body fires on the rail of the charge's sign. A cell then answers with the
+    product of two views of the stream: one says whether and how far the
+    cell opens, the other what it passes on. A plain cell has one view for
+    both. A gated cell has three rows of synapses where a plain cell has two.
+
     With ``granule_relays`` the fibres do not come from the stream itself.
     That many relay neurons each hear the whole stream and fire for it, and
     their axons are the fibres that the clusters share, as mossy fibres come
@@ -2531,7 +2579,15 @@ class _GranuleLayer(nn.Module):
         self.budget = cfg.granule_budget
         # The most spikes of a cell at a byte with no inhibition from the pool.
         cell_cap = cap if cfg.granule_cap is None else cfg.granule_cap
-        if self.budget is None:
+        self.gated = cfg.granule_gate
+        if self.gated:
+            # ``receive`` holds the synapses of the value dendrite and ``gate`` those of the gate dendrite.
+            self.gate = nn.Parameter(torch.empty(clusters, cells, fan))
+            nn.init.normal_(self.gate, std=cfg.granule_gain / math.sqrt(fan))
+            self.open = _ExcitatoryFire(_GATE_CAP, self.bits, False, quanta_per_threshold=_PACKET_UNITS * self.gated)
+            self.fire = _GatedFire(cell_cap, self.bits, self.gated)
+            self.open.price_share = self.fire.price_share = cfg.granule_price
+        elif self.budget is None:
             self.fire = _ExcitatoryFire(cell_cap, self.bits, False)
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
             # that they cause.
@@ -2625,7 +2681,12 @@ class _GranuleLayer(nn.Module):
         charge = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.receive, charge_bits=self.bits))
         # A quarter spike of rest is a quarter of the cell's present threshold.
         quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
-        charge = charge - self.rest_quarters().squeeze(-1) * quanta * quarter
+        rest = self.rest_quarters().squeeze(-1) * quanta * quarter
+        if self.gated:
+            # The gate dendrite fires above the rest, and its spikes let the value dendrite's charge into the body.
+            opening = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.gate, charge_bits=self.bits))
+            return self.fire(charge, quanta, opened=self.open(opening - rest, quanta, smooth=self.gated))
+        charge = charge - rest
         if self.budget is None:
             return self.fire(charge, quanta, smooth=self.slope)
         if self.soft:
@@ -2648,6 +2709,10 @@ class _GranuleLayer(nn.Module):
         quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
         most_quanta = _PACKET_UNITS + self.pool.cap
         rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
+        if self.gated:
+            # The rest belongs to the gate dendrite. The value dendrite collects without it.
+            gate = _weight_ticks(self.gate, charge_bits=self.bits).abs().sum(-1).amax()
+            receive, rest = torch.maximum(receive, gate + rest), 0
         send = _weight_ticks(self.send, charge_bits=self.bits).abs().sum(-1)
         arriving = send.new_zeros(self.channels).index_add_(0, self.outputs.flatten(), send.flatten())
         # A cell brings at most its own largest count, which may be below a stream neuron's.
@@ -2979,6 +3044,17 @@ class EventLM(nn.Module):
             if cfg.granule_cap is not None and (not isinstance(cfg.granule_cap, int)
                                                 or not 1 <= cfg.granule_cap <= _HIDDEN_CAP * cfg.resolution):
                 raise ValueError("a granule cell's largest count is a whole number of spikes up to a stream neuron's")
+            if not isinstance(cfg.granule_gate, int) or cfg.granule_gate < 0 or (
+                    cfg.granule_gate and (cfg.granule_budget is not None or cfg.granule_soft)):
+                raise ValueError("gated granule cells have a whole number of gate spikes to a threshold and do "
+                                 "not race")
+            if cfg.granule_gate:
+                # The largest charge a body collects, times the most spikes of its gate.
+                collected = (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution) << (
+                    cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits)
+                if collected * _GATE_CAP * cfg.granule_gate > _FP32_EXACT:
+                    raise ValueError("the charge that the gate of a gated granule cell lets in at its largest "
+                                     "count exceeds the range of exact sums")
             if cfg.granule_budget is not None and (
                     not isinstance(cfg.granule_budget, int)
                     or not 1 <= cfg.granule_budget <= (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution)):
