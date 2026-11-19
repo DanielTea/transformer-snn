@@ -310,6 +310,16 @@ def test_a_run_on_streams_that_stops_continues_as_if_it_had_not(monkeypatch, tmp
                                                                        for row in whole["curve"]]
 
 
+def test_the_trainer_hands_the_reach_to_the_model(monkeypatch, tmp_path):
+    trainer, _ = _trainer(monkeypatch)
+    record = _train(trainer, monkeypatch, tmp_path / "reach", "--stream", "3", "--read-reach", "40")
+    assert record["cfg"]["read_reach"] == 40 and record["cfg"]["read_window"] == 16
+    model, _ = trainer.load_checkpoint(tmp_path / "reach" / "model.pt", torch.device("cpu"))
+    assert all(read.reach == 40 and read.age.shape == (2, 16) for read in model.state_reads.values())
+    with pytest.raises(SystemExit):
+        _train(trainer, monkeypatch, tmp_path / "short", "--read-reach", "8")
+
+
 @pytest.mark.parametrize("flags", [("--stream", "1"), ("--stream", "4"), ("--stream", "3", "--read-beats", "2"),
                                    ("--stream-from", "6"), ("--stream", "3", "--stream-from", "4"),
                                    ("--stream", "3", "--stream-from", "12")])
@@ -379,9 +389,43 @@ def test_a_read_reaches_further_back_in_a_stream_than_in_training(monkeypatch):
         eval_stream.lengthen_reach(model, 96)
         after, state = model.stream(tokens)
     read = model.state_reads["0"]
-    assert read.window == 96 and read.age.shape == (4, 96) and torch.equal(read.age[:, 47], read.age[:, 95])
+    # No synapse is new: the cells beyond the window take the offset of its oldest cell.
+    assert read.window == 48 and read.reach == 96 and read.age.shape == (4, 48)
     assert state.reads["0"].tag.shape[2] == 95
-    # The first 48 bytes have nothing beyond the old reach, and the later ones fire other spikes.
+    # The first 48 bytes have nothing beyond the window, and the later ones fire other spikes.
     assert torch.equal(after[:, :48], before[:, :48]) and not torch.equal(after[:, 48:], before[:, 48:])
     with pytest.raises(ValueError):
-        eval_stream.lengthen_reach(model, 48)
+        eval_stream.lengthen_reach(model, 47)
+    # A stack that is built with the longer reach fires the same.
+    built = _stack(read_reach=96).eval()
+    with torch.no_grad():
+        assert torch.equal(built(tokens), after)
+    assert set(built.state_dict()) == set(_stack().state_dict())
+
+
+@pytest.mark.parametrize("cuts", [(160,), (80, 80), (47, 1, 49, 63), (7, 13, 100, 40), (130, 30)])
+def test_a_stream_with_a_longer_reach_fires_the_spikes_of_one_pass(cuts):
+    model, tokens = _stack(read_reach=96, **_LATE, **_DELAYED, **_POOLED), _bytes()
+    fired, state = _pieces(model, tokens, cuts)
+    assert torch.equal(fired, model(tokens))
+    assert all(tape.tag.shape[2] == 95 for tape in state.reads.values())
+
+
+def test_the_oldest_age_of_the_window_learns_for_all_cells_beyond_it():
+    model, tokens = _stack(read_reach=96), _bytes()
+    _, state = model.stream(tokens[:, :100])
+    fired, _ = model.stream(tokens[:, 100:], state)
+    fired.float().square().mean().backward()
+    far, near = _stack(), _bytes()
+    _, state = far.stream(near[:, :100])
+    fired, _ = far.stream(near[:, 100:], state)
+    fired.float().square().mean().backward()
+    for long, short in zip(model.state_reads.values(), far.state_reads.values()):
+        assert long.age.grad[:, -1].abs().sum() > 0 and not torch.equal(long.age.grad, short.age.grad)
+
+
+@pytest.mark.parametrize("setting", [dict(read_reach=47), dict(read_reach=96.0), dict(read_reach=True),
+                                     dict(read_reach=96, read_beats=2), dict(read_reach=96, read_phases=4)])
+def test_a_reach_is_at_least_the_window_and_takes_no_clock(setting):
+    with pytest.raises(ValueError):
+        _stack(**setting)

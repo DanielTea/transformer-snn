@@ -320,6 +320,7 @@ def build_model(args):
                             read_turn=getattr(args, "read_turn", EventLMConfig.read_turn),
                             read_delays=getattr(args, "read_delays", EventLMConfig.read_delays),
                             read_delay_probes=getattr(args, "read_delay_probes", EventLMConfig.read_delay_probes),
+                            read_reach=getattr(args, "read_reach", EventLMConfig.read_reach),
                             output_cap=getattr(args, "output_cap", EventLMConfig.output_cap),
                             pool_fine=getattr(args, "pool_fine", EventLMConfig.pool_fine),
                             pool_rest=getattr(args, "pool_rest", EventLMConfig.pool_rest),
@@ -659,6 +660,9 @@ def main():
                              "up to it, and one read finds how bytes like the present ones went on")
     parser.add_argument("--read-delay-probes", action="store_true",
                         help="the probe neurons of every state read hear the late fibres too")
+    parser.add_argument("--read-reach", type=int, metavar="CELLS",
+                        help="in a stream a state read reaches this many cells back, more than --read-window: the "
+                             "cells beyond the window take the age offset of its oldest cell, so no synapse is added")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,

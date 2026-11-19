@@ -54,14 +54,12 @@ def stream_rows(data, streams, lead):
 
 
 def lengthen_reach(model, cells):
-    """Let every read of a stack reach ``cells`` back. The cells beyond the reach that it was trained with take
-    the age offset of the oldest trained age."""
+    """Let every read of a stack reach ``cells`` back. The cells beyond its window take the age offset of the
+    window's oldest cell, as under the setting ``read_reach``."""
     for read in model.state_reads.values():
         if cells < read.window:
-            raise ValueError("a reach is lengthened, not shortened")
-        age = read.age.data
-        read.age = torch.nn.Parameter(torch.cat((age, age[:, -1:].expand(-1, cells - age.shape[1])), 1))
-        read.window = cells
+            raise ValueError("a read reaches at least its window of cells back")
+        read.reach = cells
 
 
 @torch.inference_mode()
@@ -113,8 +111,6 @@ def main():
         # A shortened split is named in the record, so its score is not taken for the whole split's.
         data = data[:args.bytes]
         record["first_bytes_of_split"] = args.bytes
-    if args.reach is not None:
-        record["reach_cells"] = args.reach
     resamples, rows, first = None, [], None
     for path in args.checkpoint:
         model, checkpoint = load_checkpoint(path, device)
@@ -126,12 +122,11 @@ def main():
             model.load_state_dict(checkpoint["averaged_parameters"], strict=False)
             # The average of weights that were each in the range of exact sums can leave it.
             model.synaptic_scaling()
-        # A longer reach repeats an age offset and adds no synapse, so the parameters are counted before it.
-        parameters = count_params(model)
         if args.reach is not None:
             lengthen_reach(model, args.reach)
         bits, targets = score(model, data, args.streams, args.lead, args.piece, device)
-        row = {"checkpoint": str(path), "run_name": checkpoint.get("run_name"), "parameters": parameters,
+        row = {"checkpoint": str(path), "run_name": checkpoint.get("run_name"), "parameters": count_params(model),
+               "reach_cells": next(iter(model.state_reads.values())).reach,
                "training_targets": training_exposure(checkpoint), "targets": targets,
                "bpb": float(bits.sum() / targets), "averaged_weights": args.averaged}
         # The pieces are resampled together for the difference to the first checkpoint.

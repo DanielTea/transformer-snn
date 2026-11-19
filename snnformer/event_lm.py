@@ -218,6 +218,9 @@ class EventLMConfig:
     # many bytes less one, and with ``read_delay_probes`` the probe neurons do too.
     read_delays: int = 1
     read_delay_probes: bool = False
+    # In a stream a state read reaches this many cells back, where that is more than ``read_window``. The cells
+    # beyond the window take the age offset of the window's oldest cell, so a longer reach adds no synapse.
+    read_reach: int | None = None
     # An output neuron fires up to this many eighths of a bit of evidence for or against its byte.
     output_cap: int = _OUTPUT_CAP
     # The neurons of state reads and cell layers count their threshold in quanta this many times finer than the
@@ -2073,6 +2076,7 @@ class _StateRead(nn.Module):
     def __init__(self, cfg: EventLMConfig):
         super().__init__()
         self.heads, self.window, self.mode, self.levels = cfg.read_heads, cfg.read_window, cfg.read_mode, cfg.read_levels
+        self.reach = self.window if cfg.read_reach is None else cfg.read_reach
         self.resolution = cfg.resolution
         # The age offsets and the gains are charges, which move further than a synapse does. This factor on
         # their stored values lets them cover that range at the synapses' learning rate.
@@ -2322,7 +2326,7 @@ class _StateRead(nn.Module):
                 payload = torch.cat((tape.payload, payload), 2)
                 tag = tag if tag is None else torch.cat((tape.tag, tag), 2)
             # A later byte reaches the cells of the last ``window`` bytes, its own among them.
-            oldest = max(0, payload.shape[2] - self.window + 1)
+            oldest = max(0, payload.shape[2] - self.reach + 1)
             tape.payload = payload[:, :, oldest:].detach()
             tape.tag = tag if tag is None else tag[:, :, oldest:].detach()
             if self.delays > 1:
@@ -2331,16 +2335,19 @@ class _StateRead(nn.Module):
         cells = kept + steps
         place = torch.arange(cells, device=spikes.device)
         distance = place[kept:, None] - place
-        visible = (distance >= 0) & (distance < self.window)
+        visible = (distance >= 0) & (distance < self.reach)
+        # The cells that a longer reach adds take the offset of the oldest age that has one.
+        aged = self.age if self.reach == self.window else torch.cat(
+            (self.age, self.age[:, -1:].expand(-1, self.reach - self.window)), 1)
         if kept:
             # Row t holds the offset of age kept + t - j in column j: the ages in reverse, one step further on
             # from row to row.
-            ages = F.pad(self.age * self.rate, (0, max(0, cells - self.window)))[:, :cells].flip(-1)
+            ages = F.pad(aged * self.rate, (0, max(0, cells - self.reach)))[:, :cells].flip(-1)
             offset = F.pad(ages, (0, steps - 1)).unfold(-1, cells, 1).flip(1)
         else:
             # Row t holds the offset of age t - j in column j. Padding one column and folding the rows shifts
             # each row by its position, which costs far less to differentiate than indexing by distance.
-            ages = F.pad(self.age[:, :steps] * self.rate, (0, max(0, steps - self.window))).flip(-1)
+            ages = F.pad(aged[:, :steps] * self.rate, (0, max(0, steps - self.reach))).flip(-1)
             offset = F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
         beats = 0
         if self.beats:
@@ -2366,7 +2373,7 @@ class _StateRead(nn.Module):
             # is cut into pieces.
             charge = charge.masked_fill(~visible, -torch.inf)
             grown = (charge - charge.amax(-1, keepdim=True)).exp()
-            back = place[kept:, None] - torch.arange(self.window, device=spikes.device)
+            back = place[kept:, None] - torch.arange(self.reach, device=spikes.device)
             total = (grown.gather(-1, back.clamp_min(0).expand(*grown.shape[:-1], -1)) * (back >= 0)).sum(-1, keepdim=True)
             rate = grown / total * self.budget
             # The cells' membranes start the race at evenly spread phases, so a rate below one spike still fires
@@ -3469,6 +3476,11 @@ class EventLM(nn.Module):
                     or _PHASE_SPIKES > _HIDDEN_CAP * cfg.resolution):
                 raise ValueError("the probes and tags of a state read hear up to 64 pairs of pacemaker cells, whose "
                                  "counts stay within a stream neuron's; a read by age alone has no probes or tags")
+            if cfg.read_reach is not None and (
+                    not isinstance(cfg.read_reach, int) or isinstance(cfg.read_reach, bool)
+                    or cfg.read_reach < cfg.read_window or cfg.read_beats or cfg.read_phases or cfg.read_turn):
+                raise ValueError("a read reaches at least its window of cells back, and one with clocks or "
+                                 "pacemakers reaches no further")
             if (not isinstance(cfg.read_delays, int) or not 1 <= cfg.read_delays <= _READ_DELAYS
                     or (cfg.read_delays > 1 and (cfg.read_mode == "age" or cfg.read_delays - 1 > cfg.dim))
                     or (cfg.read_delay_probes and cfg.read_delays == 1)):
@@ -3899,7 +3911,7 @@ class EventLM(nn.Module):
         """The counts for the next bytes of a stream, and the state after them.
 
         A stack takes a stream in pieces of any length, down to a byte at a time. Its state is what the bytes
-        before have left within reach: for every read the tags and payloads of the last ``read_window`` cells
+        before have left within reach: for every read the tags and payloads of the cells that it reaches back
         and the bytes that its late fibres still bring, for every cell layer the bytes that its delayed fibres
         still bring and the charges of its slow synapses. The spikes are those of one pass over the whole
         stream, however it is cut. The state carries no gradient, so a piece learns from what it fires itself.
