@@ -271,6 +271,7 @@ def build_model(args):
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
                             read_turn=getattr(args, "read_turn", EventLMConfig.read_turn),
+                            output_cap=getattr(args, "output_cap", EventLMConfig.output_cap),
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
                             **synapses, **heads)
         model = EventLM(cfg)
@@ -706,6 +707,9 @@ def main():
                         help="spread a learned share of immediate pulses across the steering clock")
     parser.add_argument("--delay-filter", action="store_true",
                         help="correct the coincidence path with learned spike differences across fixed taps")
+    parser.add_argument("--output-cap", type=int, default=EventLMConfig.output_cap, metavar="EIGHTHS",
+                        help="most evidence an output neuron fires for or against its byte, in eighths of a bit; "
+                             "the default of 128 ends a neuron's say at 16 bits")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
     parser.add_argument("--spike-resolution", type=int, default=1, help="number of finer spikes per original unit")
     parser.add_argument("--depth", type=int, default=3)

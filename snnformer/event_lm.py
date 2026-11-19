@@ -207,6 +207,8 @@ class EventLMConfig:
     read_cap: int | None = None
     read_phases: int = 0
     read_turn: bool = False
+    # An output neuron fires up to this many eighths of a bit of evidence for or against its byte.
+    output_cap: int = _OUTPUT_CAP
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -2937,7 +2939,10 @@ class EventLM(nn.Module):
             if cfg.output_reference:
                 raise ValueError("the clock's forecast population has no shared output reference")
         output_bits = 3
-        output_cap = _OUTPUT_CAP * cfg.resolution
+        if not isinstance(cfg.output_cap, int) or not 1 <= (cfg.output_cap * cfg.resolution) << output_bits <= _FP32_EXACT:
+            raise ValueError("the output cap is a whole number of eighths of a bit, and an output neuron's largest "
+                             "charge stays within the range of exact sums")
+        output_cap = cfg.output_cap * cfg.resolution
         if cfg.output_reference:
             if cfg.carry or cfg.continuous or cfg.route not in ("steered", "steered_correction_code"):
                 raise ValueError("output reference needs a reset-per-byte spike router")
