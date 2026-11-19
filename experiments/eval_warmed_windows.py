@@ -63,7 +63,11 @@ def score(model, passages, context, history, batch_size, device, temperatures=(1
             losses = [F.cross_entropy((logits if temperature == 1 else logits / temperature).flatten(0, 1),
                                       labels.flatten(), reduction="none").view(labels.shape)
                       for temperature in temperatures]
-            bits.append(torch.stack(losses).sum(2, dtype=torch.float64).cpu() / math.log(2))
+            stacked = torch.stack(losses)
+            if stacked.device.type == "mps":
+                # MPS has no 64-bit floats, so the sum is taken on the CPU.
+                stacked = stacked.cpu()
+            bits.append(stacked.sum(2, dtype=torch.float64).cpu() / math.log(2))
             whole += [skipped == history and labels.shape[1] == context] * labels.shape[0]
             targets += labels.numel()
     return torch.cat(bits, dim=1).numpy(), np.array(whole), targets
