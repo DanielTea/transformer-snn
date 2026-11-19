@@ -266,6 +266,9 @@ def build_model(args):
                             granule_clock=getattr(args, "granule_clock", EventLMConfig.granule_clock),
                             granule_hold=getattr(args, "granule_hold", EventLMConfig.granule_hold),
                             granule_clock_rate=getattr(args, "granule_clock_rate", EventLMConfig.granule_clock_rate),
+                            stack=getattr(args, "stack", EventLMConfig.stack),
+                            granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
+                            read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             **synapses, **heads)
         model = EventLM(cfg)
         with torch.no_grad():
@@ -558,6 +561,9 @@ def main():
                         help="inhibitory spikes per byte against the clock membrane")
     parser.add_argument("--clock-source", choices=_CLOCK_SOURCES, default="surprise",
                         help="integrate surprise, or one unit per byte as the fixed-stride control")
+    parser.add_argument("--stack", action="store_true",
+                        help="a decoder without blocks: every level is the state read and the cell layer that "
+                             "--read-after and --granule-after name for it, and --depth counts the levels")
     parser.add_argument("--read-after", help="comma-separated byte-rate blocks that a state read follows")
     parser.add_argument("--read-width", type=int, default=EventLMConfig.read_width, help="channels of a state read")
     parser.add_argument("--read-heads", type=int, default=EventLMConfig.read_heads)
@@ -572,6 +578,9 @@ def main():
                         help="starting scale of a state read's probe, tag and payload synapses")
     parser.add_argument("--read-budget", type=int, default=EventLMConfig.read_budget,
                         help="cell spikes that end a race read of rates, the race within reach of the leader if unset")
+    parser.add_argument("--read-cap", type=int, default=EventLMConfig.read_cap,
+                        help="most pulses a probe, tag or payload neuron of a race read fires at a byte; a stream "
+                             "neuron's largest count when omitted")
     parser.add_argument("--read-address-rate", type=float, default=EventLMConfig.read_address_rate,
                         help="factor on the stored age offsets and gains of a state read")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
@@ -608,6 +617,9 @@ def main():
     parser.add_argument("--granule-budget", type=lambda text: int(text) or None, default=EventLMConfig.granule_budget,
                         help="spikes per byte that the cells of a granule cluster race for; threshold cells when "
                              "omitted or 0")
+    parser.add_argument("--granule-cap", type=int, default=EventLMConfig.granule_cap,
+                        help="most spikes a granule cell fires at a byte; a stream neuron's largest count when "
+                             "omitted")
     parser.add_argument("--granule-slope", action="store_true",
                         help="threshold cells keep their spikes and learn from a smooth threshold, so that a "
                              "silent cell still learns")

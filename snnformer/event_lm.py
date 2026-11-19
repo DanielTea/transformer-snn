@@ -186,6 +186,9 @@ class EventLMConfig:
     granule_clock: str = "word"
     granule_hold: str = "sum"
     granule_clock_rate: float = 0.25
+    stack: bool = False
+    granule_cap: int | None = None
+    read_cap: int | None = None
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -1762,6 +1765,17 @@ class _DelayBlock(nn.Module):
         return spikes
 
 
+class _Level(nn.Module):
+    """A level of a stack. It has no relay neurons of its own: the stream passes as it is to the state read and to
+    the cells that follow the level."""
+
+    history_size = 0
+    correction = None
+
+    def forward(self, spikes, **_):
+        return spikes
+
+
 @dataclass
 class EventLMState:
     layers: list[_DelayState]
@@ -1909,7 +1923,9 @@ class _StateRead(nn.Module):
             self.signed = cfg.read_signed
             # Larger synapses meet thresholds raised by the same whole factor, so the pulses start as they were.
             self.threshold_scale = round(cfg.read_synapse_gain)
-            self.fire = _IntegrateFire(cap, bits, False)
+            # A probe, tag or payload neuron fires up to a stream neuron's largest count, or up to its own cap. A
+            # lower cap leaves the read's output synapses more room within the range of exact sums.
+            self.fire = _IntegrateFire(cap if cfg.read_cap is None else cfg.read_cap, bits, False)
             self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
             self.budget = cfg.read_budget
             if self.budget is None:
@@ -2072,8 +2088,9 @@ class _StateRead(nn.Module):
         if self.mode != "race":
             return ()
         bounds = [synapse.weight_ticks().abs().sum(-1).amax() for synapse in (self.probe, self.tag, self.payload)]
-        # A head's read neurons count up to a cell's largest count, in read pulses of that head's grain.
-        pulses = self.read_resolution * self.grain.detach().exp().flatten() + 0.5 / self.fire.cap
+        # A head's read neurons count up to a cell's largest payload, in read pulses of that head's grain. The
+        # bound is in ticks per unit of a stream neuron's largest count.
+        pulses = (self.read_resolution * self.grain.detach().exp().flatten() * self.fire.cap + 0.5) / self.emit.cap
         heads = self.project.weight_ticks().abs().unflatten(-1, (self.heads, -1)).sum(-1)
         bounds.append(((heads * pulses).sum(-1) + self.emit.threshold).amax())
         if self.clock is not None:
@@ -2348,6 +2365,10 @@ class _GranuleLayer(nn.Module):
     the second, and so on. Through them a cell hears what the last words
     left behind, beside the exact bytes that the delayed fibres bring.
 
+    With ``granule_cap`` a cell fires at most that many spikes at a byte, where it otherwise fires up to a stream
+    neuron's largest count. A channel that hears many cells can then take larger synapses from each within the
+    range of exact sums.
+
     With ``granule_relays`` the fibres do not come from the stream itself.
     That many relay neurons each hear the whole stream and fire for it, and
     their axons are the fibres that the clusters share, as mossy fibres come
@@ -2431,15 +2452,17 @@ class _GranuleLayer(nn.Module):
         # Spikes of charge a cell needs before its threshold counts, stored in quarter spikes.
         self.rest = nn.Parameter(torch.full((clusters, cells, 1), float(cfg.granule_rest)))
         self.budget = cfg.granule_budget
+        # The most spikes of a cell at a byte with no inhibition from the pool.
+        cell_cap = cap if cfg.granule_cap is None else cfg.granule_cap
         if self.budget is None:
-            self.fire = _ExcitatoryFire(cap, self.bits, False)
+            self.fire = _ExcitatoryFire(cell_cap, self.bits, False)
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
             # that they cause.
             self.fire.price_share = cfg.granule_price
         else:
             # The starting phases are spread evenly over a cluster's cells and shifted from cluster to cluster.
             phase = (torch.arange(1, cells + 1) * _GOLDEN + torch.arange(clusters)[:, None] / clusters) % 1
-            self.fire = _RaceFire(cap, self.bits, self.budget, phase, cfg.granule_races, cfg.granule_soften)
+            self.fire = _RaceFire(cell_cap, self.bits, self.budget, phase, cfg.granule_races, cfg.granule_soften)
             # Each cluster has its own gain on its cells' charges.
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
         self.soft, self.slope = cfg.granule_soft, cfg.granule_slope
@@ -2547,15 +2570,17 @@ class _GranuleLayer(nn.Module):
         # The resting charge at the strongest inhibition, in ticks per unit of the largest input count.
         quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
         most_quanta = _PACKET_UNITS + self.pool.cap
-        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.fire.cap)
+        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
         send = _weight_ticks(self.send, charge_bits=self.bits).abs().sum(-1)
         arriving = send.new_zeros(self.channels).index_add_(0, self.outputs.flatten(), send.flatten())
-        bounds = (receive + rest, arriving.amax() + self.emit.threshold)
+        # A cell brings at most its own largest count, which may be below a stream neuron's.
+        arriving = (arriving.amax() * (self.fire.cap / self.emit.cap)).ceil()
+        bounds = (receive + rest, arriving + self.emit.threshold)
         if self.relay is not None:
             bounds += (self.relay.weight_ticks().abs().sum(-1).amax(),)
         if self.clock is not None:
             quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
-            rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.fire.cap)
+            rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
             bounds += (self.clock.weight_ticks().abs().sum(-1).amax() + rest,)
         return bounds
 
@@ -2580,6 +2605,13 @@ class EventLM(nn.Module):
             raise ValueError("invalid spike packet route")
         if cfg.continuous and (cfg.route != "steered" or cfg.carry):
             raise ValueError("the continuous control uses the reset-per-byte steered topology")
+        if cfg.stack and (cfg.route != "steered" or cfg.carry or cfg.continuous or cfg.clock_start is not None
+                          or cfg.local_trace or cfg.compact_delays or cfg.activity_inhibition
+                          or cfg.residual_correction_start is not None or cfg.learn_packet_thresholds
+                          or cfg.output_reference or cfg.synapse_orders is not None or cfg.head_orders is not None
+                          or (cfg.read_after is None and cfg.granule_after is None)):
+            raise ValueError("a stack has no blocks: its levels are state reads and cell layers on a "
+                             "reset-per-byte stream, with no clock and no option of a block")
         if cfg.route in _PREDICTION_ROUTES and cfg.carry:
             raise ValueError("prediction memory requires reset-per-byte local neurons (--no-carry)")
         if (cfg.forecast_key_channels or cfg.match_forecast_key) and cfg.route != "steered_correction_code":
@@ -2764,7 +2796,7 @@ class EventLM(nn.Module):
         taps = 2 if cfg.route == "convergent" else 0
         self.delayed_input = nn.ModuleList(_Synapse(_VOCAB, cfg.dim, gain=0.5, byte_input=True) for _ in range(taps))
         self.input_emit = _IntegrateFire(cap, _CHARGE_BITS, cfg.carry, continuous=cfg.continuous)
-        self.blocks = nn.ModuleList(_DelayBlock(cfg, i) for i in range(cfg.depth))
+        self.blocks = nn.ModuleList(_Level() if cfg.stack else _DelayBlock(cfg, i) for i in range(cfg.depth))
         self.local_history = len(self.delayed_input) + sum(block.history_size for block in self.blocks)
         self.output = _Synapse(cfg.dim, _VOCAB, gain=0.8, continuous=cfg.continuous)
         self.output_emit = _IntegrateFire(output_cap, output_bits, cfg.carry, continuous=cfg.continuous)
@@ -2814,6 +2846,10 @@ class EventLM(nn.Module):
                     or (cfg.read_mode == "race" and cfg.read_synapse_gain != round(cfg.read_synapse_gain))
                     or cfg.read_width % cfg.read_heads):
                 raise ValueError("state reads need positive sizes and a width that the heads divide")
+            if cfg.read_cap is not None and (cfg.read_mode != "race" or not isinstance(cfg.read_cap, int)
+                                             or not 1 <= cfg.read_cap <= _HIDDEN_CAP * cfg.resolution):
+                raise ValueError("the neurons of a race read fire a whole number of pulses up to a stream neuron's "
+                                 "largest count")
             if (not isinstance(cfg.read_beats, int) or not 0 <= cfg.read_beats <= _READ_BEATS
                     or not math.isfinite(cfg.read_beat_start) or (cfg.read_beat_start and not cfg.read_beats)):
                 raise ValueError("a state read counts a cell's age in words up to sixteen, and a starting charge "
@@ -2851,9 +2887,12 @@ class EventLM(nn.Module):
                     not isinstance(cfg.granule_bits, int) or cfg.granule_bits < _CHARGE_BITS
                     or (_HIDDEN_CAP * cfg.resolution) << cfg.granule_bits > _FP32_EXACT):
                 raise ValueError("granule cells need charge bits from 6 that keep a full stream channel exact in FP32")
+            if cfg.granule_cap is not None and (not isinstance(cfg.granule_cap, int)
+                                                or not 1 <= cfg.granule_cap <= _HIDDEN_CAP * cfg.resolution):
+                raise ValueError("a granule cell's largest count is a whole number of spikes up to a stream neuron's")
             if cfg.granule_budget is not None and (
                     not isinstance(cfg.granule_budget, int)
-                    or not 1 <= cfg.granule_budget <= _HIDDEN_CAP * cfg.resolution):
+                    or not 1 <= cfg.granule_budget <= (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution)):
                 raise ValueError("a race of granule cells spends a whole budget of spikes within a cell's largest count")
             if (not isinstance(cfg.granule_races, int) or cfg.granule_races < 1
                     or cfg.granule_cells % cfg.granule_races
@@ -2922,7 +2961,7 @@ class EventLM(nn.Module):
             return synapse.weight_ticks().abs().sum(-1)
 
         bounds = [row_sums(self.output).amax()]
-        for block in self.blocks:
+        for block in () if self.cfg.stack else self.blocks:
             bounds.append(row_sums(block.expand).amax())
             if block.inhibition_redistribution is not None:
                 bounds.append(row_sums(block.inhibition_redistribution.synapse).amax())
@@ -3388,6 +3427,9 @@ class EventLM(nn.Module):
         """Apply one byte per stream using bounded integer state."""
         if self.input.weight.is_floating_point() or self.training:
             raise ValueError("step requires an eval-mode integer export from to_integer()")
+        if self.state_reads is not None or self.granule_layers is not None:
+            raise ValueError("state reads and cell layers carry no state through a stream yet: "
+                             "run this decoder on whole windows")
         if tokens.ndim != 1 or tokens.device.type != "cpu":
             raise ValueError("step expects a CPU tensor of shape [batch]")
         if state is None:
