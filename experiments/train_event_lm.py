@@ -972,8 +972,10 @@ def main():
     resume_path = Path(f"{checkpoint}.resume") if args.resume else None
     if resume_path is not None and resume_path.exists():
         state = torch.load(resume_path, map_location="cpu", weights_only=True)
-        different = sorted(key for key in {*state["args"], *reached} - _RESUME_FREE
-                           if json.dumps(state["args"].get(key)) != json.dumps(reached.get(key)))
+        # A setting that the trainer did not have when the run started stands at its default.
+        started = {key: parser.get_default(key) for key in reached} | state["args"]
+        different = sorted(key for key in {*started, *reached} - _RESUME_FREE
+                           if json.dumps(started.get(key), default=str) != json.dumps(reached.get(key)))
         if different:
             parser.error(f"{resume_path}: the run differs in {', '.join(different)}")
         if args.stop_at is not None and args.stop_at <= state["step"]:
