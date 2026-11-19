@@ -276,6 +276,10 @@ def build_model(args):
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
                             read_turn=getattr(args, "read_turn", EventLMConfig.read_turn),
                             output_cap=getattr(args, "output_cap", EventLMConfig.output_cap),
+                            pool_fine=getattr(args, "pool_fine", EventLMConfig.pool_fine),
+                            pool_rest=getattr(args, "pool_rest", EventLMConfig.pool_rest),
+                            pool_rate=getattr(args, "pool_rate", EventLMConfig.pool_rate),
+                            output_pool=getattr(args, "output_pool", EventLMConfig.output_pool),
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
                             **synapses, **heads)
         model = EventLM(cfg)
@@ -714,6 +718,19 @@ def main():
     parser.add_argument("--output-cap", type=int, default=EventLMConfig.output_cap, metavar="EIGHTHS",
                         help="most evidence an output neuron fires for or against its byte, in eighths of a bit; "
                              "the default of 128 ends a neuron's say at 16 bits")
+    parser.add_argument("--pool-fine", type=int, default=EventLMConfig.pool_fine, metavar="TIMES",
+                        help="the neurons of state reads and cell layers count their threshold in quanta this many "
+                             "times finer (four times this many to a threshold), and each spike of their pool "
+                             "adds one")
+    parser.add_argument("--pool-rest", type=int, default=EventLMConfig.pool_rest, metavar="QUANTA",
+                        help="quanta of threshold that such a neuron keeps while its pool is silent (default: a "
+                             "whole threshold)")
+    parser.add_argument("--pool-rate", type=int, default=EventLMConfig.pool_rate, metavar="TIMES",
+                        help="such a pool fires this many spikes for each one that a block's pool fires at the "
+                             "same activity of the stream")
+    parser.add_argument("--output-pool", type=int, default=EventLMConfig.output_pool, metavar="QUANTA",
+                        help="give a stack's output neurons a pool of their own and this many quanta to a "
+                             "threshold, of which one stands while the pool is silent")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
     parser.add_argument("--spike-resolution", type=int, default=1, help="number of finer spikes per original unit")
     parser.add_argument("--depth", type=int, default=3)

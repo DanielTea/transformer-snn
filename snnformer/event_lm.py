@@ -209,6 +209,16 @@ class EventLMConfig:
     read_turn: bool = False
     # An output neuron fires up to this many eighths of a bit of evidence for or against its byte.
     output_cap: int = _OUTPUT_CAP
+    # The neurons of state reads and cell layers count their threshold in quanta this many times finer than the
+    # four of a packet threshold, and every spike of their pool adds one of those.
+    pool_fine: int = 1
+    # The quanta of threshold that such a neuron has while its pool is silent: by default a whole threshold.
+    pool_rest: int | None = None
+    # The spikes that such a pool fires for each one that the pool of a block fires at the same activity.
+    pool_rate: int = 1
+    # The quanta to a threshold of a stack's output neurons, which then have a pool like a level's and one
+    # quantum while it is silent. At zero they have no pool and their threshold does not move.
+    output_pool: int = 0
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -224,6 +234,15 @@ class EventLMConfig:
     def inhibition_bits(self) -> int:
         population = 2 * self.hidden if self.inhibition_by_expansion else self.dim
         return ((population * self.resolution - 1) // _PACKET_UNITS).bit_length()
+
+    @property
+    def pool_quanta(self) -> int:
+        """The quanta to a threshold of a neuron of a state read or a cell layer."""
+        return _PACKET_UNITS * self.pool_fine
+
+    @property
+    def pool_rest_quanta(self) -> int:
+        return self.pool_quanta if self.pool_rest is None else self.pool_rest
 
 
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
@@ -309,7 +328,7 @@ class _IntegrateFire(nn.Module):
     price_share = 1.0
 
     def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False,
-                 quanta_per_threshold: int = _PACKET_UNITS):
+                 quanta_per_threshold: int = _PACKET_UNITS, capped: bool = False):
         super().__init__()
         self.cap = cap
         self.bits = charge_bits
@@ -317,6 +336,9 @@ class _IntegrateFire(nn.Module):
         self.carry = carry
         self.continuous = continuous
         self.quanta_per_threshold = quanta_per_threshold
+        # A membrane holds the charge of ``cap`` whole thresholds, so a threshold below a whole one would let
+        # more spikes through than the cap. A capped population fires the cap at most.
+        self.capped = capped
 
     def _charge(self, bounded):
         rails = torch.stack((bounded.clamp_min(0), (-bounded).clamp_min(0)), dim=-1)
@@ -344,6 +366,8 @@ class _IntegrateFire(nn.Module):
             charge = bounded.to(torch.int32)
             magnitude = (charge.abs() + threshold // 2) // threshold
             limit = (self.cap * self.quanta_per_threshold) // units
+            if self.capped:
+                limit = limit.clamp(max=self.cap)
             counts = magnitude.minimum(limit) * charge.sign()
             if current.is_floating_point():
                 surrogate = bounded / (quanta * quantum)
@@ -376,6 +400,36 @@ class _IntegrateFire(nn.Module):
         counts = total >> self.bits
         phase = (total & (self.threshold - 1)) if self.carry else None
         return self._signed(counts), phase
+
+
+class _ShuntedFire(_IntegrateFire):
+    """Neurons whose pool sets their threshold in quanta that need not be whole ticks of charge.
+
+    ``quanta_per_threshold`` quanta make the threshold that the neurons have
+    without a pool. A count is the charge over the present threshold, rounded
+    half away from zero and found in whole numbers, and the largest count is
+    the cap however high the threshold stands. Without quanta the neurons
+    fire as plain ones do.
+    """
+
+    def forward(self, current, quanta=None, *, reference=None):
+        if quanta is None:
+            return super().forward(current, reference=reference)
+        units = quanta.to(torch.int64)
+        charge = current.to(torch.int64)
+        doubled = 2 * self.quanta_per_threshold * charge.abs() + units * self.threshold
+        counts = (doubled // (2 * self.threshold * units)).clamp(max=self.cap) * charge.sign()
+        if not current.is_floating_point():
+            return counts.to(current.dtype)
+        surrogate = (current * (self.quanta_per_threshold / self.threshold) / quanta).clamp(-self.cap, self.cap)
+        return counts.to(current.dtype) + (surrogate - surrogate.detach())
+
+
+def _stream_pool(cfg):
+    """The inhibitory pool of a state read, a cell layer or a stack's output: it hears every pulse of the stream
+    there, and each of its spikes adds a quantum to the thresholds of the neurons that hear the stream with it."""
+    return _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS * cfg.pool_fine,
+                          cfg.inhibition_bits - cfg.pool_rate.bit_length() + 1, False)
 
 
 class _ResidualMembraneFire(_IntegrateFire):
@@ -1963,7 +2017,8 @@ class _StateRead(nn.Module):
                                  persistent=False)
             # A pulse of a turned neuron takes a threshold of charge at every spike of a pacemaker's largest count.
             self.turned = _IntegrateFire(cap if cfg.read_cap is None else cfg.read_cap,
-                                         bits + _PHASE_SPIKES.bit_length() - 1, False)
+                                         bits + _PHASE_SPIKES.bit_length() - 1, False,
+                                         quanta_per_threshold=cfg.pool_quanta, capped=True)
         # A cell's charge starts from a learned offset for its age.
         self.age = nn.Parameter(torch.zeros(self.heads, self.window))
         self.beats, self.clock, self.beat_mark = cfg.read_beats, None, None
@@ -2008,8 +2063,9 @@ class _StateRead(nn.Module):
             self.threshold_scale = round(cfg.read_synapse_gain)
             # A probe, tag or payload neuron fires up to a stream neuron's largest count, or up to its own cap. A
             # lower cap leaves the read's output synapses more room within the range of exact sums.
-            self.fire = _IntegrateFire(cap if cfg.read_cap is None else cfg.read_cap, bits, False)
-            self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
+            self.fire = _IntegrateFire(cap if cfg.read_cap is None else cfg.read_cap, bits, False,
+                                       quanta_per_threshold=cfg.pool_quanta, capped=True)
+            self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
             self.budget = cfg.read_budget
             if self.budget is None:
                 # Cells fire once more for every ``spacing`` of charge they come closer to the most charged cell.
@@ -2053,7 +2109,7 @@ class _StateRead(nn.Module):
             probe, tag, payload = (self._unit(drive) for drive in (probe, tag, self.payload(spikes)))
             return probe, tag, payload * self.read_resolution
         # The inhibitory pool raises every firing threshold with the stream's activity, as it does in a block.
-        quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+        quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         quanta = quanta * self.threshold_scale
         if not self.signed:
             probe, tag = probe.clamp_min(0), tag.clamp_min(0)
@@ -2687,7 +2743,7 @@ class _GranuleLayer(nn.Module):
             self.fire = _GatedFire(cell_cap, self.bits, self.gated)
             self.open.price_share = self.fire.price_share = cfg.granule_price
         elif self.budget is None:
-            self.fire = _ExcitatoryFire(cell_cap, self.bits, False)
+            self.fire = _ExcitatoryFire(cell_cap, self.bits, False, quanta_per_threshold=cfg.pool_quanta, capped=True)
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
             # that they cause.
             self.fire.price_share = cfg.granule_price
@@ -2698,7 +2754,7 @@ class _GranuleLayer(nn.Module):
             # Each cluster has its own gain on its cells' charges.
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
         self.soft, self.slope = cfg.granule_soft, cfg.granule_slope
-        self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
+        self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
         self.emit = _IntegrateFire(cap, self.bits, False)
 
     def rest_quarters(self):
@@ -2741,7 +2797,7 @@ class _GranuleLayer(nn.Module):
             opens = self.beat_at(self.word_bytes[tokens])
             return opens[..., None].expand(-1, -1, clusters).to(spikes.dtype), None
         if quanta is None:
-            quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+            quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
         rest = self.clock_rest.clamp(-_GRANULE_REST_LIMIT, _GRANULE_REST_LIMIT) * _PACKET_UNITS
         rest = rest.detach().round() + (rest - rest.detach())
@@ -2773,7 +2829,7 @@ class _GranuleLayer(nn.Module):
 
     def cells(self, spikes, tokens=None):
         """The spike counts of all cells as [batch, bytes, clusters, cells]."""
-        quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+        quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         beats, rates = self.beats(spikes, tokens, quanta) if self.orders else (None, None)
         quanta = quanta[..., None]
         heard = self.heard(self.fibres(spikes), beats, rates)
@@ -2806,7 +2862,7 @@ class _GranuleLayer(nn.Module):
         receive = _weight_ticks(self.receive, charge_bits=self.bits).abs().sum(-1).amax()
         # The resting charge at the strongest inhibition, in ticks per unit of the largest input count.
         quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
-        most_quanta = _PACKET_UNITS + self.pool.cap
+        most_quanta = self.rest_quanta + self.pool.cap
         rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
         if self.gated:
             # The rest belongs to the gate dendrite. The value dendrite collects without it.
@@ -2835,7 +2891,7 @@ class _GranuleLayer(nn.Module):
         together.
         """
         quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
-        most_quanta = _PACKET_UNITS + self.pool.cap
+        most_quanta = self.rest_quanta + self.pool.cap
         rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
         spare = self.receive.shape[-1] / 2 + 1
         # The resting charge belongs to a gated cell's gate dendrite and to a plain cell's only dendrite.
@@ -3027,6 +3083,27 @@ class EventLM(nn.Module):
             raise ValueError("the output cap is a whole number of eighths of a bit, and an output neuron's largest "
                              "charge stays within the range of exact sums")
         output_cap = cfg.output_cap * cfg.resolution
+        if (not all(isinstance(size, int) and size >= 1 and not size & (size - 1)
+                    for size in (cfg.pool_fine, cfg.pool_rate))
+                or cfg.pool_rate.bit_length() > cfg.inhibition_bits + 1
+                or (cfg.pool_rest is not None and (not isinstance(cfg.pool_rest, int) or cfg.pool_rest < 1))):
+            raise ValueError("a pool's quanta are finer and its spikes more frequent by powers of two, down to a "
+                             "pool spike for every pulse, and its neurons keep a whole number of quanta at rest")
+        if (cfg.pool_fine, cfg.pool_rest, cfg.pool_rate) != (1, None, 1):
+            charge_bits = cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits
+            if (cfg.read_after is None and cfg.granule_after is None) or (cfg.read_after is not None
+                                                                          and cfg.read_mode != "race"):
+                raise ValueError("a pool with its own quanta inhibits race reads and cell layers")
+            if cfg.granule_after is not None and (cfg.granule_gate or cfg.granule_budget is not None
+                                                  or cfg.granule_beats and cfg.granule_clock == "learned"):
+                raise ValueError("gated cells, racing cells and learned clocks are not wired to a pool with its "
+                                 "own quanta")
+            if (cfg.pool_quanta * _PACKET_UNITS) > 1 << min(cfg.router_charge_bits, charge_bits):
+                raise ValueError("a quarter of a quantum must be a whole number of charge ticks: fewer quanta to a "
+                                 "threshold or more charge bits")
+        if not isinstance(cfg.output_pool, int) or cfg.output_pool < 0 or (cfg.output_pool and not cfg.stack):
+            raise ValueError("the output neurons of a stack count their threshold in a whole number of quanta "
+                             "under a pool of their own")
         if cfg.output_reference:
             if cfg.carry or cfg.continuous or cfg.route not in ("steered", "steered_correction_code"):
                 raise ValueError("output reference needs a reset-per-byte spike router")
@@ -3080,6 +3157,12 @@ class EventLM(nn.Module):
         self.local_history = len(self.delayed_input) + sum(block.history_size for block in self.blocks)
         self.output = _Synapse(cfg.dim, _VOCAB, gain=0.8, continuous=cfg.continuous)
         self.output_emit = _IntegrateFire(output_cap, output_bits, cfg.carry, continuous=cfg.continuous)
+        self.output_pool = None
+        if cfg.output_pool:
+            # The pool divides what the stream's activity multiplies: the evidence of the output neurons then
+            # does not grow with the number of pulses that carry it.
+            self.output_emit = _ShuntedFire(output_cap, output_bits, False, quanta_per_threshold=cfg.output_pool)
+            self.output_pool = _stream_pool(cfg)
         # A second vocabulary population reads the byte-rate stream through the same
         # synapses. Its higher threshold removes the finer spike resolution.
         coarse = cfg.resolution.bit_length() - 1
@@ -3519,7 +3602,12 @@ class EventLM(nn.Module):
             )
             spikes = self._apply_recall(spikes, recall)
         current = self.output(spikes)
-        counts = self.output_emit(current, reference=self._reference_counts(current))
+        if self.output_pool is not None:
+            # One quantum of threshold at rest and one more for every spike of the pool.
+            counts = self.output_emit(
+                current, 1 + self.output_pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)))
+        else:
+            counts = self.output_emit(current, reference=self._reference_counts(current))
         if self.fast_synapses is not None:
             counts = self._excite_vocabulary(counts, tokens, surprise, early, correction_access)
         if self.read_heads is not None:
