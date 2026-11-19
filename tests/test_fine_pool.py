@@ -7,7 +7,8 @@ import numpy as np
 import pytest
 import torch
 
-from snnformer.event_lm import EventLM, EventLMConfig, _IntegrateFire, _ShuntedFire, _stream_pool, emitted_pulses
+from snnformer.event_lm import (EventLM, EventLMConfig, _ExcitatoryFire, _IntegrateFire, _ShuntedFire, _stream_pool,
+                                emitted_pulses)
 
 _LEVELS = (0, 1)
 _STACK = dict(dim=64, hidden=4, depth=2, route="steered", carry=False, resolution=16, router_charge_bits=8, stack=True,
@@ -227,6 +228,52 @@ def test_the_pulses_of_fine_pools_are_counted():
     assert pulses["fine"]["output_pool"][0] > 0
 
 
+def test_a_wide_slope_is_the_smooth_threshold_of_whole_spikes():
+    # Sixty-four quanta to a threshold and four at rest: a cell fires sixteen fine spikes for a threshold of charge.
+    fire = _ExcitatoryFire(32, 8, False, quanta_per_threshold=64, capped=True)
+    thresholds = torch.tensor([[-3.0, -0.25, 0.25, 2.0]])
+    slopes = []
+    for smooth in (1, 16):
+        charge = (thresholds * fire.threshold).requires_grad_()
+        spikes = fire(charge, _quanta(4.0), smooth=smooth)
+        # The spikes are the same: sixteen for every threshold of charge.
+        assert spikes.tolist() == [[0.0, 0.0, 4.0, 32.0]]
+        spikes.sum().backward()
+        slopes.append(charge.grad * fire.threshold / 16)
+    narrow, wide = slopes
+    # A slope as wide as one fine spike leaves a cell a quarter threshold below alone. The wide one draws it up as
+    # a cell of whole spikes is drawn, and neither moves a cell far below.
+    assert narrow[0, 1].abs() < 0.01 and 0.25 < wide[0, 1] < 0.35
+    assert narrow[0, 0].abs() < 0.01 and wide[0, 0].abs() < 0.02
+    whole = _ExcitatoryFire(32, 8, False)
+    charge = (thresholds * whole.threshold).requires_grad_()
+    whole(charge, _quanta(4.0), smooth=True).sum().backward()
+    torch.testing.assert_close(wide, charge.grad * whole.threshold)
+
+    tokens = _bytes()
+    for settings, weights in ((dict(), "receive"), (dict(granule_gate=4, granule_cells=64), "gate")):
+        grads = []
+        for width in (1, 16):
+            model = _stack(**_FINE, **settings, granule_slope_width=width)
+            grads.append((model(tokens), model))
+        (first, narrow), (second, wide) = grads
+        # The width adds no synapse and changes no spike. Only what the cells learn from differs.
+        assert set(narrow.state_dict()) == set(wide.state_dict()) and torch.equal(first, second)
+        for output, model in grads:
+            output.float().square().mean().backward()
+        learned = [getattr(model.granule_layers["0"], weights).grad for model in (narrow, wide)]
+        assert all(torch.isfinite(grad).all() and grad.abs().sum() > 0 for grad in learned)
+        assert not torch.equal(*learned)
+
+
+@pytest.mark.parametrize("setting", [dict(granule_slope_width=0), dict(granule_slope_width=65),
+                                     dict(granule_slope_width=2.0),
+                                     dict(granule_slope=False, granule_slope_width=16)])
+def test_a_layer_refuses_a_slope_width_it_cannot_have(setting):
+    with pytest.raises(ValueError, match="smooth threshold"):
+        _stack(**setting)
+
+
 @pytest.mark.parametrize("setting", [
     dict(pool_fine=3), dict(pool_fine=0), dict(pool_rate=12), dict(pool_rate=1024), dict(pool_rest=0),
     dict(pool_rest=2.0), dict(pool_fine=32), dict(pool_fine=16, granule_gate=8, granule_cells=64),
@@ -257,9 +304,9 @@ def test_the_trainer_hands_the_pool_settings_to_the_model(monkeypatch, tmp_path)
     flags = """--variant event_steered --no-carry --stack --dim 32 --hidden 4 --depth 1 --spike-resolution 16
     --router-charge-bits 8 --read-after 0 --read-width 16 --read-heads 2 --read-window 16 --read-mode race
     --read-budget 16 --read-resolution 4 --granule-after 0 --granule-clusters 1 --granule-fan 32 --granule-cells 16
-    --granule-slope --pool-fine 16 --pool-rest 4 --pool-rate 32 --output-pool 128 --ctx 16 --bs 2 --steps 2
-    --warmup 1 --lr 0.003 --seed 3 --eval-every 2 --eval-bs 2 --eval-batches 1 --final-eval-batches 1
-    --validation-only""".split()
+    --granule-slope --granule-slope-width 16 --pool-fine 16 --pool-rest 4 --pool-rate 32 --output-pool 128
+    --ctx 16 --bs 2 --steps 2 --warmup 1 --lr 0.003 --seed 3 --eval-every 2 --eval-bs 2 --eval-batches 1
+    --final-eval-batches 1 --validation-only""".split()
     monkeypatch.setattr(sys, "argv", ["train_event_lm.py", *flags, "--checkpoint", str(tmp_path / "model.pt"),
                                       "--results-dir", str(tmp_path / "results")])
     train_event_lm.main()
@@ -268,4 +315,5 @@ def test_the_trainer_hands_the_pool_settings_to_the_model(monkeypatch, tmp_path)
     assert (cfg.pool_fine, cfg.pool_rest, cfg.pool_rate, cfg.output_pool) == (16, 4, 32, 128)
     layer = model.granule_layers["0"]
     assert (layer.pool.threshold, layer.rest_quanta, layer.fire.quanta_per_threshold) == (4, 4, 64)
+    assert (cfg.granule_slope_width, layer.slope_width) == (16, 16)
     assert type(model.output_emit) is _ShuntedFire and model.output_pool.threshold == 4

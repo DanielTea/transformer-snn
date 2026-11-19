@@ -263,6 +263,8 @@ def build_model(args):
                             granule_soften=getattr(args, "granule_soften", EventLMConfig.granule_soften),
                             granule_soft=getattr(args, "granule_soft", EventLMConfig.granule_soft),
                             granule_slope=getattr(args, "granule_slope", EventLMConfig.granule_slope),
+                            granule_slope_width=getattr(args, "granule_slope_width",
+                                                        EventLMConfig.granule_slope_width),
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
@@ -660,6 +662,11 @@ def main():
     parser.add_argument("--granule-slope", action="store_true",
                         help="threshold cells keep their spikes and learn from a smooth threshold, so that a "
                              "silent cell still learns")
+    parser.add_argument("--granule-slope-width", type=int, default=EventLMConfig.granule_slope_width,
+                        metavar="SPIKES",
+                        help="the smooth threshold that cells learn from is as wide as SPIKES of a cell's spikes "
+                             "(1 when omitted); with a fine pool its number of fine spikes keeps the slope as "
+                             "wide as it is for whole spikes")
     parser.add_argument("--granule-races", type=int, default=EventLMConfig.granule_races,
                         help="equal groups in which the cells of a granule cluster race, each for the budget")
     parser.add_argument("--granule-soften", type=float, default=EventLMConfig.granule_soften,

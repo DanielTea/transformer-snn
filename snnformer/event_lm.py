@@ -196,6 +196,7 @@ class EventLMConfig:
     granule_soften: float = 1.0
     granule_soft: bool = False
     granule_slope: bool = False
+    granule_slope_width: int = 1
     granule_delays: int = 1
     granule_relays: int = 0
     granule_traces: int = 0
@@ -2630,7 +2631,11 @@ class _GranuleLayer(nn.Module):
     they fire in, so that a cell far behind can still be drawn into use.
     With ``granule_slope`` cells that do not race learn below their
     thresholds as well: their spikes are unchanged and their slope is that
-    of a smooth threshold, so that a silent cell is not lost.
+    of a smooth threshold, so that a silent cell is not lost. The smooth
+    threshold is as wide as one spike of the cell, and as wide as
+    ``granule_slope_width`` of them where that is set. A cell under a fine
+    pool fires ``pool_fine`` spikes for the charge of a whole one, so that
+    width keeps the slope as wide as it is without the pool.
     With ``granule_soft`` the cells neither race nor spike: each answers
     with a real number, a smooth threshold of its own charge, through the
     synapses and the gains of the race. That is a stand-in for diagnosis,
@@ -2787,7 +2792,8 @@ class _GranuleLayer(nn.Module):
             self.fire = _RaceFire(cell_cap, self.bits, self.budget, phase, cfg.granule_races, cfg.granule_soften)
             # Each cluster has its own gain on its cells' charges.
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
-        self.soft, self.slope = cfg.granule_soft, cfg.granule_slope
+        # A plain cell's smooth threshold is that many of its spikes wide, and a gate's that many thresholds.
+        self.soft, self.slope, self.slope_width = cfg.granule_soft, cfg.granule_slope, cfg.granule_slope_width
         self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
         self.emit = _IntegrateFire(cap, self.bits, False)
 
@@ -2874,10 +2880,11 @@ class _GranuleLayer(nn.Module):
         if self.gated:
             # The gate dendrite fires above the rest, and its spikes let the value dendrite's charge into the body.
             opening = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.gate, charge_bits=self.bits))
-            return self.fire(charge, quanta, opened=self.open(opening - rest, quanta, smooth=self.gated))
+            return self.fire(charge, quanta,
+                             opened=self.open(opening - rest, quanta, smooth=self.gated * self.slope_width))
         charge = charge - rest
         if self.budget is None:
-            return self.fire(charge, quanta, smooth=self.slope)
+            return self.fire(charge, quanta, smooth=self.slope * self.slope_width)
         if self.soft:
             # The charge in thresholds, as the race takes it, and no competition between the cells.
             thresholds = charge / (quanta * (self.fire.threshold // self.fire.quanta_per_threshold))
@@ -3303,6 +3310,10 @@ class EventLM(nn.Module):
                 raise ValueError("soft granule cells stand in for racing cells and take their cluster gains")
             if cfg.granule_slope and cfg.granule_budget is not None:
                 raise ValueError("the slope below the threshold belongs to granule cells that do not race")
+            if (not isinstance(cfg.granule_slope_width, int) or not 1 <= cfg.granule_slope_width <= 64
+                    or cfg.granule_slope_width > 1 and not (cfg.granule_slope or cfg.granule_gate)):
+                raise ValueError("the smooth threshold of a granule cell is 1 to 64 of its spikes wide, and wider "
+                                 "than one only for cells that learn below their thresholds")
             if cfg.granule_reach is not None and (
                     not isinstance(cfg.granule_reach, int) or not 1 <= cfg.granule_reach <= cfg.dim):
                 raise ValueError("the axons of a granule cluster reach a whole number of the stream's channels")
