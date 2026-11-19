@@ -123,6 +123,10 @@ def averaged_weights(model, average):
         with torch.no_grad():
             for parameter, mean in zip(model.parameters(), average, strict=True):
                 parameter.copy_(mean)
+        if isinstance(model, EventLM):
+            # Where a neuron's range depends on other learned sizes, the average of weights that were each in
+            # range can leave it.
+            model.synaptic_scaling()
         yield
     finally:
         with torch.no_grad():
@@ -993,6 +997,9 @@ def main():
         print(f"{name}: continuing after {start} of {args.steps} updates", flush=True)
     teacher_event = isinstance(teacher, EventLM)
     teacher_resolution = teacher.cfg.resolution if teacher_event else 1
+    # Neurons whose synapses were scaled back into the range of exact sums since the last evaluation: a tensor
+    # between evaluations, so that no step waits for it.
+    scaled_neurons = 0
     for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
@@ -1047,6 +1054,9 @@ def main():
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
+        if event:
+            # A neuron whose summed synapses left the range of exact sums shrinks them all by one factor.
+            scaled_neurons += model.synaptic_scaling()
         if average is not None:
             # The average follows the weights closely at first, so the starting weights do not linger in it.
             decay = min(args.weight_average, step / (step + 10))
@@ -1054,6 +1064,7 @@ def main():
                 for mean, parameter in zip(average, model.parameters(), strict=True):
                     mean.lerp_(parameter, 1 - decay)
         if step % args.eval_every == 0 or step == args.steps:
+            scaled_neurons = int(scaled_neurons)
             metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
             averaged_metrics = None
             if average is not None:
@@ -1070,8 +1081,12 @@ def main():
                               **({"bank_read_rank_loss": bank_read_loss.item()} if args.bank_read_rank_weight else {}),
                               **({"code_loss": code_loss.item()} if args.code_loss_weight else {}),
                               **({"early_train_bpb": early_loss.item() / math.log(2)}
-                                 if args.early_readout_weight else {})))
+                                 if args.early_readout_weight else {}),
+                              **({"scaled_neurons": scaled_neurons} if scaled_neurons else {})))
             activity = f" pulses/byte={metrics['pulses_per_byte']:.0f}" if pulse_counts is not None else ""
+            if scaled_neurons:
+                activity += f" scaled neurons={scaled_neurons}"
+                scaled_neurons = 0
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
                   f"accuracy={metrics['argmax_accuracy']:.4f} ({earlier_seconds + timer():.1f}s){activity}", flush=True)
 

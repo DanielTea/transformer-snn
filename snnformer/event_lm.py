@@ -234,6 +234,25 @@ def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
     return ticks.detach().round() + (ticks - ticks.detach()) if quantized else ticks
 
 
+def _unrounded_sums(weight, charge_bits):
+    """The summed sizes of each neuron's synapses in weight ticks, before the ticks are rounded."""
+    limit = _WEIGHT_LIMIT << (charge_bits - _CHARGE_BITS)
+    return (weight * (1 << charge_bits)).clamp(-limit, limit).abs().sum(-1)
+
+
+def _shrink_synapses(weight, factor, charge_bits):
+    """Shrink in place all synapses of the neurons whose ``factor`` is below one, and count those neurons.
+
+    ``weight`` holds one neuron's synapses along its last axis. A synapse beyond the largest weight counts as the
+    largest weight. The synapses of every other neuron stay as they are, bit for bit. The count is a tensor, so
+    that a pass over a whole decoder waits for no result on a graphics processor.
+    """
+    over = (factor < 1).unsqueeze(-1)
+    limit = (_WEIGHT_LIMIT << (charge_bits - _CHARGE_BITS)) / (1 << charge_bits)
+    weight.copy_(torch.where(over, weight.clamp(-limit, limit) * factor.unsqueeze(-1), weight))
+    return over.sum()
+
+
 def emitted_pulses(population, counts):
     """A firing population's pulses for a pulse budget, whose price pushes on them with the population's share."""
     total = counts.abs().sum()
@@ -2199,6 +2218,35 @@ class _StateRead(nn.Module):
             bounds.append(self.clock_ticks().abs().sum(-1).amax() + self.clock_rest_ticks)
         return tuple(bounds)
 
+    @torch.no_grad()
+    def scale_synapses(self, limit):
+        """Shrink the synapses of each probe, tag, payload and read neuron whose summed weights would exceed
+        ``limit`` ticks per unit of a stream neuron's largest count, and count those neurons.
+
+        The sums are those of ``accumulator_bounds``. Rounding moves a synapse by at most half a tick, so the sums
+        of the unrounded synapses are held that far below the limit.
+        """
+        if self.mode != "race":
+            return 0
+        bits, scaled = self.probe.charge_bits, 0
+        spare = self.probe.weight.shape[-1] / 2 + 1
+        for index, synapse in enumerate((self.probe, self.tag, self.payload)):
+            allowed = limit - spare
+            if self.phases and index < 2:
+                phase = (self.probe_phase, self.tag_phase)[index]
+                allowed = allowed - (phase.weight_ticks().abs().sum(-1) * (_PHASE_SPIKES / self.emit.cap)).ceil()
+            sums = _unrounded_sums(synapse.weight, bits)
+            scaled += _shrink_synapses(synapse.weight, allowed / sums.clamp_min(1), bits)
+        # A read neuron of the stream sums each head's synapses at that head's largest count of read pulses.
+        pulses = (self.read_resolution * self.grain.exp().flatten() * self.fire.cap + 0.5) / self.emit.cap
+        weight = self.project.weight
+        heads = (weight * (1 << bits)).clamp(-(_WEIGHT_LIMIT << (bits - _CHARGE_BITS)),
+                                             _WEIGHT_LIMIT << (bits - _CHARGE_BITS)).abs()
+        heads = heads.unflatten(-1, (self.heads, -1)).sum(-1)
+        spare = (weight.shape[-1] / self.heads / 2 * pulses).sum() + 1
+        allowed = limit - self.emit.threshold - spare
+        return scaled + _shrink_synapses(weight, allowed / (heads * pulses).sum(-1).clamp_min(1), bits)
+
 
 def _pacemaker_counts(steps, pairs, longest, shortest=_PHASE_SHORTEST):
     """The spikes of a bank of pacemaker cells at each byte, as [bytes, 2 * pairs] whole counts of either sign.
@@ -2777,6 +2825,42 @@ class _GranuleLayer(nn.Module):
             bounds += (self.clock.weight_ticks().abs().sum(-1).amax() + rest,)
         return bounds
 
+    @torch.no_grad()
+    def scale_synapses(self, limit):
+        """Shrink the synapses of each cell, stream channel and relay whose summed weights would exceed ``limit``
+        ticks per unit of a stream neuron's largest count, and count those neurons.
+
+        The sums are those of ``accumulator_bounds``, with half a tick of rounding spared for every synapse. A
+        stream channel sums the synapses that all the cells of all its clusters send to it, so those shrink
+        together.
+        """
+        quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
+        most_quanta = _PACKET_UNITS + self.pool.cap
+        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
+        spare = self.receive.shape[-1] / 2 + 1
+        # The resting charge belongs to a gated cell's gate dendrite and to a plain cell's only dendrite.
+        dendrites = [(self.receive, 0 if self.gated else rest)]
+        if self.gated:
+            dendrites.append((self.gate, rest))
+        scaled = 0
+        for weight, resting in dendrites:
+            allowed = limit - resting - spare
+            scaled += _shrink_synapses(weight, allowed / _unrounded_sums(weight, self.bits).clamp_min(1), self.bits)
+        # What arrives at a channel is counted at a cell's largest count, in units of a stream neuron's.
+        sums = _unrounded_sums(self.send, self.bits)
+        targets = self.outputs.flatten()
+        arriving = sums.new_zeros(self.channels).index_add_(0, targets, sums.flatten())
+        fibres = sums.new_zeros(self.channels).index_add_(0, targets, torch.ones_like(sums.flatten()))
+        ratio = self.fire.cap / self.emit.cap
+        allowed = (limit - self.emit.threshold - 1) / ratio - fibres * self.send.shape[-1] / 2
+        factor = (allowed / arriving.clamp_min(1))[self.outputs]
+        scaled += _shrink_synapses(self.send, factor, self.bits)
+        if self.relay is not None:
+            weight, bits = self.relay.weight, self.relay.charge_bits
+            allowed = limit - weight.shape[-1] / 2 - 1
+            scaled += _shrink_synapses(weight, allowed / _unrounded_sums(weight, bits).clamp_min(1), bits)
+        return scaled
+
 
 class EventLM(nn.Module):
     """One-hot byte events in, signed output spike counts over 256 bytes out.
@@ -3227,6 +3311,30 @@ class EventLM(nn.Module):
         limit = _FP32_EXACT // self.input_emit.cap
         if not torch.stack(bounds).amax().item() <= limit:
             raise ValueError("quantized weights exceed the exact FP32 accumulator range at this spike resolution")
+
+    @torch.no_grad()
+    def synaptic_scaling(self):
+        """Keep every neuron of the state reads, the cell layers and the output within the range of exact sums.
+
+        A neuron's membrane sums its synapses' charges exactly as long as the summed sizes of its synapses, at
+        the largest count of what it hears, stay below 2 ** 24 ticks. Training can carry a neuron beyond that,
+        and the decoder then refuses to run. Here every such neuron shrinks all of its synapses by one factor,
+        which brings their sum back to the range and leaves their proportions as they are: the neuron keeps what
+        it listens for and gives up size, as a neuron that scales its synapses to its own activity does. No other
+        synapse changes. Returns the number of neurons that shrank, as a tensor. Called after every step of
+        training, this is a rule of the learning and not of the network: the weights it leaves pass
+        ``_check_accumulator``.
+        """
+        if not self.input.weight.is_floating_point():
+            return 0
+        limit = _FP32_EXACT // self.input_emit.cap
+        weight, bits = self.output.weight, self.output.charge_bits
+        allowed = limit - weight.shape[-1] / 2 - 1
+        scaled = _shrink_synapses(weight, allowed / _unrounded_sums(weight, bits).clamp_min(1), bits)
+        for layers in (self.state_reads, self.granule_layers):
+            for layer in () if layers is None else layers.values():
+                scaled += layer.scale_synapses(limit)
+        return scaled
 
     def _forecast_counts(self, spikes):
         return self.forecast_emit(self.output(spikes))
