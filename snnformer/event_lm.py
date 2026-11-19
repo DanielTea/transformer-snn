@@ -224,6 +224,10 @@ class EventLMConfig:
     pool_rest: int | None = None
     # The spikes that such a pool fires for each one that the pool of a block fires at the same activity.
     pool_rate: int = 1
+    # A membrane holds the charge of a neuron's largest count at its resting threshold, so a pool that raises the
+    # threshold leaves the neuron fewer spikes. With this the pool divides the charge before the membrane bounds
+    # it, and the neurons of race reads and plain cells fire up to their largest count at every threshold.
+    pool_lifts_ceiling: bool = False
     # The quanta to a threshold of a stack's output neurons, which then have a pool like a level's and one
     # quantum while it is silent. At zero they have no pool and their threshold does not move.
     output_pool: int = 0
@@ -341,6 +345,8 @@ class _IntegrateFire(nn.Module):
     price_share = 1.0
     # A dendrite counts its charge in steps and sends no spike.
     dendrite = False
+    # The pool of a lifted population divides the charge before the membrane bounds it.
+    lifted = False
 
     def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False,
                  quanta_per_threshold: int = _PACKET_UNITS, capped: bool | int = False):
@@ -378,6 +384,15 @@ class _IntegrateFire(nn.Module):
             units = quanta.to(torch.int32)
             quantum = self.threshold // self.quanta_per_threshold
             threshold = units * quantum
+            if self.lifted:
+                # The membrane holds the charge of the largest count at the present threshold, so the neuron
+                # fires and learns up to that count however high its pool has raised the threshold.
+                charge = current.to(torch.int32)
+                counts = ((charge.abs() + threshold // 2) // threshold).clamp(max=self.capped) * charge.sign()
+                if current.is_floating_point():
+                    surrogate = (current / (quanta * quantum)).clamp(-self.capped, self.capped)
+                    return counts.to(current.dtype) + (surrogate - surrogate.detach())
+                return counts
             charge = bounded.to(torch.int32)
             magnitude = (charge.abs() + threshold // 2) // threshold
             limit = (self.cap * self.quanta_per_threshold) // units
@@ -2094,6 +2109,7 @@ class _StateRead(nn.Module):
             # lower cap leaves the read's output synapses more room within the range of exact sums.
             self.fire = _IntegrateFire(cap if cfg.read_cap is None else cfg.read_cap, bits, False,
                                        quanta_per_threshold=cfg.pool_quanta, capped=True)
+            self.fire.lifted = cfg.pool_lifts_ceiling
             self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
             self.budget = cfg.read_budget
             if self.budget is None:
@@ -2846,6 +2862,7 @@ class _GranuleLayer(nn.Module):
             self.fire.price_share = cfg.granule_price
         elif self.budget is None:
             self.fire = _ExcitatoryFire(cell_cap, self.bits, False, quanta_per_threshold=cfg.pool_quanta, capped=True)
+            self.fire.lifted = cfg.pool_lifts_ceiling
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
             # that they cause.
             self.fire.price_share = cfg.granule_price
@@ -3216,6 +3233,13 @@ class EventLM(nn.Module):
             if (cfg.pool_quanta * _PACKET_UNITS) > 1 << min(cfg.router_charge_bits, charge_bits):
                 raise ValueError("a quarter of a quantum must be a whole number of charge ticks: fewer quanta to a "
                                  "threshold or more charge bits")
+        if not isinstance(cfg.pool_lifts_ceiling, bool) or (cfg.pool_lifts_ceiling and (
+                (cfg.read_after is None and cfg.granule_after is None)
+                or (cfg.read_after is not None and (cfg.read_mode != "race" or cfg.read_turn))
+                or (cfg.granule_after is not None and (cfg.granule_budget is not None or cfg.granule_gate
+                                                       or cfg.granule_veto)))):
+            raise ValueError("a pool lifts the ceilings of race reads that no pacemaker turns and of plain cells, "
+                             "which neither race nor have a gate or a veto")
         if not isinstance(cfg.output_pool, int) or cfg.output_pool < 0 or (cfg.output_pool and not cfg.stack):
             raise ValueError("the output neurons of a stack count their threshold in a whole number of quanta "
                              "under a pool of their own")

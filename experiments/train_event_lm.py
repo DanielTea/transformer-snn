@@ -283,6 +283,7 @@ def build_model(args):
                             pool_fine=getattr(args, "pool_fine", EventLMConfig.pool_fine),
                             pool_rest=getattr(args, "pool_rest", EventLMConfig.pool_rest),
                             pool_rate=getattr(args, "pool_rate", EventLMConfig.pool_rate),
+                            pool_lifts_ceiling=getattr(args, "pool_lifts_ceiling", EventLMConfig.pool_lifts_ceiling),
                             output_pool=getattr(args, "output_pool", EventLMConfig.output_pool),
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
@@ -749,6 +750,10 @@ def main():
     parser.add_argument("--pool-rate", type=int, default=EventLMConfig.pool_rate, metavar="TIMES",
                         help="such a pool fires this many spikes for each one that a block's pool fires at the "
                              "same activity of the stream")
+    parser.add_argument("--pool-lifts-ceiling", action="store_true",
+                        help="the pool divides a neuron's charge before its membrane bounds it, so the neurons of "
+                             "race reads and plain cells fire up to their largest count however high their "
+                             "threshold stands (otherwise a raised threshold leaves them fewer spikes)")
     parser.add_argument("--output-pool", type=int, default=EventLMConfig.output_pool, metavar="QUANTA",
                         help="give a stack's output neurons a pool of their own and this many quanta to a "
                              "threshold, of which one stands while the pool is silent")
