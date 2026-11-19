@@ -275,6 +275,8 @@ def build_model(args):
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
                             read_turn=getattr(args, "read_turn", EventLMConfig.read_turn),
+                            read_delays=getattr(args, "read_delays", EventLMConfig.read_delays),
+                            read_delay_probes=getattr(args, "read_delay_probes", EventLMConfig.read_delay_probes),
                             output_cap=getattr(args, "output_cap", EventLMConfig.output_cap),
                             pool_fine=getattr(args, "pool_fine", EventLMConfig.pool_fine),
                             pool_rest=getattr(args, "pool_rest", EventLMConfig.pool_rest),
@@ -605,6 +607,12 @@ def main():
                         help="pacemakers gate the dendrites of the probe and tag neurons of every state read, so "
                              "the pulses of a pair of neurons are turned by the phase of its pacemakers: probe and "
                              "tag then match by what they hold and by the bytes between them at once")
+    parser.add_argument("--read-delays", type=int, default=EventLMConfig.read_delays,
+                        help="the tag neurons of every state read hear each channel as it is now and once more "
+                             "after a delay of one to this many bytes less one: a cell's tag then tells what led "
+                             "up to it, and one read finds how bytes like the present ones went on")
+    parser.add_argument("--read-delay-probes", action="store_true",
+                        help="the probe neurons of every state read hear the late fibres too")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,

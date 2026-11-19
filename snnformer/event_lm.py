@@ -73,6 +73,8 @@ _READ_CLOCK_BITS = 4
 # The most pairs of pacemaker cells a state read can hear, the largest count of a pacemaker in spikes of either
 # sign, and the shortest period of a bank in bytes. The longest period is twice the read window.
 _READ_PHASES = 64
+# The longest delay of a state read's delayed fibres is one byte less than this.
+_READ_DELAYS = 16
 _PHASE_SPIKES = 64
 _PHASE_SHORTEST = 3.0
 # The synapses from the pacemakers start with this gain. At a quarter the pacemakers charge a probe or tag neuron
@@ -207,6 +209,10 @@ class EventLMConfig:
     read_cap: int | None = None
     read_phases: int = 0
     read_turn: bool = False
+    # The tag neurons of a state read hear every channel as it is now and once more after a delay of one to this
+    # many bytes less one, and with ``read_delay_probes`` the probe neurons do too.
+    read_delays: int = 1
+    read_delay_probes: bool = False
     # An output neuron fires up to this many eighths of a bit of evidence for or against its byte.
     output_cap: int = _OUTPUT_CAP
     # The neurons of state reads and cell layers count their threshold in quanta this many times finer than the
@@ -1980,6 +1986,16 @@ class _StateRead(nn.Module):
     turns by a radian a byte and the periods grow in equal ratios. Most pairs
     turn little within a window and match by what the cells hold alone. This
     is the spike form of a Transformer's rotary phases.
+
+    With ``read_delays`` above one the tag neurons hear every channel twice:
+    as it is now, and through a second fibre that brings it some bytes late.
+    Channel ``c`` is late by ``1 + c % (read_delays - 1)`` bytes, so every
+    delay is on the same share of the channels. A cell's tag then tells what
+    led up to the cell beside what the cell holds, and a probe that matches
+    it finds the cells that followed bytes like the present ones: one read
+    looks up how such bytes went on, which takes two reads in a row without
+    the delays. With ``read_delay_probes`` the probe neurons hear the late
+    fibres too, and a probe tells the last few bytes where it told one.
     """
 
     def __init__(self, cfg: EventLMConfig):
@@ -1993,9 +2009,13 @@ class _StateRead(nn.Module):
         cap = _HIDDEN_CAP * cfg.resolution
         # A payload pulse of a single addressed cell arrives as this many read pulses.
         self.read_resolution = cfg.resolution if cfg.read_resolution is None else cfg.read_resolution
+        self.delays, self.delay_probes = cfg.read_delays, cfg.read_delay_probes
         if self.mode != "age":
-            self.probe = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
-            self.tag = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
+            # A neuron that hears the late fibres has a second synapse from every channel.
+            late = cfg.dim if self.delays > 1 else 0
+            self.probe = _Synapse(cfg.dim + late * self.delay_probes, cfg.read_width, gain=cfg.read_synapse_gain,
+                                  charge_bits=bits)
+            self.tag = _Synapse(cfg.dim + late, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
             # Each head has its own gain on the match of probe and tag.
             self.gain = nn.Parameter(torch.zeros(self.heads, 1, 1))
         self.phases = cfg.read_phases
@@ -2095,12 +2115,23 @@ class _StateRead(nn.Module):
         started = self.word_beats(tokens).cumsum(1)
         return (started[:, :, None] - started[:, None, :]).clamp(0, self.beats)
 
+    def heard(self, spikes):
+        """The stream and what the late fibres bring of it, as [batch, bytes, 2 * channels]: the channels as they
+        are, then the channels of each delay in turn, the shortest first. A fibre is silent until its first byte
+        has had the time to arrive."""
+        if self.delays == 1:
+            return spikes
+        length, kinds = spikes.shape[1], self.delays - 1
+        late = [F.pad(spikes[..., delay - 1::kinds], (0, 0, delay, 0))[:, :length] for delay in range(1, self.delays)]
+        return torch.cat((spikes, *late), -1)
+
     def packets(self, spikes):
         """The probes, tags and payloads of all cells as [batch, heads, cells, channels]: whole pulses in a race and
         drives of unit size for a softmax. A read by age alone has payloads only."""
         if self.mode == "age":
             return None, None, self._unit(self.payload(spikes)) * self.read_resolution
-        probe, tag = self.probe(spikes), self.tag(spikes)
+        heard = self.heard(spikes)
+        probe, tag = self.probe(heard if self.delay_probes else spikes), self.tag(heard)
         if self.phases:
             # The pacemakers charge the probe and tag neurons beside the stream.
             beats = self.phase_counts(spikes.shape[1]).to(spikes.dtype)
@@ -2285,9 +2316,8 @@ class _StateRead(nn.Module):
         if self.mode != "race":
             return 0
         bits, scaled = self.probe.charge_bits, 0
-        spare = self.probe.weight.shape[-1] / 2 + 1
         for index, synapse in enumerate((self.probe, self.tag, self.payload)):
-            allowed = limit - spare
+            allowed = limit - (synapse.weight.shape[-1] / 2 + 1)
             if self.phases and index < 2:
                 phase = (self.probe_phase, self.tag_phase)[index]
                 allowed = allowed - (phase.weight_ticks().abs().sum(-1) * (_PHASE_SPIKES / self.emit.cap)).ceil()
@@ -3234,6 +3264,12 @@ class EventLM(nn.Module):
                     or _PHASE_SPIKES > _HIDDEN_CAP * cfg.resolution):
                 raise ValueError("the probes and tags of a state read hear up to 64 pairs of pacemaker cells, whose "
                                  "counts stay within a stream neuron's; a read by age alone has no probes or tags")
+            if (not isinstance(cfg.read_delays, int) or not 1 <= cfg.read_delays <= _READ_DELAYS
+                    or (cfg.read_delays > 1 and (cfg.read_mode == "age" or cfg.read_delays - 1 > cfg.dim))
+                    or (cfg.read_delay_probes and cfg.read_delays == 1)):
+                raise ValueError("the tags of a state read hear every channel once more after one of up to fifteen "
+                                 "delays, each on a channel at least, and the probes hear those late fibres only "
+                                 "where the tags do; a read by age alone has no tags")
             if cfg.read_turn:
                 if (cfg.read_mode != "race" or not cfg.read_signed or cfg.read_budget is None
                         or cfg.read_width // cfg.read_heads % 2):
