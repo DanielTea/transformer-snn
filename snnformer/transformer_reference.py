@@ -224,8 +224,9 @@ class TransformerLM(nn.Module):
         if cfg.feed_forward not in _UNITS or cfg.age_offsets < 0:
             raise ValueError("the feed-forward units are swiglu, reglu, gelu or relu and the rate of the age offsets "
                              "is not negative")
-        if (cfg.feed_forward != "swiglu" or cfg.age_offsets) and cfg.attn != "transformer":
-            raise ValueError("other units and age offsets are controls of the full Transformer")
+        if (cfg.feed_forward != "swiglu" or cfg.age_offsets or cfg.untied_output) and cfg.attn != "transformer":
+            raise ValueError("other units, age offsets and an output layer of its own are controls of the full "
+                             "Transformer")
         # Offsets by age replace the rotary phases: a head then addresses by content and by distance in two terms.
         self.rotary_dim = 2 * ((dim // heads) // 2) if cfg.position_embeddings and not cfg.age_offsets else 0
         hidden = max(1, round(2 * cfg.mlp_ratio * dim / 3))
@@ -251,7 +252,11 @@ class TransformerLM(nn.Module):
         self.norm = nn.LayerNorm(dim)
         self.head = nn.Linear(dim, vocab, bias=False)
         self._init_weights(self.tok)
-        self.head.weight = self.tok.weight
+        if cfg.untied_output:
+            # A control: the output layer has weights of its own, as the output synapses of a stack have.
+            self._init_weights(self.head)
+        else:
+            self.head.weight = self.tok.weight
         residual_std = 0.02 / math.sqrt(2 * depth)
         for block in self.blocks:
             # Keep the memory module's own spike-specific initialization.

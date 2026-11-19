@@ -153,10 +153,31 @@ def test_a_unit_is_gated_or_plain_and_opens_smoothly_or_above_a_threshold():
     torch.testing.assert_close(block._feed_forward(x), x)
 
 
+def test_an_output_layer_of_its_own_learns_apart_from_the_embedding():
+    torch.manual_seed(6)
+    count = lambda model: sum(parameter.numel() for parameter in model.parameters())  # noqa: E731
+    tied, untied = TransformerLM(_FULL, **_SMALL), TransformerLM(replace(_FULL, untied_output=True), **_SMALL)
+    assert tied.head.weight is tied.tok.weight and untied.head.weight is not untied.tok.weight
+    # The output layer adds a weight from every channel to every byte, drawn as the embedding's are.
+    assert count(untied) - count(tied) == untied.head.weight.numel() == 32 * 16
+    assert not torch.equal(untied.head.weight, untied.tok.weight)
+    assert abs(untied.head.weight.std() / 0.02 - 1) < 0.2
+    tokens = torch.randint(32, (2, 23))
+    untied(tokens).square().mean().backward()
+    assert untied.head.weight.grad.any() and untied.tok.weight.grad.any()
+    assert not torch.equal(untied.head.weight.grad, untied.tok.weight.grad)
+    # With the embedding's weights in its output layer the model is the tied one.
+    with torch.no_grad():
+        untied.head.weight.copy_(untied.tok.weight)
+    tied.load_state_dict(untied.state_dict())
+    torch.testing.assert_close(tied(tokens), untied(tokens))
+
+
 @pytest.mark.parametrize("setting", [dict(feed_forward="tanh"), dict(age_offsets=-1.0),
                                      dict(attn="transformer_local", feed_forward="relu"),
                                      dict(attn="transformer_local", feed_forward="reglu"),
-                                     dict(attn="transformer_local", age_offsets=8.0)])
+                                     dict(attn="transformer_local", age_offsets=8.0),
+                                     dict(attn="transformer_local", untied_output=True)])
 def test_the_controls_belong_to_the_full_transformer(setting):
     with pytest.raises(ValueError):
         TransformerLM(replace(_FULL, **setting), **_SMALL)
