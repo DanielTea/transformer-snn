@@ -18,6 +18,7 @@ to a GPU.
 |---|---|
 | `head_use.py` | Where the heads of a network look, in bytes back and in words back |
 | `read_addresses.py` | How far the read heads have moved their addresses: the offsets by age in bytes and in beats, and the gains |
+| `clock_beats.py` | Where the clock cells of the read heads beat: at which share of the bytes, at which place in a word and on which bytes |
 | `read_ablate.py` | What the reads are worth, and what the match of probe and tag is worth in them |
 | `read_match_stats.py` | How fine the probe and tag pulses of the reads are |
 | `words_in_view.py` | Where one checkpoint is ahead of another: by copyable targets, by the place in a word and by the words in view |

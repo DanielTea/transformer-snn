@@ -7,43 +7,126 @@ correction into the vocabulary neurons. Every release is
 measured against a full-attention Transformer of the same size
 and training.
 
-The newest decoder, **v13**, scores **1.262 bits per byte** on
-the full enwik8 test split. The Transformer scores 1.207. Under
-the same scoring the v12 decoder scores 1.467, so the distance
-fell from 0.260 to 0.055 bpb in one release. v13 adds **state
-reads**, which let the present byte address the stream's own
-earlier states, and **race cells** on **delayed fibres**,
-clusters of cells that compete for a fixed number of spikes per
-byte.
+The newest decoder, **v14**, scores **1.244 bits per byte** on
+the full enwik8 test split. Under the same scoring the v13
+decoder scores 1.262. The gain comes from one change: the read
+heads learn their **addresses** eight times as fast. v14 also
+gives every read head a **clock cell**. The decoder with clock
+cells is the one released, and it is 0.0013 bpb ahead of the one
+without, which is less than a second training run moves a
+decoder.
 
-![enwik8 test loss of the Transformer, the new decoders and the v12 decoders](results/figures/event_lm_state_reads.png)
+![enwik8 test loss of the two v14 decoders, the v13 decoder and two Transformers](results/figures/event_lm_read_clocks.png)
 
-The Transformer is still ahead. The v13 decoder runs in
+The Transformer is still ahead. The 256-wide Transformer that
+v12 and v13 were measured against scores 1.207, which leaves
+0.038 bpb where v13 left 0.055. A Transformer of the standard
+shape and the same size, trained for this release, scores
+**1.182** and is the stronger reference. The v14 decoder runs in
 512-byte windows only. It has no stream form yet, so it has no
-streaming score, no native integer run and no generator. Its
-weights are release assets, and the model that runs from a
-clone is v11.
+streaming score and no native integer run. Its weights are
+release assets, and the model that runs from a clone is v11.
 
 | Release | Adds | enwik8 test | Transformer | Scored in |
 |---|---|---:|---:|---|
-| [v13](#v13-state-reads-and-race-cells) | State reads and race cells on delayed fibres | **1.262** | 1.207 | 512-byte windows |
-| [v12](#v12-coasting-read-heads) | Read heads on a tape of the stream | 1.414 | 1.207 | One continuous stream |
+| [v14](#v14-read-clocks-and-the-address-rate) | A faster address rate and clock cells for the read heads | **1.244** | 1.182 | 512-byte windows |
+| [v13](#v13-state-reads-and-race-cells) | State reads and race cells on delayed fibres | 1.262 | 1.182 | 512-byte windows |
+| [v12](#v12-coasting-read-heads) | Read heads on a tape of the stream | 1.414 | 1.182 | One continuous stream |
 | [v11](#v11-surprise-clock-and-fast-synapses) | Fast synapses written by error spikes | 1.645 | 1.704 | One continuous stream |
 
 Each Transformer has the size and the training of its row and
-reads 512 bytes. v13 and v12 have about 34.8M parameters and
-368.64M training targets from random weights. In v13's windows
-the v12 decoder scores 1.467, because it gives up the stream it
-carries. v11 has 25.79M parameters and 140.90M targets. Its
-fast synapses carry the whole stream, and with the same
-synapses on its output the v11 Transformer scores 1.578. Every
-arm is one seed.
+reads 512 bytes. v14, v13 and v12 have about 34.8M parameters
+and 368.64M training targets from random weights. Their
+Transformer is the one of the standard shape that v14 trained.
+The 256-wide Transformer that v12 and v13 published scores
+1.207. In the windows of v13 and v14 the v12 decoder scores
+1.467, because it gives up the stream it carries. v11 has 25.79M
+parameters and 140.90M targets. Its fast synapses carry the
+whole stream, and with the same synapses on its output the v11
+Transformer scores 1.578. Every arm is one seed.
 
-[State-read study](docs/STATE_READS.md) ·
-[Model card](models/spiking-byte-lm-v13/README.md) ·
+[Read-clock study](docs/READ_CLOCKS.md) ·
+[Model card](models/spiking-byte-lm-v14/README.md) ·
 [Leaderboard](docs/LEADERBOARD.md) ·
-[Research handoff](docs/V13_HANDOFF.md) ·
-[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v13)
+[Research handoff](docs/V14_HANDOFF.md) ·
+[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v14)
+
+## v14: read clocks and the address rate
+
+The v14 study changes how the read heads of the v13 decoder
+learn where to look. A head addresses the earlier bytes with
+charges: a gain on the match of probe and tag, and an offset for
+every age. One unit of charge multiplies a cell's rate in the
+race by e, so an address has to move much further than a synapse
+does. With an **address rate** of 8 the stored charges count
+eight times, and one update moves an address eight times as far.
+The decoder keeps its 34.82M parameters.
+
+The study also gives a head a second kind of age. Every head has
+a **clock cell** whose spike is a beat, and the head counts the
+beats that fell after each earlier byte. In a made-up language
+whose words depend on the word before last, clock cells learn to
+beat on the spaces, and a read then finds that word whatever the
+lengths of the words between. At full size the clock cells did
+not find the words. The decoder with them is the one released
+because it scores best, but its lead of 0.0013 bpb is less than
+a second run moves a decoder.
+
+![A read head counts time in beats, and the test on the made-up language](results/figures/event_lm_read_clocks_language.png)
+
+| Trained from scratch, 368.64M targets | Optimizer | enwik8 | PG-19 |
+|---|---|---:|---:|
+| 34.82M SNN, clock cells and address rate | Rotated, averaged | 1.24445 | 1.53378 |
+| 34.82M SNN, address rate | Rotated, averaged | 1.24570 | 1.53600 |
+| 34.82M SNN, spike reads and race cells | Rotated, averaged | 1.26226 | 1.55162 |
+| 34.85M full attention, 256 wide | AdamW | 1.20684 | 1.48212 |
+| 34.85M full attention, 256 wide | Rotated, averaged | 1.20407 | 1.48204 |
+| 34.75M full attention, standard shape | AdamW, averaged | **1.18215** | **1.45701** |
+
+Both Transformers are ahead. The released decoder is 0.038 bpb
+behind the 256-wide one on enwik8 and 0.052 on 16 PG-19 books.
+The Transformer of the standard shape is 512 wide with 11
+layers, was trained for this study and is 0.062 and 0.077 ahead.
+Every score in the table is in windows of 512 bytes that start
+from an empty state, with 256 unscored bytes before the 256
+scored ones. The six rows received identical windows from random
+weights, and every arm is one seed. The decoders run in such
+windows only. A window generator that is new in v14 writes text
+with them, at one window per byte. The v14 weights are release
+assets, and the model that runs from a clone is v11.
+
+![Validation loss of the decoders and the Transformers, and the decoders' distance to the Transformer](results/figures/event_lm_read_clocks_training.png)
+
+The faster addresses show from 6,000 updates on. The decoders
+lead the 256-wide Transformer up to 9,000 updates. Both
+Transformers take their lead by 30,000 updates, and it changes
+little after that.
+
+![The decoder's distance to the Transformer by the kind of target](results/figures/event_lm_read_clocks_gap.png)
+
+On bytes that an earlier match in the window offers for copying,
+the decoders are ahead of the Transformer. They are behind on
+the other bytes, and furthest where four or more words are in
+view. A linear readout finds more of the earlier words in the
+decoder's stream than in the Transformer's, though that stream
+is five and a half times as wide. The decoder holds the words
+and makes less of them.
+
+![What the streams know of the earlier words](results/figures/event_lm_read_clocks_words.png)
+
+Beside its three decoders the study trained 43 pilots of other
+layouts, and it counts none of them as a gain. Cells that answer
+a byte with many of their number, on relay neurons that hear the
+whole stream, were closing in on the race cells when the pilots
+ended. They are the next step.
+[Next pilots](docs/V14_HANDOFF.md#next-pilots)
+
+[Read-clock study](docs/READ_CLOCKS.md) ·
+[Every training arm](docs/READ_CLOCKS_ARMS.md) ·
+[Leaderboard](docs/LEADERBOARD.md) ·
+[Model card](models/spiking-byte-lm-v14/README.md) ·
+[Research handoff](docs/V14_HANDOFF.md) ·
+[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v14)
 
 ## v13: state reads and race cells
 
@@ -76,9 +159,9 @@ The Transformer is still ahead, by 0.055 bpb on enwik8 and by
 0.070 on 16 PG-19 books. Every score in this table is in windows
 of 512 bytes that start from an empty state, with 256 unscored
 bytes before the 256 scored ones. A dash marks a score that was
-not measured. The new decoder runs in such windows only. It has
+not measured. The v13 decoder runs in such windows only. It has
 no stream form yet, so it has no streaming score, no native
-integer run, no pulse audit and no generator. The seven rows
+integer run and no pulse audit. The seven rows
 received identical windows from random weights. The rows marked
 rotated were trained with a rotated optimizer, which runs Adam
 in the eigenbasis of each weight matrix's gradient moments, and
@@ -106,9 +189,10 @@ changes that did not help.
 
 ![Validation loss of every arm by family](results/figures/event_lm_state_reads_iterations.png)
 
-The next step is built and not yet run at full size: fibres
-whose delay counts words where a delayed fibre counts bytes.
-[Next pilots](docs/V13_HANDOFF.md#next-pilots)
+The next step that v13 named was fibres whose delay counts
+words where a delayed fibre counts bytes. v14 ran them at full
+size in pilots of 3,000 to 6,000 updates, and they did not help.
+[v14](#v14-read-clocks-and-the-address-rate)
 
 [State-read study](docs/STATE_READS.md) ·
 [Every training arm](docs/STATE_READS_ARMS.md) ·
@@ -287,6 +371,13 @@ the next pilots.
 [Restore and rescore](docs/V13_HANDOFF.md#restore-the-checkpoints) ·
 [Exact manifest](models/spiking-byte-lm-v13/manifest.json)
 
+The v14 archives hold the six checkpoints of the read-clock
+study. Its handoff has the restore commands, the scoring in
+warmed windows, the window generator, the diagnostics that run
+on the released files and the next pilots.
+[Restore and rescore](docs/V14_HANDOFF.md#restore-the-checkpoints) ·
+[Exact manifest](models/spiking-byte-lm-v14/manifest.json)
+
 Regenerate the leaderboards, scientific figures and browser report
 from the checked-in records.
 
@@ -295,6 +386,7 @@ python experiments/plot_event_lm_study.py
 python experiments/plot_depth_inhibition.py
 python experiments/plot_coasting_heads.py
 python experiments/plot_state_reads.py
+python experiments/plot_read_clocks.py
 python experiments/make_report.py docs/report.html
 ```
 

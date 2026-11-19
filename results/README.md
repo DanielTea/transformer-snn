@@ -44,6 +44,20 @@ thought-tape probe on the frozen v12 decoder.
 `state_reads_checkpoints.sha256` lists the seven released
 checkpoints and the three v12 checkpoints scored beside them.
 
+The [read-clock study](../docs/READ_CLOCKS.md) uses
+`event_lm/read_clocks`. `arms.json` holds the settings and the
+validation curve of every arm, `runs` the training records of
+the three released runs and `scores` their test scores in warmed
+windows. The other records are the outputs of the study's
+diagnostics, each as printed in a `.txt` file and as rows in a
+`.json` file, and are named after the script and the network.
+`word_time_reads_s0.json` and `word_time_reads_s1.json` hold the
+tests on the made-up language. `leaderboard.json` is the table
+of the leaderboard page and `resaved_checkpoints.json` the
+hashes of the checkpoints before and after their paths were
+rewritten. `read_clocks_checkpoints.sha256` lists the six
+released checkpoints and the v12 Transformer scored beside them.
+
 The recall figure uses `recall_distance/*_gap_v1_*.json` and
 `recall_distance/dendrite_event_s0_anchored_extrapolation.json`.
 The successor loss figure uses `lm_successor/scaled_v2_continuous.json`
