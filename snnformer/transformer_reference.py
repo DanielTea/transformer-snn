@@ -86,8 +86,10 @@ class _CausalAttention(nn.Module):
     def _offsets(self, length):
         distance = torch.arange(length, device=self.age.device)
         distance = distance[:, None] - distance
-        # A distance beyond the table takes its last offset.
-        offsets = (self.age * self.age_rate)[:, distance.clamp(0, self.age.shape[1] - 1)]
+        # A distance beyond the table takes its last offset. Selecting along one axis keeps the way back a scattered
+        # sum: an indexed assignment sorts its indices on a GPU, and waits for it in every layer.
+        chosen = distance.clamp(0, self.age.shape[1] - 1).reshape(-1)
+        offsets = (self.age * self.age_rate).index_select(1, chosen).view(-1, length, length)
         return offsets.masked_fill(distance < 0, -torch.inf)
 
     def _project(self, x, rope):
