@@ -33,6 +33,14 @@ class _Corpus:
         offsets = self.offsets[documents] + starts - self.beginnings[documents]
         return np.stack([self.data[offset:offset + context + 1] for offset in offsets])
 
+    def stretch(self, count, length, generator):
+        """Unbroken stretches of the corpus. One may run on from a document into the next, as a stream of
+        documents does."""
+        if len(self.data) <= length + 1:
+            raise ValueError("a stretch of the stream is longer than a source of the training mixture")
+        starts = torch.randint(len(self.data) - length, (count,), generator=generator).numpy()
+        return np.stack([self.data[start:start + length + 1] for start in starts])
+
 
 def _checked_file(folder, name, digest):
     if Path(name).name != name or name in ("", ".", ".."):
@@ -89,6 +97,22 @@ class TrainingMixture:
         self.digest.update(raw)
         windows = torch.from_numpy(raw.astype(np.int64))
         return windows[:, :-1], windows[:, 1:]
+
+    def stretch(self, batch_size, pieces, generator):
+        """Stretches of ``pieces`` windows on end as inputs and targets, each from one source, with the sources
+        in the proportions of the windows."""
+        length = pieces * self.context
+        indices = self.schedule[(self.windows + np.arange(batch_size)) % len(self.schedule)]
+        raw = np.empty((batch_size, length + 1), dtype=np.uint8)
+        for source, (name, corpus) in enumerate(self.corpora.items()):
+            positions = np.flatnonzero(indices == source)
+            if positions.size:
+                raw[positions] = corpus.stretch(positions.size, length, generator)
+                self.targets[name] += len(positions) * length
+        self.windows += batch_size
+        self.digest.update(raw)
+        stretches = torch.from_numpy(raw.astype(np.int64))
+        return stretches[:, :-1], stretches[:, 1:]
 
     def receipt(self):
         return {

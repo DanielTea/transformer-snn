@@ -281,6 +281,11 @@ def test_the_trainer_trains_a_stack_on_streams(monkeypatch, tmp_path):
     assert drawn == [16] * 12 and windows["args"]["stream"] is None
     assert all("stream_val_bpb" in row for row in windows["curve"])
     assert windows["curve"][-1]["val_bpb"] != record["curve"][-1]["val_bpb"]
+    # A run turns from windows to streams at an update of its schedule, and is as the run on windows until then.
+    drawn.clear()
+    turned = _train(trainer, monkeypatch, tmp_path / "turned", "--stream", "3", "--stream-from", "6")
+    assert drawn == [16] * 6 + [48] * 2
+    assert turned["curve"][0] == windows["curve"][0] and turned["curve"][1]["val_bpb"] != windows["curve"][1]["val_bpb"]
 
 
 def test_a_run_on_streams_that_stops_continues_as_if_it_had_not(monkeypatch, tmp_path):
@@ -296,9 +301,18 @@ def test_a_run_on_streams_that_stops_continues_as_if_it_had_not(monkeypatch, tmp
     assert _train(trainer, monkeypatch, tmp_path / "other", "--stop-at", "6") is None
     with pytest.raises(SystemExit):
         _train(trainer, monkeypatch, tmp_path / "other", "--stream", "3")
+    # A run that turns to streams continues through the turn as if it had not stopped.
+    whole = _train(trainer, monkeypatch, tmp_path / "turn", "--stream", "3", "--stream-from", "6")
+    assert _train(trainer, monkeypatch, tmp_path / "turned", "--stream", "3", "--stream-from", "6",
+                  "--stop-at", "6") is None
+    parts = _train(trainer, monkeypatch, tmp_path / "turned", "--stream", "3", "--stream-from", "6")
+    assert [[row[key] for key in keys] for row in parts["curve"]] == [[row[key] for key in keys]
+                                                                       for row in whole["curve"]]
 
 
-@pytest.mark.parametrize("flags", [("--stream", "1"), ("--stream", "4"), ("--stream", "3", "--read-beats", "2")])
+@pytest.mark.parametrize("flags", [("--stream", "1"), ("--stream", "4"), ("--stream", "3", "--read-beats", "2"),
+                                   ("--stream-from", "6"), ("--stream", "3", "--stream-from", "4"),
+                                   ("--stream", "3", "--stream-from", "12")])
 def test_the_trainer_refuses_streams_that_do_not_fit(monkeypatch, tmp_path, flags):
     trainer, _ = _trainer(monkeypatch)
     with pytest.raises(SystemExit):

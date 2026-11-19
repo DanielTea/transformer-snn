@@ -762,6 +762,8 @@ def main():
                         help="train a stack on streams: stretches of this many consecutive windows of --ctx bytes, "
                              "one window an update, with the state of its reads and cells handed on from window "
                              "to window")
+    parser.add_argument("--stream-from", type=int, default=0, metavar="STEP",
+                        help="train on windows that start empty up to this update and on streams after it")
     parser.add_argument("--early-readout", type=int,
                         help="number of leading blocks whose stream also drives the vocabulary neurons")
     parser.add_argument("--early-readout-weight", type=float, default=0.0,
@@ -952,10 +954,13 @@ def main():
                                      or args.stop_at % args.save_every):
         parser.error("--stop-at needs --resume and an update below --steps at which --save-every writes")
     if args.stream is not None and (
-            args.stream < 2 or (args.save_every and args.save_every % args.stream) or args.training_mixture is not None
+            args.stream < 2 or (args.save_every and args.save_every % args.stream)
             or args.code_loss_weight or args.early_readout_weight or args.bank_read_rank_weight):
-        parser.error("--stream takes two or more windows to a stretch, a number that divides --save-every, draws "
-                     "them from the training split alone and trains on the next byte alone")
+        parser.error("--stream takes two or more windows to a stretch, a number that divides --save-every, and "
+                     "trains on the next byte alone")
+    if args.stream_from and (args.stream is None or not 0 < args.stream_from < args.steps
+                             or args.stream_from % args.stream):
+        parser.error("--stream-from needs --stream and an update below --steps that is a whole number of stretches")
     event = args.variant in EVENT_ROUTES
     name = "_".join(part for part in (args.variant, f"s{args.seed}", args.tag) if part)
     results_dir = None if args.results_dir is None else args.results_dir.expanduser()
@@ -973,6 +978,10 @@ def main():
             raise ValueError("evaluation windows would overlap; reduce batch size or evaluation batches")
         if args.stream is not None and len(train) <= args.stream * args.ctx + 1:
             raise ValueError("a stretch of the stream is longer than the training split")
+        if args.stream is not None and mixture is not None:
+            for corpus in mixture.corpora.values():
+                if len(corpus.data) <= args.stream * args.ctx + 1:
+                    raise ValueError("a stretch of the stream is longer than a source of the training mixture")
         model, cfg, model_kwargs = build_model(args)
         initialization = loaded_weights = None
         if args.initialize_from is not None:
@@ -1080,6 +1089,18 @@ def main():
                                stacks=args.rotate_stacks, scales=args.lr_scale)
     average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
     generator = torch.Generator(device="cpu").manual_seed(args.seed)
+
+    def draw(step):
+        """The windows that an update on windows trains on, or the stretch that an update on streams starts.
+        The other updates of a stretch draw nothing."""
+        if args.stream is None or step <= args.stream_from:
+            return (random_batch(train, args.bs, args.ctx, generator) if mixture is None
+                    else mixture.batch(args.bs, generator))
+        if (step - 1 - args.stream_from) % args.stream:
+            return None
+        return (random_batch(train, args.bs, args.stream * args.ctx, generator) if mixture is None
+                else mixture.stretch(args.bs, args.stream, generator))
+
     timer, curve = Timer(), []
     parameters = count_params(model)
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -1107,13 +1128,9 @@ def main():
             spike_price = state["spike_price"].to(device)
         curve, start, earlier_seconds = state["curve"], state["step"], state["seconds"]
         resumed_at = [*state["resumed_at"], start]
-        # Drawing the earlier batches again puts the generator and the mixture's receipt where they were. A run
-        # on streams drew one stretch for every --stream updates.
-        for _ in range(start if args.stream is None else -(-start // args.stream)):
-            if mixture is None:
-                random_batch(train, args.bs, args.ctx * (args.stream or 1), generator)
-            else:
-                mixture.batch(args.bs, generator)
+        # Drawing the earlier batches again puts the generator and the mixture's receipt where they were.
+        for earlier in range(1, start + 1):
+            draw(earlier)
         print(f"{name}: continuing after {start} of {args.steps} updates", flush=True)
     teacher_event = isinstance(teacher, EventLM)
     teacher_resolution = teacher.cfg.resolution if teacher_event else 1
@@ -1124,15 +1141,16 @@ def main():
     for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
-        if args.stream is None:
-            inputs, labels = (random_batch(train, args.bs, args.ctx, generator) if mixture is None
-                              else mixture.batch(args.bs, generator))
-        else:
-            piece = (step - 1) % args.stream
-            if piece == 0 or stretch is None:
+        on_streams = args.stream is not None and step > args.stream_from
+        drawn = draw(step)
+        if on_streams:
+            if drawn is not None:
                 # A new stretch of the training bytes, which the stack hears from an empty state.
-                stretch, carried = random_batch(train, args.bs, args.stream * args.ctx, generator), None
+                stretch, carried = drawn, None
+            piece = (step - 1 - args.stream_from) % args.stream
             inputs, labels = (part[:, piece * args.ctx:(piece + 1) * args.ctx] for part in stretch)
+        else:
+            inputs, labels = drawn
         inputs = inputs.to(device)
         if pulse_counts is not None:
             pulse_counts.clear()
@@ -1153,7 +1171,7 @@ def main():
             code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
         elif args.early_readout_weight:
             counts, *early = model(inputs, **forward_options)
-        elif args.stream is not None:
+        elif on_streams:
             # The state carries no gradient: a window learns from what it fires itself.
             counts, carried = model.stream(inputs, carried, **forward_options)
         else:
