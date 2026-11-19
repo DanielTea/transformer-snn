@@ -310,6 +310,44 @@ def test_a_run_on_streams_that_stops_continues_as_if_it_had_not(monkeypatch, tmp
                                                                        for row in whole["curve"]]
 
 
+def test_groups_of_streams_take_turns(monkeypatch, tmp_path):
+    trainer, _ = _trainer(monkeypatch)
+    drawn, heard = [], []
+    draw = trainer.random_batch
+
+    def record(source, rows, length, generator):
+        drawn.append(length)
+        stretch = draw(source, rows, length, generator)
+        heard.append(stretch[0])
+        return stretch
+
+    monkeypatch.setattr(trainer, "random_batch", record)
+    stream = trainer.EventLM.stream
+    pieces = []
+    monkeypatch.setattr(trainer.EventLM, "stream", lambda self, tokens, state=None, **options: (
+        # The trainer first hands the stack two bytes to see that it takes a stream.
+        pieces.append((tokens.cpu().clone(), None if state is None else state.position))
+        if self.training and tokens.shape[1] == 16 else None,
+        stream(self, tokens, state, **options))[1])
+    record_ = _train(trainer, monkeypatch, tmp_path / "groups", "--stream", "3", "--stream-groups", "2")
+    # Two groups of streams of three windows: each group draws a stretch at its first turn of every round of six.
+    assert drawn == [48] * 4 and record_["args"]["stream_groups"] == 2 and len(pieces) == 12
+    for turn, (tokens, position) in enumerate(pieces):
+        group, piece = turn % 2, turn // 2 % 3
+        stretch = heard[2 * (turn // 6) + group]
+        assert torch.equal(tokens, stretch[:, piece * 16:(piece + 1) * 16])
+        assert position == (None if piece == 0 else piece * 16)
+    # A run with groups that stops between rounds continues as if it had not.
+    whole = _train(trainer, monkeypatch, tmp_path / "whole", "--stream", "3", "--stream-groups", "2")
+    assert _train(trainer, monkeypatch, tmp_path / "parts", "--stream", "3", "--stream-groups", "2",
+                  "--stop-at", "6") is None
+    parts = _train(trainer, monkeypatch, tmp_path / "parts", "--stream", "3", "--stream-groups", "2")
+    keys = ("train_bpb", "val_bpb", "stream_val_bpb")
+    assert [[row[key] for key in keys] for row in parts["curve"]] == [[row[key] for key in keys]
+                                                                       for row in whole["curve"]]
+    assert whole["curve"] == record_["curve"]
+
+
 def test_the_trainer_hands_the_reach_to_the_model(monkeypatch, tmp_path):
     trainer, _ = _trainer(monkeypatch)
     record = _train(trainer, monkeypatch, tmp_path / "reach", "--stream", "3", "--read-reach", "40")
@@ -322,7 +360,10 @@ def test_the_trainer_hands_the_reach_to_the_model(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("flags", [("--stream", "1"), ("--stream", "4"), ("--stream", "3", "--read-beats", "2"),
                                    ("--stream-from", "6"), ("--stream", "3", "--stream-from", "4"),
-                                   ("--stream", "3", "--stream-from", "12")])
+                                   ("--stream", "3", "--stream-from", "12"), ("--stream-groups", "2"),
+                                   ("--stream", "3", "--stream-groups", "0"),
+                                   ("--stream", "3", "--stream-groups", "4"),
+                                   ("--stream", "2", "--stream-groups", "3", "--stream-from", "4")])
 def test_the_trainer_refuses_streams_that_do_not_fit(monkeypatch, tmp_path, flags):
     trainer, _ = _trainer(monkeypatch)
     with pytest.raises(SystemExit):

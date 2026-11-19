@@ -768,6 +768,9 @@ def main():
                              "to window")
     parser.add_argument("--stream-from", type=int, default=0, metavar="STEP",
                         help="train on windows that start empty up to this update and on streams after it")
+    parser.add_argument("--stream-groups", type=int, default=1, metavar="GROUPS",
+                        help="groups of streams that run side by side and take turns: an update trains on the next "
+                             "window of the next group, so consecutive updates hear different texts")
     parser.add_argument("--early-readout", type=int,
                         help="number of leading blocks whose stream also drives the vocabulary neurons")
     parser.add_argument("--early-readout-weight", type=float, default=0.0,
@@ -962,9 +965,15 @@ def main():
             or args.code_loss_weight or args.early_readout_weight or args.bank_read_rank_weight):
         parser.error("--stream takes two or more windows to a stretch, a number that divides --save-every, and "
                      "trains on the next byte alone")
-    if args.stream_from and (args.stream is None or not 0 < args.stream_from < args.steps
-                             or args.stream_from % args.stream):
-        parser.error("--stream-from needs --stream and an update below --steps that is a whole number of stretches")
+    if args.stream_groups != 1 and (args.stream is None or args.stream_groups < 1):
+        parser.error("--stream-groups needs --stream and one group at least")
+    # All groups start a stretch together every this many updates, and a run saves and turns at such updates.
+    rounds = 1 if args.stream is None else args.stream * args.stream_groups
+    if args.stream is not None and ((args.save_every and args.save_every % rounds) or args.stream_from % rounds):
+        parser.error("the stretches of all --stream-groups take a number of updates that divides --save-every "
+                     "and --stream-from")
+    if args.stream_from and (args.stream is None or not 0 < args.stream_from < args.steps):
+        parser.error("--stream-from needs --stream and an update below --steps")
     event = args.variant in EVENT_ROUTES
     name = "_".join(part for part in (args.variant, f"s{args.seed}", args.tag) if part)
     results_dir = None if args.results_dir is None else args.results_dir.expanduser()
@@ -1096,11 +1105,11 @@ def main():
 
     def draw(step):
         """The windows that an update on windows trains on, or the stretch that an update on streams starts.
-        The other updates of a stretch draw nothing."""
+        The other updates of a stretch draw nothing. The groups of streams take turns, each a window at a time."""
         if args.stream is None or step <= args.stream_from:
             return (random_batch(train, args.bs, args.ctx, generator) if mixture is None
                     else mixture.batch(args.bs, generator))
-        if (step - 1 - args.stream_from) % args.stream:
+        if (step - 1 - args.stream_from) // args.stream_groups % args.stream:
             return None
         return (random_batch(train, args.bs, args.stream * args.ctx, generator) if mixture is None
                 else mixture.stretch(args.bs, args.stream, generator))
@@ -1141,18 +1150,20 @@ def main():
     # Neurons whose synapses were scaled back into the range of exact sums since the last evaluation: a tensor
     # between evaluations, so that no step waits for it.
     scaled_neurons = 0
-    stretch = carried = None
+    # The stretch that each group of streams hears and the state that its stack carries through it.
+    stretches, carried = {}, {}
     for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
         on_streams = args.stream is not None and step > args.stream_from
         drawn = draw(step)
         if on_streams:
+            turn = step - 1 - args.stream_from
+            group, piece = turn % args.stream_groups, turn // args.stream_groups % args.stream
             if drawn is not None:
                 # A new stretch of the training bytes, which the stack hears from an empty state.
-                stretch, carried = drawn, None
-            piece = (step - 1 - args.stream_from) % args.stream
-            inputs, labels = (part[:, piece * args.ctx:(piece + 1) * args.ctx] for part in stretch)
+                stretches[group], carried[group] = drawn, None
+            inputs, labels = (part[:, piece * args.ctx:(piece + 1) * args.ctx] for part in stretches[group])
         else:
             inputs, labels = drawn
         inputs = inputs.to(device)
@@ -1177,7 +1188,7 @@ def main():
             counts, *early = model(inputs, **forward_options)
         elif on_streams:
             # The state carries no gradient: a window learns from what it fires itself.
-            counts, carried = model.stream(inputs, carried, **forward_options)
+            counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
         else:
             counts = model(inputs, **forward_options)
         logits = scoring_logits(counts, event, args.spike_resolution)
