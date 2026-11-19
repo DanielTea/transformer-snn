@@ -78,3 +78,59 @@ def test_local_transformer_step_matches_batch_across_ring_wraps(window, rope):
     assert state.length == tokens.shape[1]
     assert [(layer.keys.data_ptr(), layer.values.data_ptr()) for layer in state.layers] == rings
     assert all(layer.keys.shape == layer.values.shape == (2, 4, window, 5) for layer in state.layers)
+
+
+_FULL = SNNConfig(neuron="ann", attn="transformer", mlp_ratio=4.0, position_embeddings=True)
+_SMALL = dict(vocab=32, dim=16, depth=2, heads=4, ctx=24)
+
+
+def test_plain_units_spend_the_same_weights_on_more_units_with_a_threshold():
+    torch.manual_seed(3)
+    gated, plain = TransformerLM(_FULL, **_SMALL), TransformerLM(replace(_FULL, feed_forward="relu"), **_SMALL)
+    count = lambda model: sum(parameter.numel() for parameter in model.parameters())  # noqa: E731
+    # Three rows of weights per gated unit, two per plain unit.
+    assert gated.blocks[0].mlp_out.in_features == 43 and plain.blocks[0].mlp_out.in_features == 64
+    assert plain.blocks[0].mlp_in.out_features == 64 and abs(count(plain) - count(gated)) <= 2 * 16
+    block = plain.blocks[0]
+    x = torch.randn(2, 5, 16)
+    hidden = block.mlp_in(block.mlp_norm(x))
+    torch.testing.assert_close(block._feed_forward(x), x + block.mlp_out(hidden.clamp_min(0)))
+    tokens = torch.randint(32, (2, 23))
+    plain(tokens).square().mean().backward()
+    assert all(bool(block.mlp_in.weight.grad.any()) and bool(block.mlp_out.weight.grad.any()) for block in plain.blocks)
+
+
+def test_age_offsets_address_by_distance_in_place_of_rotary_phases():
+    torch.manual_seed(4)
+    model = TransformerLM(replace(_FULL, age_offsets=8.0), **_SMALL)
+    assert model.rotary_dim == 0 and model._rope(torch.arange(4.0)) is None
+    attention = model.blocks[0].attn
+    assert attention.age.shape == (4, 24) and not attention.age.any() and attention.age_rate == 8.0
+    # Level offsets leave a head with what the keys hold: the model without positions.
+    bare = TransformerLM(replace(_FULL, position_embeddings=False), **_SMALL)
+    bare.load_state_dict(model.state_dict(), strict=False)
+    tokens = torch.randint(32, (2, 23))
+    torch.testing.assert_close(model(tokens), bare(tokens), atol=1e-6, rtol=1e-5)
+    # A head whose offset for one distance is far above the others reads the key that far back.
+    x = torch.randn(2, 9, 16)
+    with torch.no_grad():
+        attention.age[:, 2] = 5.0
+    values = attention.qkv(x).reshape(2, 9, 3, 4, 4)[:, :, 2].flatten(2)
+    torch.testing.assert_close(attention(x, None)[:, 2:], attention.out(values[:, :-2]), atol=1e-5, rtol=1e-4)
+    # No later token is seen, and a distance beyond the table takes its last offset.
+    longer, changed = torch.randint(32, (1, 40)), None
+    changed = longer.clone()
+    changed[:, 30:] = (changed[:, 30:] + 1) % 32
+    first, second = model(longer), model(changed)
+    torch.testing.assert_close(first[:, :30], second[:, :30], atol=1e-6, rtol=1e-5)
+    assert not torch.allclose(first[:, 30:], second[:, 30:])
+    model(tokens).square().mean().backward()
+    assert all(bool(block.attn.age.grad.any()) for block in model.blocks)
+
+
+@pytest.mark.parametrize("setting", [dict(feed_forward="gelu"), dict(age_offsets=-1.0),
+                                     dict(attn="transformer_local", feed_forward="relu"),
+                                     dict(attn="transformer_local", age_offsets=8.0)])
+def test_the_controls_belong_to_the_full_transformer(setting):
+    with pytest.raises(ValueError):
+        TransformerLM(replace(_FULL, **setting), **_SMALL)

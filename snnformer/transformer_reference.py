@@ -71,13 +71,24 @@ def _sliding_window_attention(
 
 
 class _CausalAttention(nn.Module):
-    def __init__(self, dim: int, heads: int, window: int | None) -> None:
+    def __init__(self, dim: int, heads: int, window: int | None, ages: int = 0, age_rate: float = 1.0) -> None:
         super().__init__()
         self.heads = heads
         self.head_dim = dim // heads
         self.window = window
         self.qkv = nn.Linear(dim, 3 * dim, bias=False)
         self.out = nn.Linear(dim, dim, bias=False)
+        # With ages every head adds a learned offset to a key by its distance from the query, as the heads of the
+        # spike decoder's state reads do. The offsets start level and move ``age_rate`` times as fast as a weight.
+        self.age = nn.Parameter(torch.zeros(heads, ages)) if ages else None
+        self.age_rate = age_rate
+
+    def _offsets(self, length):
+        distance = torch.arange(length, device=self.age.device)
+        distance = distance[:, None] - distance
+        # A distance beyond the table takes its last offset.
+        offsets = (self.age * self.age_rate)[:, distance.clamp(0, self.age.shape[1] - 1)]
+        return offsets.masked_fill(distance < 0, -torch.inf)
 
     def _project(self, x, rope):
         batch, length, _ = x.shape
@@ -91,7 +102,9 @@ class _CausalAttention(nn.Module):
     def forward(self, x: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor] | None) -> torch.Tensor:
         batch, length, dim = x.shape
         q, k, v = self._project(x, rope)
-        if self.window is None:
+        if self.age is not None:
+            mixed = F.scaled_dot_product_attention(q, k, v, attn_mask=self._offsets(length).to(q.dtype))
+        elif self.window is None:
             mixed = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         else:
             mixed = _sliding_window_attention(q, k, v, self.window)
@@ -123,18 +136,24 @@ class _CausalAttention(nn.Module):
 
 
 class _TransformerBlock(nn.Module):
-    def __init__(self, dim: int, heads: int, hidden: int, window: int | None) -> None:
+    def __init__(self, dim: int, heads: int, hidden: int, window: int | None, *, plain: int = 0, ages: int = 0,
+                 age_rate: float = 1.0) -> None:
         super().__init__()
         self.attn_norm = nn.LayerNorm(dim)
-        self.attn = _CausalAttention(dim, heads, window)
+        self.attn = _CausalAttention(dim, heads, window, ages, age_rate)
         self.mlp_norm = nn.LayerNorm(dim)
-        self.mlp_in = nn.Linear(dim, 2 * hidden, bias=False)
-        self.mlp_out = nn.Linear(hidden, dim, bias=False)
+        # ``plain`` units each have one row of input weights and a threshold at zero. A gated unit has two rows:
+        # one opens the unit and the other is what it passes on.
+        self.plain = plain
+        self.mlp_in = nn.Linear(dim, plain or 2 * hidden, bias=False)
+        self.mlp_out = nn.Linear(plain or hidden, dim, bias=False)
 
     def _mix(self, x: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor] | None) -> torch.Tensor:
         return self.attn(x, rope)
 
     def _feed_forward(self, x):
+        if self.plain:
+            return x + self.mlp_out(F.relu(self.mlp_in(self.mlp_norm(x))))
         gate, value = self.mlp_in(self.mlp_norm(x)).chunk(2, dim=-1)
         return x + self.mlp_out(F.silu(gate) * value)
 
@@ -195,8 +214,15 @@ class TransformerLM(nn.Module):
 
         self.cfg = cfg
         self.ctx = ctx
-        self.rotary_dim = 2 * ((dim // heads) // 2) if cfg.position_embeddings else 0
+        if cfg.feed_forward not in ("swiglu", "relu") or cfg.age_offsets < 0:
+            raise ValueError("the feed-forward units are swiglu or relu and the rate of the age offsets is not negative")
+        if (cfg.feed_forward != "swiglu" or cfg.age_offsets) and cfg.attn != "transformer":
+            raise ValueError("plain units and age offsets are controls of the full Transformer")
+        # Offsets by age replace the rotary phases: a head then addresses by content and by distance in two terms.
+        self.rotary_dim = 2 * ((dim // heads) // 2) if cfg.position_embeddings and not cfg.age_offsets else 0
         hidden = max(1, round(2 * cfg.mlp_ratio * dim / 3))
+        options = dict(plain=max(1, round(cfg.mlp_ratio * dim)) if cfg.feed_forward == "relu" else 0,
+                       ages=ctx if cfg.age_offsets else 0, age_rate=cfg.age_offsets or 1.0)
         self.tok = nn.Embedding(vocab, dim)
         window = cfg.local_window if cfg.attn in ("transformer_local", "transformer_event", "transformer_successor") else None
         if window is not None and window < 1:
@@ -212,7 +238,7 @@ class TransformerLM(nn.Module):
                 _EventTransformerBlock(dim, heads, hidden, window, memory_cfg) for _ in range(depth)
             )
         else:
-            self.blocks = nn.ModuleList(_TransformerBlock(dim, heads, hidden, width) for width in windows)
+            self.blocks = nn.ModuleList(_TransformerBlock(dim, heads, hidden, width, **options) for width in windows)
         self.norm = nn.LayerNorm(dim)
         self.head = nn.Linear(dim, vocab, bias=False)
         self._init_weights(self.tok)

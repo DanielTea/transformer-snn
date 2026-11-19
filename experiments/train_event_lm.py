@@ -280,7 +280,9 @@ def build_model(args):
             if head_readout is not None:
                 model.read_heads.readout[:, 1:] = head_readout
         return model, cfg, {}
-    cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
+    cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window,
+                  feed_forward=getattr(args, "feed_forward", SNNConfig.feed_forward),
+                  age_offsets=getattr(args, "age_offsets", SNNConfig.age_offsets))
     if args.local_lookback is not None:
         per_layer, extra = divmod(args.local_lookback - 1, args.depth)
         model_kwargs["local_windows"] = tuple(1 + per_layer + (layer < extra) for layer in range(args.depth))
@@ -700,6 +702,13 @@ def main():
     parser.add_argument("--no-carry", action="store_true", help="reset event membrane before each token")
     parser.add_argument("--heads", type=int, default=4, help="Transformer attention heads")
     parser.add_argument("--mlp-ratio", type=float, default=4.4, help="Transformer feed-forward expansion")
+    parser.add_argument("--feed-forward", choices=("swiglu", "relu"), default=SNNConfig.feed_forward,
+                        help="the Transformer's feed-forward units: gated (swiglu), or as a control plain units "
+                             "with a threshold (relu) at the same number of weights, as the cells of a stack are")
+    parser.add_argument("--age-offsets", type=float, default=SNNConfig.age_offsets, metavar="RATE",
+                        help="as a control the Transformer's heads address by an offset per head and distance "
+                             "that moves RATE times as fast as a weight, in place of rotary phases, as the heads "
+                             "of a state read do")
     parser.add_argument("--local-window", type=int, default=32, help="local Transformer attention window")
     parser.add_argument("--local-lookback", type=int, help="effective context including the current byte")
     parser.add_argument("--ctx", type=int, default=256)

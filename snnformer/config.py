@@ -52,6 +52,8 @@ class SNNConfig:
     successor_scaled_votes: bool = False  # smaller spike weights for shorter suffix matches
     mlp: str = "cdglu"
     mlp_ratio: float = 4.0
+    feed_forward: str = "swiglu"  # the reference Transformer's units: gated "swiglu", or plain "relu" at the same budget
+    age_offsets: float = 0.0  # above 0 the reference addresses by an offset per head and distance at this rate, without RoPE
     qk_levels: int | None = None  # spike levels of Q/K neurons (None -> same as levels; 1 -> binary)
     softmax_temp_init: float = 1.0  # initial inverse temperature of softmax attention
     wta_k: int = 1  # winners per query for the WTA baseline
