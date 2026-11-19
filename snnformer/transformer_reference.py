@@ -137,16 +137,20 @@ class _CausalAttention(nn.Module):
         return self.out(mixed.transpose(1, 2).reshape_as(x)), state
 
 
+# The feed-forward units by name: whether a unit is gated, and whether it opens smoothly.
+_UNITS = {"swiglu": (True, True), "reglu": (True, False), "gelu": (False, True), "relu": (False, False)}
+
+
 class _TransformerBlock(nn.Module):
-    def __init__(self, dim: int, heads: int, hidden: int, window: int | None, *, plain: int = 0, ages: int = 0,
-                 age_rate: float = 1.0) -> None:
+    def __init__(self, dim: int, heads: int, hidden: int, window: int | None, *, plain: int = 0, smooth: bool = True,
+                 ages: int = 0, age_rate: float = 1.0) -> None:
         super().__init__()
         self.attn_norm = nn.LayerNorm(dim)
         self.attn = _CausalAttention(dim, heads, window, ages, age_rate)
         self.mlp_norm = nn.LayerNorm(dim)
-        # ``plain`` units each have one row of input weights and a threshold at zero. A gated unit has two rows:
-        # one opens the unit and the other is what it passes on.
-        self.plain = plain
+        # ``plain`` units each have one row of input weights. A gated unit has two rows: one opens the unit and
+        # the other is what it passes on. A unit opens smoothly, or not at all below a threshold at zero.
+        self.plain, self.smooth = plain, smooth
         self.mlp_in = nn.Linear(dim, plain or 2 * hidden, bias=False)
         self.mlp_out = nn.Linear(plain or hidden, dim, bias=False)
 
@@ -155,9 +159,10 @@ class _TransformerBlock(nn.Module):
 
     def _feed_forward(self, x):
         if self.plain:
-            return x + self.mlp_out(F.relu(self.mlp_in(self.mlp_norm(x))))
+            drive = self.mlp_in(self.mlp_norm(x))
+            return x + self.mlp_out(F.gelu(drive) if self.smooth else F.relu(drive))
         gate, value = self.mlp_in(self.mlp_norm(x)).chunk(2, dim=-1)
-        return x + self.mlp_out(F.silu(gate) * value)
+        return x + self.mlp_out((F.silu(gate) if self.smooth else F.relu(gate)) * value)
 
     def forward(self, x: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor] | None) -> torch.Tensor:
         return self._feed_forward(x + self._mix(self.attn_norm(x), rope))
@@ -216,14 +221,16 @@ class TransformerLM(nn.Module):
 
         self.cfg = cfg
         self.ctx = ctx
-        if cfg.feed_forward not in ("swiglu", "relu") or cfg.age_offsets < 0:
-            raise ValueError("the feed-forward units are swiglu or relu and the rate of the age offsets is not negative")
+        if cfg.feed_forward not in _UNITS or cfg.age_offsets < 0:
+            raise ValueError("the feed-forward units are swiglu, reglu, gelu or relu and the rate of the age offsets "
+                             "is not negative")
         if (cfg.feed_forward != "swiglu" or cfg.age_offsets) and cfg.attn != "transformer":
-            raise ValueError("plain units and age offsets are controls of the full Transformer")
+            raise ValueError("other units and age offsets are controls of the full Transformer")
         # Offsets by age replace the rotary phases: a head then addresses by content and by distance in two terms.
         self.rotary_dim = 2 * ((dim // heads) // 2) if cfg.position_embeddings and not cfg.age_offsets else 0
         hidden = max(1, round(2 * cfg.mlp_ratio * dim / 3))
-        options = dict(plain=max(1, round(cfg.mlp_ratio * dim)) if cfg.feed_forward == "relu" else 0,
+        gated, smooth = _UNITS[cfg.feed_forward]
+        options = dict(plain=0 if gated else max(1, round(cfg.mlp_ratio * dim)), smooth=smooth,
                        ages=ctx if cfg.age_offsets else 0, age_rate=cfg.age_offsets or 1.0)
         self.tok = nn.Embedding(vocab, dim)
         window = cfg.local_window if cfg.attn in ("transformer_local", "transformer_event", "transformer_successor") else None

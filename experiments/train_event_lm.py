@@ -737,9 +737,11 @@ def main():
     parser.add_argument("--no-carry", action="store_true", help="reset event membrane before each token")
     parser.add_argument("--heads", type=int, default=4, help="Transformer attention heads")
     parser.add_argument("--mlp-ratio", type=float, default=4.4, help="Transformer feed-forward expansion")
-    parser.add_argument("--feed-forward", choices=("swiglu", "relu"), default=SNNConfig.feed_forward,
-                        help="the Transformer's feed-forward units: gated (swiglu), or as a control plain units "
-                             "with a threshold (relu) at the same number of weights, as the cells of a stack are")
+    parser.add_argument("--feed-forward", choices=("swiglu", "reglu", "gelu", "relu"), default=SNNConfig.feed_forward,
+                        help="the Transformer's feed-forward units: gated (swiglu), or as controls at the same "
+                             "number of weights gated units that open only above zero (reglu), as the gated cells "
+                             "of a stack do, plain smooth units (gelu), or plain units with a threshold (relu), as "
+                             "the plain cells of a stack are")
     parser.add_argument("--age-offsets", type=float, default=SNNConfig.age_offsets, metavar="RATE",
                         help="as a control the Transformer's heads address by an offset per head and distance "
                              "that moves RATE times as fast as a weight, in place of rotary phases, as the heads "
