@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import torch
 from torch import nn
@@ -52,6 +52,9 @@ _READ_CLOCKS = ("word", "end", "learned")
 _RACE_UNIT = 1.5
 # Multiples of the golden ratio spread the starting phases of a race's cells evenly.
 _GOLDEN = (math.sqrt(5) - 1) / 2
+# The golden ratio in steps of a phase that counts 2 ** 32 steps to a turn.
+_PHASE_STEPS = 1 << 32
+_GOLDEN_STEP = round(_GOLDEN * _PHASE_STEPS)
 # The kinds of slow synapses a granule cluster can have. The slowest then passes a 256th of its charge on per byte.
 _GRANULE_TRACES = 4
 # Bytes over which a slow synapse's held charge is summed in one piece.
@@ -1923,6 +1926,51 @@ class EventChunkState:
     heads: HeadState | None = None
 
 
+@dataclass
+class ReadTape:
+    """What a state read keeps of a stream: the tags and payloads of the cells that later bytes can still reach,
+    as [batch, heads, cells, channels], and the last bytes of the stream for its late fibres."""
+    tag: torch.Tensor | None = None
+    payload: torch.Tensor | None = None
+    late: torch.Tensor | None = None
+
+
+@dataclass
+class FibreState:
+    """What a cell layer keeps of a stream: the last bytes that its delayed fibres still bring, and the charges
+    that its slow synapses hold."""
+    late: torch.Tensor | None = None
+    held: list[torch.Tensor] | None = None
+
+
+@dataclass
+class StreamState:
+    """The state of a stack after some bytes of a stream: how many have gone by, and what every read and every
+    cell layer keeps of them."""
+    position: int = 0
+    reads: dict[str, ReadTape] = field(default_factory=dict)
+    cells: dict[str, FibreState] = field(default_factory=dict)
+
+
+def _late(present, before, delay):
+    """``present`` as it stood ``delay`` bytes earlier, as [batch, bytes, channels]. ``before`` holds the last
+    bytes of the stream before ``present``, and what lies before the first byte of all is silent."""
+    length = present.shape[1]
+    joined = present if before is None else torch.cat((before, present), 1)
+    lead = max(0, delay + length - joined.shape[1])
+    return F.pad(joined, (0, 0, lead, 0))[:, joined.shape[1] + lead - length - delay:][:, :length]
+
+
+def _spread_phases(first, count, device, dtype):
+    """The phases at which the membranes of ``count`` cells start a race, from cell ``first`` of a stream on.
+
+    The golden ratio spreads the phases evenly over the cells. They are found in whole numbers, so that a cell
+    has its phase however far into a stream it stands.
+    """
+    cells = torch.arange(first + 1, first + count + 1)
+    return ((cells * _GOLDEN_STEP) % _PHASE_STEPS).to(dtype).div(_PHASE_STEPS).to(device)
+
+
 def _word_bytes():
     """The bytes that make up words: letters, digits and the bytes of longer characters."""
     inside = torch.zeros(_VOCAB, dtype=torch.bool)
@@ -2128,7 +2176,8 @@ class _StateRead(nn.Module):
 
     def shares(self, spikes, tokens=None):
         """Each visible cell's share of every read and the payloads, as [batch, heads, cells, cells or channels]."""
-        return self._address(spikes, tokens)[:2]
+        fired, total, payload, _ = self._address(spikes, tokens)
+        return (fired if total is None else fired / total), payload
 
     def word_beats(self, tokens):
         """The bytes at which the fixed clock beats, as [batch, bytes]."""
@@ -2140,22 +2189,24 @@ class _StateRead(nn.Module):
         started = self.word_beats(tokens).cumsum(1)
         return (started[:, :, None] - started[:, None, :]).clamp(0, self.beats)
 
-    def heard(self, spikes):
+    def heard(self, spikes, before=None):
         """The stream and what the late fibres bring of it, as [batch, bytes, 2 * channels]: the channels as they
         are, then the channels of each delay in turn, the shortest first. A fibre is silent until its first byte
-        has had the time to arrive."""
+        has had the time to arrive. ``before`` holds the last bytes of a stream before these."""
         if self.delays == 1:
             return spikes
-        length, kinds = spikes.shape[1], self.delays - 1
-        late = [F.pad(spikes[..., delay - 1::kinds], (0, 0, delay, 0))[:, :length] for delay in range(1, self.delays)]
+        kinds = self.delays - 1
+        late = [_late(spikes[..., delay - 1::kinds], None if before is None else before[..., delay - 1::kinds], delay)
+                for delay in range(1, self.delays)]
         return torch.cat((spikes, *late), -1)
 
-    def packets(self, spikes):
+    def packets(self, spikes, before=None):
         """The probes, tags and payloads of all cells as [batch, heads, cells, channels]: whole pulses in a race and
-        drives of unit size for a softmax. A read by age alone has payloads only."""
+        drives of unit size for a softmax. A read by age alone has payloads only. ``before`` holds the last bytes
+        of a stream before these, for the late fibres."""
         if self.mode == "age":
             return None, None, self._unit(self.payload(spikes)) * self.read_resolution
-        heard = self.heard(spikes)
+        heard = self.heard(spikes, before)
         probe, tag = self.probe(heard if self.delay_probes else spikes), self.tag(heard)
         if self.phases:
             # The pacemakers charge the probe and tag neurons beside the stream.
@@ -2252,29 +2303,56 @@ class _StateRead(nn.Module):
             offset = offset + (mean - mean.detach())
         return offset, spent
 
-    def _address(self, spikes, tokens=None):
-        """The shares, the payloads and the number of cell spikes, which is none for a softmax."""
+    def _address(self, spikes, tokens=None, tape=None, position=0):
+        """The spikes of every cell at every read as [batch, heads, bytes, cells], their sum at each read (none
+        where the shares are a softmax's), the payloads and the number of cell spikes.
+
+        In a stream the ``tape`` holds the cells that earlier bytes have left within reach. They stand before
+        the cells of ``spikes``, ``position`` bytes have gone by before these, and the tape then takes up the
+        cells that the next bytes can still reach.
+        """
         steps = spikes.shape[1]
-        distance = torch.arange(steps, device=spikes.device)
-        distance = distance[:, None] - distance
+        probe, tag, payload = self.packets(spikes, None if tape is None else tape.late)
+        kept = 0
+        if tape is not None:
+            if self.beats or self.phases or self.turn:
+                raise ValueError("the clocks and pacemakers of a read are not wired to a stream yet")
+            if tape.payload is not None:
+                kept = tape.payload.shape[2]
+                payload = torch.cat((tape.payload, payload), 2)
+                tag = tag if tag is None else torch.cat((tape.tag, tag), 2)
+            # A later byte reaches the cells of the last ``window`` bytes, its own among them.
+            oldest = max(0, payload.shape[2] - self.window + 1)
+            tape.payload = payload[:, :, oldest:].detach()
+            tape.tag = tag if tag is None else tag[:, :, oldest:].detach()
+            if self.delays > 1:
+                late = spikes if tape.late is None else torch.cat((tape.late, spikes), 1)
+                tape.late = late[:, max(0, late.shape[1] - self.delays + 1):].detach()
+        cells = kept + steps
+        place = torch.arange(cells, device=spikes.device)
+        distance = place[kept:, None] - place
         visible = (distance >= 0) & (distance < self.window)
-        # Row t holds the offset of age t - j in column j. Padding one column and folding the rows shifts
-        # each row by its position, which costs far less to differentiate than indexing by distance.
-        ages = F.pad(self.age[:, :steps] * self.rate, (0, max(0, steps - self.window))).flip(-1)
-        offset = F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
-        probe, tag, payload = self.packets(spikes)
+        if kept:
+            # Row t holds the offset of age kept + t - j in column j: the ages in reverse, one step further on
+            # from row to row.
+            ages = F.pad(self.age * self.rate, (0, max(0, cells - self.window)))[:, :cells].flip(-1)
+            offset = F.pad(ages, (0, steps - 1)).unfold(-1, cells, 1).flip(1)
+        else:
+            # Row t holds the offset of age t - j in column j. Padding one column and folding the rows shifts
+            # each row by its position, which costs far less to differentiate than indexing by distance.
+            ages = F.pad(self.age[:, :steps] * self.rate, (0, max(0, steps - self.window))).flip(-1)
+            offset = F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
         beats = 0
         if self.beats:
             by_beat, beats = self.beat_offsets(spikes, tokens, tag)
             offset = offset + by_beat
         if self.mode == "age":
             shares = offset.masked_fill(~visible, -torch.inf).softmax(-1)
-            shares = shares if shares.ndim == 4 else shares[None]
-            return shares, payload, None
+            return (shares if shares.ndim == 4 else shares[None]), None, payload, None
         if self.mode == "soft":
             gain = (self.gain * self.rate).exp()
             charge = probe @ tag.transpose(2, 3) * (gain / math.sqrt(probe.shape[-1])) + offset
-            return charge.masked_fill(~visible, -torch.inf).softmax(-1), payload, None
+            return charge.masked_fill(~visible, -torch.inf).softmax(-1), None, payload, None
         # Pulse pairs charge a cell. The unit keeps the spread of the charge over cells near one at the start.
         unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
         charge = probe @ tag.transpose(2, 3) * ((self.gain * self.rate).exp() / unit) + offset
@@ -2283,18 +2361,27 @@ class _StateRead(nn.Module):
             behind = (charge.masked_fill(~visible, -torch.inf).amax(-1, keepdim=True) - charge) / spacing
             fired = (integer_spike(1 - behind / self.levels, self.levels) * self.levels).masked_fill(~visible, 0)
         else:
-            rate = charge.masked_fill(~visible, -torch.inf).softmax(-1) * self.budget
+            # Every unit of charge multiplies a cell's rate by e, and the rates share the budget. Their sum runs
+            # over the cells in the order of their ages, so that a race fires the same spikes however a stream
+            # is cut into pieces.
+            charge = charge.masked_fill(~visible, -torch.inf)
+            grown = (charge - charge.amax(-1, keepdim=True)).exp()
+            back = place[kept:, None] - torch.arange(self.window, device=spikes.device)
+            total = (grown.gather(-1, back.clamp_min(0).expand(*grown.shape[:-1], -1)) * (back >= 0)).sum(-1, keepdim=True)
+            rate = grown / total * self.budget
             # The cells' membranes start the race at evenly spread phases, so a rate below one spike still fires
             # in a part of the cells. Each head shifts the phases by its own amount.
-            cells = torch.arange(1, steps + 1, device=spikes.device)
             heads = torch.arange(self.heads, device=spikes.device)[:, None, None]
-            phase = (cells * _GOLDEN + heads / self.heads) % 1
-            fired = rate + ((rate + phase).floor() - rate).detach()
-        return fired / fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum() + beats
+            phase = (_spread_phases(position - kept, cells, spikes.device, rate.dtype) + heads / self.heads) % 1
+            fired = (rate + phase).floor().detach() + (rate - rate.detach())
+        return fired, fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum() + beats
 
-    def forward(self, spikes, pulse_counts=None, tokens=None):
-        shares, payload, cell_spikes = self._address(spikes, tokens)
-        packet = shares @ payload
+    def forward(self, spikes, pulse_counts=None, tokens=None, tape=None, position=0):
+        fired, total, payload, cell_spikes = self._address(spikes, tokens, tape, position)
+        # Whole cell spikes pass whole payload pulses on, and their sum is the same in any order.
+        packet = fired @ payload
+        if total is not None:
+            packet = packet / total
         if self.mode == "race":
             # Every cell spike raises the threshold of its head's read neurons, so the shunted sum of the payload
             # pulses is their mean, counted in whole read pulses.
@@ -2885,15 +2972,17 @@ class _GranuleLayer(nn.Module):
         """The spikes that the fibres carry: the stream's own, or those of the relays that hear the whole stream."""
         return spikes if self.relay is None else self.relay_fire(self.relay(spikes))
 
-    def held(self, spikes):
+    def held(self, spikes, carried=None):
         """What the slow synapses pass on at every byte: kind ``j`` a ``4 ** -j`` share of the charge it holds.
 
-        The shares are computed in floating point, as the rates of a race are.
+        The shares are computed in floating point, as the rates of a race are. In a stream ``carried`` brings
+        the charges that the synapses held before these bytes and takes up those that they hold after them.
         """
-        passed = []
+        passed, charges = [], []
         for kind in range(1, self.traces + 1):
             share = 0.25 ** kind
-            parts, charge = [], 0.0
+            parts = []
+            charge = 0.0 if carried is None or carried.held is None else carried.held[kind - 1]
             # A synapse holds the sum of what arrived, each arrival shrunk once per byte since. The sum is taken in
             # stretches, so that the shrinking stays within the range of the numbers.
             for part in spikes.double().split(_TRACE_STRETCH, dim=1):
@@ -2902,6 +2991,9 @@ class _GranuleLayer(nn.Module):
                 parts.append(((part / shrink).cumsum(1) + charge) * shrink)
                 charge = parts[-1][:, -1:]
             passed.append((torch.cat(parts, 1) * share).to(spikes.dtype))
+            charges.append(charge.detach())
+        if carried is not None and charges:
+            carried.held = charges
         return passed
 
     def beats(self, spikes, tokens=None, quanta=None):
@@ -2925,15 +3017,22 @@ class _GranuleLayer(nn.Module):
         fired = self.tick(charge, quanta)
         return fired.detach(), self.tick.rates(charge, quanta) if fired.requires_grad else None
 
-    def heard(self, spikes, beats=None, rates=None):
+    def heard(self, spikes, beats=None, rates=None, carried=None):
         """What every cluster's fibres bring as [batch, bytes, clusters, fan]: their channels, each after its delay,
-        through its slow synapse or as a stretch between beats of the cluster's clock."""
+        through its slow synapse or as a stretch between beats of the cluster's clock. In a stream ``carried``
+        brings what the fibres and the slow synapses keep of the bytes before and takes up what they keep of
+        these."""
         plain = self.delays + self.traces
         if plain + self.orders == 1:
             return spikes[..., self.inputs]
-        length = spikes.shape[1]
-        views = [spikes] + [F.pad(spikes, (0, 0, delay, 0))[:, :length] for delay in range(1, self.delays)]
-        views += self.held(spikes)
+        if carried is not None and self.orders:
+            raise ValueError("beat fibres are not wired to a stream yet")
+        before = None if carried is None else carried.late
+        views = [spikes] + [_late(spikes, before, delay) for delay in range(1, self.delays)]
+        views += self.held(spikes, carried)
+        if carried is not None and self.delays > 1:
+            late = spikes if before is None else torch.cat((before, spikes), 1)
+            carried.late = late[:, max(0, late.shape[1] - self.delays + 1):].detach()
         taps = self.plain_taps if self.orders else self.taps
         heard = torch.stack(views, dim=-1).flatten(-2)[..., self.inputs * len(views) + taps]
         if not self.orders:
@@ -2951,12 +3050,12 @@ class _GranuleLayer(nn.Module):
         """The ticks of a quarter spike of a cell at one quantum of threshold."""
         return (1 << self.bits) // (self.fire.quanta_per_threshold * _PACKET_UNITS)
 
-    def cells(self, spikes, tokens=None):
+    def cells(self, spikes, tokens=None, carried=None):
         """The spike counts of all cells as [batch, bytes, clusters, cells]."""
         quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         beats, rates = self.beats(spikes, tokens, quanta) if self.orders else (None, None)
         quanta = quanta[..., None]
-        heard = self.heard(self.fibres(spikes), beats, rates)
+        heard = self.heard(self.fibres(spikes), beats, rates, carried)
         charge = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.receive, charge_bits=self.bits))
         # A quarter spike of rest is a quarter of the cell's present threshold.
         rest = self.rest_quarters().squeeze(-1) * quanta * self.quarter()
@@ -2979,8 +3078,8 @@ class _GranuleLayer(nn.Module):
             return F.gelu(thresholds * self.sharpness.exp())
         return self.fire(charge, quanta, sharpness=self.sharpness.exp())
 
-    def forward(self, spikes, tokens=None):
-        sent = torch.einsum("btgn,gkn->btgk", self.cells(spikes, tokens),
+    def forward(self, spikes, tokens=None, carried=None):
+        sent = torch.einsum("btgn,gkn->btgk", self.cells(spikes, tokens, carried),
                             _weight_ticks(self.send, charge_bits=self.bits))
         arriving = torch.zeros_like(spikes).index_add_(spikes.ndim - 1, self.outputs.flatten(), sent.flatten(-2))
         current = spikes * self.emit.threshold + arriving
@@ -3693,9 +3792,13 @@ class EventLM(nn.Module):
 
     def forward(self, tokens, *, delay_limit=None, shuffle_phase=False, correction_access=None,
                 return_prediction=False, corrected_prediction=False, memory_pulses=None, bank_read_losses=None,
-                early_readout=None):
+                early_readout=None, stream=None):
         if tokens.ndim != 2 or tokens.shape[1] == 0:
             raise ValueError("expected a nonempty [batch, bytes] tensor")
+        if stream is not None and (not self.cfg.stack or correction_access is not None or return_prediction
+                                   or early_readout is not None):
+            raise ValueError("a stack of reads and cells carries its state through a stream; other decoders "
+                             "use forward_chunk")
         if delay_limit is not None and (delay_limit < 1 or self.cfg.route not in _DELAY_ROUTES):
             raise ValueError("delay_limit needs a positive value and a selectable delay line")
         if shuffle_phase and self.cfg.route not in _PHASE_ROUTES:
@@ -3739,15 +3842,23 @@ class EventLM(nn.Module):
                            local_state=None if local_layers is None else local_layers[index])
             if self.state_reads is not None and str(index) in self.state_reads:
                 if local_layers is not None:
-                    raise ValueError("state reads have no carried stream state yet")
-                spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens)
+                    raise ValueError("state reads have no carried stream state yet outside a stack")
+                if stream is None:
+                    spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens)
+                else:
+                    spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens,
+                                                          stream.reads.setdefault(str(index), ReadTape()),
+                                                          stream.position)
             if self.granule_layers is not None and str(index) in self.granule_layers:
                 if local_layers is not None:
-                    raise ValueError("granule layers are not wired into the carried stream yet")
-                spikes = self.granule_layers[str(index)](spikes, tokens)
+                    raise ValueError("granule layers are not wired into the carried stream yet outside a stack")
+                spikes = self.granule_layers[str(index)](
+                    spikes, tokens, None if stream is None else stream.cells.setdefault(str(index), FibreState()))
         if tap == len(self.blocks):
             early = self._forecast_counts(spikes)
             surprise = self._surprise(early, tokens, correction_access)
+        if stream is not None:
+            stream.position += tokens.shape[1]
         if memory_pulses is not None and self.state_reads is not None:
             # One bank of pacemakers fires for all the reads that hear it, and one for all whose neurons it gates.
             read = next(iter(self.state_reads.values()))
@@ -3783,6 +3894,25 @@ class EventLM(nn.Module):
             outputs = (counts, prediction, self.prediction_memory.observation_code(observed))
             return outputs if early_readout is None else (*outputs, early)
         return counts if early_readout is None else (counts, early)
+
+    def stream(self, tokens, state=None, *, memory_pulses=None):
+        """The counts for the next bytes of a stream, and the state after them.
+
+        A stack takes a stream in pieces of any length, down to a byte at a time. Its state is what the bytes
+        before have left within reach: for every read the tags and payloads of the last ``read_window`` cells
+        and the bytes that its late fibres still bring, for every cell layer the bytes that its delayed fibres
+        still bring and the charges of its slow synapses. The spikes are those of one pass over the whole
+        stream, however it is cut. The state carries no gradient, so a piece learns from what it fires itself.
+        """
+        if state is None:
+            state = StreamState()
+        else:
+            held = next((tape.payload for tape in state.reads.values() if tape.payload is not None), None)
+            if held is not None and held.shape[0] != tokens.shape[0]:
+                raise ValueError("the state belongs to another number of streams")
+            state = StreamState(state.position, {key: copy.copy(tape) for key, tape in state.reads.items()},
+                                {key: copy.copy(fibres) for key, fibres in state.cells.items()})
+        return self(tokens, memory_pulses=memory_pulses, stream=state), state
 
     def forward_chunk(self, tokens, state=None, *, hide_age=None, stats=None, shuffle_keys=False):
         """Carry the bank and either replay local context or carry the trace and delays.

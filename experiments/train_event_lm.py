@@ -166,6 +166,47 @@ def evaluate(model, data, *, context, batches, batch_size, device, event, pulse_
             **({"pulses_per_byte": pulses / count} if pulse_counts is not None else {})}
 
 
+# A stream of the validation hears this many pieces before the scored ones, and has this many scored ones.
+_STREAM_LEAD, _STREAM_PIECES = 2, 4
+
+
+@torch.inference_mode()
+def evaluate_stream(model, data, *, context, batches, batch_size, device, event, pulse_counts=None):
+    """Score a stack on streams: evenly spaced stretches of the data, which it takes piece by piece with the state
+    that it carries.
+
+    A stream is some pieces of ``context`` bytes that are not scored and then the scored ones, so every scored
+    byte has full tapes behind it. As many bytes are scored as ``evaluate`` scores in windows that start empty.
+    """
+    was_training = model.training
+    model.eval()
+    streams = max(1, batches * batch_size // _STREAM_PIECES)
+    length = (_STREAM_LEAD + _STREAM_PIECES) * context
+    stride = (len(data) - length - 1) // streams
+    offsets = np.arange(length + 1)
+    nll = 0.0
+    correct = 0
+    try:
+        for start in range(0, streams, batch_size):
+            rows = np.arange(start, min(start + batch_size, streams))[:, None] * stride + offsets
+            stretch = torch.from_numpy(data[rows].astype(np.int64)).to(device)
+            state = None
+            for piece in range(_STREAM_LEAD + _STREAM_PIECES):
+                span = slice(piece * context, (piece + 1) * context)
+                output, state = model.stream(stretch[:, :-1][:, span], state)
+                if pulse_counts is not None:
+                    pulse_counts.clear()
+                if piece >= _STREAM_LEAD:
+                    targets = stretch[:, 1:][:, span]
+                    logits = scoring_logits(output, event, model.cfg.resolution)
+                    nll += F.cross_entropy(logits.flatten(0, 1), targets.flatten(), reduction="sum").item()
+                    correct += (output.argmax(dim=-1) == targets).sum().item()
+    finally:
+        model.train(was_training)
+    count = streams * _STREAM_PIECES * context
+    return {"bpb": nll / (count * math.log(2)), "argmax_accuracy": correct / count, "target_bytes": count}
+
+
 def build_model(args):
     model_kwargs = dict(vocab=256, dim=args.dim, heads=args.heads, depth=args.depth, ctx=args.ctx)
     if args.variant in EVENT_ROUTES:
@@ -717,6 +758,10 @@ def main():
                              "and continue from that file when it exists")
     parser.add_argument("--stop-at", type=int, metavar="STEP",
                         help="leave after this update with its training state saved; --resume continues the schedule")
+    parser.add_argument("--stream", type=int, metavar="PIECES",
+                        help="train a stack on streams: stretches of this many consecutive windows of --ctx bytes, "
+                             "one window an update, with the state of its reads and cells handed on from window "
+                             "to window")
     parser.add_argument("--early-readout", type=int,
                         help="number of leading blocks whose stream also drives the vocabulary neurons")
     parser.add_argument("--early-readout-weight", type=float, default=0.0,
@@ -906,6 +951,11 @@ def main():
     if args.stop_at is not None and (not args.resume or not 0 < args.stop_at < args.steps
                                      or args.stop_at % args.save_every):
         parser.error("--stop-at needs --resume and an update below --steps at which --save-every writes")
+    if args.stream is not None and (
+            args.stream < 2 or (args.save_every and args.save_every % args.stream) or args.training_mixture is not None
+            or args.code_loss_weight or args.early_readout_weight or args.bank_read_rank_weight):
+        parser.error("--stream takes two or more windows to a stretch, a number that divides --save-every, draws "
+                     "them from the training split alone and trains on the next byte alone")
     event = args.variant in EVENT_ROUTES
     name = "_".join(part for part in (args.variant, f"s{args.seed}", args.tag) if part)
     results_dir = None if args.results_dir is None else args.results_dir.expanduser()
@@ -921,6 +971,8 @@ def main():
         max_windows = args.eval_bs * max(args.eval_batches, args.final_eval_batches)
         if (len(val) - args.ctx - 1) // max_windows < args.ctx:
             raise ValueError("evaluation windows would overlap; reduce batch size or evaluation batches")
+        if args.stream is not None and len(train) <= args.stream * args.ctx + 1:
+            raise ValueError("a stretch of the stream is longer than the training split")
         model, cfg, model_kwargs = build_model(args)
         initialization = loaded_weights = None
         if args.initialize_from is not None:
@@ -1007,6 +1059,23 @@ def main():
 
     evaluate_options = dict(context=args.ctx, batch_size=args.eval_bs, device=device, event=event,
                             pulse_counts=pulse_counts)
+    # A stack whose reads and cells carry their state is also scored on streams.
+    streams = False
+    if event and cfg.stack:
+        try:
+            with torch.no_grad():
+                model.stream(torch.zeros(1, 2, dtype=torch.long, device=device))
+            streams = True
+        except ValueError:
+            pass
+        if pulse_counts is not None:
+            pulse_counts.clear()
+    max_streams = max_windows // _STREAM_PIECES
+    if streams and (len(val) - (_STREAM_LEAD + _STREAM_PIECES) * args.ctx - 1) // max(1, max_streams) < 1:
+        streams = False
+    if args.stream is not None and not streams:
+        parser.error("--stream trains a stack whose reads and cells carry their state, with a validation split "
+                     "that holds its streams")
     optimizer = make_optimizer(model, args.lr, args.wd, betas=(0.9, args.adam_beta2), rotated=args.rotated_adam,
                                stacks=args.rotate_stacks, scales=args.lr_scale)
     average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
@@ -1038,10 +1107,11 @@ def main():
             spike_price = state["spike_price"].to(device)
         curve, start, earlier_seconds = state["curve"], state["step"], state["seconds"]
         resumed_at = [*state["resumed_at"], start]
-        # Drawing the earlier batches again puts the generator and the mixture's receipt where they were.
-        for _ in range(start):
+        # Drawing the earlier batches again puts the generator and the mixture's receipt where they were. A run
+        # on streams drew one stretch for every --stream updates.
+        for _ in range(start if args.stream is None else -(-start // args.stream)):
             if mixture is None:
-                random_batch(train, args.bs, args.ctx, generator)
+                random_batch(train, args.bs, args.ctx * (args.stream or 1), generator)
             else:
                 mixture.batch(args.bs, generator)
         print(f"{name}: continuing after {start} of {args.steps} updates", flush=True)
@@ -1050,11 +1120,19 @@ def main():
     # Neurons whose synapses were scaled back into the range of exact sums since the last evaluation: a tensor
     # between evaluations, so that no step waits for it.
     scaled_neurons = 0
+    stretch = carried = None
     for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
-        inputs, labels = (random_batch(train, args.bs, args.ctx, generator) if mixture is None
-                          else mixture.batch(args.bs, generator))
+        if args.stream is None:
+            inputs, labels = (random_batch(train, args.bs, args.ctx, generator) if mixture is None
+                              else mixture.batch(args.bs, generator))
+        else:
+            piece = (step - 1) % args.stream
+            if piece == 0 or stretch is None:
+                # A new stretch of the training bytes, which the stack hears from an empty state.
+                stretch, carried = random_batch(train, args.bs, args.stream * args.ctx, generator), None
+            inputs, labels = (part[:, piece * args.ctx:(piece + 1) * args.ctx] for part in stretch)
         inputs = inputs.to(device)
         if pulse_counts is not None:
             pulse_counts.clear()
@@ -1075,6 +1153,9 @@ def main():
             code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
         elif args.early_readout_weight:
             counts, *early = model(inputs, **forward_options)
+        elif args.stream is not None:
+            # The state carries no gradient: a window learns from what it fires itself.
+            counts, carried = model.stream(inputs, carried, **forward_options)
         else:
             counts = model(inputs, **forward_options)
         logits = scoring_logits(counts, event, args.spike_resolution)
@@ -1116,15 +1197,24 @@ def main():
         if step % args.eval_every == 0 or step == args.steps:
             scaled_neurons = int(scaled_neurons)
             metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
-            averaged_metrics = None
+            flowing = evaluate_stream(model, val, batches=args.eval_batches, **evaluate_options) if streams else None
+            averaged_metrics = averaged_flowing = None
             if average is not None:
                 with averaged_weights(model, average):
                     averaged_metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
+                    if streams:
+                        averaged_flowing = evaluate_stream(model, val, batches=args.eval_batches, **evaluate_options)
                 print(f"{name} averaged weights at {step}: {averaged_metrics['bpb']:.4f} bpb", flush=True)
+                if streams:
+                    print(f"{name} averaged weights on streams at {step}: {averaged_flowing['bpb']:.4f} bpb",
+                          flush=True)
             curve.append(dict(step=step, tokens=step * args.bs * args.ctx,
                               train_bpb=language_loss.item() / math.log(2), val_bpb=metrics["bpb"],
                               val_argmax_accuracy=metrics["argmax_accuracy"],
                               **({} if averaged_metrics is None else {"averaged_val_bpb": averaged_metrics["bpb"]}),
+                              **({} if flowing is None else {"stream_val_bpb": flowing["bpb"]}),
+                              **({} if averaged_flowing is None else
+                                 {"averaged_stream_val_bpb": averaged_flowing["bpb"]}),
                               **({"train_pulses_per_byte": pulses.item(), "val_pulses_per_byte": metrics["pulses_per_byte"],
                                   "spike_price": spike_price.item()} if pulse_counts is not None else {}),
                               **({"teacher_selected_fraction": teacher_fraction.item()} if teacher is not None else {}),
@@ -1137,6 +1227,8 @@ def main():
             if scaled_neurons:
                 activity += f" scaled neurons={scaled_neurons}"
                 scaled_neurons = 0
+            if flowing is not None:
+                activity += f" streams={flowing['bpb']:.4f} bpb"
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
                   f"accuracy={metrics['argmax_accuracy']:.4f} ({earlier_seconds + timer():.1f}s){activity}", flush=True)
 
@@ -1169,12 +1261,22 @@ def main():
     val_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,
                                                             **evaluate_options)
+    final_options = dict(evaluate_options, batches=args.final_eval_batches)
+    stream_scores = {}
+    if streams:
+        stream_scores["stream_val"] = evaluate_stream(model, val, **final_options)
+        if not args.validation_only:
+            stream_scores["stream_test"] = evaluate_stream(model, test, **final_options)
     averaged_score = None
     if average is not None:
         with averaged_weights(model, average):
             averaged_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
+            if streams:
+                stream_scores["averaged_stream_val"] = evaluate_stream(model, val, **final_options)
             averaged_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
         print(f"{name} averaged weights: validation={averaged_score['bpb']:.4f} bpb", flush=True)
+    for label, score in stream_scores.items():
+        print(f"{name} {label.replace('_', ' ')}: {score['bpb']:.4f} bpb", flush=True)
     args_record = dict(vars(args), data=str(args.data), results_dir=None if results_dir is None else str(results_dir),
                        synapse_readout=None if args.synapse_readout is None else str(args.synapse_readout),
                        head_readout=None if args.head_readout is None else str(args.head_readout),
@@ -1199,7 +1301,7 @@ def main():
                   data_sha1=ENWIK8_SHA1, train_target_bytes=args.steps * args.bs * args.ctx, curve=curve,
                   val_bpb=val_score["bpb"], test_bpb=test_score["bpb"] if test_score else None,
                   **({} if averaged_score is None else {"averaged_val_bpb": averaged_score["bpb"]}),
-                  val=val_score, test=test_score,
+                  val=val_score, test=test_score, **stream_scores,
                   scoring=("normalized exponential of scaled output" if event else "softmax over logits"),
                   seconds=earlier_seconds + timer(), **({"resumed_at_steps": resumed_at} if resumed_at else {}),
                   **teacher_details, **mixture_details)
