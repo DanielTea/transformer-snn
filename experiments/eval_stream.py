@@ -126,10 +126,12 @@ def main():
             model.load_state_dict(checkpoint["averaged_parameters"], strict=False)
             # The average of weights that were each in the range of exact sums can leave it.
             model.synaptic_scaling()
+        # A longer reach repeats an age offset and adds no synapse, so the parameters are counted before it.
+        parameters = count_params(model)
         if args.reach is not None:
             lengthen_reach(model, args.reach)
         bits, targets = score(model, data, args.streams, args.lead, args.piece, device)
-        row = {"checkpoint": str(path), "run_name": checkpoint.get("run_name"), "parameters": count_params(model),
+        row = {"checkpoint": str(path), "run_name": checkpoint.get("run_name"), "parameters": parameters,
                "training_targets": training_exposure(checkpoint), "targets": targets,
                "bpb": float(bits.sum() / targets), "averaged_weights": args.averaged}
         # The pieces are resampled together for the difference to the first checkpoint.
