@@ -79,7 +79,10 @@ _PHASE_SHORTEST = 3.0
 # about as much as the stream does, and the heads start on a few cells picked by chance. At an eighth the reads
 # start nearly as broad as without pacemakers, and the synapses still hold several ticks each.
 _PHASE_GAIN = 0.125
-
+# The pacemakers that turn the probes and tags of a read: the fastest turns by one radian a byte, and with ever
+# more pairs the slowest would turn this many times slower.
+_TURN_SHORTEST = 2 * math.pi
+_TURN_SPAN = 10_000.0
 
 
 def _delay_group_widths(channels, groups):
@@ -203,6 +206,7 @@ class EventLMConfig:
     granule_gate: int = 0
     read_cap: int | None = None
     read_phases: int = 0
+    read_turn: bool = False
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -1887,6 +1891,20 @@ class _StateRead(nn.Module):
     addresses a cell by what it holds, by how old it is, and by both at once,
     and all of it is learned by the synapses from the stream and from the
     pacemakers. The age offsets remain beside it.
+
+    With ``read_turn`` the pacemakers gate where they were only heard. The
+    neurons of a probe or tag come in pairs that share two dendrites, and
+    every pair has a pair of pacemaker cells with a period of its own. Each
+    spike of a pacemaker lets the charge of a dendrite into a body once, on
+    the rail of the pacemaker's sign, so the two bodies fire for the two
+    charges turned by the pacemaker's phase. A probe sent at one byte and a
+    tag left at an earlier one then match by what both hold and by the phase
+    that passed between them, at each pair's own period. One head can so look
+    for one thing a few bytes back and for another thing far back, where an
+    age offset gives a head one preference for every probe. The fastest pair
+    turns by a radian a byte and the periods grow in equal ratios. Most pairs
+    turn little within a window and match by what the cells hold alone. This
+    is the spike form of a Transformer's rotary phases.
     """
 
     def __init__(self, cfg: EventLMConfig):
@@ -1914,6 +1932,17 @@ class _StateRead(nn.Module):
             self.register_buffer("pacemakers", _pacemaker_counts(self.window, self.phases, 2 * self.window),
                                  persistent=False)
         self.payload = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
+        self.turn = cfg.read_turn
+        if self.turn:
+            # Every pair of a head's probe or tag neurons has a pacemaker pair, slower from pair to pair, and the
+            # heads share the pacemakers.
+            pairs = cfg.read_width // self.heads // 2
+            self.turn_longest = _TURN_SHORTEST * _TURN_SPAN ** ((pairs - 1) / pairs)
+            self.register_buffer("turners", _pacemaker_counts(self.window, pairs, self.turn_longest, _TURN_SHORTEST),
+                                 persistent=False)
+            # A pulse of a turned neuron takes a threshold of charge at every spike of a pacemaker's largest count.
+            self.turned = _IntegrateFire(cap if cfg.read_cap is None else cfg.read_cap,
+                                         bits + _PHASE_SPIKES.bit_length() - 1, False)
         # A cell's charge starts from a learned offset for its age.
         self.age = nn.Parameter(torch.zeros(self.heads, self.window))
         self.beats, self.clock, self.beat_mark = cfg.read_beats, None, None
@@ -2007,7 +2036,10 @@ class _StateRead(nn.Module):
         quanta = quanta * self.threshold_scale
         if not self.signed:
             probe, tag = probe.clamp_min(0), tag.clamp_min(0)
-        probe, tag = self._split(self.fire(probe, quanta)), self._split(self.fire(tag, quanta))
+        if self.turn:
+            probe, tag = (self._split(self.turned(self.let_in(drive), quanta)) for drive in (probe, tag))
+        else:
+            probe, tag = self._split(self.fire(probe, quanta)), self._split(self.fire(tag, quanta))
         return probe, tag, self._split(self.fire(self.payload(spikes), quanta))
 
     def phase_counts(self, steps):
@@ -2016,6 +2048,23 @@ class _StateRead(nn.Module):
             longer = _pacemaker_counts(steps, self.phases, 2 * self.window)
             self.pacemakers = longer.to(self.pacemakers.device)
         return self.pacemakers[:steps]
+
+    def turn_counts(self, steps):
+        """The spikes of the pacemakers that gate the probes and tags at the first ``steps`` bytes of a window, as
+        [bytes, cells]: the cells of the cosines, then those of the sines."""
+        if steps > self.turners.shape[0]:
+            longer = _pacemaker_counts(steps, self.turners.shape[1] // 2, self.turn_longest, _TURN_SHORTEST)
+            self.turners = longer.to(self.turners.device)
+        return self.turners[:steps]
+
+    def let_in(self, drive):
+        """The charge that the pacemakers let into the bodies of probe or tag neurons, as [batch, cells, channels]:
+        the charges of each pair's two dendrites, turned by the phase of the pair's pacemakers."""
+        # A dendrite holds no more charge than a neuron counts.
+        limit = self.fire.threshold * self.fire.cap
+        first, second = drive.clamp(-limit, limit).unflatten(-1, (self.heads, -1, 2)).unbind(-1)
+        cosine, sine = self.turn_counts(drive.shape[1]).to(drive.dtype)[:, None].chunk(2, -1)
+        return torch.stack((first * cosine - second * sine, first * sine + second * cosine), -1).flatten(-3)
 
     def clock_ticks(self):
         """The clock cells' synapses in weight ticks, each within the limit that keeps their sums exact."""
@@ -2149,16 +2198,16 @@ class _StateRead(nn.Module):
         return tuple(bounds)
 
 
-def _pacemaker_counts(steps, pairs, longest):
+def _pacemaker_counts(steps, pairs, longest, shortest=_PHASE_SHORTEST):
     """The spikes of a bank of pacemaker cells at each byte, as [bytes, 2 * pairs] whole counts of either sign.
 
     The two cells of a pair fire with one period, a quarter of it apart: their counts follow the cosine and the
-    sine of the pair's phase. The periods run in equal ratios from the shortest to ``longest`` bytes. The phases
+    sine of the pair's phase. The periods run in equal ratios from ``shortest`` to ``longest`` bytes. The phases
     at two bytes then tell how many bytes lie between them, at every scale from a few bytes to the whole window,
     whatever the bytes are.
     """
-    ratio = (longest / _PHASE_SHORTEST) ** (torch.arange(pairs, dtype=torch.float64) / max(pairs - 1, 1))
-    phase = 2 * math.pi * torch.arange(steps, dtype=torch.float64)[:, None] / (_PHASE_SHORTEST * ratio)
+    ratio = (longest / shortest) ** (torch.arange(pairs, dtype=torch.float64) / max(pairs - 1, 1))
+    phase = 2 * math.pi * torch.arange(steps, dtype=torch.float64)[:, None] / (shortest * ratio)
     return torch.cat((phase.cos(), phase.sin()), -1).mul(_PHASE_SPIKES).round().to(torch.float32)
 
 
@@ -3010,6 +3059,15 @@ class EventLM(nn.Module):
                     or _PHASE_SPIKES > _HIDDEN_CAP * cfg.resolution):
                 raise ValueError("the probes and tags of a state read hear up to 64 pairs of pacemaker cells, whose "
                                  "counts stay within a stream neuron's; a read by age alone has no probes or tags")
+            if cfg.read_turn:
+                if (cfg.read_mode != "race" or not cfg.read_signed or cfg.read_budget is None
+                        or cfg.read_width // cfg.read_heads % 2):
+                    raise ValueError("pacemakers turn the probes and tags of a race read with a budget, whose "
+                                     "neurons come in pairs and fire pulses of both signs")
+                held = (_HIDDEN_CAP * cfg.resolution if cfg.read_cap is None else cfg.read_cap) << cfg.router_charge_bits
+                if 2 * _PHASE_SPIKES * held > _FP32_EXACT:
+                    raise ValueError("the charge that the pacemakers let into a turned probe or tag neuron exceeds "
+                                     "the range of exact sums; lower the read cap")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
         if cfg.granule_after is not None:
@@ -3333,10 +3391,13 @@ class EventLM(nn.Module):
         if tap == len(self.blocks):
             early = self._forecast_counts(spikes)
             surprise = self._surprise(early, tokens, correction_access)
-        if memory_pulses is not None and self.state_reads is not None and self.cfg.read_phases:
-            # One bank of pacemakers fires for all the reads that hear it.
+        if memory_pulses is not None and self.state_reads is not None:
+            # One bank of pacemakers fires for all the reads that hear it, and one for all whose neurons it gates.
             read = next(iter(self.state_reads.values()))
-            memory_pulses.append(read.phase_counts(tokens.shape[1]).abs().sum() * tokens.shape[0])
+            if self.cfg.read_phases:
+                memory_pulses.append(read.phase_counts(tokens.shape[1]).abs().sum() * tokens.shape[0])
+            if self.cfg.read_turn:
+                memory_pulses.append(read.turn_counts(tokens.shape[1]).abs().sum() * tokens.shape[0])
         if self.prediction_memory is not None:
             prediction = self._prediction_code(spikes)
             recall = self.prediction_memory(

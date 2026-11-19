@@ -270,6 +270,7 @@ def build_model(args):
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
+                            read_turn=getattr(args, "read_turn", EventLMConfig.read_turn),
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
                             **synapses, **heads)
         model = EventLM(cfg)
@@ -591,6 +592,10 @@ def main():
                         help="pairs of pacemaker cells that the probe and tag neurons of every state read hear: "
                              "their phases tell how far apart two bytes are, so the match of probe and tag can "
                              "address a cell by its age as well as by what it holds")
+    parser.add_argument("--read-turn", action="store_true",
+                        help="pacemakers gate the dendrites of the probe and tag neurons of every state read, so "
+                             "the pulses of a pair of neurons are turned by the phase of its pacemakers: probe and "
+                             "tag then match by what they hold and by the bytes between them at once")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
