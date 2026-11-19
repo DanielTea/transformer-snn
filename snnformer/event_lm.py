@@ -68,6 +68,15 @@ _GRANULE_BEATS = 8
 _CLOCK_BITS = 4
 # The clock cell of a read's head hears the read's tags, and its threshold is this many bits above a stream neuron's.
 _READ_CLOCK_BITS = 4
+# The most pairs of pacemaker cells a state read can hear, the largest count of a pacemaker in spikes of either
+# sign, and the shortest period of a bank in bytes. The longest period is twice the read window.
+_READ_PHASES = 64
+_PHASE_SPIKES = 64
+_PHASE_SHORTEST = 3.0
+# The synapses from the pacemakers start with this gain. At a quarter the pacemakers charge a probe or tag neuron
+# about as much as the stream does, and the heads start on a few cells picked by chance. At an eighth the reads
+# start nearly as broad as without pacemakers, and the synapses still hold several ticks each.
+_PHASE_GAIN = 0.125
 
 
 def _delay_group_widths(channels, groups):
@@ -189,6 +198,7 @@ class EventLMConfig:
     stack: bool = False
     granule_cap: int | None = None
     read_cap: int | None = None
+    read_phases: int = 0
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -1862,6 +1872,17 @@ class _StateRead(nn.Module):
     complete word, the one of age one the first byte after the word before
     it, and so on. One offset then addresses the single cell that holds the
     stream's state at the end of a chosen word.
+
+    With ``read_phases`` the probe and tag neurons also hear a bank of that
+    many pairs of pacemaker cells. A pacemaker fires in a fixed rhythm: the
+    counts of a pair follow the cosine and the sine of a phase that turns
+    once in the pair's period, and the periods run from three bytes to twice
+    the window. The phases at two bytes tell how far apart the bytes are, so
+    a probe that carries its own phases turned back by some bytes meets the
+    tag of the cell that many bytes back. The match of probe and tag then
+    addresses a cell by what it holds, by how old it is, and by both at once,
+    and all of it is learned by the synapses from the stream and from the
+    pacemakers. The age offsets remain beside it.
     """
 
     def __init__(self, cfg: EventLMConfig):
@@ -1880,6 +1901,14 @@ class _StateRead(nn.Module):
             self.tag = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
             # Each head has its own gain on the match of probe and tag.
             self.gain = nn.Parameter(torch.zeros(self.heads, 1, 1))
+        self.phases = cfg.read_phases
+        if self.phases:
+            # The probe and tag neurons also hear the pacemakers, through synapses of their own.
+            gain = _PHASE_GAIN * cfg.read_synapse_gain
+            self.probe_phase = _Synapse(2 * self.phases, cfg.read_width, gain=gain, charge_bits=bits)
+            self.tag_phase = _Synapse(2 * self.phases, cfg.read_width, gain=gain, charge_bits=bits)
+            self.register_buffer("pacemakers", _pacemaker_counts(self.window, self.phases, 2 * self.window),
+                                 persistent=False)
         self.payload = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
         # A cell's charge starts from a learned offset for its age.
         self.age = nn.Parameter(torch.zeros(self.heads, self.window))
@@ -1961,17 +1990,28 @@ class _StateRead(nn.Module):
         drives of unit size for a softmax. A read by age alone has payloads only."""
         if self.mode == "age":
             return None, None, self._unit(self.payload(spikes)) * self.read_resolution
+        probe, tag = self.probe(spikes), self.tag(spikes)
+        if self.phases:
+            # The pacemakers charge the probe and tag neurons beside the stream.
+            beats = self.phase_counts(spikes.shape[1]).to(spikes.dtype)
+            probe, tag = probe + self.probe_phase(beats), tag + self.tag_phase(beats)
         if self.mode == "soft":
-            probe, tag, payload = (self._unit(synapse(spikes)) for synapse in (self.probe, self.tag, self.payload))
+            probe, tag, payload = (self._unit(drive) for drive in (probe, tag, self.payload(spikes)))
             return probe, tag, payload * self.read_resolution
         # The inhibitory pool raises every firing threshold with the stream's activity, as it does in a block.
         quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         quanta = quanta * self.threshold_scale
-        probe, tag = self.probe(spikes), self.tag(spikes)
         if not self.signed:
             probe, tag = probe.clamp_min(0), tag.clamp_min(0)
         probe, tag = self._split(self.fire(probe, quanta)), self._split(self.fire(tag, quanta))
         return probe, tag, self._split(self.fire(self.payload(spikes), quanta))
+
+    def phase_counts(self, steps):
+        """The pacemakers' spikes at the first ``steps`` bytes of a window, as [bytes, cells]."""
+        if steps > self.pacemakers.shape[0]:
+            longer = _pacemaker_counts(steps, self.phases, 2 * self.window)
+            self.pacemakers = longer.to(self.pacemakers.device)
+        return self.pacemakers[:steps]
 
     def clock_ticks(self):
         """The clock cells' synapses in weight ticks, each within the limit that keeps their sums exact."""
@@ -2087,7 +2127,13 @@ class _StateRead(nn.Module):
         """
         if self.mode != "race":
             return ()
-        bounds = [synapse.weight_ticks().abs().sum(-1).amax() for synapse in (self.probe, self.tag, self.payload)]
+        bounds = [synapse.weight_ticks().abs().sum(-1) for synapse in (self.probe, self.tag, self.payload)]
+        if self.phases:
+            # A pacemaker's largest count is a part of a stream neuron's, and its synapses weigh that part.
+            part = _PHASE_SPIKES / self.emit.cap
+            for index, synapse in enumerate((self.probe_phase, self.tag_phase)):
+                bounds[index] = bounds[index] + (synapse.weight_ticks().abs().sum(-1) * part).ceil()
+        bounds = [bound.amax() for bound in bounds]
         # A head's read neurons count up to a cell's largest payload, in read pulses of that head's grain. The
         # bound is in ticks per unit of a stream neuron's largest count.
         pulses = (self.read_resolution * self.grain.detach().exp().flatten() * self.fire.cap + 0.5) / self.emit.cap
@@ -2097,6 +2143,19 @@ class _StateRead(nn.Module):
             # With a clock cell's largest resting charge, in ticks per unit of the largest tag.
             bounds.append(self.clock_ticks().abs().sum(-1).amax() + self.clock_rest_ticks)
         return tuple(bounds)
+
+
+def _pacemaker_counts(steps, pairs, longest):
+    """The spikes of a bank of pacemaker cells at each byte, as [bytes, 2 * pairs] whole counts of either sign.
+
+    The two cells of a pair fire with one period, a quarter of it apart: their counts follow the cosine and the
+    sine of the pair's phase. The periods run in equal ratios from the shortest to ``longest`` bytes. The phases
+    at two bytes then tell how many bytes lie between them, at every scale from a few bytes to the whole window,
+    whatever the bytes are.
+    """
+    ratio = (longest / _PHASE_SHORTEST) ** (torch.arange(pairs, dtype=torch.float64) / max(pairs - 1, 1))
+    phase = 2 * math.pi * torch.arange(steps, dtype=torch.float64)[:, None] / (_PHASE_SHORTEST * ratio)
+    return torch.cat((phase.cos(), phase.sin()), -1).mul(_PHASE_SPIKES).round().to(torch.float32)
 
 
 def _beat_age_chances(rates, limit):
@@ -2881,6 +2940,11 @@ class EventLM(nn.Module):
                 raise ValueError("a learned clock hears the tags of its read, which a read by age alone has not")
             if cfg.read_marks and not cfg.read_beats:
                 raise ValueError("a beat marks its cell only where a state read counts ages in beats")
+            if (not isinstance(cfg.read_phases, int) or not 0 <= cfg.read_phases <= _READ_PHASES
+                    or (cfg.read_phases and cfg.read_mode == "age")
+                    or _PHASE_SPIKES > _HIDDEN_CAP * cfg.resolution):
+                raise ValueError("the probes and tags of a state read hear up to 64 pairs of pacemaker cells, whose "
+                                 "counts stay within a stream neuron's; a read by age alone has no probes or tags")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
         if cfg.granule_after is not None:
@@ -3193,6 +3257,10 @@ class EventLM(nn.Module):
         if tap == len(self.blocks):
             early = self._forecast_counts(spikes)
             surprise = self._surprise(early, tokens, correction_access)
+        if memory_pulses is not None and self.state_reads is not None and self.cfg.read_phases:
+            # One bank of pacemakers fires for all the reads that hear it.
+            read = next(iter(self.state_reads.values()))
+            memory_pulses.append(read.phase_counts(tokens.shape[1]).abs().sum() * tokens.shape[0])
         if self.prediction_memory is not None:
             prediction = self._prediction_code(spikes)
             recall = self.prediction_memory(

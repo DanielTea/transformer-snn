@@ -269,6 +269,7 @@ def build_model(args):
                             stack=getattr(args, "stack", EventLMConfig.stack),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
+                            read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
                             **synapses, **heads)
         model = EventLM(cfg)
         with torch.no_grad():
@@ -583,6 +584,10 @@ def main():
                              "neuron's largest count when omitted")
     parser.add_argument("--read-address-rate", type=float, default=EventLMConfig.read_address_rate,
                         help="factor on the stored age offsets and gains of a state read")
+    parser.add_argument("--read-phases", type=int, default=EventLMConfig.read_phases,
+                        help="pairs of pacemaker cells that the probe and tag neurons of every state read hear: "
+                             "their phases tell how far apart two bytes are, so the match of probe and tag can "
+                             "address a cell by its age as well as by what it holds")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
