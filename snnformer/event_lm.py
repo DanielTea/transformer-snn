@@ -207,6 +207,7 @@ class EventLMConfig:
     stack: bool = False
     granule_cap: int | None = None
     granule_gate: int = 0
+    granule_veto: int = 0
     read_cap: int | None = None
     read_phases: int = 0
     read_turn: bool = False
@@ -280,7 +281,12 @@ def _shrink_synapses(weight, factor, charge_bits):
 
 
 def emitted_pulses(population, counts):
-    """A firing population's pulses for a pulse budget, whose price pushes on them with the population's share."""
+    """A firing population's pulses for a pulse budget, whose price pushes on them with the population's share.
+
+    A dendrite that does not fire has none: its steps stay inside its cell.
+    """
+    if population.dendrite:
+        return counts.new_zeros(())
     total = counts.abs().sum()
     share = population.price_share
     if share == 1:
@@ -333,6 +339,8 @@ class _IntegrateFire(nn.Module):
 
     # The share of a pulse budget's price that pushes on this population. Its pulses count in full either way.
     price_share = 1.0
+    # A dendrite counts its charge in steps and sends no spike.
+    dendrite = False
 
     def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False,
                  quanta_per_threshold: int = _PACKET_UNITS, capped: bool | int = False):
@@ -2440,6 +2448,39 @@ class _GatedFire(_IntegrateFire):
         return counts.to(current.dtype) + (surrogate - surrogate.detach())
 
 
+class _VetoedFire(_IntegrateFire):
+    """The body of a cell with a veto dendrite: it fires for the share of its charge that the veto leaves.
+
+    The cell's own dendrite collects charge above the cell's rest, as a plain
+    cell's does. The veto dendrite does not fire. Its charge closes the cell in
+    ``steps`` equal steps: with none the body fires as a plain cell, every
+    step keeps one more ``steps``-th of the charge from the body, and with all
+    of them the cell is shut. The body counts its threshold ``steps`` times as
+    fine, so that the share that passes is a whole number of ticks.
+
+    The cell learns from the smooth threshold of a plain cell times the share
+    that passes. A veto on a cell that would not have fired changes no spike
+    and learns nothing from it.
+    """
+
+    def __init__(self, cap: int, charge_bits: int, steps: int, quanta_per_threshold: int = _PACKET_UNITS):
+        super().__init__(cap, charge_bits + steps.bit_length() - 1, False, quanta_per_threshold=quanta_per_threshold,
+                         capped=True)
+        self.steps = steps
+
+    def forward(self, current, quanta=None, *, reference=None, vetoed=None, smooth=1):
+        # A whole threshold of the cell's own dendrite.
+        whole = self.threshold // self.steps
+        bounded = current.clamp(-whole * self.cap, whole * self.cap)
+        counts = super().forward(bounded.clamp_min(0) * (self.steps - vetoed.detach()), quanta)
+        if not current.is_floating_point():
+            return counts
+        plain = smooth * F.gelu(current / (quanta * (whole // self.quanta_per_threshold) * smooth))
+        share = 1 - vetoed / self.steps
+        learned = plain * share.detach() + plain.detach().clamp_min(0) * share
+        return counts.detach() + (learned - learned.detach())
+
+
 class _RaceFire(_IntegrateFire):
     """Cells that race for a budget of spikes, as the cells of a state read do.
 
@@ -2671,6 +2712,16 @@ class _GranuleLayer(nn.Module):
     cell opens, the other what it passes on. A plain cell has one view for
     both. A gated cell has three rows of synapses where a plain cell has two.
 
+    With ``granule_veto`` every cell has a second dendrite on the same fibres
+    that does not fire. Its charge closes the cell, in ``granule_veto`` steps
+    over the charge of one whole spike: a quarter of the cell's own charge is
+    kept from the body with every step of four, and at the last the cell is
+    shut. So a cell fires for what one view of the stream collects unless
+    another view forbids it, as shunting inhibition on a dendrite vetoes the
+    excitation that passes it. The veto's synapses start silent, so the layer
+    starts as one of plain cells, and they add no pulse: the steps stay
+    inside the cell. A cell with a veto has three rows of synapses.
+
     With ``granule_relays`` the fibres do not come from the stream itself.
     That many relay neurons each hear the whole stream and fire for it, and
     their axons are the fibres that the clusters share, as mossy fibres come
@@ -2770,7 +2821,7 @@ class _GranuleLayer(nn.Module):
         self.budget = cfg.granule_budget
         # The most spikes of a cell at a byte with no inhibition from the pool.
         cell_cap = cap if cfg.granule_cap is None else cfg.granule_cap
-        self.gated = cfg.granule_gate
+        self.gated, self.vetoed = cfg.granule_gate, cfg.granule_veto
         if self.gated:
             # ``receive`` holds the synapses of the value dendrite and ``gate`` those of the gate dendrite.
             self.gate = nn.Parameter(torch.empty(clusters, cells, fan))
@@ -2781,6 +2832,18 @@ class _GranuleLayer(nn.Module):
                                         capped=_GATE_CAP * self.gated)
             self.fire = _GatedFire(cell_cap, self.bits, self.gated, cfg.pool_quanta)
             self.open.price_share = self.fire.price_share = cfg.granule_price
+        elif cfg.granule_veto:
+            # ``veto`` holds the synapses of the veto dendrite. They start silent.
+            self.veto = nn.Parameter(torch.zeros(clusters, cells, fan))
+            # The veto counts its steps over the charge of one whole spike, and reaches the last one under the
+            # strongest inhibition of the pool.
+            steps = _PACKET_UNITS * cfg.granule_veto
+            most = cfg.pool_rest_quanta + _HIDDEN_CAP * _PACKET_UNITS * cfg.pool_fine
+            self.shut = _ExcitatoryFire(-(-cfg.granule_veto * most // steps), self.bits, False,
+                                        quanta_per_threshold=steps, capped=cfg.granule_veto)
+            self.shut.dendrite = True
+            self.fire = _VetoedFire(cell_cap, self.bits, cfg.granule_veto, cfg.pool_quanta)
+            self.fire.price_share = cfg.granule_price
         elif self.budget is None:
             self.fire = _ExcitatoryFire(cell_cap, self.bits, False, quanta_per_threshold=cfg.pool_quanta, capped=True)
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
@@ -2867,6 +2930,10 @@ class _GranuleLayer(nn.Module):
                               rates if rates is not None and rates.requires_grad else None)
         return heard.scatter(-1, place, brought)
 
+    def quarter(self):
+        """The ticks of a quarter spike of a cell at one quantum of threshold."""
+        return (1 << self.bits) // (self.fire.quanta_per_threshold * _PACKET_UNITS)
+
     def cells(self, spikes, tokens=None):
         """The spike counts of all cells as [batch, bytes, clusters, cells]."""
         quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
@@ -2875,14 +2942,18 @@ class _GranuleLayer(nn.Module):
         heard = self.heard(self.fibres(spikes), beats, rates)
         charge = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.receive, charge_bits=self.bits))
         # A quarter spike of rest is a quarter of the cell's present threshold.
-        quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
-        rest = self.rest_quarters().squeeze(-1) * quanta * quarter
+        rest = self.rest_quarters().squeeze(-1) * quanta * self.quarter()
         if self.gated:
             # The gate dendrite fires above the rest, and its spikes let the value dendrite's charge into the body.
             opening = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.gate, charge_bits=self.bits))
             return self.fire(charge, quanta,
                              opened=self.open(opening - rest, quanta, smooth=self.gated * self.slope_width))
         charge = charge - rest
+        if self.vetoed:
+            # The veto dendrite's steps keep that many shares of the cell's charge from its body.
+            closing = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.veto, charge_bits=self.bits))
+            return self.fire(charge, quanta, vetoed=self.shut(closing, quanta, smooth=self.vetoed),
+                             smooth=self.slope * self.slope_width)
         if self.budget is None:
             return self.fire(charge, quanta, smooth=self.slope * self.slope_width)
         if self.soft:
@@ -2902,13 +2973,16 @@ class _GranuleLayer(nn.Module):
         """The largest sums of weight ticks that a cell, a stream channel and a relay can receive."""
         receive = _weight_ticks(self.receive, charge_bits=self.bits).abs().sum(-1).amax()
         # The resting charge at the strongest inhibition, in ticks per unit of the largest input count.
-        quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
         most_quanta = self.rest_quanta + self.pool.cap
-        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
+        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * self.quarter() // self.emit.cap)
         if self.gated:
             # The rest belongs to the gate dendrite. The value dendrite collects without it.
             gate = _weight_ticks(self.gate, charge_bits=self.bits).abs().sum(-1).amax()
             receive, rest = torch.maximum(receive, gate + rest), 0
+        if self.vetoed:
+            # The veto dendrite has no rest.
+            veto = _weight_ticks(self.veto, charge_bits=self.bits).abs().sum(-1).amax()
+            receive, rest = torch.maximum(receive + rest, veto), 0
         send = _weight_ticks(self.send, charge_bits=self.bits).abs().sum(-1)
         arriving = send.new_zeros(self.channels).index_add_(0, self.outputs.flatten(), send.flatten())
         # A cell brings at most its own largest count, which may be below a stream neuron's.
@@ -2931,14 +3005,15 @@ class _GranuleLayer(nn.Module):
         stream channel sums the synapses that all the cells of all its clusters send to it, so those shrink
         together.
         """
-        quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
         most_quanta = self.rest_quanta + self.pool.cap
-        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
+        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * self.quarter() // self.emit.cap)
         spare = self.receive.shape[-1] / 2 + 1
-        # The resting charge belongs to a gated cell's gate dendrite and to a plain cell's only dendrite.
+        # The resting charge belongs to a gated cell's gate dendrite and to the own dendrite of any other cell.
         dendrites = [(self.receive, 0 if self.gated else rest)]
         if self.gated:
             dendrites.append((self.gate, rest))
+        if self.vetoed:
+            dendrites.append((self.veto, 0))
         scaled = 0
         for weight, resting in dendrites:
             allowed = limit - resting - spare
@@ -3339,6 +3414,14 @@ class EventLM(nn.Module):
                         cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits):
                     raise ValueError("a gate spike of a gated granule cell must be a whole number of charge ticks "
                                      "at one quantum of threshold: fewer gate spikes or quanta to a threshold")
+            if cfg.granule_veto:
+                bits = cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits
+                if (not isinstance(cfg.granule_veto, int) or cfg.granule_veto not in (2, 4, 8, 16)
+                        or cfg.granule_gate or cfg.granule_budget is not None or not cfg.granule_slope
+                        or _PACKET_UNITS * cfg.granule_veto > 1 << bits):
+                    raise ValueError("a veto dendrite closes a cell in 2, 4, 8 or 16 steps, each a whole number of "
+                                     "charge ticks at one quantum of threshold, and belongs to cells that neither "
+                                     "race nor have a gate and that learn below their thresholds")
             if cfg.granule_budget is not None and (
                     not isinstance(cfg.granule_budget, int)
                     or not 1 <= cfg.granule_budget <= (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution)):

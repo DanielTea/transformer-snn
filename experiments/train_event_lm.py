@@ -285,6 +285,7 @@ def build_model(args):
                             pool_rate=getattr(args, "pool_rate", EventLMConfig.pool_rate),
                             output_pool=getattr(args, "output_pool", EventLMConfig.output_pool),
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
+                            granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
                             **synapses, **heads)
         model = EventLM(cfg)
         with torch.no_grad():
@@ -659,6 +660,10 @@ def main():
                         help="every granule cell has a gate dendrite and a value dendrite: each gate spike lets "
                              "the value dendrite's charge into the cell body once, and SPIKES of them are a "
                              "threshold of the gate; plain threshold cells when omitted or 0")
+    parser.add_argument("--granule-veto", type=int, default=EventLMConfig.granule_veto, metavar="STEPS",
+                        help="every granule cell has a veto dendrite on the same fibres that does not fire: its "
+                             "charge closes the cell in STEPS steps over the charge of one whole spike; no veto "
+                             "when omitted or 0")
     parser.add_argument("--granule-slope", action="store_true",
                         help="threshold cells keep their spikes and learn from a smooth threshold, so that a "
                              "silent cell still learns")
