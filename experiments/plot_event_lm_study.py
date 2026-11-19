@@ -69,6 +69,8 @@ COASTING_HEADS_GROUP = "coasting_heads_368640k"
 COASTING_HEADS_CHECKPOINTS = "event_lm/coasting_heads_checkpoints.sha256"
 STATE_READS = "event_lm/state_reads"
 STATE_READS_CHECKPOINTS = "event_lm/state_reads_checkpoints.sha256"
+READ_CLOCKS = "event_lm/read_clocks"
+READ_CLOCKS_CHECKPOINTS = "event_lm/read_clocks_checkpoints.sha256"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -239,6 +241,22 @@ STATE_READS_ARMS = (
      "checkpoints/scratch-study/transformer_s20001.pt", ORANGE),
     ("34.85M full attention", "Rotated, averaged", "test_transformer_rotated", "pg19_rotated",
      "checkpoints/state_reads/full-transformer-rot/model.pt.averaged", ORANGE),
+)
+# The same for the read-clock study. A record with a folder is one of an earlier study.
+READ_CLOCKS_ARMS = (
+    ("34.82M SNN, clock cells and address rate", "Rotated, averaged", "test_clock_cells",
+     "pg19_clock_cells_and_address_rate", "checkpoints/read_clocks/tag8-a8/model.pt.averaged", VIOLET),
+    ("34.82M SNN, address rate", "Rotated, averaged", "test_address_rate", "pg19_clock_cells_and_address_rate",
+     "checkpoints/read_clocks/rate8/model.pt.averaged", "#e0559b"),
+    ("34.82M SNN, spike reads and race cells", "Rotated, averaged", f"{STATE_READS}/scores/test_spike_reads_and_cells",
+     f"{STATE_READS}/scores/pg19_spike_reads_and_cells",
+     "checkpoints/state_reads/pilot-race64-d8-c350-dl4/model.pt.averaged", "#4a5568"),
+    ("34.85M full attention, 256 wide", "AdamW", f"{STATE_READS}/scores/test_v12_decoders",
+     f"{STATE_READS}/scores/pg19_spike_reads_and_cells", "checkpoints/scratch-study/transformer_s20001.pt", ORANGE),
+    ("34.85M full attention, 256 wide", "Rotated, averaged", f"{STATE_READS}/scores/test_transformer_rotated",
+     f"{STATE_READS}/scores/pg19_rotated", "checkpoints/state_reads/full-transformer-rot/model.pt.averaged", ORANGE),
+    ("34.75M full attention, standard shape", "AdamW, averaged", "test_transformer_standard",
+     "pg19_transformer_standard", "checkpoints/read_clocks/transformer-std/model.pt.averaged", ORANGE),
 )
 TRACE_READ_DRIVE_116326K = (
     ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
@@ -419,13 +437,13 @@ def read_comparison(definitions, *, seed, context, exposure, test_inputs=None):
     return rows
 
 
-def read_warmed_windows():
-    """The state-read comparison, with every checkpoint scored in windows that start from an empty state."""
+def read_warmed_windows(arms=STATE_READS_ARMS, study=STATE_READS):
+    """A comparison of a study with every checkpoint scored in windows that start from an empty state."""
     records = {}
 
     def scored(name, checkpoint, targets):
         if name not in records:
-            record = records[name] = read_result(f"{STATE_READS}/scores/{name}.json")
+            record = records[name] = read_result(f"{name}.json" if "/" in name else f"{study}/scores/{name}.json")
             protocol = (record["protocol"], record["split"], record["context_bytes"], record["unscored_history_bytes"])
             if protocol != ("causal_warmed_windows", "test", 256, 256):
                 raise ValueError(f"{name}: expected test scores in windows of 256 unscored and 256 scored bytes")
@@ -435,10 +453,10 @@ def read_warmed_windows():
         return row
 
     rows = []
-    for model, optimizer, enwik8, pg19, checkpoint, color in STATE_READS_ARMS:
+    for model, optimizer, enwik8, pg19, checkpoint, color in arms:
         row = scored(enwik8, checkpoint, CORPORA[0][2])
         scores = {"enwik8": {"mean": row["bpb"]}}
-        if pg19 and (RESULTS / f"{STATE_READS}/scores/{pg19}.json").is_file():
+        if pg19 and (RESULTS / (f"{pg19}.json" if "/" in pg19 else f"{study}/scores/{pg19}.json")).is_file():
             books = scored(pg19, checkpoint, CORPORA[1][2])
             scores["pg19_full"] = {"mean": books["calibrated_bpb"], "raw_bpb": books["bpb"],
                                    "temperature": books["temperature"]}
@@ -656,7 +674,7 @@ def warmed_table(rows):
     return "\n".join(lines)
 
 
-def write_leaderboards(data, depth, research, transfers, warmed=None):
+def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=None):
     latest = depth["groups"]["depth"]
     paragraphs = [
         "# Spiking byte model leaderboards",
@@ -737,6 +755,30 @@ def write_leaderboards(data, depth, research, transfers, warmed=None):
             "![Generated pulses with identical output counts within each pair](../results/figures/event_lm_residual_emissions.png)",
         ),
     }
+    if clocks:
+        scores = {row["checkpoint"].split("/")[2]: row["scores"]["enwik8"]["mean"] for row in clocks["rows"]}
+        paragraphs.extend([
+            "## Read clocks and the address rate, trained from scratch · 368,640,000 training targets · seed 20001",
+            warmed_table(clocks["rows"]),
+            "![enwik8 test loss of the two new decoders, the v13 decoder and two Transformers]"
+            "(../results/figures/event_lm_read_clocks.png)",
+            "![A read head counts time in beats, and the test on a made-up language]"
+            "(../results/figures/event_lm_read_clocks_language.png)",
+            "![Averaged validation loss over training, and the decoders' distance to the Transformer]"
+            "(../results/figures/event_lm_read_clocks_training.png)",
+            "[Measurements, pilots and limits](READ_CLOCKS.md) · [Every training arm](READ_CLOCKS_ARMS.md)",
+            "This comparison is scored in windows as the one below it: every window starts from an empty state and "
+            "holds 256 unscored bytes before its 256 scored ones. The two new decoders are the v13 decoder with an "
+            "address rate of 8 for its read heads, and one of them has a clock cell for every head as well. They "
+            f"are {scores['rate8'] - scores['tag8-a8']:.4f} bpb apart on enwik8, which is less than a second run "
+            "moves a decoder, so the gain over v13 is the address rate's. Neither decoder has a stream form or a "
+            "native pulse count, and both write text only by running a whole window for every byte.",
+            "The Transformer of the standard shape is 512 wide with 11 layers, 8 heads and an MLP of 4 times its "
+            "width. It was trained for this study with AdamW and is scored at the running average of its weights. "
+            "The 256-wide Transformer has 6 layers and an MLP of 42 times its width and is the reference of every "
+            "earlier comparison. The six models received identical windows from random weights. Every row is one "
+            "seed.",
+        ])
     if warmed:
         stream = {row["model"]: row["scores"]["enwik8"]["mean"]
                   for row in research["groups"][COASTING_HEADS_GROUP]["rows"]}
@@ -1405,7 +1447,12 @@ def main():
     if warmed:
         summary = RESULTS / STATE_READS / "leaderboard.json"
         summary.write_text(json.dumps(warmed, indent=2) + "\n", encoding="utf-8")
-    write_leaderboards(data, depth, research, transfers, warmed)
+    clocks = (read_warmed_windows(READ_CLOCKS_ARMS, READ_CLOCKS)
+              if (RESULTS / READ_CLOCKS_CHECKPOINTS).is_file() else None)
+    if clocks:
+        summary = RESULTS / READ_CLOCKS / "leaderboard.json"
+        summary.write_text(json.dumps(clocks, indent=2) + "\n", encoding="utf-8")
+    write_leaderboards(data, depth, research, transfers, warmed, clocks)
     output = RESULTS / "figures"
     output.mkdir(parents=True, exist_ok=True)
     plot_loss(data, output)

@@ -99,6 +99,22 @@ def guided_language_loss(logits, targets, teacher_logits, weight):
     return loss.mean(), hard.mean(), use_teacher.float().mean()
 
 
+# A continued run may change these without changing what it trains: where it stops, on what it runs and where it
+# writes. A saved state that is moved with its folder to another machine continues there.
+_RESUME_FREE = frozenset(("stop_at", "force", "threads", "device", "checkpoint", "results_dir"))
+
+
+def _on_cpu(value):
+    """The tensors of a nested state on the CPU, so a saved run can continue on another device."""
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu()
+    if isinstance(value, dict):
+        return {key: _on_cpu(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(_on_cpu(item) for item in value)
+    return value
+
+
 @contextmanager
 def averaged_weights(model, average):
     """Run the model on the running average of its weights and give it its own weights back afterwards."""
@@ -223,16 +239,26 @@ def build_model(args):
                             read_budget=getattr(args, "read_budget", EventLMConfig.read_budget),
                             read_address_rate=getattr(args, "read_address_rate", EventLMConfig.read_address_rate),
                             read_synapse_gain=getattr(args, "read_synapse_gain", EventLMConfig.read_synapse_gain),
+                            read_beats=getattr(args, "read_beats", EventLMConfig.read_beats),
+                            read_beat_start=getattr(args, "read_beat_start", EventLMConfig.read_beat_start),
+                            read_clock=getattr(args, "read_clock", EventLMConfig.read_clock),
+                            read_clock_rate=getattr(args, "read_clock_rate", EventLMConfig.read_clock_rate),
+                            read_marks=getattr(args, "read_marks", EventLMConfig.read_marks),
                             granule_after=(None if getattr(args, "granule_after", None) is None
                                            else tuple(map(int, args.granule_after.split(",")))),
                             granule_clusters=getattr(args, "granule_clusters", EventLMConfig.granule_clusters),
                             granule_cells=getattr(args, "granule_cells", EventLMConfig.granule_cells),
                             granule_fan=getattr(args, "granule_fan", EventLMConfig.granule_fan),
+                            granule_reach=getattr(args, "granule_reach", EventLMConfig.granule_reach),
                             granule_gain=getattr(args, "granule_gain", EventLMConfig.granule_gain),
                             granule_rest=getattr(args, "granule_rest", EventLMConfig.granule_rest),
                             granule_price=getattr(args, "granule_price", EventLMConfig.granule_price),
                             granule_bits=getattr(args, "granule_bits", EventLMConfig.granule_bits),
                             granule_budget=getattr(args, "granule_budget", EventLMConfig.granule_budget),
+                            granule_races=getattr(args, "granule_races", EventLMConfig.granule_races),
+                            granule_soften=getattr(args, "granule_soften", EventLMConfig.granule_soften),
+                            granule_soft=getattr(args, "granule_soft", EventLMConfig.granule_soft),
+                            granule_slope=getattr(args, "granule_slope", EventLMConfig.granule_slope),
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
@@ -548,6 +574,18 @@ def main():
                         help="cell spikes that end a race read of rates, the race within reach of the leader if unset")
     parser.add_argument("--read-address-rate", type=float, default=EventLMConfig.read_address_rate,
                         help="factor on the stored age offsets and gains of a state read")
+    parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
+                        help="a state read also knows each cell's age in beats of a clock, counted up to this many")
+    parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
+                        help="charge that each head starts with for one age in beats of its own")
+    parser.add_argument("--read-clock", choices=("word", "end", "learned"), default=EventLMConfig.read_clock,
+                        help="what beats for a state read's ages: the start of every word, the first byte after "
+                             "every word, or a clock cell of each head that learns when to beat")
+    parser.add_argument("--read-clock-rate", type=float, default=EventLMConfig.read_clock_rate,
+                        help="the share of bytes at which a learned read clock beats before it has learned")
+    parser.add_argument("--read-marks", action=argparse.BooleanOptionalAction, default=EventLMConfig.read_marks,
+                        help="a beat marks the cell it falls on, and every head has a second offset for the "
+                             "marked cell of each age in beats")
     parser.add_argument("--read-signed", action=argparse.BooleanOptionalAction, default=EventLMConfig.read_signed,
                         help="keep the negative pulses of a race read's probe and tag")
     parser.add_argument("--granule-after", help="comma-separated byte-rate blocks that a layer of granule cells follows")
@@ -556,6 +594,9 @@ def main():
     parser.add_argument("--granule-cells", type=int, default=EventLMConfig.granule_cells, help="cells of a cluster")
     parser.add_argument("--granule-fan", type=int, default=EventLMConfig.granule_fan,
                         help="stream channels a cluster listens to, and channels its axons reach")
+    parser.add_argument("--granule-reach", type=int, default=EventLMConfig.granule_reach,
+                        help="stream channels the axons of a cluster reach, where that differs from the channels "
+                             "it listens to")
     parser.add_argument("--granule-gain", type=float, default=EventLMConfig.granule_gain,
                         help="starting scale of the granule cells' input synapses")
     parser.add_argument("--granule-rest", type=float, default=EventLMConfig.granule_rest,
@@ -564,8 +605,20 @@ def main():
                         help="share of the pulse budget's price that pushes on the granule cells' own spikes")
     parser.add_argument("--granule-bits", type=int, default=EventLMConfig.granule_bits,
                         help="charge bits of the granule cells' synapses; the router's charge bits when omitted")
-    parser.add_argument("--granule-budget", type=int, default=EventLMConfig.granule_budget,
-                        help="spikes per byte that the cells of a granule cluster race for; threshold cells when omitted")
+    parser.add_argument("--granule-budget", type=lambda text: int(text) or None, default=EventLMConfig.granule_budget,
+                        help="spikes per byte that the cells of a granule cluster race for; threshold cells when "
+                             "omitted or 0")
+    parser.add_argument("--granule-slope", action="store_true",
+                        help="threshold cells keep their spikes and learn from a smooth threshold, so that a "
+                             "silent cell still learns")
+    parser.add_argument("--granule-races", type=int, default=EventLMConfig.granule_races,
+                        help="equal groups in which the cells of a granule cluster race, each for the budget")
+    parser.add_argument("--granule-soften", type=float, default=EventLMConfig.granule_soften,
+                        help="factor by which a race of granule cells is softened where its gradient is taken; "
+                             "the spikes stay those of the race as it is")
+    parser.add_argument("--granule-soft", action="store_true",
+                        help="diagnosis only: granule cells that answer with real numbers and do not race, "
+                             "which makes the decoder a hybrid and no spiking network")
     parser.add_argument("--granule-delays", type=int, default=EventLMConfig.granule_delays,
                         help="conduction delays among a granule cluster's fibres: each brings its channel as it was "
                              "zero to one less than this many bytes ago")
@@ -576,9 +629,11 @@ def main():
                         help="stretches of bytes that a granule cluster's beat fibres hold: a fibre brings its "
                              "channel over the present stretch or over one of this many stretches before it, and a "
                              "beat of the cluster's clock opens a new stretch; no beat fibres when zero")
-    parser.add_argument("--granule-clock", choices=("word", "every", "learned"), default=EventLMConfig.granule_clock,
-                        help="what beats for a granule cluster's beat fibres: the start of every word, every byte "
-                             "(which makes them delayed fibres), or a clock cell of the cluster that learns when")
+    parser.add_argument("--granule-clock", choices=("word", "end", "every", "learned"),
+                        default=EventLMConfig.granule_clock,
+                        help="what beats for a granule cluster's beat fibres: the start of every word, the first "
+                             "byte after every word, every byte (which makes them delayed fibres), or a clock cell "
+                             "of the cluster that learns when")
     parser.add_argument("--granule-hold", choices=("sum", "mean", "last"), default=EventLMConfig.granule_hold,
                         help="what a beat fibre brings of a stretch: its summed count, its mean count per byte, or "
                              "the count at its last byte")
@@ -595,6 +650,11 @@ def main():
                         help="start from the weights of a checkpoint of the same decoder, whatever its recall circuits")
     parser.add_argument("--save-every", type=int, default=0,
                         help="also write the weights to <checkpoint>.partial after every this many steps")
+    parser.add_argument("--resume", action="store_true",
+                        help="write the whole training state to <checkpoint>.resume with every partial "
+                             "and continue from that file when it exists")
+    parser.add_argument("--stop-at", type=int, metavar="STEP",
+                        help="leave after this update with its training state saved; --resume continues the schedule")
     parser.add_argument("--early-readout", type=int,
                         help="number of leading blocks whose stream also drives the vocabulary neurons")
     parser.add_argument("--early-readout-weight", type=float, default=0.0,
@@ -639,7 +699,7 @@ def main():
                              "the synapses of granule cells")
     parser.add_argument("--lr-scale", type=_lr_scales, default=(), metavar="PART=FACTOR,...",
                         help="multiply the learning rate of every parameter whose name contains a part by that "
-                             "part's factor; the first matching part counts")
+                             "part's factor; of several matching parts the longest counts")
     parser.add_argument("--weight-average", type=float,
                         help="also keep a running average of the weights with this decay, score it at every "
                              "evaluation and save it beside the checkpoint")
@@ -747,6 +807,11 @@ def main():
         parser.error("packet thresholds, pulse budgets and delay or output options need a steered spike router")
     if args.pulse_budget is not None and (not math.isfinite(args.pulse_budget) or args.pulse_budget <= 0):
         parser.error("pulse budget must be positive and finite")
+    if args.resume and (args.checkpoint is None or args.save_every < 1):
+        parser.error("--resume needs --checkpoint and --save-every")
+    if args.stop_at is not None and (not args.resume or not 0 < args.stop_at < args.steps
+                                     or args.stop_at % args.save_every):
+        parser.error("--stop-at needs --resume and an update below --steps at which --save-every writes")
     event = args.variant in EVENT_ROUTES
     name = "_".join(part for part in (args.variant, f"s{args.seed}", args.tag) if part)
     results_dir = None if args.results_dir is None else args.results_dir.expanduser()
@@ -776,14 +841,39 @@ def main():
             recall = ("fast_synapses.", "read_heads.")
             parent = torch.load(args.load_weights.expanduser(), map_location="cpu", weights_only=True)
             own = asdict(cfg)
-            different = sorted(name for name, value in (parent.get("cfg") or {}).items()
-                               if not name.startswith(("synapse_", "head_")) and name in own
+            # A read's offsets for the age in beats start at zero, and a new read or cell layer starts silent. Each
+            # leaves the decoder as it was, so a trained decoder may gain them here. A checkpoint from before the
+            # reads had such ages has none.
+            ages = ("read_beats", "read_beat_start", "read_clock", "read_clock_rate", "read_marks",
+                    "read_address_rate")
+            earlier = {**{name: getattr(EventLMConfig, name) for name in ages}, **(parent.get("cfg") or {})}
+            grown = {"read_beats", "read_marks", "read_address_rate"}
+            silent = [".beat_age", ".beat_mark"]
+            if not earlier["read_beats"]:
+                # With the ages it may choose their clock: the clock cells of a read start deaf.
+                grown |= {"read_clock", "read_clock_rate"}
+                silent += [f"state_reads.{index}.clock" for index in own["read_after"] or ()]
+            for place, part in (("read_after", "state_reads"), ("granule_after", "granule_layers")):
+                before, now = set(earlier.get(place) or ()), set(own[place] or ())
+                if before < now:
+                    grown.add(place)
+                    silent += [f"{part}.{index}." for index in sorted(now - before)]
+            different = sorted(name for name, value in earlier.items()
+                               if not name.startswith(("synapse_", "head_")) and name in own and name not in grown
                                and json.dumps(value) != json.dumps(own[name]))
             if different:
                 raise ValueError(f"{args.load_weights}: the decoder differs in {', '.join(different)}")
             weights = {name: value for name, value in parent["state_dict"].items() if not name.startswith(recall)}
+            # A read stores its offsets and gains as shares of its address rate. Under another rate the shares
+            # change so that the offsets and gains, and with them the decoder, stay as they were.
+            share = earlier["read_address_rate"] / own["read_address_rate"]
+            if share != 1.0:
+                shares = {f"state_reads.{index}.{name}" for index in earlier.get("read_after") or ()
+                          for name in ("age", "gain", "spacing", "beat_age", "beat_mark")}
+                weights = {name: value * share if name in shares else value for name, value in weights.items()}
             missing, unexpected = model.load_state_dict(weights, strict=False)
-            if unexpected or any(not name.startswith(recall) for name in missing):
+            if unexpected or any(not name.startswith(recall) and not any(part in name for part in silent)
+                                 for name in missing):
                 raise ValueError(f"{args.load_weights}: expected the weights of the same decoder")
             with args.load_weights.expanduser().open("rb") as stream:
                 loaded_weights = {"checkpoint": str(args.load_weights), "run_name": parent.get("run_name"),
@@ -831,9 +921,37 @@ def main():
     parameters = count_params(model)
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"{name}: params={parameters} trainable={trainable_params}", flush=True)
+    reached = {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()}
+    start, earlier_seconds, resumed_at = 0, 0.0, []
+    resume_path = Path(f"{checkpoint}.resume") if args.resume else None
+    if resume_path is not None and resume_path.exists():
+        state = torch.load(resume_path, map_location="cpu", weights_only=True)
+        different = sorted(key for key in {*state["args"], *reached} - _RESUME_FREE
+                           if json.dumps(state["args"].get(key)) != json.dumps(reached.get(key)))
+        if different:
+            parser.error(f"{resume_path}: the run differs in {', '.join(different)}")
+        if args.stop_at is not None and args.stop_at <= state["step"]:
+            parser.error(f"{resume_path}: the run is already at update {state['step']}")
+        model.load_state_dict(state["state_dict"])
+        optimizer.load_state_dict(state["optimizer"])
+        if average is not None:
+            with torch.no_grad():
+                for mean, saved in zip(average, state["average"], strict=True):
+                    mean.copy_(saved)
+        if pulse_counts is not None:
+            spike_price = state["spike_price"].to(device)
+        curve, start, earlier_seconds = state["curve"], state["step"], state["seconds"]
+        resumed_at = [*state["resumed_at"], start]
+        # Drawing the earlier batches again puts the generator and the mixture's receipt where they were.
+        for _ in range(start):
+            if mixture is None:
+                random_batch(train, args.bs, args.ctx, generator)
+            else:
+                mixture.batch(args.bs, generator)
+        print(f"{name}: continuing after {start} of {args.steps} updates", flush=True)
     teacher_event = isinstance(teacher, EventLM)
     teacher_resolution = teacher.cfg.resolution if teacher_event else 1
-    for step in range(1, args.steps + 1):
+    for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
         inputs, labels = (random_batch(train, args.bs, args.ctx, generator) if mixture is None
@@ -913,12 +1031,12 @@ def main():
                                  if args.early_readout_weight else {})))
             activity = f" pulses/byte={metrics['pulses_per_byte']:.0f}" if pulse_counts is not None else ""
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
-                  f"accuracy={metrics['argmax_accuracy']:.4f} ({timer():.1f}s){activity}", flush=True)
+                  f"accuracy={metrics['argmax_accuracy']:.4f} ({earlier_seconds + timer():.1f}s){activity}", flush=True)
 
         if args.save_every and checkpoint is not None and step % args.save_every == 0 and step < args.steps:
             # A long run that is stopped early keeps its last weights under another name.
             partial = Path(f"{checkpoint}.partial")
-            reached = {name: str(value) if isinstance(value, Path) else value for name, value in vars(args).items()}
+            partial.parent.mkdir(parents=True, exist_ok=True)
             torch.save(dict(format_version=1, model_type=type(model).__name__, task="event_lm", run_name=name,
                             cfg=asdict(cfg), model_kwargs=model_kwargs, args=dict(reached, steps=step),
                             initialization=initialization,
@@ -928,6 +1046,18 @@ def main():
                             }})),
                        f"{partial}.tmp")
             os.replace(f"{partial}.tmp", partial)
+            if resume_path is not None:
+                torch.save(dict(format_version=1, step=step, args=reached, resumed_at=resumed_at,
+                                state_dict={key: value.detach().cpu() for key, value in model.state_dict().items()},
+                                average=None if average is None else [mean.cpu() for mean in average],
+                                optimizer=_on_cpu(optimizer.state_dict()),
+                                spike_price=None if pulse_counts is None else spike_price.cpu(),
+                                curve=curve, seconds=earlier_seconds + timer()),
+                           f"{resume_path}.tmp")
+                os.replace(f"{resume_path}.tmp", resume_path)
+        if step == args.stop_at:
+            print(f"{name} stopped after {step} of {args.steps} updates", flush=True)
+            return
 
     val_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,
@@ -964,8 +1094,11 @@ def main():
                   **({} if averaged_score is None else {"averaged_val_bpb": averaged_score["bpb"]}),
                   val=val_score, test=test_score,
                   scoring=("normalized exponential of scaled output" if event else "softmax over logits"),
-                  seconds=timer(), **teacher_details, **mixture_details)
+                  seconds=earlier_seconds + timer(), **({"resumed_at_steps": resumed_at} if resumed_at else {}),
+                  **teacher_details, **mixture_details)
     destination = save_result("event_lm", name, record, overwrite=args.force, directory=results_dir)
+    if resume_path is not None:
+        resume_path.unlink(missing_ok=True)
     split, metric = ("validation", val_score) if test_score is None else ("test", test_score)
     print(f"{name} {split}={metric['bpb']:.4f} bpb accuracy={metric['argmax_accuracy']:.4f} ({destination})")
 

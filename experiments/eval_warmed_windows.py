@@ -63,7 +63,11 @@ def score(model, passages, context, history, batch_size, device, temperatures=(1
             losses = [F.cross_entropy((logits if temperature == 1 else logits / temperature).flatten(0, 1),
                                       labels.flatten(), reduction="none").view(labels.shape)
                       for temperature in temperatures]
-            bits.append(torch.stack(losses).sum(2, dtype=torch.float64).cpu() / math.log(2))
+            stacked = torch.stack(losses)
+            if stacked.device.type == "mps":
+                # MPS has no 64-bit floats, so the sum is taken on the CPU.
+                stacked = stacked.cpu()
+            bits.append(stacked.sum(2, dtype=torch.float64).cpu() / math.log(2))
             whole += [skipped == history and labels.shape[1] == context] * labels.shape[0]
             targets += labels.numel()
     return torch.cat(bits, dim=1).numpy(), np.array(whole), targets
@@ -80,6 +84,7 @@ def main():
     parser.add_argument("--calibration-manifest", type=Path)
     parser.add_argument("--temperatures", type=float, nargs="+", default=[0.8, 1.0, 1.25, 1.5, 1.75, 2.0])
     parser.add_argument("--split", choices=("validation", "test"), default="test")
+    parser.add_argument("--bytes", type=int, help="score only the first bytes of the enwik8 split, for a quick look")
     parser.add_argument("--context", type=int, default=256, help="scored bytes per window")
     parser.add_argument("--history", type=int, default=256, help="unscored bytes before them")
     parser.add_argument("--batch-size", type=int, default=64)
@@ -91,6 +96,8 @@ def main():
         parser.error("context, batch size and threads must be positive and the history within the context")
     if args.enwik8 is not None and args.calibration_books is not None:
         parser.error("temperatures are fitted for PG-19 books only")
+    if args.bytes is not None and (args.enwik8 is None or args.bytes <= args.context + args.history):
+        parser.error("--bytes shortens an enwik8 split to more than one window")
     if (args.calibration_books is None) != (args.calibration_manifest is None):
         parser.error("calibration books need their manifest")
     if min(args.temperatures) <= 0:
@@ -105,6 +112,10 @@ def main():
     if args.enwik8 is not None:
         _, validation, test = load_splits(args.enwik8)
         passages = [torch.from_numpy(np.array(test if args.split == "test" else validation))]
+        if args.bytes is not None:
+            # A shortened split is named in the record, so its score is not taken for the whole split's.
+            passages = [passages[0][:args.bytes]]
+            record["first_bytes_of_split"] = args.bytes
     else:
         manifest = args.manifest.read_bytes()
         books = load_books(manifest, args.books_dir, 0, split=args.split)

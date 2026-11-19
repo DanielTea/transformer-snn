@@ -2,8 +2,8 @@ import pytest
 import torch
 from torch.nn import functional as F
 
-from snnformer.event_lm import (EventLM, EventLMConfig, _beat_views, _expected_beat_views, _IntegrateFire,
-                                _spread_channels, _weight_ticks, emitted_pulses)
+from snnformer.event_lm import (EventLM, EventLMConfig, _beat_views, _ExcitatoryFire, _expected_beat_views,
+                                _IntegrateFire, _PACKET_UNITS, _spread_channels, _weight_ticks, emitted_pulses)
 
 
 def _decoder(seed=0, **settings):
@@ -109,7 +109,8 @@ def test_cells_only_change_the_channels_their_axons_reach():
     (6, 4, 0, 0, 0, "word", "mean"), (None, 1, 30, 0, 0, "word", "mean"), (6, 4, 24, 0, 0, "word", "mean"),
     (6, 2, 0, 2, 0, "word", "mean"), (None, 1, 0, 1, 0, "word", "mean"), (6, 3, 24, 3, 0, "word", "mean"),
     (6, 1, 0, 0, 3, "word", "mean"), (None, 2, 0, 0, 2, "word", "last"), (6, 1, 24, 0, 3, "every", "sum"),
-    (6, 2, 0, 1, 2, "learned", "mean"), (None, 1, 0, 0, 4, "learned", "sum"), (6, 4, 24, 0, 2, "learned", "last")])
+    (6, 2, 0, 1, 2, "learned", "mean"), (None, 1, 0, 0, 4, "learned", "sum"), (6, 4, 24, 0, 2, "learned", "last"),
+    (6, 2, 0, 0, 3, "end", "sum")])
 def test_granule_layers_keep_the_decoder_causal_and_train(budget, delays, relays, traces, beats, clock, hold):
     model = _grow(_granules(granule_gain=1.0, granule_budget=budget, granule_delays=delays, granule_relays=relays,
                             granule_traces=traces, granule_beats=beats, granule_clock=clock, granule_hold=hold,
@@ -228,6 +229,71 @@ def test_racing_cells_spend_their_budget_whatever_their_charges_are():
     for budget in (0, 513, 6.0):
         with pytest.raises(ValueError, match="whole budget"):
             _granules(granule_budget=budget)
+
+
+def test_the_cells_of_a_cluster_can_race_in_equal_groups():
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    assert torch.equal(_granules(granule_budget=3, granule_races=4)(tokens), _decoder()(tokens))
+    model = _grow(_granules(granule_gain=1.0, granule_budget=3, granule_races=4))
+    layer = model.granule_layers["0"]
+    spikes = _stream()
+    cells = layer.cells(spikes)
+    assert cells.shape == (2, 40, 6, 20) and torch.equal(cells, cells.round()) and cells.min() == 0
+    # Each group of five cells spends the budget of three spikes.
+    spent = cells.unflatten(-1, (4, 5)).sum(-1)
+    assert spent.min() >= 1 and spent.max() <= 5 and abs(spent.mean().item() - 3) < 0.1
+    # A cell races only against the cells of its own group.
+    with torch.no_grad():
+        busiest = 5 + cells[..., 0, 5:10].sum((0, 1)).argmax()
+        layer.rest[0, busiest] = 8.0
+        handicapped = layer.cells(spikes)
+    assert handicapped[..., 0, busiest].sum() < 0.5 * cells[..., 0, busiest].sum()
+    assert not torch.equal(handicapped[..., 0, 5:10], cells[..., 0, 5:10])
+    assert torch.equal(handicapped[..., 0, :5], cells[..., 0, :5])
+    assert torch.equal(handicapped[..., 0, 10:], cells[..., 0, 10:]) and torch.equal(handicapped[..., 1:, :], cells[..., 1:, :])
+    # The decoder with grouped races stays causal and trains.
+    later = tokens.clone()
+    later[:, 40:] = (later[:, 40:] + 7) % 256
+    with torch.no_grad():
+        first, second = model(tokens), model(later)
+    assert torch.equal(first[:, :40], second[:, :40]) and not torch.equal(first[:, 40:], second[:, 40:])
+    F.cross_entropy(model.train()(tokens).flatten(0, 1) / 16, tokens.flatten()).backward()
+    assert all(torch.isfinite(parameter.grad).all() and parameter.grad.abs().max() > 0
+               for name, parameter in layer.named_parameters() if name in ("receive", "send"))
+    for settings in ({"granule_races": 0}, {"granule_races": 3}, {"granule_races": 2.0}, {"granule_budget": None}):
+        with pytest.raises(ValueError, match="equal groups"):
+            _granules(**dict({"granule_budget": 3, "granule_races": 4}, **settings))
+
+
+def test_cells_learn_from_a_softer_race_and_fire_in_the_race_as_it_is():
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    sharp = _grow(_granules(granule_gain=1.0, granule_budget=3))
+    soft = _grow(_granules(granule_gain=1.0, granule_budget=3, granule_soften=4.0))
+    soft.load_state_dict(sharp.state_dict())
+    # One cell of every cluster is twelve thresholds behind the others, which are level.
+    slopes = []
+    for model in (sharp, soft):
+        fire = model.granule_layers["0"].fire
+        charges = torch.zeros(1, 1, 6, 20)
+        charges[..., 0] = -12.0
+        charges.requires_grad_()
+        cells = fire(charges * (fire.threshold // fire.quanta_per_threshold), torch.ones(1, 1, 6, 1))
+        cells[..., 0].sum().backward()
+        slopes.append((cells.detach(), charges.grad[..., 0].sum().item()))
+    # The spikes are the same: about three per cluster, none from the cell behind. That cell learns from the
+    # softer race.
+    assert torch.equal(slopes[0][0], slopes[1][0]) and torch.equal(slopes[0][0], slopes[0][0].round())
+    spent = slopes[0][0].sum(-1)
+    assert spent.min() >= 2 and spent.max() <= 4 and slopes[0][0][..., 0].sum() == 0
+    assert 0 < slopes[0][1] < 1e-4 and slopes[1][1] > 1e-2
+    with torch.no_grad():
+        assert torch.equal(sharp(tokens), soft(tokens))
+    F.cross_entropy(soft.train()(tokens).flatten(0, 1) / 16, tokens.flatten()).backward()
+    assert all(torch.isfinite(parameter.grad).all() and parameter.grad.abs().max() > 0
+               for name, parameter in soft.granule_layers["0"].named_parameters() if name in ("receive", "send"))
+    for settings in ({"granule_soften": 0.5}, {"granule_soften": float("inf")}, {"granule_budget": None}):
+        with pytest.raises(ValueError, match="softened"):
+            _granules(**dict({"granule_budget": 3, "granule_soften": 2.0}, **settings))
 
 
 def test_fibres_bring_their_channels_after_their_own_delays():
@@ -467,6 +533,32 @@ def test_the_word_clock_beats_where_a_word_starts():
     assert not torch.equal(_grow(model)(tokens), _decoder()(tokens))
 
 
+def test_the_end_clock_beats_at_the_first_byte_after_a_word():
+    text = "An  elephant's na\u00efve 2nd re-run.".encode()
+    tokens = torch.tensor([list(text)])
+    model = _granules(granule_gain=1.0, granule_rest=0.0, granule_beats=2, granule_clock="end")
+    layer = model.granule_layers["0"]
+    spikes = torch.randint(-3, 4, (1, len(text), 96), generator=torch.Generator().manual_seed(6)).float()
+    beats, rates = layer.beats(spikes, tokens)
+    assert rates is None and beats.shape == (1, len(text), 6) and (beats == beats[..., :1]).all()
+    assert beats[0, :, 0].nonzero().flatten().tolist() == [2, 12, 14, 21, 25, 28, 32]
+    with pytest.raises(ValueError, match="bytes themselves"):
+        layer.beats(spikes)
+    # From the gap after "2nd" and from inside "re", a fibre of the first order brings the sum over " 2nd" and one of
+    # the second order the sum over " na\u00efve": a held stretch is the same word from both places.
+    heard = layer.heard(spikes, beats)
+    for cluster in range(6):
+        place, order = layer.beat_fibres[cluster], layer.beat_orders[cluster]
+        channel = layer.inputs[cluster, place]
+        for step in range(25, 28):
+            brought = heard[0, step, cluster, place]
+            assert torch.equal(brought[order == 1], spikes[0, 21:25].sum(0)[channel[order == 1]])
+            assert torch.equal(brought[order == 2], spikes[0, 14:21].sum(0)[channel[order == 2]])
+            assert torch.equal(brought[order == 0], spikes[0, 25:step + 1].sum(0)[channel[order == 0]])
+    assert torch.equal(model(tokens), _decoder()(tokens))
+    assert not torch.equal(_grow(model)(tokens), _decoder()(tokens))
+
+
 def test_clock_cells_beat_at_their_pace_until_they_learn_what_to_listen_to():
     model = _granules(granule_gain=1.0, granule_rest=0.0, granule_beats=3, granule_clock="learned",
                       granule_clock_rate=0.25)
@@ -611,7 +703,7 @@ def test_a_learned_clock_gets_its_slope_through_the_cells_and_only_in_training()
 def test_beat_fibres_leave_other_layers_and_old_weights_as_they_were():
     tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
     plain = _decoder()
-    for clock in ("word", "every", "learned"):
+    for clock in ("word", "end", "every", "learned"):
         model = _granules(granule_beats=4, granule_clock=clock, granule_delays=2)
         assert torch.equal(model(tokens), plain(tokens))
         assert not torch.equal(_grow(model)(tokens), plain(tokens))
@@ -623,6 +715,89 @@ def test_beat_fibres_leave_other_layers_and_old_weights_as_they_were():
     learned = _granules(granule_delays=4, granule_beats=2, granule_clock="learned").state_dict()
     assert set(learned) - set(old.state_dict()) == {f"granule_layers.{index}.{name}" for index in (0, 2)
                                                     for name in ("clock.weight", "clock_rest")}
+
+
+def test_the_axons_of_a_cluster_can_reach_more_or_fewer_channels_than_it_hears():
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    same, named = _grow(_granules(granule_budget=3)), _grow(_granules(granule_budget=3, granule_reach=24))
+    # A reach equal to the fan is the layer as it was.
+    assert same.state_dict().keys() == named.state_dict().keys()
+    assert torch.equal(same(tokens), named(tokens))
+    for reach in (8, 96):
+        model = _grow(_granules(granule_budget=3, granule_reach=reach))
+        for layer in model.granule_layers.values():
+            assert layer.inputs.shape == (6, 24) and layer.receive.shape == (6, 20, 24)
+            assert layer.outputs.shape == (6, reach) and layer.send.shape == (6, reach, 20)
+            assert all(len(set(row.tolist())) == reach for row in layer.outputs)
+        counts = model(tokens)
+        assert counts.shape == (2, 80, 256) and torch.isfinite(counts).all()
+        counts.square().mean().backward()
+        for layer in model.granule_layers.values():
+            assert torch.isfinite(layer.send.grad).all() and layer.send.grad.abs().sum() > 0
+            assert torch.isfinite(layer.receive.grad).all() and layer.receive.grad.abs().sum() > 0
+        # The cells write to the channels their axons reach and to no others.
+        layer, stream = model.granule_layers["0"], _stream()
+        reached = torch.zeros(96, dtype=torch.bool)
+        reached[layer.outputs.flatten()] = True
+        with torch.no_grad():
+            layer.send.mul_(40)
+        changed = (layer(stream) != stream).flatten(0, 1).any(0)
+        assert changed.any() and not changed[~reached].any()
+    for reach in (0, 97, 2.0):
+        with pytest.raises(ValueError, match="reach a whole number"):
+            _granules(granule_reach=reach)
+
+
+def test_soft_cells_stand_in_for_the_race_with_the_same_parameters():
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    race, soft = _grow(_granules(granule_budget=3)), _grow(_granules(granule_budget=3, granule_soft=True))
+    assert {name: value.shape for name, value in race.state_dict().items()} == {
+        name: value.shape for name, value in soft.state_dict().items()}
+    layer, stream = soft.granule_layers["0"], _stream()
+    answers, spikes = layer.cells(stream), race.granule_layers["0"].cells(stream)
+    # The cells of a race share whole spikes. Soft cells answer each for itself, with real numbers.
+    assert torch.equal(spikes, spikes.round()) and not torch.equal(answers, answers.round())
+    assert not torch.equal(race(tokens), soft(tokens))
+    counts = soft(tokens)
+    counts.square().mean().backward()
+    for layer in soft.granule_layers.values():
+        for parameter in (layer.receive, layer.send, layer.rest, layer.sharpness):
+            assert torch.isfinite(parameter.grad).all() and parameter.grad.abs().sum() > 0
+    with pytest.raises(ValueError, match="soft granule cells"):
+        _granules(granule_soft=True)
+
+
+def test_threshold_cells_with_a_slope_learn_below_their_threshold():
+    fire = _ExcitatoryFire(32, 8, False)
+    quanta = torch.full((1, 1), float(_PACKET_UNITS))
+    thresholds = torch.tensor([[-3.0, -0.4, 0.3, 0.6, 2.2]])
+    slopes = []
+    for smooth in (False, True):
+        charge = (thresholds * fire.threshold).requires_grad_()
+        spikes = fire(charge, quanta, smooth=smooth)
+        # The spikes are those of the threshold either way: one for every threshold of charge, rounded.
+        assert spikes.tolist() == [[0.0, 0.0, 0.0, 1.0, 2.0]]
+        spikes.sum().backward()
+        slopes.append(charge.grad * fire.threshold)
+    plain, smooth = slopes
+    # A cell below its threshold has no slope of its own. With the smooth threshold a cell just below it is
+    # drawn up, and one far below is left alone.
+    assert plain[0, :2].tolist() == [0.0, 0.0] and torch.allclose(plain[0, 2:], torch.ones(3))
+    assert 0.1 < smooth[0, 1] < 0.4 and smooth[0, 0].abs() < 0.02 and (smooth[0, 2:] > 0.7).all()
+    tokens = torch.randint(0, 256, (2, 80), generator=torch.Generator().manual_seed(1))
+    cells, sloped = _grow(_granules(granule_gain=1.0)), _grow(_granules(granule_gain=1.0, granule_slope=True))
+    assert cells.state_dict().keys() == sloped.state_dict().keys()
+    assert torch.equal(cells(tokens), sloped(tokens))
+    grads = []
+    for model in (cells, sloped):
+        layer = model.granule_layers["0"]
+        fired = layer.cells(_stream())
+        assert (fired == 0).any() and (fired > 0).any()
+        layer(_stream()).square().mean().backward()
+        grads.append(layer.receive.grad.clone())
+    assert torch.isfinite(grads[1]).all() and not torch.equal(grads[0], grads[1])
+    with pytest.raises(ValueError, match="do not race"):
+        _granules(granule_budget=3, granule_slope=True)
 
 
 def test_granule_settings_are_checked():

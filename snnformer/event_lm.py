@@ -45,6 +45,9 @@ _TRACE_READ_DRIVE_SOURCES = ("write", "present", "write-rails", "present-rails")
 _TRACE_ARRIVAL_MODES = ("selected", "unmatched")
 _CLOCK_SOURCES = ("surprise", "periodic")
 _READ_MODES = ("soft", "race", "age")
+# The most words a state read counts a cell's age in.
+_READ_BEATS = 16
+_READ_CLOCKS = ("word", "end", "learned")
 # Signed probe and tag pulses give a cell this many times ``resolution`` root channels of charge spread at the start.
 _RACE_UNIT = 1.5
 # Multiples of the golden ratio spread the starting phases of a race's cells evenly.
@@ -56,13 +59,15 @@ _TRACE_STRETCH = 512
 # The most spikes of resting charge a granule cell can hold below its threshold.
 _GRANULE_REST_LIMIT = 16
 # What opens a new stretch on a granule cluster's beat fibres, and what such a fibre brings of a stretch.
-_GRANULE_CLOCKS = ("word", "every", "learned")
+_GRANULE_CLOCKS = ("word", "end", "every", "learned")
 _GRANULE_HOLDS = ("mean", "sum", "last")
 # The most closed stretches a cluster's beat fibres can hold.
 _GRANULE_BEATS = 8
 # A clock cell's threshold is this many bits above a stream neuron's. A clock hears the whole stream, and against
 # a lower threshold one step of all its synapses together would carry it from never beating to always beating.
 _CLOCK_BITS = 4
+# The clock cell of a read's head hears the read's tags, and its threshold is this many bits above a stream neuron's.
+_READ_CLOCK_BITS = 4
 
 
 def _delay_group_widths(channels, groups):
@@ -155,15 +160,25 @@ class EventLMConfig:
     read_budget: int | None = None
     read_address_rate: float = 1.0
     read_synapse_gain: float = 1.0
+    read_beats: int = 0
+    read_beat_start: float = 0.0
+    read_clock: str = "word"
+    read_clock_rate: float = 0.25
+    read_marks: bool = False
     granule_after: tuple[int, ...] | None = None
     granule_clusters: int = 32
     granule_cells: int = 256
     granule_fan: int = 128
+    granule_reach: int | None = None
     granule_gain: float = 0.25
     granule_rest: float = 0.5
     granule_price: float = 0.0
     granule_bits: int | None = None
     granule_budget: int | None = None
+    granule_races: int = 1
+    granule_soften: float = 1.0
+    granule_soft: bool = False
+    granule_slope: bool = False
     granule_delays: int = 1
     granule_relays: int = 0
     granule_traces: int = 0
@@ -1771,6 +1786,24 @@ class EventChunkState:
     heads: HeadState | None = None
 
 
+def _word_bytes():
+    """The bytes that make up words: letters, digits and the bytes of longer characters."""
+    inside = torch.zeros(_VOCAB, dtype=torch.bool)
+    inside[list(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")] = True
+    inside[128:] = True
+    return inside
+
+
+def _word_starts(inside):
+    """The bytes at which a word starts: a word byte after a byte that is none, as [batch, bytes]."""
+    return inside & ~F.pad(inside, (1, 0))[:, :inside.shape[1]]
+
+
+def _word_ends(inside):
+    """The first byte after every word: a byte that is no word byte after one that is, as [batch, bytes]."""
+    return ~inside & F.pad(inside, (1, 0))[:, :inside.shape[1]]
+
+
 class _StateRead(nn.Module):
     """A read of the stream's own earlier cells, addressed by what they hold.
 
@@ -1791,6 +1824,30 @@ class _StateRead(nn.Module):
     payload in pulses of their own resolution. Without ``read_signed`` the
     probe and the tag keep only their positive pulses. ``age`` is the control
     without an address: every cell's share follows from its age alone.
+
+    With ``read_beats`` a cell also has an age in beats of a clock: the number
+    of beats after it, counted up to that many. Each head has a learned offset
+    for every such age beside its offsets for the age in bytes. The ``word``
+    clock beats where a word starts, which the bytes themselves tell, so a
+    head can prefer the cells of the word before last however long the words
+    between are. The ``end`` clock beats at the first byte after a word, so
+    that a word has one age from every later byte. With a ``learned`` clock
+    every head has a clock cell of its own, and its spike is the beat. The
+    cell hears the tags of its read, the pulses by which the cells are
+    addressed, through synapses that start silent. A head then counts a
+    cell's age in whatever its clock cell has learned to mark. The whole
+    beats decide the ages, and the clock cells learn from the mean offsets
+    over clocks that beat with their chances. With ``read_beat_start`` every
+    head starts with that much charge for one age of its own, the first head
+    for the present stretch, the next for the one before, and so on, so the
+    heads do not all turn to the same one.
+
+    With ``read_marks`` a beat also marks the cell it falls on, and each head
+    has a second offset for the marked cell of every age. Under the clock at
+    word ends the marked cell of age nought is the first byte after the last
+    complete word, the one of age one the first byte after the word before
+    it, and so on. One offset then addresses the single cell that holds the
+    stream's state at the end of a chosen word.
     """
 
     def __init__(self, cfg: EventLMConfig):
@@ -1812,6 +1869,39 @@ class _StateRead(nn.Module):
         self.payload = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
         # A cell's charge starts from a learned offset for its age.
         self.age = nn.Parameter(torch.zeros(self.heads, self.window))
+        self.beats, self.clock, self.beat_mark = cfg.read_beats, None, None
+        if self.beats:
+            # And from a learned offset for its age in beats, where the last one stands for all older cells.
+            self.beat_age = nn.Parameter(torch.zeros(self.heads, self.beats + 1))
+            if cfg.read_marks:
+                # A cell on which a beat fell has a further offset for its age.
+                self.beat_mark = nn.Parameter(torch.zeros(self.heads, self.beats + 1))
+            if cfg.read_beat_start:
+                with torch.no_grad():
+                    own = torch.arange(self.heads) % (self.beats + 1)
+                    self.beat_age[torch.arange(self.heads), own] = cfg.read_beat_start / self.rate
+            if cfg.read_clock != "learned":
+                # A fixed clock reads the bytes: it beats where a word starts, or at the first byte after one.
+                self.beat_at = _word_starts if cfg.read_clock == "word" else _word_ends
+                self.register_buffer("word_bytes", _word_bytes(), persistent=False)
+            else:
+                # A head's clock cell hears the tags of the read. It starts deaf, so that it first beats at its
+                # own pace.
+                self.clock = _Synapse(cfg.read_width, self.heads, gain=cfg.read_synapse_gain, charge_bits=bits)
+                nn.init.zeros_(self.clock.weight)
+                # Spikes of charge a clock cell lacks before a beat becomes as likely as none, in quarter spikes.
+                rest = math.log((1 - cfg.read_clock_rate) / cfg.read_clock_rate)
+                self.clock_rest = nn.Parameter(torch.full((self.heads,), rest))
+                self.tick = _ClockFire(bits + _READ_CLOCK_BITS, 1)
+                # A clock synapse saturates where the sum of all of them at the largest tags would leave the
+                # range of exact sums, so no step of training can carry a clock cell out of it.
+                quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
+                self.clock_rest_ticks = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * _PACKET_UNITS * quarter // cap)
+                self.clock_limit = min(_WEIGHT_LIMIT << (bits - _CHARGE_BITS),
+                                       (_FP32_EXACT // cap - self.clock_rest_ticks) // cfg.read_width)
+                if self.clock_limit < 1:
+                    raise ValueError("a clock cell cannot hear this many read channels within the range of exact "
+                                     "sums; lower the read width or the spike resolution")
         # The read is silent until its output synapses grow.
         self.project = _Synapse(cfg.read_width, cfg.dim, gain=0.0, charge_bits=bits)
         self.emit = _IntegrateFire(cap, bits, False)
@@ -1836,11 +1926,91 @@ class _StateRead(nn.Module):
         drive = self._split(drive)
         return drive * drive.square().mean(-1, keepdim=True).add(1e-6).rsqrt()
 
-    def shares(self, spikes):
+    def shares(self, spikes, tokens=None):
         """Each visible cell's share of every read and the payloads, as [batch, heads, cells, cells or channels]."""
-        return self._address(spikes)[:2]
+        return self._address(spikes, tokens)[:2]
 
-    def _address(self, spikes):
+    def word_beats(self, tokens):
+        """The bytes at which the fixed clock beats, as [batch, bytes]."""
+        return self.beat_at(self.word_bytes[tokens])
+
+    def word_ages(self, tokens):
+        """The beats of the fixed clock after each cell up to each byte, as [batch, bytes, cells] counted up to the
+        limit: the words that started since the cell, or with the clock at word ends the words that ended."""
+        started = self.word_beats(tokens).cumsum(1)
+        return (started[:, :, None] - started[:, None, :]).clamp(0, self.beats)
+
+    def packets(self, spikes):
+        """The probes, tags and payloads of all cells as [batch, heads, cells, channels]: whole pulses in a race and
+        drives of unit size for a softmax. A read by age alone has payloads only."""
+        if self.mode == "age":
+            return None, None, self._unit(self.payload(spikes)) * self.read_resolution
+        if self.mode == "soft":
+            probe, tag, payload = (self._unit(synapse(spikes)) for synapse in (self.probe, self.tag, self.payload))
+            return probe, tag, payload * self.read_resolution
+        # The inhibitory pool raises every firing threshold with the stream's activity, as it does in a block.
+        quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+        quanta = quanta * self.threshold_scale
+        probe, tag = self.probe(spikes), self.tag(spikes)
+        if not self.signed:
+            probe, tag = probe.clamp_min(0), tag.clamp_min(0)
+        probe, tag = self._split(self.fire(probe, quanta)), self._split(self.fire(tag, quanta))
+        return probe, tag, self._split(self.fire(self.payload(spikes), quanta))
+
+    def clock_ticks(self):
+        """The clock cells' synapses in weight ticks, each within the limit that keeps their sums exact."""
+        return self.clock.weight_ticks().clamp(-self.clock_limit, self.clock_limit)
+
+    def clock_beats(self, spikes, tag=None):
+        """The bytes at which each head's clock cell beats as [batch, bytes, heads], and the chances of those beats
+        where the clock cells learn. The cells hear the tags of the read, which are computed from the stream
+        where they are not passed."""
+        tag = self.packets(spikes)[1] if tag is None else tag
+        # A softmax read has drives of unit size where a race has a few pulses on a channel.
+        heard = tag.transpose(1, 2).flatten(2) * (1 if self.mode == "race" else _PACKET_UNITS)
+        # The tags are shunted where they fire, so a clock cell's threshold stays as it is.
+        quanta = heard.new_full((), _PACKET_UNITS)
+        quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
+        rest = self.clock_rest.clamp(-_GRANULE_REST_LIMIT, _GRANULE_REST_LIMIT) * _PACKET_UNITS
+        rest = rest.detach().round() + (rest - rest.detach())
+        charge = F.linear(heard, self.clock_ticks()) - rest * quanta * quarter
+        fired = self.tick(charge, quanta).squeeze(-1)
+        return fired.detach(), self.tick.rates(charge, quanta) if fired.requires_grad else None
+
+    def beat_offsets(self, spikes, tokens=None, tag=None):
+        """Each cell's offset for its age in beats as [batch, heads, bytes, cells], and the number of beats that
+        clock cells spent on it."""
+        charges = self.beat_age * self.rate
+        if self.clock is None:
+            if tokens is None:
+                raise ValueError("a read by word age reads the bytes themselves")
+            ages, rates, spent = self.word_ages(tokens)[:, None], None, 0
+            marked = self.word_beats(tokens)[:, None, None]
+        else:
+            beats, rates = self.clock_beats(spikes, tag)
+            started = beats.to(torch.int64).cumsum(1).transpose(1, 2)
+            ages, spent = (started[..., :, None] - started[..., None, :]).clamp(0, self.beats), beats.sum()
+            marked = beats.transpose(1, 2)[:, :, None] > 0
+        # One term per age costs far less to differentiate than indexing the offsets by age.
+        offset = sum((ages == age) * charges[:, age, None, None] for age in range(self.beats + 1))
+        marks = None if self.beat_mark is None else self.beat_mark * self.rate
+        if marks is not None:
+            offset = offset + sum(((ages == age) & marked) * marks[:, age, None, None]
+                                  for age in range(self.beats + 1))
+        if rates is not None:
+            # The whole beats decide the ages. The clock cells learn from the mean offsets over their chances.
+            chances = _beat_age_chances(rates.transpose(1, 2), self.beats)
+            spare = (charges[:, :-1] - charges[:, -1:]).detach()
+            mean = sum(chance * spare[:, age, None, None] for age, chance in enumerate(chances))
+            if marks is not None:
+                # A cell is marked with the chance of a beat on it, whatever its age then is.
+                spare, oldest = (marks[:, :-1] - marks[:, -1:]).detach(), marks[:, -1:, None].detach()
+                by_age = sum(chance * spare[:, age, None, None] for age, chance in enumerate(chances)) + oldest
+                mean = mean + rates.transpose(1, 2)[:, :, None] * by_age
+            offset = offset + (mean - mean.detach())
+        return offset, spent
+
+    def _address(self, spikes, tokens=None):
         """The shares, the payloads and the number of cell spikes, which is none for a softmax."""
         steps = spikes.shape[1]
         distance = torch.arange(steps, device=spikes.device)
@@ -1850,22 +2020,19 @@ class _StateRead(nn.Module):
         # each row by its position, which costs far less to differentiate than indexing by distance.
         ages = F.pad(self.age[:, :steps] * self.rate, (0, max(0, steps - self.window))).flip(-1)
         offset = F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
+        probe, tag, payload = self.packets(spikes)
+        beats = 0
+        if self.beats:
+            by_beat, beats = self.beat_offsets(spikes, tokens, tag)
+            offset = offset + by_beat
         if self.mode == "age":
             shares = offset.masked_fill(~visible, -torch.inf).softmax(-1)
-            return shares[None], self._unit(self.payload(spikes)) * self.read_resolution, None
+            shares = shares if shares.ndim == 4 else shares[None]
+            return shares, payload, None
         if self.mode == "soft":
-            probe, tag, payload = (self._unit(synapse(spikes)) for synapse in (self.probe, self.tag, self.payload))
             gain = (self.gain * self.rate).exp()
             charge = probe @ tag.transpose(2, 3) * (gain / math.sqrt(probe.shape[-1])) + offset
-            return charge.masked_fill(~visible, -torch.inf).softmax(-1), payload * self.read_resolution, None
-        # The inhibitory pool raises every firing threshold with the stream's activity, as it does in a block.
-        quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
-        quanta = quanta * self.threshold_scale
-        probe, tag = self.probe(spikes), self.tag(spikes)
-        if not self.signed:
-            probe, tag = probe.clamp_min(0), tag.clamp_min(0)
-        probe, tag = self._split(self.fire(probe, quanta)), self._split(self.fire(tag, quanta))
-        payload = self._split(self.fire(self.payload(spikes), quanta))
+            return charge.masked_fill(~visible, -torch.inf).softmax(-1), payload, None
         # Pulse pairs charge a cell. The unit keeps the spread of the charge over cells near one at the start.
         unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
         charge = probe @ tag.transpose(2, 3) * ((self.gain * self.rate).exp() / unit) + offset
@@ -1881,10 +2048,10 @@ class _StateRead(nn.Module):
             heads = torch.arange(self.heads, device=spikes.device)[:, None, None]
             phase = (cells * _GOLDEN + heads / self.heads) % 1
             fired = rate + ((rate + phase).floor() - rate).detach()
-        return fired / fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum()
+        return fired / fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum() + beats
 
-    def forward(self, spikes, pulse_counts=None):
-        shares, payload, cell_spikes = self._address(spikes)
+    def forward(self, spikes, pulse_counts=None, tokens=None):
+        shares, payload, cell_spikes = self._address(spikes, tokens)
         packet = shares @ payload
         if self.mode == "race":
             # Every cell spike raises the threshold of its head's read neurons, so the shunted sum of the payload
@@ -1908,7 +2075,34 @@ class _StateRead(nn.Module):
         # A head's read neurons count up to a cell's largest count, in read pulses of that head's grain.
         pulses = self.read_resolution * self.grain.detach().exp().flatten() + 0.5 / self.fire.cap
         heads = self.project.weight_ticks().abs().unflatten(-1, (self.heads, -1)).sum(-1)
-        return (*bounds, ((heads * pulses).sum(-1) + self.emit.threshold).amax())
+        bounds.append(((heads * pulses).sum(-1) + self.emit.threshold).amax())
+        if self.clock is not None:
+            # With a clock cell's largest resting charge, in ticks per unit of the largest tag.
+            bounds.append(self.clock_ticks().abs().sum(-1).amax() + self.clock_rest_ticks)
+        return tuple(bounds)
+
+
+def _beat_age_chances(rates, limit):
+    """The chances that no beat, one beat and so on up to ``limit - 1`` beats fall after each cell up to each byte.
+
+    ``rates`` are a clock's chances of a beat at every byte as [..., bytes], and each returned chance is
+    [..., bytes, cells]. No beat falls after a cell up to a byte with the product of the chances of none at the
+    bytes between them. A further beat is the last one up to the byte, at any byte after the cell, with one beat
+    fewer before it, which one triangular matrix product per count gives. These are exact chances over clocks whose
+    beats do not depend on each other. Running sums over the odds of the beats give the same chances in fewer
+    operations, and at 512 bytes they took longer than the products on a processor and on a graphics card.
+    """
+    steps = rates.shape[-1]
+    quiet = torch.log1p(-rates.clamp(max=1 - 1e-6)).cumsum(-1)
+    visible = torch.ones(steps, steps, dtype=torch.bool, device=rates.device).tril()
+    chance = (quiet[..., :, None] - quiet[..., None, :]).masked_fill(~visible, -torch.inf).exp()
+    # last[t, s]: the last beat up to byte t falls at byte s.
+    last = chance * rates[..., None, :]
+    chances = [chance]
+    for _ in range(limit - 1):
+        chance = last @ F.pad(chance, (0, 0, 1, 0))[..., :steps, :]
+        chances.append(chance)
+    return chances
 
 
 def _spread_channels(channels, clusters, fan, generator):
@@ -1927,10 +2121,22 @@ def _spread_channels(channels, clusters, fan, generator):
 
 
 class _ExcitatoryFire(_IntegrateFire):
-    """Integrate-and-fire cells with one excitatory rail: a charge below zero emits nothing."""
+    """Integrate-and-fire cells with one excitatory rail: a charge below zero emits nothing.
 
-    def forward(self, current, quanta=None, *, reference=None):
-        return super().forward(current.clamp_min(0), quanta, reference=reference)
+    A silent cell has no slope: nothing tells it which way its charge should
+    move, so a cell that falls silent stays silent. With ``smooth`` the
+    spikes are the same and the slope is that of a smooth threshold of the
+    charge, which is small and positive just below the threshold. A silent
+    cell then still learns from the bytes that bring it near its threshold.
+    """
+
+    def forward(self, current, quanta=None, *, reference=None, smooth=False):
+        counts = super().forward(current.clamp_min(0), quanta, reference=reference)
+        if not smooth or not current.is_floating_point():
+            return counts
+        threshold = self.threshold if quanta is None else quanta * (self.threshold // self.quanta_per_threshold)
+        learned = F.gelu(current / threshold)
+        return counts.detach() + (learned - learned.detach())
 
 
 class _RaceFire(_IntegrateFire):
@@ -1940,18 +2146,35 @@ class _RaceFire(_IntegrateFire):
     inhibition ends the race after ``budget`` spikes. The cells' membranes
     start at evenly spread phases, so a rate below one spike still fires in a
     part of the cells. The spikes a race spends do not depend on how large
-    its charges are.
+    its charges are. With ``races`` the cells run that many races side by
+    side, each among the cells of one equal group and each for the budget.
+
+    A cell far behind in a race has a rate near zero, and the rate's slope is
+    then near zero too: the cell cannot learn that a larger charge would let
+    it win. With ``soften`` above one the cells learn from a race whose
+    charges are divided by it. The spikes are those of the race as it is.
     """
 
-    def __init__(self, cap: int, charge_bits: int, budget: int, phase: torch.Tensor):
+    def __init__(self, cap: int, charge_bits: int, budget: int, phase: torch.Tensor, races: int = 1,
+                 soften: float = 1.0):
         super().__init__(cap, charge_bits, False)
         self.budget = budget
+        self.races = races
+        self.soften = soften
         self.register_buffer("phase", phase, persistent=False)
+
+    def rates(self, charges):
+        if self.races > 1:
+            return charges.unflatten(-1, (self.races, -1)).softmax(-1).flatten(-2) * self.budget
+        return charges.softmax(-1) * self.budget
 
     def forward(self, current, quanta=None, *, reference=None, sharpness=1.0):
         thresholds = current / (quanta * (self.threshold // self.quanta_per_threshold))
-        rate = (thresholds * sharpness).softmax(-1) * self.budget
-        return rate + ((rate + self.phase).floor() - rate).detach()
+        charges = thresholds * sharpness
+        rate = self.rates(charges)
+        spikes = (rate + self.phase).floor()
+        learned = rate if self.soften == 1 else self.rates(charges / self.soften)
+        return learned + (spikes - learned).detach()
 
 
 class _ClockFire(_IntegrateFire):
@@ -2092,12 +2315,27 @@ class _GranuleLayer(nn.Module):
     the charge passed the threshold. Its axon reaches ``fan`` other channels,
     where the spikes join the stream through a firing population like a
     block's correction. The layer is silent until its output synapses grow.
+    With ``granule_reach`` the axons of a cluster reach that many channels
+    instead, so that a cell can hear more of the stream than it writes to,
+    or less.
 
     With a ``granule_budget`` the cells of a cluster race for that many
     spikes per byte instead, and a cell's rest is its handicap in the race.
     A cluster then holds learned cells that the stream addresses by what it
     carries, as a state read addresses the stream's own earlier cells, and
-    no price on pulses can silence it.
+    no price on pulses can silence it. With ``granule_races`` the cells of a
+    cluster race in that many equal groups, each for the budget, so the
+    cluster answers with a cell of every group instead of a single cell.
+    With ``granule_soften`` the cells learn from a softer race than the one
+    they fire in, so that a cell far behind can still be drawn into use.
+    With ``granule_slope`` cells that do not race learn below their
+    thresholds as well: their spikes are unchanged and their slope is that
+    of a smooth threshold, so that a silent cell is not lost.
+    With ``granule_soft`` the cells neither race nor spike: each answers
+    with a real number, a smooth threshold of its own charge, through the
+    synapses and the gains of the race. That is a stand-in for diagnosis,
+    which shows what the race costs. A decoder with soft cells is not a
+    spiking network.
 
     With ``granule_delays`` the fibres of a cluster conduct at different
     speeds: each brings its channel as it was zero to ``granule_delays - 1``
@@ -2124,8 +2362,11 @@ class _GranuleLayer(nn.Module):
     stretch so far and the held ones side by side, whatever their lengths in
     bytes, and what it hears of a held stretch stays the same until the next
     beat. What is kept of a stretch is its summed count, its mean count or
-    the count at its last byte. The ``word`` clock beats where a word starts,
-    which the bytes themselves tell. A ``learned`` clock is a cell that hears
+    the count at its last byte. The ``word`` clock beats where a word starts
+    and the ``end`` clock at the first byte after a word, which the bytes
+    themselves tell. Seen from the gap after a word and from inside the next
+    word, a held stretch of the ``end`` clock is the same word, which it is
+    not under the ``word`` clock. A ``learned`` clock is a cell that hears
     the whole stream and races a silent rival for one spike per byte: its
     spike is the beat. Every beat fibre has such a clock cell of its own. The
     clock cells of a cluster share their synapses and differ in the phases
@@ -2151,7 +2392,8 @@ class _GranuleLayer(nn.Module):
             self.relay_fire = _IntegrateFire(cap, cfg.router_charge_bits, False)
             sources = cfg.granule_relays
         self.register_buffer("inputs", _spread_channels(sources, clusters, fan, generator))
-        self.register_buffer("outputs", _spread_channels(cfg.dim, clusters, fan, generator))
+        reach = fan if cfg.granule_reach is None else cfg.granule_reach
+        self.register_buffer("outputs", _spread_channels(cfg.dim, clusters, reach, generator))
         self.delays, self.traces = cfg.granule_delays, cfg.granule_traces
         # Beat fibres come in one order for the present stretch and one for each held stretch.
         self.orders = cfg.granule_beats + 1 if cfg.granule_beats else 0
@@ -2170,12 +2412,9 @@ class _GranuleLayer(nn.Module):
             self.register_buffer("plain_taps", self.taps.masked_fill(on_beat, 0), persistent=False)
             self.register_buffer("beat_fibres", on_beat.nonzero()[:, 1].view(clusters, -1), persistent=False)
             self.register_buffer("beat_orders", (self.taps - plain).gather(1, self.beat_fibres), persistent=False)
-            if self.clock_kind == "word":
-                # Letters, digits and the bytes of longer characters make up words.
-                inside = torch.zeros(_VOCAB, dtype=torch.bool)
-                inside[list(b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")] = True
-                inside[128:] = True
-                self.register_buffer("word_bytes", inside, persistent=False)
+            if self.clock_kind in ("word", "end"):
+                self.register_buffer("word_bytes", _word_bytes(), persistent=False)
+                self.beat_at = _word_starts if self.clock_kind == "word" else _word_ends
             elif self.clock_kind == "learned":
                 # The clock cells of a cluster hear the whole stream through one set of synapses. They start deaf,
                 # so that they first beat at their own pace.
@@ -2188,7 +2427,7 @@ class _GranuleLayer(nn.Module):
                 self.tick = _ClockFire(cfg.router_charge_bits + _CLOCK_BITS, self.beat_fibres.shape[1])
         self.receive = nn.Parameter(torch.empty(clusters, cells, fan))
         nn.init.normal_(self.receive, std=cfg.granule_gain / math.sqrt(fan))
-        self.send = nn.Parameter(torch.zeros(clusters, fan, cells))
+        self.send = nn.Parameter(torch.zeros(clusters, reach, cells))
         # Spikes of charge a cell needs before its threshold counts, stored in quarter spikes.
         self.rest = nn.Parameter(torch.full((clusters, cells, 1), float(cfg.granule_rest)))
         self.budget = cfg.granule_budget
@@ -2200,9 +2439,10 @@ class _GranuleLayer(nn.Module):
         else:
             # The starting phases are spread evenly over a cluster's cells and shifted from cluster to cluster.
             phase = (torch.arange(1, cells + 1) * _GOLDEN + torch.arange(clusters)[:, None] / clusters) % 1
-            self.fire = _RaceFire(cap, self.bits, self.budget, phase)
+            self.fire = _RaceFire(cap, self.bits, self.budget, phase, cfg.granule_races, cfg.granule_soften)
             # Each cluster has its own gain on its cells' charges.
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
+        self.soft, self.slope = cfg.granule_soft, cfg.granule_slope
         self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
         self.emit = _IntegrateFire(cap, self.bits, False)
 
@@ -2240,12 +2480,11 @@ class _GranuleLayer(nn.Module):
         clusters = self.inputs.shape[0]
         if self.clock_kind == "every":
             return spikes.new_ones(batch, steps, clusters), None
-        if self.clock_kind == "word":
+        if self.clock_kind in ("word", "end"):
             if tokens is None:
                 raise ValueError("the word clock reads the bytes themselves")
-            inside = self.word_bytes[tokens]
-            starts = inside & ~F.pad(inside, (1, 0))[:, :steps]
-            return starts[..., None].expand(-1, -1, clusters).to(spikes.dtype), None
+            opens = self.beat_at(self.word_bytes[tokens])
+            return opens[..., None].expand(-1, -1, clusters).to(spikes.dtype), None
         if quanta is None:
             quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
@@ -2288,7 +2527,11 @@ class _GranuleLayer(nn.Module):
         quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
         charge = charge - self.rest_quarters().squeeze(-1) * quanta * quarter
         if self.budget is None:
-            return self.fire(charge, quanta)
+            return self.fire(charge, quanta, smooth=self.slope)
+        if self.soft:
+            # The charge in thresholds, as the race takes it, and no competition between the cells.
+            thresholds = charge / (quanta * (self.fire.threshold // self.fire.quanta_per_threshold))
+            return F.gelu(thresholds * self.sharpness.exp())
         return self.fire(charge, quanta, sharpness=self.sharpness.exp())
 
     def forward(self, spikes, tokens=None):
@@ -2571,6 +2814,19 @@ class EventLM(nn.Module):
                     or (cfg.read_mode == "race" and cfg.read_synapse_gain != round(cfg.read_synapse_gain))
                     or cfg.read_width % cfg.read_heads):
                 raise ValueError("state reads need positive sizes and a width that the heads divide")
+            if (not isinstance(cfg.read_beats, int) or not 0 <= cfg.read_beats <= _READ_BEATS
+                    or not math.isfinite(cfg.read_beat_start) or (cfg.read_beat_start and not cfg.read_beats)):
+                raise ValueError("a state read counts a cell's age in words up to sixteen, and a starting charge "
+                                 "for a head's own age needs such ages")
+            if (cfg.read_clock not in _READ_CLOCKS or not 0 < cfg.read_clock_rate < 1
+                    or (cfg.read_clock != "word" and not cfg.read_beats)):
+                raise ValueError("a state read counts ages in beats of a clock at the starts or the ends of words "
+                                 "or of learned clock cells, which start at a rate between none and every byte; "
+                                 "the clocks other than the default need such ages")
+            if cfg.read_clock == "learned" and cfg.read_mode == "age":
+                raise ValueError("a learned clock hears the tags of its read, which a read by age alone has not")
+            if cfg.read_marks and not cfg.read_beats:
+                raise ValueError("a beat marks its cell only where a state read counts ages in beats")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
         if cfg.granule_after is not None:
@@ -2584,6 +2840,13 @@ class EventLM(nn.Module):
                     or not 0 <= cfg.granule_price <= 1):
                 raise ValueError("granule layers need positive sizes, a fan within the stream, a rest within its "
                                  "limit and a price share from 0 to 1")
+            if cfg.granule_soft and cfg.granule_budget is None:
+                raise ValueError("soft granule cells stand in for racing cells and take their cluster gains")
+            if cfg.granule_slope and cfg.granule_budget is not None:
+                raise ValueError("the slope below the threshold belongs to granule cells that do not race")
+            if cfg.granule_reach is not None and (
+                    not isinstance(cfg.granule_reach, int) or not 1 <= cfg.granule_reach <= cfg.dim):
+                raise ValueError("the axons of a granule cluster reach a whole number of the stream's channels")
             if cfg.granule_bits is not None and (
                     not isinstance(cfg.granule_bits, int) or cfg.granule_bits < _CHARGE_BITS
                     or (_HIDDEN_CAP * cfg.resolution) << cfg.granule_bits > _FP32_EXACT):
@@ -2592,6 +2855,13 @@ class EventLM(nn.Module):
                     not isinstance(cfg.granule_budget, int)
                     or not 1 <= cfg.granule_budget <= _HIDDEN_CAP * cfg.resolution):
                 raise ValueError("a race of granule cells spends a whole budget of spikes within a cell's largest count")
+            if (not isinstance(cfg.granule_races, int) or cfg.granule_races < 1
+                    or cfg.granule_cells % cfg.granule_races
+                    or (cfg.granule_races > 1 and cfg.granule_budget is None)):
+                raise ValueError("the cells of a granule cluster race in equal groups, each for the budget")
+            if (not isinstance(cfg.granule_soften, (int, float)) or not 1 <= cfg.granule_soften < math.inf
+                    or (cfg.granule_soften != 1 and cfg.granule_budget is None)):
+                raise ValueError("racing granule cells learn from a race softened by a finite factor of at least one")
             if not isinstance(cfg.granule_delays, int) or not 1 <= cfg.granule_delays <= cfg.granule_fan:
                 raise ValueError("granule fibres need at least one delay and at most one delay per fibre")
             if (not isinstance(cfg.granule_traces, int) or not 0 <= cfg.granule_traces <= _GRANULE_TRACES
@@ -2601,9 +2871,9 @@ class EventLM(nn.Module):
             if (not isinstance(cfg.granule_beats, int) or not 0 <= cfg.granule_beats <= _GRANULE_BEATS
                     or cfg.granule_clock not in _GRANULE_CLOCKS or cfg.granule_hold not in _GRANULE_HOLDS
                     or not 0 < cfg.granule_clock_rate < 1):
-                raise ValueError("beat fibres hold up to eight stretches between the beats of a word, every-byte or "
-                                 "learned clock, as a sum, a mean or a last count, and a learned clock starts at a "
-                                 "rate between zero and one beat per byte")
+                raise ValueError("beat fibres hold up to eight stretches between the beats of a word, word-end, "
+                                 "every-byte or learned clock, as a sum, a mean or a last count, and a learned "
+                                 "clock starts at a rate between zero and one beat per byte")
             if cfg.granule_beats and (cfg.granule_delays + cfg.granule_traces + cfg.granule_beats + 1
                                       > cfg.granule_fan):
                 raise ValueError("granule clusters need a fibre for each delay, each slow synapse, the present "
@@ -2851,7 +3121,7 @@ class EventLM(nn.Module):
             if self.state_reads is not None and str(index) in self.state_reads:
                 if local_layers is not None:
                     raise ValueError("state reads have no carried stream state yet")
-                spikes = self.state_reads[str(index)](spikes, memory_pulses)
+                spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens)
             if self.granule_layers is not None and str(index) in self.granule_layers:
                 if local_layers is not None:
                     raise ValueError("granule layers are not wired into the carried stream yet")

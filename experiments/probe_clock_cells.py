@@ -1,11 +1,14 @@
 """Where do a decoder's learned clocks beat?
 
-For every cluster of every granule layer with clock cells, on windows of an
-enwik8 split: the beats per byte and clock cell, the share of them that falls
-on the first byte of a word, the beats per word start, the beats per byte by
-the kind of the byte, and the share of bytes at which the cluster's clock
-cells are split, so that a part of its beat fibres moves on. A word is a run
-of letters, digits and bytes of longer characters, as the fixed word clock
+For every cluster of every granule layer with clock cells and for every head
+of every state read with clock cells, on windows of an enwik8 split: the beats
+per byte and clock cell, the share of them that falls on the first byte of a
+word and on the first byte after a word, the beats per word start and per word
+end, the beats per byte by the kind of the byte, and the share of bytes at
+which a cluster's clock cells are split, so that a part of its beat fibres
+moves on. A head has one clock cell, which is never split. For a read the
+heads' learned offsets for a cell's age in beats are listed too. A word is a
+run of letters, digits and bytes of longer characters, as the fixed word clock
 has it.
 """
 
@@ -27,7 +30,8 @@ KINDS = (("letter", b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"), ("
 
 
 def text_features(tokens):
-    """The kind of every byte, whether it starts a word, and how many word bytes stand right before it."""
+    """The kind of every byte, whether it starts a word or is the first byte after one, and how many word bytes
+    stand right before it."""
     kinds = np.full(256, len(KINDS))
     for index, (_, group) in enumerate(KINDS):
         kinds[list(group)] = index
@@ -39,7 +43,7 @@ def text_features(tokens):
     run = np.zeros_like(kind)
     for column in range(1, kind.shape[1]):
         run[:, column] = np.where(inside[:, column - 1], run[:, column - 1] + 1, 0)
-    return kind, inside & ~earlier, run
+    return kind, inside & ~earlier, ~inside & earlier, run
 
 
 def main():
@@ -56,15 +60,19 @@ def main():
     device = resolve_device(args.device)
     model, checkpoint = load_checkpoint(args.checkpoint, device)
     model.eval()
-    layers = {name: layer for name, layer in (getattr(model, "granule_layers", None) or {}).items()
+    layers = {f"cells after block {name}": layer
+              for name, layer in (getattr(model, "granule_layers", None) or {}).items()
               if getattr(layer, "clock", None) is not None}
+    reads = {f"read after block {name}": read for name, read in (getattr(model, "state_reads", None) or {}).items()
+             if getattr(read, "clock", None) is not None}
+    layers.update(reads)
     if not layers:
         parser.error("the checkpoint has no learned clocks")
     _, validation, test = load_splits(args.data)
     data = np.asarray(validation if args.split == "validation" else test)
     starts = np.linspace(0, len(data) - args.context - 1, args.windows).astype(np.int64)
     tokens = np.stack([data[start:start + args.context] for start in starts]).astype(np.int64)
-    kind, word_start, run = text_features(tokens)
+    kind, word_start, word_end, run = text_features(tokens)
     fired, beating = {}, {name: [] for name in layers}
     for name, layer in layers.items():
         layer.tick.register_forward_hook(lambda _module, _inputs, beats, name=name: fired.__setitem__(name, beats))
@@ -77,20 +85,25 @@ def main():
     names = [name for name, _ in KINDS] + ["markup"]
     letters = kind == 0
     result = {"checkpoint": args.checkpoint.name, "steps": checkpoint["args"]["steps"], "split": args.split,
-              "bytes": int(tokens.size), "share_of_bytes_that_start_a_word": float(word_start.mean()), "layers": {}}
-    print(f"{args.checkpoint}: {tokens.size} {args.split} bytes, {100 * word_start.mean():.1f}% of them start a word")
-    print("cluster: beats per byte and cell | share of beats on a word start | beats per word start | split cells | "
-          + ", ".join(names) + " | letter after 1, 2, 3+ word bytes")
+              "bytes": int(tokens.size), "share_of_bytes_that_start_a_word": float(word_start.mean()),
+              "share_of_bytes_that_follow_a_word": float(word_end.mean()), "layers": {}}
+    print(f"{args.checkpoint}: {tokens.size} {args.split} bytes, {100 * word_start.mean():.1f}% of them start a word "
+          f"and {100 * word_end.mean():.1f}% are the first after one")
+    print("cluster or head: beats per byte and cell | share of beats on a word start, on the first byte after a word | "
+          "beats per word start, per word end | split cells | " + ", ".join(names)
+          + " | letter after 1, 2, 3+ word bytes")
     for name, parts in beating.items():
         beats = np.concatenate(parts)
-        print(f"layer after block {name}")
+        print(name)
         rows = []
         for cluster in range(beats.shape[-1]):
             mine = beats[..., cluster]
             row = {
                 "beats_per_byte": float(mine.mean()),
                 "share_of_beats_on_word_starts": float(mine[word_start].sum() / max(mine.sum(), 1e-9)),
+                "share_of_beats_on_word_ends": float(mine[word_end].sum() / max(mine.sum(), 1e-9)),
                 "beats_per_word_start": float(mine[word_start].mean()),
+                "beats_per_word_end": float(mine[word_end].mean()),
                 "share_of_bytes_with_split_cells": float(((mine > 0.1) & (mine < 0.9)).mean()),
                 "beats_per_byte_by_kind": {label: float(mine[kind == index].mean())
                                            for index, label in enumerate(names) if (kind == index).any()},
@@ -98,10 +111,15 @@ def main():
                                                       (("1", run == 1), ("2", run == 2), ("3+", run >= 3))},
             }
             rows.append(row)
-            print(f"  {cluster:>2}: {row['beats_per_byte']:.3f} | {row['share_of_beats_on_word_starts']:.2f} | "
-                  f"{row['beats_per_word_start']:.2f} | {row['share_of_bytes_with_split_cells']:.2f} | "
+            if name in reads:
+                row["offsets_by_age_in_beats"] = (reads[name].beat_age[cluster].detach() * reads[name].rate).tolist()
+            print(f"  {cluster:>2}: {row['beats_per_byte']:.3f} | {row['share_of_beats_on_word_starts']:.2f} "
+                  f"{row['share_of_beats_on_word_ends']:.2f} | {row['beats_per_word_start']:.2f} "
+                  f"{row['beats_per_word_end']:.2f} | {row['share_of_bytes_with_split_cells']:.2f} | "
                   + " ".join(f"{value:.2f}" for value in row["beats_per_byte_by_kind"].values()) + " | "
-                  + " ".join(f"{value:.2f}" for value in row["beats_per_letter_after_word_bytes"].values()))
+                  + " ".join(f"{value:.2f}" for value in row["beats_per_letter_after_word_bytes"].values())
+                  + ("" if name not in reads else " | offsets by age in beats "
+                     + " ".join(f"{value:.1f}" for value in row["offsets_by_age_in_beats"])))
         result["layers"][name] = rows
     if args.output is not None:
         with _atomic_output(args.output, "w", overwrite=True) as stream:

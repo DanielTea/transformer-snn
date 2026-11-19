@@ -4,6 +4,29 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## Read clocks and the address rate, trained from scratch · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | Optimizer | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw |
+|---|---:|---|---:|---:|---:|---:|---:|
+| 34.82M SNN, clock cells and address rate | 34,822,736 | Rotated, averaged | 1.24445 | 4 | 1.53378 | 4 | 1.53378 |
+| 34.82M SNN, address rate | 34,819,544 | Rotated, averaged | 1.24570 | 5 | 1.53600 | 5 | 1.53600 |
+| 34.82M SNN, spike reads and race cells | 34,819,544 | Rotated, averaged | 1.26226 | 6 | 1.55162 | 6 | 1.55162 |
+| 34.85M full attention, 256 wide | 34,845,696 | AdamW | 1.20684 | 3 | 1.48212 | 3 | 1.48212 |
+| 34.85M full attention, 256 wide | 34,845,696 | Rotated, averaged | 1.20407 | 2 | 1.48204 | 2 | 1.48204 |
+| 34.75M full attention, standard shape | 34,752,000 | AdamW, averaged | **1.18215** | 1 | **1.45701** | 1 | **1.45701** |
+
+![enwik8 test loss of the two new decoders, the v13 decoder and two Transformers](../results/figures/event_lm_read_clocks.png)
+
+![A read head counts time in beats, and the test on a made-up language](../results/figures/event_lm_read_clocks_language.png)
+
+![Averaged validation loss over training, and the decoders' distance to the Transformer](../results/figures/event_lm_read_clocks_training.png)
+
+[Measurements, pilots and limits](READ_CLOCKS.md) · [Every training arm](READ_CLOCKS_ARMS.md)
+
+This comparison is scored in windows as the one below it: every window starts from an empty state and holds 256 unscored bytes before its 256 scored ones. The two new decoders are the v13 decoder with an address rate of 8 for its read heads, and one of them has a clock cell for every head as well. They are 0.0013 bpb apart on enwik8, which is less than a second run moves a decoder, so the gain over v13 is the address rate's. Neither decoder has a stream form or a native pulse count, and both write text only by running a whole window for every byte.
+
+The Transformer of the standard shape is 512 wide with 11 layers, 8 heads and an MLP of 4 times its width. It was trained for this study with AdamW and is scored at the running average of its weights. The 256-wide Transformer has 6 layers and an MLP of 42 times its width and is the reference of every earlier comparison. The six models received identical windows from random weights. Every row is one seed.
+
 ## State reads and race cells, trained from scratch · 368,640,000 training targets · seed 20001
 
 | Model | Parameters | Optimizer | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw |
