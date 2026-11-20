@@ -1,0 +1,38 @@
+{
+  "study": "trained_plasticity",
+  "note": "Fast output synapses run inside every training window (EventLM._plastic_window) and, in a stream, the same rule in whole numbers (EventLM._teach with plastic_after). Test bed: the stack of results/event_lm/stream_form/small_test_bed.json (6 levels, 256 channels, 4.86 million parameters, windows of 256 bytes, batch 16, 6,000 updates on a CPU, seed 20001, rate 3e-4, averaged weights). Scored on the enwik8 validation split as 16 streams of about 312 KB with experiments/eval_stream.py, paired over pieces with experiments/compare_stream_scores.py and experiments/stream_quarters.py. One seed per arm.",
+  "criteria": {
+    "recorded_utc": "2026-11-20T22:54:24Z",
+    "replaces": "The first prompt's go/no-go: c or d beats b by more than b's own gain over a, and f does not gain. That bar was set to b's gain on this small stack (0.0945), about 14 times v15's full-size gain, so it measured how weak the small stack is rather than whether training helps.",
+    "comparison": "Validation streams of the test-bed scorings: 16 streams of about 312 KB, a lead of 8,192 and the same pieces. Every comparison paired with experiments/compare_stream_scores.py. References: a, the stack with no fast synapses; b, the stack with v15's teach given after training, the strongest reading-time learner that needs no training (the stronger of b-all and b-last); a candidate is any arm trained with plasticity in the loop, scored with its own trained rule (the decay arms already running and the arms of the revised prompt: Rule B with C = 16 and C = 64, N, A-carry).",
+    "go_if_a_candidate_meets_all": [
+      "1. Better than b: it beats b by more than the paired 95% interval and by at least 0.010 bpb.",
+      "2. Stable along the stream: no quarter of the stream scores worse than a in that quarter; the gain over a in the last quarter is at least 0.8 times the gain in the first quarter; and on one long stream (a lead of 262,144 bytes, or one stream of 1 MB or more) it is still better than b.",
+      "3. The control fails: the same arm with the stored values shuffled gains less than a fifth of the candidate's gain over a. Run for every arm that passes 1 and 2.",
+      "4. The tests pass."
+    ],
+    "second_route": "If no candidate passes, but the trained cells scored with v15's teach beat b by more than the interval and by at least 0.010, and are stable as in criterion 2: GO with that setting (train with plasticity in the loop, run v15's rule at inference), reported as that.",
+    "no_go": "Otherwise. Write up the null result with the table and do not move to full size. After the results are in, add no arms beyond those named.",
+    "always_report": [
+      "every arm scored with its rule switched off (the dependence check; not a criterion)",
+      "the gain by quarter for every arm",
+      "the in-window gains beside the stream gains"
+    ],
+    "analysis_rules_given_with_the_criteria": [
+      "Judge 'are the trained cells worse for v15's rule' by the gain, not the score: each trained stack's rule-off score minus its score with v15's teach, against the baseline's gain from teach (b over a). Near that gain: the cells are fine and the loss is in the base. Clearly smaller: the cells serve the rule worse.",
+      "v15's teach threshold was tuned on untrained cells. Re-pick it per arm on the first part of the validation streams, as v15 picked its own, before comparing teach scores across arms.",
+      "The shuffled control's teach score: also worse than the baseline means the damage comes from training with any plastic readout in the loop; as good as the baseline means it is specific to learning to use real memory.",
+      "Compare the 65,536-byte lead with the 8,192 lead for v15's rule and the trained rules: a gain that shrinks with the longer lead means the rule adapts rather than accumulates."
+    ],
+    "seen_before_recording": {
+      "stream_scorings_bpb": {
+        "a-8k": 1.95134, "a-64k": 1.95138, "b-last-8k": 1.85686, "b-all-8k": 1.84989, "c-8k": 22.22322,
+        "g-8k (c, rule off)": 1.98415, "c-teach-8k (c, rule off, v15 teach on level 5 at 2^24)": 1.98805,
+        "e8-8k": 1.85283, "e8-teach-8k": 2.03159, "e10-8k": 1.9239, "e10-teach-8k": 1.98318, "f-8k": 1.94802
+      },
+      "analyses": "experiments/stream_quarters.py at the 8,192 lead against a, b-all and b-last for b-all, b-last, c, e8, f and g (gains and quarters).",
+      "training_logs": "In-window averaged validation of every arm at every evaluation; d up to 4,500 of 6,000 updates."
+    },
+    "pending_at_recording": ["f-teach-8k", "c-64k", "b-last-64k", "b-all-64k", "e8-64k", "e10-64k", "f-64k", "d-8k", "d-64k"]
+  }
+}
