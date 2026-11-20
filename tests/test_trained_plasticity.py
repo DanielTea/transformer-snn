@@ -2,6 +2,7 @@
 make the learning that happens while reading useful, and that a stream then runs in whole numbers with the gains
 that training found."""
 
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -92,6 +93,9 @@ def test_a_stream_cut_into_pieces_of_1_7_or_512_bytes_fires_and_learns_the_same(
 def test_at_gains_of_zero_the_stack_is_the_one_without_fast_synapses():
     plain, trained, tokens = _stack(), _stack(plastic_after=(0, 1)), _bytes()
     assert trained.plastic_gains.tolist() == [0.0, 0.0]
+    # The gains are the stack's only parameter of its own, the first of all: a fork adds them there.
+    names = [name for name, _ in trained.named_parameters()]
+    assert names[0] == "plastic_gains" and names[1:] == [name for name, _ in plain.named_parameters()]
     count = lambda model: sum(parameter.numel() for parameter in model.parameters())  # noqa: E731
     assert count(trained) == count(plain) + 2
     with torch.no_grad():
@@ -211,3 +215,34 @@ def test_the_scorer_runs_the_trained_rule_unless_it_is_switched_off(monkeypatch)
     assert count == 999 and not np.array_equal(trained, silent) and np.array_equal(silent, plain)
     # The pieces do not change what is learned or scored.
     assert trained.sum() == pytest.approx(other.sum(), rel=1e-12)
+
+
+@pytest.mark.parametrize("recipe", [[], ["--read-forget", "--rotated-adam", "3", "--rotate-stacks"]])
+def test_a_saved_run_continues_as_an_arm_with_trained_fast_synapses(monkeypatch, tmp_path, recipe):
+    from test_stream_form import _train, _trainer
+
+    trainer, _ = _trainer(monkeypatch)
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "experiments" / "stack"))
+    import fork_state
+
+    assert _train(trainer, monkeypatch, tmp_path / "parent", *recipe, "--stop-at", "6") is None
+    parent = torch.load(tmp_path / "parent" / "model.pt.resume", weights_only=True)
+    # A run whose trainer did not have the trained synapses yet holds none of their settings.
+    parent["args"] = {key: value for key, value in parent["args"].items() if not key.startswith("plastic")}
+    torch.save(parent, tmp_path / "older.resume")
+    (tmp_path / "child").mkdir()
+    monkeypatch.setattr(sys, "argv", ["fork_state.py", str(tmp_path / "older.resume"),
+                                      str(tmp_path / "child" / "model.pt.resume"), "--tag", "plastic",
+                                      "--set", "plastic_levels=1"])
+    fork_state.main()
+    forked = torch.load(tmp_path / "child" / "model.pt.resume", weights_only=True)
+    # The arm starts as the parent's stack, with silent gains that the optimizer has no moments for yet.
+    assert forked["state_dict"]["plastic_gains"].tolist() == [0.0] and forked["args"]["plastic_levels"] == "1"
+    assert all(torch.equal(forked["state_dict"][key], value) for key, value in parent["state_dict"].items())
+    assert len(forked["average"]) == len(parent["average"]) + 1
+    record = _train(trainer, monkeypatch, tmp_path / "child", *recipe, "--plastic-levels", "1", "--tag", "plastic")
+    assert record["resumed_at_steps"] == [6] and record["args"]["plastic_levels"] == "1"
+    final = torch.load(tmp_path / "child" / "model.pt", weights_only=True)
+    assert final["state_dict"]["plastic_gains"].abs().sum() > 0
+    with pytest.raises(ValueError, match="already"):
+        fork_state.add_plastic_gains(forked, 1)
