@@ -239,6 +239,7 @@ def main():
             if args.teach_levels is not None:
                 parser.error(f"{path}: the stack was trained with fast output synapses; give none after training")
             plastic = {"levels": list(model.plastic_after), "rule": model.cfg.plastic_rule,
+                       **({"chunk": model.cfg.plastic_chunk} if model.cfg.plastic_rule == "chunked" else {}),
                        "decay_shift": model.cfg.plastic_decay_shift, "threshold": model.cfg.plastic_threshold,
                        "shuffled": model.cfg.plastic_shuffle, "teaching_spikes_per_byte": model.cfg.teach_budget,
                        "gains": model.plastic_gains.tolist()}

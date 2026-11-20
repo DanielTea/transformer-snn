@@ -246,3 +246,175 @@ def test_a_saved_run_continues_as_an_arm_with_trained_fast_synapses(monkeypatch,
     assert final["state_dict"]["plastic_gains"].abs().sum() > 0
     with pytest.raises(ValueError, match="already"):
         fork_state.add_plastic_gains(forked, 1)
+
+
+# Rule B (chunked): the error after the correction, taken in chunks; N: a bounded readout; A-carry: training on streams.
+
+_CHUNKED = dict(plastic_after=(1,), plastic_rule="chunked")
+_NORMALIZED = dict(plastic_after=(1,), plastic_rule="normalized")
+
+
+@pytest.mark.parametrize("design, gains", [(dict(_CHUNKED, plastic_chunk=1), [1.0]),
+                                           (dict(_CHUNKED, plastic_chunk=16), [1.0]),
+                                           (dict(_CHUNKED, plastic_chunk=64), [0.5]),
+                                           (dict(_CHUNKED, plastic_after=(0, 1), plastic_chunk=16), [2.0, -0.5]),
+                                           (_NORMALIZED, [4.0]),
+                                           (dict(_NORMALIZED, plastic_after=(0, 1)), [1.0, -2.0])])
+def test_the_new_rules_fire_in_a_window_what_they_fire_in_its_stream(design, gains):
+    model, tokens = _stack(gains=gains, dtype=torch.float64, **design), _bytes()
+    with torch.no_grad():
+        window, plain = model(tokens), _stack(dtype=torch.float64)(tokens)
+    streamed, _ = _pieces(model, tokens, (160,))
+    assert torch.equal(window, streamed) and torch.equal(window, window.round())
+    assert (window - plain).abs().sum() > 0
+
+
+def test_a_normalized_window_with_a_decay_keeps_to_its_stream_within_rounding():
+    model, tokens = _stack(gains=[4.0], dtype=torch.float64, **dict(_NORMALIZED, plastic_decay_shift=6)), _bytes()
+    with torch.no_grad():
+        window = model(tokens)
+    streamed, _ = _pieces(model, tokens, (160,))
+    differs = (window - streamed).abs()
+    assert differs.max() <= 1 and (differs > 0).float().mean() < 0.02
+
+
+@pytest.mark.parametrize("design", [dict(_CHUNKED, plastic_chunk=16), _NORMALIZED])
+def test_the_new_rules_change_no_spike_before_a_later_byte(design):
+    model, tokens = _stack(gains=[1.0], **design), _bytes()
+    changed = tokens.clone()
+    changed[:, 71:] = _bytes(seed=9)[:, 71:]
+    with torch.no_grad():
+        first, second = model(tokens), model(changed)
+    assert torch.equal(first[:, :71], second[:, :71]) and not torch.equal(first[:, 71:], second[:, 71:])
+
+
+@pytest.mark.parametrize("design", [dict(_CHUNKED, plastic_chunk=16), dict(_CHUNKED, plastic_chunk=64), _NORMALIZED,
+                                    dict(_NORMALIZED, plastic_decay_shift=7)])
+def test_the_new_rules_cut_anywhere_fire_and_learn_the_same(design):
+    model, tokens = _stack(gains=[0.5 if design["plastic_rule"] == "chunked" else 4.0], **design), _bytes(length=520)
+    whole, after = _pieces(model, tokens, (520,))
+    # Cuts that fall inside chunks of 16 and 64 bytes.
+    for cuts in ((1,) * 520, (7,) * 74 + (2,), (100,) * 5 + (20,), (512, 8)):
+        fired, state = _pieces(model, tokens, cuts)
+        assert torch.equal(fired, whole)
+        for name in ("fast", "mean", "total", "pending", "norm"):
+            mine, theirs = getattr(state.taught, name), getattr(after.taught, name)
+            assert (mine is None and theirs is None) or torch.equal(mine, theirs)
+
+
+@pytest.mark.parametrize("design", [dict(_CHUNKED, plastic_chunk=16), _NORMALIZED])
+def test_the_new_rules_at_gains_of_zero_are_the_stack_without_fast_synapses(design):
+    plain, trained, tokens = _stack(), _stack(**design), _bytes()
+    with torch.no_grad():
+        assert torch.equal(trained(tokens), plain(tokens))
+    assert torch.equal(_pieces(trained, tokens, (160,))[0], _pieces(plain, tokens, (160,))[0])
+
+
+def test_chunks_of_one_byte_race_on_what_the_synapses_fire():
+    # With chunks of one byte nothing waits: every byte teaches with the race of the counts and the fast spikes, as
+    # fast synapses given after training do.
+    model, tokens = _stack(gains=[1.0], **dict(_CHUNKED, plastic_chunk=1)), _bytes(length=40)
+    state, plain = None, _stack()
+    for start in range(40):
+        with torch.no_grad():
+            fired, state = model.stream(tokens[:, start:start + 1], state)
+            base, _ = plain.stream(tokens[:, :start + 1])
+        assert not state.taught.pending.any()
+        assert torch.equal(state.taught.said, base[:, -1].double() + (fired[:, -1] - base[:, -1]).double())
+
+
+def _repeated_passage(repeats):
+    """One stream of a 64-byte passage that repeats, as [1, 64 * repeats]."""
+    return _bytes(seed=21, length=64, streams=1).repeat(1, repeats)
+
+
+def _in_pieces(model, tokens, state=None):
+    length = tokens.shape[1]
+    return _pieces(model, tokens, (512,) * (length // 512) + ((length % 512,) if length % 512 else ()), state)
+
+
+def test_the_chunked_rule_stops_growing_on_a_passage_that_repeats():
+    from test_teaching_spikes import _bits
+
+    tokens = _repeated_passage(1000)
+    half = tokens.shape[1] // 2
+    plain = _stack()
+    silent, _ = _in_pieces(plain, tokens)
+    sizes, late = {}, slice(-6400, -1)
+    for name, model in (("chunked", _stack(gains=[1.0], **dict(_CHUNKED, plastic_chunk=16))),
+                        ("base-error", _stack(gains=[1.0], **_PLASTIC))):
+        early, middle = _in_pieces(model, tokens[:, :half])
+        later, end = _in_pieces(model, tokens[:, half:], middle)
+        sizes[name] = middle.taught.fast.abs().sum().item(), end.taught.fast.abs().sum().item()
+        if name == "chunked":
+            fired = torch.cat((early, later), 1)
+            # The repeats teach the passage, and it is then predicted at least as well as without fast synapses.
+            assert _bits(model, fired, tokens)[:, late].mean() <= _bits(plain, silent, tokens)[:, late].mean()
+    # From 500 to 1,000 repeats the chunked rule's synapses hardly grow; the base-error rule's keep growing.
+    assert sizes["chunked"][1] <= 1.05 * sizes["chunked"][0]
+    assert sizes["base-error"][1] >= 1.5 * sizes["base-error"][0]
+
+
+def test_the_normalized_rule_fires_no_more_than_its_gain_times_the_largest_error():
+    gain = 4.0
+    model = _stack(gains=[gain], **_NORMALIZED)
+    plain = _stack()
+    tokens = _repeated_passage(200)
+    fired, _ = _in_pieces(model, tokens)
+    silent, _ = _in_pieces(plain, tokens)
+    # A byte teaches at most its budget of 256 spikes, so the fast spikes stay within the gain times that.
+    assert (fired - silent).abs().max() <= gain * 256 + 0.5
+
+
+def test_training_on_streams_runs_the_window_form_from_the_state_it_hands_on():
+    model, tokens = _stack(gains=[1.0], dtype=torch.float64, **_PLASTIC), _bytes(length=300)
+    model.train()
+    cuts, start, trained, state = (100, 60, 140), 0, [], None
+    for length in cuts:
+        with torch.enable_grad():
+            fired, state = model.stream(tokens[:, start:start + length], state)
+        trained.append(fired.detach())
+        start += length
+    model.eval()
+    whole, after = _pieces(model, tokens, (300,))
+    # In 64-bit floats without a decay the window form and the whole-number rule agree on every spike and state.
+    assert torch.equal(torch.cat(trained, 1), whole)
+    for name in ("fast", "mean", "total", "active", "said"):
+        assert torch.equal(getattr(state.taught, name), getattr(after.taught, name))
+    assert state.taught.heard == after.taught.heard == 300
+    # The gain learns from a window that continues a stream, through what the carried synapses fire.
+    model.train()
+    model.zero_grad()
+    _, early = model.stream(tokens[:, :100])
+    fired, _ = model.stream(tokens[:, 100:160], early)
+    fired.sum().backward()
+    assert model.plastic_gains.grad.abs().sum() > 0
+
+
+def test_the_trainer_trains_trained_synapses_on_streams(monkeypatch, tmp_path):
+    from test_stream_form import _train, _trainer
+
+    trainer, _ = _trainer(monkeypatch)
+    record = _train(trainer, monkeypatch, tmp_path / "carry", "--plastic-levels", "1", "--stream", "3",
+                    "--stream-groups", "2")
+    assert record["args"]["stream"] == 3 and record["args"]["plastic_levels"] == "1"
+    final = torch.load(tmp_path / "carry" / "model.pt", weights_only=True)
+    assert final["state_dict"]["plastic_gains"].abs().sum() > 0
+
+
+@pytest.mark.parametrize("setting", [dict(plastic_after=(1,), plastic_rule="chunked", plastic_chunk=0),
+                                     dict(plastic_after=(1,), plastic_rule="chunked", plastic_decay_shift=4),
+                                     dict(plastic_after=(1,), plastic_rule="chunked", plastic_shuffle=True),
+                                     dict(plastic_after=(1,), plastic_rule="normalized", plastic_shuffle=True),
+                                     dict(plastic_after=(1,), plastic_rule="delta")])
+def test_the_new_rules_refuse_settings_they_do_not_have(setting):
+    with pytest.raises(ValueError):
+        EventLM(EventLMConfig(**dict(_STACK, **setting)))
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs MPS")
+@pytest.mark.parametrize("design", [dict(_CHUNKED, plastic_chunk=16), _NORMALIZED])
+def test_the_new_stream_rules_refuse_mps(design):
+    model = _stack(gains=[1.0], **design).to("mps")
+    with pytest.raises(ValueError, match="MPS"):
+        model.stream(_bytes().to("mps"))
