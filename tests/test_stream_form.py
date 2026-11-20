@@ -310,6 +310,37 @@ def test_a_run_on_streams_that_stops_continues_as_if_it_had_not(monkeypatch, tmp
                                                                        for row in whole["curve"]]
 
 
+def test_a_saved_run_continues_as_a_new_arm_with_longer_windows(monkeypatch, tmp_path):
+    trainer, _ = _trainer(monkeypatch)
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "experiments" / "stack"))
+    import fork_state
+
+    drawn = []
+    draw = trainer.random_batch
+    monkeypatch.setattr(trainer, "random_batch",
+                        lambda source, rows, length, generator: drawn.append((rows, length)) or draw(
+                            source, rows, length, generator))
+    assert _train(trainer, monkeypatch, tmp_path / "parent", "--stop-at", "6") is None
+    longer = ["--ctx", "32", "--bs", "1", "--read-reach", "32", "--tag", "longer"]
+    (tmp_path / "child").mkdir()
+    monkeypatch.setattr(sys, "argv", ["fork_state.py", str(tmp_path / "parent" / "model.pt.resume"),
+                                      str(tmp_path / "child" / "model.pt.resume"), "--tag", "longer",
+                                      "--set", "ctx=32", "bs=1", "read_reach=32"])
+    fork_state.main()
+    drawn.clear()
+    record = _train(trainer, monkeypatch, tmp_path / "child", *longer)
+    # The new arm has the parent's six updates behind it and trains its own six on windows twice as long.
+    assert record["resumed_at_steps"] == [6] and record["args"]["ctx"] == 32 and record["args"]["tag"] == "longer"
+    assert drawn[-6:] == [(1, 32)] * 6 and len(record["curve"]) == 2
+    # The parent's state is as it was, and it does not continue under the new settings.
+    with pytest.raises(SystemExit):
+        _train(trainer, monkeypatch, tmp_path / "parent", *longer)
+    with pytest.raises(SystemExit):
+        monkeypatch.setattr(sys, "argv", ["fork_state.py", str(tmp_path / "parent" / "model.pt.resume"),
+                                          str(tmp_path / "other.resume"), "--tag", "other", "--set", "windows=3"])
+        fork_state.main()
+
+
 def test_groups_of_streams_take_turns(monkeypatch, tmp_path):
     trainer, _ = _trainer(monkeypatch)
     drawn, heard = [], []
