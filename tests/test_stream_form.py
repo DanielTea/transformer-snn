@@ -442,6 +442,16 @@ def test_a_read_reaches_further_back_in_a_stream_than_in_training(monkeypatch):
     with torch.no_grad():
         assert torch.equal(built(tokens), after)
     assert set(built.state_dict()) == set(_stack().state_dict())
+    # The reach of one level alone.
+    single = _stack().eval()
+    eval_stream.lengthen_reach(single, 96, levels=[1])
+    assert [single.state_reads[level].reach for level in ("0", "1")] == [48, 96]
+    with torch.no_grad():
+        partly, state = single.stream(tokens)
+    assert state.reads["0"].tag.shape[2] == 47 and state.reads["1"].tag.shape[2] == 95
+    assert torch.equal(partly[:, :48], before[:, :48]) and not torch.equal(partly, after)
+    with pytest.raises(ValueError):
+        eval_stream.lengthen_reach(single, 96, levels=[5])
 
 
 @pytest.mark.parametrize("cuts", [(160,), (80, 80), (47, 1, 49, 63), (7, 13, 100, 40), (130, 30)])

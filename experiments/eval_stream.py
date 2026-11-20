@@ -53,10 +53,15 @@ def stream_rows(data, streams, lead):
     return data[places].long(), data[places + 1].long(), scored
 
 
-def lengthen_reach(model, cells):
-    """Let every read of a stack reach ``cells`` back. The cells beyond its window take the age offset of the
-    window's oldest cell, as under the setting ``read_reach``."""
-    for read in model.state_reads.values():
+def lengthen_reach(model, cells, levels=None):
+    """Let every read of a stack reach ``cells`` back, or only the reads after ``levels``. The cells beyond a
+    read's window take the age offset of the window's oldest cell, as under the setting ``read_reach``."""
+    reads = model.state_reads
+    if levels is not None and not {str(level) for level in levels} <= set(reads):
+        raise ValueError("the stack has no read after one of these levels")
+    for level, read in reads.items():
+        if levels is not None and int(level) not in levels:
+            continue
         if cells < read.window:
             raise ValueError("a read reaches at least its window of cells back")
         read.reach = cells
@@ -91,6 +96,8 @@ def main():
     parser.add_argument("--lead", type=int, default=8192, help="unscored bytes that a part after the first hears")
     parser.add_argument("--piece", type=int, default=512, help="bytes that the stack takes at a time")
     parser.add_argument("--reach", type=int, help="cells that every read reaches back, if more than in training")
+    parser.add_argument("--reach-levels", type=int, nargs="+",
+                        help="lengthen the reach of the reads after these levels only")
     parser.add_argument("--averaged", action="store_true",
                         help="score the averaged weights that a partial checkpoint holds beside its last ones")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
@@ -99,6 +106,8 @@ def main():
     args = parser.parse_args()
     if min(args.streams, args.piece, args.threads) < 1 or args.lead < 0:
         parser.error("streams, piece and threads must be positive and the lead not negative")
+    if args.reach_levels is not None and args.reach is None:
+        parser.error("--reach-levels names the levels that take --reach")
     if args.json.exists():
         parser.error(f"{args.json} already exists")
     torch.set_num_threads(args.threads)
@@ -123,10 +132,13 @@ def main():
             # The average of weights that were each in the range of exact sums can leave it.
             model.synaptic_scaling()
         if args.reach is not None:
-            lengthen_reach(model, args.reach)
+            lengthen_reach(model, args.reach, args.reach_levels)
         bits, targets = score(model, data, args.streams, args.lead, args.piece, device)
+        reaches = {int(level): read.reach for level, read in model.state_reads.items()}
         row = {"checkpoint": str(path), "run_name": checkpoint.get("run_name"), "parameters": count_params(model),
-               "reach_cells": next(iter(model.state_reads.values())).reach,
+               # One number where all reads reach equally far, and the reach after every level otherwise.
+               "reach_cells": (next(iter(reaches.values())) if len(set(reaches.values())) == 1
+                               else dict(sorted(reaches.items()))),
                "training_targets": training_exposure(checkpoint), "targets": targets,
                "bpb": float(bits.sum() / targets), "averaged_weights": args.averaged}
         # The pieces are resampled together for the difference to the first checkpoint.
