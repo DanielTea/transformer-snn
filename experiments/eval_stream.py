@@ -110,6 +110,9 @@ def main():
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--json", type=Path, required=True)
+    parser.add_argument("--bits", type=Path,
+                        help="keep the bits of every piece as [checkpoints, streams, pieces] in this .npy file, so "
+                             "that another scoring of the same streams can be compared piece by piece")
     args = parser.parse_args()
     if min(args.streams, args.piece, args.threads) < 1 or args.lead < 0:
         parser.error("streams, piece and threads must be positive and the lead not negative")
@@ -119,6 +122,8 @@ def main():
         parser.error("--teach-levels and --teach-threshold go together")
     if args.json.exists():
         parser.error(f"{args.json} already exists")
+    if args.bits is not None and (args.bits.suffix != ".npy" or args.bits.exists()):
+        parser.error("--bits names a new .npy file")
     torch.set_num_threads(args.threads)
     device = resolve_device(args.device)
     _, validation, test = load_splits(args.enwik8)
@@ -129,7 +134,7 @@ def main():
         # A shortened split is named in the record, so its score is not taken for the whole split's.
         data = data[:args.bytes]
         record["first_bytes_of_split"] = args.bytes
-    resamples, rows, first = None, [], None
+    resamples, rows, first, kept = None, [], None, []
     for path in args.checkpoint:
         model, checkpoint = load_checkpoint(path, device)
         if not isinstance(model, EventLM) or not model.cfg.stack:
@@ -155,6 +160,7 @@ def main():
         if args.teach_levels is not None:
             row["taught"] = {"levels": sorted(args.teach_levels), "threshold": args.teach_threshold,
                              "teaching_spikes_per_byte": args.teach_budget}
+        kept.append(bits)
         # The pieces are resampled together for the difference to the first checkpoint.
         paired = bits.reshape(-1)
         if first is None:
@@ -172,6 +178,8 @@ def main():
               flush=True)
         del model
     record["checkpoints"] = rows
+    if args.bits is not None:
+        np.save(args.bits, np.stack(kept))
     with _atomic_output(args.json, "w", False) as stream:
         json.dump(record, stream, indent=2)
         stream.write("\n")
