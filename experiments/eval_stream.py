@@ -198,7 +198,10 @@ def main():
                "reach_cells": (next(iter(reaches.values())) if len(set(reaches.values())) == 1
                                else dict(sorted(reaches.items()))),
                "training_targets": training_exposure(checkpoint), "targets": targets,
-               "bpb": float(bits.sum() / targets), "averaged_weights": args.averaged}
+               "bpb": float(bits.sum() / targets)}
+        if args.averaged:
+            # A partial checkpoint was scored at the average that it holds, not at the weights that its file names.
+            row["averaged_weights"] = True
         if args.teach_levels is not None:
             row["taught"] = {"levels": sorted(args.teach_levels), "threshold": args.teach_threshold,
                              "teaching_spikes_per_byte": args.teach_budget}
