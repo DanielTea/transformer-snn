@@ -33,6 +33,9 @@ def fork(state, tag, settings):
     unknown = sorted(set(settings) - set(state["args"]))
     if unknown:
         raise ValueError(f"the run has no setting {', '.join(unknown)}")
+    # A whole number for a setting that holds a fraction is that fraction, as the trainer reads it from its flag.
+    settings = {key: float(value) if isinstance(state["args"][key], float) and isinstance(value, int)
+                and not isinstance(value, bool) else value for key, value in settings.items()}
     return state | {"args": state["args"] | settings | {"tag": tag}}
 
 
