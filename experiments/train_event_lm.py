@@ -332,6 +332,12 @@ def build_model(args):
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
                             granule_self_gate=getattr(args, "granule_self_gate", EventLMConfig.granule_self_gate),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
+                            plastic_after=(None if getattr(args, "plastic_levels", None) is None
+                                           else tuple(map(int, args.plastic_levels.split(",")))),
+                            plastic_rule=getattr(args, "plastic_rule", EventLMConfig.plastic_rule),
+                            plastic_decay_shift=getattr(args, "plastic_decay_shift", EventLMConfig.plastic_decay_shift),
+                            plastic_threshold=getattr(args, "plastic_threshold", EventLMConfig.plastic_threshold),
+                            plastic_shuffle=getattr(args, "plastic_shuffle", EventLMConfig.plastic_shuffle),
                             **synapses, **heads)
         model = EventLM(cfg)
         with torch.no_grad():
@@ -824,6 +830,20 @@ def main():
     parser.add_argument("--output-pool", type=int, default=EventLMConfig.output_pool, metavar="QUANTA",
                         help="give a stack's output neurons a pool of their own and this many quanta to a "
                              "threshold, of which one stands while the pool is silent")
+    parser.add_argument("--plastic-levels",
+                        help="comma-separated levels whose cells fast output synapses hear in every training window "
+                             "as in a stream: every byte of a window teaches them after it is predicted, and each "
+                             "level learns, from zero, the gain of its fast neurons (trained plasticity)")
+    parser.add_argument("--plastic-rule", choices=("base-error",), default=EventLMConfig.plastic_rule,
+                        help="what an arriving byte teaches: base-error takes the race of the output neurons' own "
+                             "counts, without the fast spikes")
+    parser.add_argument("--plastic-decay-shift", type=int, default=EventLMConfig.plastic_decay_shift, metavar="K",
+                        help="the fast synapses lose one part in 2 ** K of their size at every byte; 0 keeps it")
+    parser.add_argument("--plastic-threshold", type=int, default=EventLMConfig.plastic_threshold,
+                        help="charge of one fast spike at a gain of one")
+    parser.add_argument("--plastic-shuffle", action="store_true",
+                        help="control: a byte teaches with the error of a pseudo-random earlier byte, so the fast "
+                             "synapses cost what they cost and remember nothing that follows from what came")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
     parser.add_argument("--spike-resolution", type=int, default=1, help="number of finer spikes per original unit")
     parser.add_argument("--depth", type=int, default=3)

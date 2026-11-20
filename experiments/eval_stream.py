@@ -13,7 +13,12 @@ spikes of one pass over the whole of it. ``--reach`` lets every read reach
 further back than it did in training, which a stream allows at no cost in
 synapses. ``--teach-levels`` gives the output its fast synapses from the
 cells after those levels: every arriving byte then teaches them, in each
-stream by itself, and no byte is learned from before it is predicted.
+stream by itself, and no byte is learned from before it is predicted. A
+stack trained with fast synapses in its windows (``--plastic-levels`` of the
+trainer) runs its trained rule with its trained gains, in whole numbers;
+``--plastic-off`` scores it without them. ``--teach-freeze-after`` lets the
+fast synapses of every part stop changing after that many bytes, its lead
+included, while they keep firing.
 
 With ``--books-dir`` every book of a verified PG-19 manifest is a passage of
 its own that starts from an empty state. A book longer than ``--part`` bytes
@@ -156,6 +161,12 @@ def main():
     parser.add_argument("--teach-threshold", type=int, help="units of fast charge to one spike of an output neuron")
     parser.add_argument("--teach-budget", type=int, default=EventLMConfig.teach_budget,
                         help="teaching spikes of every arriving byte")
+    parser.add_argument("--plastic-off", action="store_true",
+                        help="score a stack trained with fast output synapses without them, to see how much the "
+                             "rest of it leans on them")
+    parser.add_argument("--teach-freeze-after", type=int, metavar="BYTES",
+                        help="the fast output synapses of every part stop changing after this many bytes, its lead "
+                             "included, and keep firing")
     parser.add_argument("--averaged", action="store_true",
                         help="score the averaged weights that a partial checkpoint holds beside its last ones")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
@@ -175,6 +186,8 @@ def main():
         parser.error("--forget-slope is a finite slope for the cells that --reach adds")
     if (args.teach_levels is None) != (args.teach_threshold is None):
         parser.error("--teach-levels and --teach-threshold go together")
+    if args.teach_freeze_after is not None and args.teach_freeze_after < 0:
+        parser.error("--teach-freeze-after counts bytes")
     if args.json.exists():
         parser.error(f"{args.json} already exists")
     if args.bits is not None and (args.bits.suffix != ".npy" or args.bits.exists()):
@@ -216,8 +229,23 @@ def main():
                 forget_by_power(model, args.forget_slope, args.reach_levels)
             except ValueError as error:
                 parser.error(f"{path}: {error}")
+        trained = model.plastic_after is not None
+        if args.plastic_off:
+            if not trained:
+                parser.error(f"{path}: --plastic-off silences fast synapses that training ran, and it ran none")
+            plastic = {"levels": list(model.plastic_after), "gains": model.plastic_gains.tolist()}
+            model.silence_plasticity()
+        elif trained:
+            if args.teach_levels is not None:
+                parser.error(f"{path}: the stack was trained with fast output synapses; give none after training")
+            plastic = {"levels": list(model.plastic_after), "rule": model.cfg.plastic_rule,
+                       "decay_shift": model.cfg.plastic_decay_shift, "threshold": model.cfg.plastic_threshold,
+                       "shuffled": model.cfg.plastic_shuffle, "teaching_spikes_per_byte": model.cfg.teach_budget,
+                       "gains": model.plastic_gains.tolist()}
         if args.teach_levels is not None:
             model.teach(args.teach_levels, args.teach_threshold, args.teach_budget)
+        if args.teach_freeze_after is not None:
+            model.freeze_teaching_after(args.teach_freeze_after)
         bits, targets = score(model, streams, args.piece, device)
         reaches = {int(level): read.reach for level, read in model.state_reads.items()}
         row = {"checkpoint": str(path), "run_name": checkpoint.get("run_name"), "parameters": count_params(model),
@@ -234,6 +262,10 @@ def main():
         if args.teach_levels is not None:
             row["taught"] = {"levels": sorted(args.teach_levels), "threshold": args.teach_threshold,
                              "teaching_spikes_per_byte": args.teach_budget}
+        if trained:
+            row["plastic_silenced" if args.plastic_off else "plastic"] = plastic
+        if args.teach_freeze_after is not None:
+            row["teach_freeze_after"] = args.teach_freeze_after
         kept.append(bits)
         # The pieces are resampled together for the difference to the first checkpoint.
         paired = bits.reshape(-1)
