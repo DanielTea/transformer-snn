@@ -321,6 +321,8 @@ def build_model(args):
                             read_delays=getattr(args, "read_delays", EventLMConfig.read_delays),
                             read_delay_probes=getattr(args, "read_delay_probes", EventLMConfig.read_delay_probes),
                             read_reach=getattr(args, "read_reach", EventLMConfig.read_reach),
+                            read_forget=getattr(args, "read_forget", EventLMConfig.read_forget),
+                            read_forget_rate=getattr(args, "read_forget_rate", EventLMConfig.read_forget_rate),
                             output_cap=getattr(args, "output_cap", EventLMConfig.output_cap),
                             pool_fine=getattr(args, "pool_fine", EventLMConfig.pool_fine),
                             pool_rest=getattr(args, "pool_rest", EventLMConfig.pool_rest),
@@ -663,6 +665,12 @@ def main():
     parser.add_argument("--read-reach", type=int, metavar="CELLS",
                         help="in a stream a state read reaches this many cells back, more than --read-window: the "
                              "cells beyond the window take the age offset of its oldest cell, so no synapse is added")
+    parser.add_argument("--read-forget", action="store_true",
+                        help="beyond its window a state read forgets by a power of the age: every head learns a "
+                             "slope that a far cell's offset takes for every doubling of its age, starting at zero")
+    parser.add_argument("--read-forget-rate", type=float, default=EventLMConfig.read_forget_rate,
+                        help="the forgetting slope counts this many times on top of the address rate; 0 holds "
+                             "it at nothing, as the control of a fork")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,

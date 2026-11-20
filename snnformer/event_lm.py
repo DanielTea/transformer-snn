@@ -230,6 +230,12 @@ class EventLMConfig:
     # In a stream a state read reaches this many cells back, where that is more than ``read_window``. The cells
     # beyond the window take the age offset of the window's oldest cell, so a longer reach adds no synapse.
     read_reach: int | None = None
+    # With ``read_forget`` a state read forgets by a power of the age beyond its window: every head has a learned
+    # slope that the offset of a cell beyond the window takes for every doubling of its age, counted
+    # ``read_forget_rate`` times on top of the address rate. The slopes start at zero, and at a rate of zero a
+    # slope counts for nothing.
+    read_forget: bool = False
+    read_forget_rate: float = 1.0
     # An output neuron fires up to this many eighths of a bit of evidence for or against its byte.
     output_cap: int = _OUTPUT_CAP
     # The neurons of state reads and cell layers count their threshold in quanta this many times finer than the
@@ -2146,6 +2152,9 @@ class _StateRead(nn.Module):
                                          quanta_per_threshold=cfg.pool_quanta, capped=True)
         # A cell's charge starts from a learned offset for its age.
         self.age = nn.Parameter(torch.zeros(self.heads, self.window))
+        # Beyond the window a head forgets at a learned slope for every doubling of a cell's age.
+        self.forget = nn.Parameter(torch.zeros(self.heads)) if cfg.read_forget else None
+        self.forget_rate = cfg.read_forget_rate
         self.beats, self.clock, self.beat_mark = cfg.read_beats, None, None
         if self.beats:
             # And from a learned offset for its age in beats, where the last one stands for all older cells.
@@ -2336,6 +2345,21 @@ class _StateRead(nn.Module):
             offset = offset + (mean - mean.detach())
         return offset, spent
 
+    def aged(self):
+        """The offset of every age within reach as [heads, reach], before the address rate counts it.
+
+        The cells that a longer reach adds take the offset of the oldest age that has one. With ``read_forget``
+        they take a head's slope as well for every doubling of their age from there, so that a cell's rate in a
+        race goes as a power of its age: the read forgets the far past by a power law, at any reach.
+        """
+        if self.reach == self.window:
+            return self.age
+        far = self.age[:, -1:].expand(-1, self.reach - self.window)
+        if self.forget is not None:
+            ages = torch.arange(self.window, self.reach, device=self.age.device, dtype=self.age.dtype)
+            far = far + (self.forget * self.forget_rate)[:, None] * torch.log2(ages / (self.window - 1))
+        return torch.cat((self.age, far), 1)
+
     def _address(self, spikes, tokens=None, tape=None, position=0):
         """The spikes of every cell at every read as [batch, heads, bytes, cells], their sum at each read (none
         where the shares are a softmax's), the payloads and the number of cell spikes.
@@ -2365,9 +2389,7 @@ class _StateRead(nn.Module):
         place = torch.arange(cells, device=spikes.device)
         distance = place[kept:, None] - place
         visible = (distance >= 0) & (distance < self.reach)
-        # The cells that a longer reach adds take the offset of the oldest age that has one.
-        aged = self.age if self.reach == self.window else torch.cat(
-            (self.age, self.age[:, -1:].expand(-1, self.reach - self.window)), 1)
+        aged = self.aged()
         if kept:
             # Row t holds the offset of age kept + t - j in column j: the ages in reverse, one step further on
             # from row to row.
@@ -3513,6 +3535,12 @@ class EventLM(nn.Module):
                     or cfg.read_reach < cfg.read_window or cfg.read_beats or cfg.read_phases or cfg.read_turn):
                 raise ValueError("a read reaches at least its window of cells back, and one with clocks or "
                                  "pacemakers reaches no further")
+            if cfg.read_forget and (cfg.read_window < 2 or cfg.read_beats or cfg.read_phases or cfg.read_turn):
+                raise ValueError("a read forgets beyond a window of two cells at least, and one with clocks or "
+                                 "pacemakers reaches no further than its window")
+            if (not isinstance(cfg.read_forget_rate, (int, float)) or isinstance(cfg.read_forget_rate, bool)
+                    or not math.isfinite(cfg.read_forget_rate) or cfg.read_forget_rate < 0):
+                raise ValueError("the forgetting slope counts a finite number of times, none at the least")
             if (not isinstance(cfg.read_delays, int) or not 1 <= cfg.read_delays <= _READ_DELAYS
                     or (cfg.read_delays > 1 and (cfg.read_mode == "age" or cfg.read_delays - 1 > cfg.dim))
                     or (cfg.read_delay_probes and cfg.read_delays == 1)):
