@@ -4,6 +4,33 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## A stack that reads a stream, trained from scratch · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
+|---|---:|---|---:|---:|---:|---:|
+| 34.81M SNN stack, long windows | 34,810,812 | Stream, longer reach, taught output synapses | **1.13394** | 1 | **1.40469** | 1 |
+| 34.81M SNN stack, long windows | 34,810,812 | Stream, longer reach | 1.14058 | 3 | 1.42490 | 2 |
+| 34.81M SNN stack, long windows | 34,810,812 | Stream | 1.15359 | 6 | 1.44559 | 5 |
+| 34.81M SNN stack, windows of 512 bytes | 34,810,812 | Stream, longer reach, taught output synapses | 1.16034 | 8 | — | — |
+| 34.81M SNN stack, windows of 512 bytes | 34,810,812 | Stream, longer reach | 1.17095 | 9 | 1.46178 | 6 |
+| 34.81M SNN stack, windows of 512 bytes | 34,810,812 | Stream | 1.18518 | 10 | 1.47610 | 7 |
+| 34.75M full attention, standard shape | 34,752,000 | Windows with 496 bytes of history, taught output synapses | 1.13440 | 2 | — | — |
+| 34.75M full attention, standard shape | 34,752,000 | Windows with 496 bytes of history | 1.14388 | 4 | 1.42649 | 3 |
+| 34.75M full attention, standard shape | 34,752,000 | Windows with 448 bytes of history | 1.14539 | 5 | 1.42786 | 4 |
+| 34.75M full attention, standard shape | 34,752,000 | Windows with 256 bytes of history | 1.15646 | 7 | — | — |
+
+![Complete enwik8 test and validation of the two stacks as streams and of the Transformer in warmed windows](../results/figures/event_lm_stream_form.png)
+
+![The stack as it reads a stream: eleven levels of a state read and a layer of threshold cells](../results/figures/event_lm_stream_form_circuit.png)
+
+![Averaged validation loss over training in windows, and the stacks' distance to the Transformer](../results/figures/event_lm_stream_form_training.png)
+
+[Measurements, circuit and limits](STREAM_FORM.md) · [Every training arm](STREAM_FORM_ARMS.md)
+
+This comparison reads the test as a stream. A stack carries its state through 16 unbroken parts of the enwik8 test split and through every PG-19 book. The Transformer carries no state and reads the same texts in windows that hold the named bytes of history before the scored ones. A longer reach lets the reads of a stack reach cells beyond its window of training, which adds no synapse. Taught output synapses start at zero in every stream and learn from each byte after it was predicted, and the Transformer gets the same rule on its last layer as a control.
+
+On the enwik8 test the stack on long windows with its longer reach is 0.0033 bpb below the Transformer at its best window. On the validation split it is 0.0065 above it (1.1694 against 1.1629), so the two are level. That stack trained on windows of 1,024 bytes from 24,000 updates, and the Transformer and the other stack on windows of 512 bytes. A Transformer trained on windows of 1,024 bytes is the control that this comparison does not have yet. The three models received identical windows from random weights up to 24,000 updates. Every row is one seed.
+
 ## Read clocks and the address rate, trained from scratch · 368,640,000 training targets · seed 20001
 
 | Model | Parameters | Optimizer | enwik8 | Rank | PG-19 calibrated | Rank | PG-19 raw |
