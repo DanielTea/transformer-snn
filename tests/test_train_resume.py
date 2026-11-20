@@ -86,6 +86,24 @@ def test_a_run_continues_only_with_the_settings_it_was_started_with(trainer, tmp
     assert "already at update 4" in capsys.readouterr().err
 
 
+def test_a_run_from_before_a_setting_existed_continues_with_that_setting_at_its_default(trainer, tmp_path, capsys):
+    whole, broken = tmp_path / "whole", tmp_path / "broken"
+    trainer(whole)
+    trainer(broken, "--stop-at", "4")
+    # The saved state of a run that an earlier trainer started does not name the settings added since.
+    path = broken / "model.pt.resume"
+    state = torch.load(path, weights_only=True)
+    del state["args"]["output_cap"]
+    torch.save(state, path)
+    with pytest.raises(SystemExit):
+        trainer(broken, "--output-cap", "64")
+    assert "the run differs in output_cap" in capsys.readouterr().err
+    trainer(broken)
+    one = torch.load(whole / "model.pt", weights_only=True)["state_dict"]
+    other = torch.load(broken / "model.pt", weights_only=True)["state_dict"]
+    assert all(torch.equal(one[key], other[key]) for key in one)
+
+
 def test_stopping_needs_a_saved_state_to_continue_from(trainer, tmp_path, capsys):
     with pytest.raises(SystemExit):
         trainer(tmp_path, "--stop-at", "3")

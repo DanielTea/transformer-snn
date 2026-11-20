@@ -37,6 +37,21 @@ def test_mixture_samples_document_windows_and_records_equal_sequences(tmp_path, 
     assert results[0] == results[1]
     assert results[0]["source_targets"] == {"enwik8": 80, "c4": 40}
 
+    # A stretch of a stream is unbroken in its source and may run on from a document into the next.
+    mix = TrainingMixture(catalogue, np.frombuffer(enwik8, dtype=np.uint8), 2)
+    generator = torch.Generator().manual_seed(9631)
+    crossed = False
+    for _ in range(20):
+        inputs, labels = mix.stretch(3, 3, generator)
+        assert inputs.shape == labels.shape == (3, 6)
+        torch.testing.assert_close(inputs[:, 1:], labels[:, :-1])
+        rows = [bytes(row.tolist() + [last.item()]) for row, last in zip(inputs, labels[:, -1])]
+        assert rows[0] in enwik8 and rows[1] in enwik8 and rows[2] in body
+        crossed |= len(set(rows[2])) > 1
+    assert crossed and mix.receipt()["source_targets"] == {"enwik8": 240, "c4": 120}
+    with pytest.raises(ValueError, match="longer than a source"):
+        mix.stretch(3, 5, generator)
+
     (tmp_path / "c4.spans").write_bytes(lengths.replace(b"first\t4", b"first\t3"))
     with pytest.raises(ValueError, match="file checksum differs"):
         TrainingMixture(catalogue, np.frombuffer(enwik8, dtype=np.uint8), 2)

@@ -123,6 +123,10 @@ def averaged_weights(model, average):
         with torch.no_grad():
             for parameter, mean in zip(model.parameters(), average, strict=True):
                 parameter.copy_(mean)
+        if isinstance(model, EventLM):
+            # Where a neuron's range depends on other learned sizes, the average of weights that were each in
+            # range can leave it.
+            model.synaptic_scaling()
         yield
     finally:
         with torch.no_grad():
@@ -160,6 +164,47 @@ def evaluate(model, data, *, context, batches, batch_size, device, event, pulse_
     count = window_count * context
     return {"bpb": nll / (count * math.log(2)), "argmax_accuracy": correct / count, "target_bytes": count,
             **({"pulses_per_byte": pulses / count} if pulse_counts is not None else {})}
+
+
+# A stream of the validation hears this many pieces before the scored ones, and has this many scored ones.
+_STREAM_LEAD, _STREAM_PIECES = 2, 4
+
+
+@torch.inference_mode()
+def evaluate_stream(model, data, *, context, batches, batch_size, device, event, pulse_counts=None):
+    """Score a stack on streams: evenly spaced stretches of the data, which it takes piece by piece with the state
+    that it carries.
+
+    A stream is some pieces of ``context`` bytes that are not scored and then the scored ones, so every scored
+    byte has full tapes behind it. As many bytes are scored as ``evaluate`` scores in windows that start empty.
+    """
+    was_training = model.training
+    model.eval()
+    streams = max(1, batches * batch_size // _STREAM_PIECES)
+    length = (_STREAM_LEAD + _STREAM_PIECES) * context
+    stride = (len(data) - length - 1) // streams
+    offsets = np.arange(length + 1)
+    nll = 0.0
+    correct = 0
+    try:
+        for start in range(0, streams, batch_size):
+            rows = np.arange(start, min(start + batch_size, streams))[:, None] * stride + offsets
+            stretch = torch.from_numpy(data[rows].astype(np.int64)).to(device)
+            state = None
+            for piece in range(_STREAM_LEAD + _STREAM_PIECES):
+                span = slice(piece * context, (piece + 1) * context)
+                output, state = model.stream(stretch[:, :-1][:, span], state)
+                if pulse_counts is not None:
+                    pulse_counts.clear()
+                if piece >= _STREAM_LEAD:
+                    targets = stretch[:, 1:][:, span]
+                    logits = scoring_logits(output, event, model.cfg.resolution)
+                    nll += F.cross_entropy(logits.flatten(0, 1), targets.flatten(), reduction="sum").item()
+                    correct += (output.argmax(dim=-1) == targets).sum().item()
+    finally:
+        model.train(was_training)
+    count = streams * _STREAM_PIECES * context
+    return {"bpb": nll / (count * math.log(2)), "argmax_accuracy": correct / count, "target_bytes": count}
 
 
 def build_model(args):
@@ -259,6 +304,8 @@ def build_model(args):
                             granule_soften=getattr(args, "granule_soften", EventLMConfig.granule_soften),
                             granule_soft=getattr(args, "granule_soft", EventLMConfig.granule_soft),
                             granule_slope=getattr(args, "granule_slope", EventLMConfig.granule_slope),
+                            granule_slope_width=getattr(args, "granule_slope_width",
+                                                        EventLMConfig.granule_slope_width),
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
@@ -266,6 +313,22 @@ def build_model(args):
                             granule_clock=getattr(args, "granule_clock", EventLMConfig.granule_clock),
                             granule_hold=getattr(args, "granule_hold", EventLMConfig.granule_hold),
                             granule_clock_rate=getattr(args, "granule_clock_rate", EventLMConfig.granule_clock_rate),
+                            stack=getattr(args, "stack", EventLMConfig.stack),
+                            granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
+                            read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
+                            read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
+                            read_turn=getattr(args, "read_turn", EventLMConfig.read_turn),
+                            read_delays=getattr(args, "read_delays", EventLMConfig.read_delays),
+                            read_delay_probes=getattr(args, "read_delay_probes", EventLMConfig.read_delay_probes),
+                            read_reach=getattr(args, "read_reach", EventLMConfig.read_reach),
+                            output_cap=getattr(args, "output_cap", EventLMConfig.output_cap),
+                            pool_fine=getattr(args, "pool_fine", EventLMConfig.pool_fine),
+                            pool_rest=getattr(args, "pool_rest", EventLMConfig.pool_rest),
+                            pool_rate=getattr(args, "pool_rate", EventLMConfig.pool_rate),
+                            pool_lifts_ceiling=getattr(args, "pool_lifts_ceiling", EventLMConfig.pool_lifts_ceiling),
+                            output_pool=getattr(args, "output_pool", EventLMConfig.output_pool),
+                            granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
+                            granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
                             **synapses, **heads)
         model = EventLM(cfg)
         with torch.no_grad():
@@ -276,7 +339,10 @@ def build_model(args):
             if head_readout is not None:
                 model.read_heads.readout[:, 1:] = head_readout
         return model, cfg, {}
-    cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window)
+    cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window,
+                  feed_forward=getattr(args, "feed_forward", SNNConfig.feed_forward),
+                  age_offsets=getattr(args, "age_offsets", SNNConfig.age_offsets),
+                  untied_output=getattr(args, "untied_output", SNNConfig.untied_output))
     if args.local_lookback is not None:
         per_layer, extra = divmod(args.local_lookback - 1, args.depth)
         model_kwargs["local_windows"] = tuple(1 + per_layer + (layer < extra) for layer in range(args.depth))
@@ -558,6 +624,9 @@ def main():
                         help="inhibitory spikes per byte against the clock membrane")
     parser.add_argument("--clock-source", choices=_CLOCK_SOURCES, default="surprise",
                         help="integrate surprise, or one unit per byte as the fixed-stride control")
+    parser.add_argument("--stack", action="store_true",
+                        help="a decoder without blocks: every level is the state read and the cell layer that "
+                             "--read-after and --granule-after name for it, and --depth counts the levels")
     parser.add_argument("--read-after", help="comma-separated byte-rate blocks that a state read follows")
     parser.add_argument("--read-width", type=int, default=EventLMConfig.read_width, help="channels of a state read")
     parser.add_argument("--read-heads", type=int, default=EventLMConfig.read_heads)
@@ -572,8 +641,28 @@ def main():
                         help="starting scale of a state read's probe, tag and payload synapses")
     parser.add_argument("--read-budget", type=int, default=EventLMConfig.read_budget,
                         help="cell spikes that end a race read of rates, the race within reach of the leader if unset")
+    parser.add_argument("--read-cap", type=int, default=EventLMConfig.read_cap,
+                        help="most pulses a probe, tag or payload neuron of a race read fires at a byte; a stream "
+                             "neuron's largest count when omitted")
     parser.add_argument("--read-address-rate", type=float, default=EventLMConfig.read_address_rate,
                         help="factor on the stored age offsets and gains of a state read")
+    parser.add_argument("--read-phases", type=int, default=EventLMConfig.read_phases,
+                        help="pairs of pacemaker cells that the probe and tag neurons of every state read hear: "
+                             "their phases tell how far apart two bytes are, so the match of probe and tag can "
+                             "address a cell by its age as well as by what it holds")
+    parser.add_argument("--read-turn", action="store_true",
+                        help="pacemakers gate the dendrites of the probe and tag neurons of every state read, so "
+                             "the pulses of a pair of neurons are turned by the phase of its pacemakers: probe and "
+                             "tag then match by what they hold and by the bytes between them at once")
+    parser.add_argument("--read-delays", type=int, default=EventLMConfig.read_delays,
+                        help="the tag neurons of every state read hear each channel as it is now and once more "
+                             "after a delay of one to this many bytes less one: a cell's tag then tells what led "
+                             "up to it, and one read finds how bytes like the present ones went on")
+    parser.add_argument("--read-delay-probes", action="store_true",
+                        help="the probe neurons of every state read hear the late fibres too")
+    parser.add_argument("--read-reach", type=int, metavar="CELLS",
+                        help="in a stream a state read reaches this many cells back, more than --read-window: the "
+                             "cells beyond the window take the age offset of its oldest cell, so no synapse is added")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
@@ -593,7 +682,9 @@ def main():
                         help="clusters of granule cells in a layer, each on its own stream channels")
     parser.add_argument("--granule-cells", type=int, default=EventLMConfig.granule_cells, help="cells of a cluster")
     parser.add_argument("--granule-fan", type=int, default=EventLMConfig.granule_fan,
-                        help="stream channels a cluster listens to, and channels its axons reach")
+                        help="stream channels a cluster listens to, and channels its axons reach; two or more times "
+                             "the stream gives every channel that many fibres, one for the present and the others "
+                             "each after a delay of its own")
     parser.add_argument("--granule-reach", type=int, default=EventLMConfig.granule_reach,
                         help="stream channels the axons of a cluster reach, where that differs from the channels "
                              "it listens to")
@@ -608,9 +699,25 @@ def main():
     parser.add_argument("--granule-budget", type=lambda text: int(text) or None, default=EventLMConfig.granule_budget,
                         help="spikes per byte that the cells of a granule cluster race for; threshold cells when "
                              "omitted or 0")
+    parser.add_argument("--granule-cap", type=int, default=EventLMConfig.granule_cap,
+                        help="most spikes a granule cell fires at a byte; a stream neuron's largest count when "
+                             "omitted")
+    parser.add_argument("--granule-gate", type=int, default=EventLMConfig.granule_gate, metavar="SPIKES",
+                        help="every granule cell has a gate dendrite and a value dendrite: each gate spike lets "
+                             "the value dendrite's charge into the cell body once, and SPIKES of them are a "
+                             "threshold of the gate; plain threshold cells when omitted or 0")
+    parser.add_argument("--granule-veto", type=int, default=EventLMConfig.granule_veto, metavar="STEPS",
+                        help="every granule cell has a veto dendrite on the same fibres that does not fire: its "
+                             "charge closes the cell in STEPS steps over the charge of one whole spike; no veto "
+                             "when omitted or 0")
     parser.add_argument("--granule-slope", action="store_true",
                         help="threshold cells keep their spikes and learn from a smooth threshold, so that a "
                              "silent cell still learns")
+    parser.add_argument("--granule-slope-width", type=int, default=EventLMConfig.granule_slope_width,
+                        metavar="SPIKES",
+                        help="the smooth threshold that cells learn from is as wide as SPIKES of a cell's spikes "
+                             "(1 when omitted); with a fine pool its number of fine spikes keeps the slope as "
+                             "wide as it is for whole spikes")
     parser.add_argument("--granule-races", type=int, default=EventLMConfig.granule_races,
                         help="equal groups in which the cells of a granule cluster race, each for the budget")
     parser.add_argument("--granule-soften", type=float, default=EventLMConfig.granule_soften,
@@ -655,6 +762,15 @@ def main():
                              "and continue from that file when it exists")
     parser.add_argument("--stop-at", type=int, metavar="STEP",
                         help="leave after this update with its training state saved; --resume continues the schedule")
+    parser.add_argument("--stream", type=int, metavar="PIECES",
+                        help="train a stack on streams: stretches of this many consecutive windows of --ctx bytes, "
+                             "one window an update, with the state of its reads and cells handed on from window "
+                             "to window")
+    parser.add_argument("--stream-from", type=int, default=0, metavar="STEP",
+                        help="train on windows that start empty up to this update and on streams after it")
+    parser.add_argument("--stream-groups", type=int, default=1, metavar="GROUPS",
+                        help="groups of streams that run side by side and take turns: an update trains on the next "
+                             "window of the next group, so consecutive updates hear different texts")
     parser.add_argument("--early-readout", type=int,
                         help="number of leading blocks whose stream also drives the vocabulary neurons")
     parser.add_argument("--early-readout-weight", type=float, default=0.0,
@@ -675,12 +791,44 @@ def main():
                         help="spread a learned share of immediate pulses across the steering clock")
     parser.add_argument("--delay-filter", action="store_true",
                         help="correct the coincidence path with learned spike differences across fixed taps")
+    parser.add_argument("--output-cap", type=int, default=EventLMConfig.output_cap, metavar="EIGHTHS",
+                        help="most evidence an output neuron fires for or against its byte, in eighths of a bit; "
+                             "the default of 128 ends a neuron's say at 16 bits")
+    parser.add_argument("--pool-fine", type=int, default=EventLMConfig.pool_fine, metavar="TIMES",
+                        help="the neurons of state reads and cell layers count their threshold in quanta this many "
+                             "times finer (four times this many to a threshold), and each spike of their pool "
+                             "adds one")
+    parser.add_argument("--pool-rest", type=int, default=EventLMConfig.pool_rest, metavar="QUANTA",
+                        help="quanta of threshold that such a neuron keeps while its pool is silent (default: a "
+                             "whole threshold)")
+    parser.add_argument("--pool-rate", type=int, default=EventLMConfig.pool_rate, metavar="TIMES",
+                        help="such a pool fires this many spikes for each one that a block's pool fires at the "
+                             "same activity of the stream")
+    parser.add_argument("--pool-lifts-ceiling", action="store_true",
+                        help="the pool divides a neuron's charge before its membrane bounds it, so the neurons of "
+                             "race reads and plain cells fire up to their largest count however high their "
+                             "threshold stands (otherwise a raised threshold leaves them fewer spikes)")
+    parser.add_argument("--output-pool", type=int, default=EventLMConfig.output_pool, metavar="QUANTA",
+                        help="give a stack's output neurons a pool of their own and this many quanta to a "
+                             "threshold, of which one stands while the pool is silent")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
     parser.add_argument("--spike-resolution", type=int, default=1, help="number of finer spikes per original unit")
     parser.add_argument("--depth", type=int, default=3)
     parser.add_argument("--no-carry", action="store_true", help="reset event membrane before each token")
     parser.add_argument("--heads", type=int, default=4, help="Transformer attention heads")
     parser.add_argument("--mlp-ratio", type=float, default=4.4, help="Transformer feed-forward expansion")
+    parser.add_argument("--feed-forward", choices=("swiglu", "reglu", "gelu", "relu"), default=SNNConfig.feed_forward,
+                        help="the Transformer's feed-forward units: gated (swiglu), or as controls at the same "
+                             "number of weights gated units that open only above zero (reglu), as the gated cells "
+                             "of a stack do, plain smooth units (gelu), or plain units with a threshold (relu), as "
+                             "the plain cells of a stack are")
+    parser.add_argument("--age-offsets", type=float, default=SNNConfig.age_offsets, metavar="RATE",
+                        help="as a control the Transformer's heads address by an offset per head and distance "
+                             "that moves RATE times as fast as a weight, in place of rotary phases, as the heads "
+                             "of a state read do")
+    parser.add_argument("--untied-output", action="store_true",
+                        help="as a control the Transformer's output layer has weights of its own in place of the "
+                             "embedding's, as the output synapses of a stack have")
     parser.add_argument("--local-window", type=int, default=32, help="local Transformer attention window")
     parser.add_argument("--local-lookback", type=int, help="effective context including the current byte")
     parser.add_argument("--ctx", type=int, default=256)
@@ -812,6 +960,20 @@ def main():
     if args.stop_at is not None and (not args.resume or not 0 < args.stop_at < args.steps
                                      or args.stop_at % args.save_every):
         parser.error("--stop-at needs --resume and an update below --steps at which --save-every writes")
+    if args.stream is not None and (
+            args.stream < 2 or (args.save_every and args.save_every % args.stream)
+            or args.code_loss_weight or args.early_readout_weight or args.bank_read_rank_weight):
+        parser.error("--stream takes two or more windows to a stretch, a number that divides --save-every, and "
+                     "trains on the next byte alone")
+    if args.stream_groups != 1 and (args.stream is None or args.stream_groups < 1):
+        parser.error("--stream-groups needs --stream and one group at least")
+    # All groups start a stretch together every this many updates, and a run saves and turns at such updates.
+    rounds = 1 if args.stream is None else args.stream * args.stream_groups
+    if args.stream is not None and ((args.save_every and args.save_every % rounds) or args.stream_from % rounds):
+        parser.error("the stretches of all --stream-groups take a number of updates that divides --save-every "
+                     "and --stream-from")
+    if args.stream_from and (args.stream is None or not 0 < args.stream_from < args.steps):
+        parser.error("--stream-from needs --stream and an update below --steps")
     event = args.variant in EVENT_ROUTES
     name = "_".join(part for part in (args.variant, f"s{args.seed}", args.tag) if part)
     results_dir = None if args.results_dir is None else args.results_dir.expanduser()
@@ -827,6 +989,12 @@ def main():
         max_windows = args.eval_bs * max(args.eval_batches, args.final_eval_batches)
         if (len(val) - args.ctx - 1) // max_windows < args.ctx:
             raise ValueError("evaluation windows would overlap; reduce batch size or evaluation batches")
+        if args.stream is not None and len(train) <= args.stream * args.ctx + 1:
+            raise ValueError("a stretch of the stream is longer than the training split")
+        if args.stream is not None and mixture is not None:
+            for corpus in mixture.corpora.values():
+                if len(corpus.data) <= args.stream * args.ctx + 1:
+                    raise ValueError("a stretch of the stream is longer than a source of the training mixture")
         model, cfg, model_kwargs = build_model(args)
         initialization = loaded_weights = None
         if args.initialize_from is not None:
@@ -913,10 +1081,39 @@ def main():
 
     evaluate_options = dict(context=args.ctx, batch_size=args.eval_bs, device=device, event=event,
                             pulse_counts=pulse_counts)
+    # A stack whose reads and cells carry their state is also scored on streams.
+    streams = False
+    if event and cfg.stack:
+        try:
+            with torch.no_grad():
+                model.stream(torch.zeros(1, 2, dtype=torch.long, device=device))
+            streams = True
+        except ValueError:
+            pass
+        if pulse_counts is not None:
+            pulse_counts.clear()
+    max_streams = max_windows // _STREAM_PIECES
+    if streams and (len(val) - (_STREAM_LEAD + _STREAM_PIECES) * args.ctx - 1) // max(1, max_streams) < 1:
+        streams = False
+    if args.stream is not None and not streams:
+        parser.error("--stream trains a stack whose reads and cells carry their state, with a validation split "
+                     "that holds its streams")
     optimizer = make_optimizer(model, args.lr, args.wd, betas=(0.9, args.adam_beta2), rotated=args.rotated_adam,
                                stacks=args.rotate_stacks, scales=args.lr_scale)
     average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
     generator = torch.Generator(device="cpu").manual_seed(args.seed)
+
+    def draw(step):
+        """The windows that an update on windows trains on, or the stretch that an update on streams starts.
+        The other updates of a stretch draw nothing. The groups of streams take turns, each a window at a time."""
+        if args.stream is None or step <= args.stream_from:
+            return (random_batch(train, args.bs, args.ctx, generator) if mixture is None
+                    else mixture.batch(args.bs, generator))
+        if (step - 1 - args.stream_from) // args.stream_groups % args.stream:
+            return None
+        return (random_batch(train, args.bs, args.stream * args.ctx, generator) if mixture is None
+                else mixture.stretch(args.bs, args.stream, generator))
+
     timer, curve = Timer(), []
     parameters = count_params(model)
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -926,8 +1123,10 @@ def main():
     resume_path = Path(f"{checkpoint}.resume") if args.resume else None
     if resume_path is not None and resume_path.exists():
         state = torch.load(resume_path, map_location="cpu", weights_only=True)
-        different = sorted(key for key in {*state["args"], *reached} - _RESUME_FREE
-                           if json.dumps(state["args"].get(key)) != json.dumps(reached.get(key)))
+        # A setting that the trainer did not have when the run started stands at its default.
+        started = {key: parser.get_default(key) for key in reached} | state["args"]
+        different = sorted(key for key in {*started, *reached} - _RESUME_FREE
+                           if json.dumps(started.get(key), default=str) != json.dumps(reached.get(key)))
         if different:
             parser.error(f"{resume_path}: the run differs in {', '.join(different)}")
         if args.stop_at is not None and args.stop_at <= state["step"]:
@@ -943,19 +1142,30 @@ def main():
         curve, start, earlier_seconds = state["curve"], state["step"], state["seconds"]
         resumed_at = [*state["resumed_at"], start]
         # Drawing the earlier batches again puts the generator and the mixture's receipt where they were.
-        for _ in range(start):
-            if mixture is None:
-                random_batch(train, args.bs, args.ctx, generator)
-            else:
-                mixture.batch(args.bs, generator)
+        for earlier in range(1, start + 1):
+            draw(earlier)
         print(f"{name}: continuing after {start} of {args.steps} updates", flush=True)
     teacher_event = isinstance(teacher, EventLM)
     teacher_resolution = teacher.cfg.resolution if teacher_event else 1
+    # Neurons whose synapses were scaled back into the range of exact sums since the last evaluation: a tensor
+    # between evaluations, so that no step waits for it.
+    scaled_neurons = 0
+    # The stretch that each group of streams hears and the state that its stack carries through it.
+    stretches, carried = {}, {}
     for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
-        inputs, labels = (random_batch(train, args.bs, args.ctx, generator) if mixture is None
-                          else mixture.batch(args.bs, generator))
+        on_streams = args.stream is not None and step > args.stream_from
+        drawn = draw(step)
+        if on_streams:
+            turn = step - 1 - args.stream_from
+            group, piece = turn % args.stream_groups, turn // args.stream_groups % args.stream
+            if drawn is not None:
+                # A new stretch of the training bytes, which the stack hears from an empty state.
+                stretches[group], carried[group] = drawn, None
+            inputs, labels = (part[:, piece * args.ctx:(piece + 1) * args.ctx] for part in stretches[group])
+        else:
+            inputs, labels = drawn
         inputs = inputs.to(device)
         if pulse_counts is not None:
             pulse_counts.clear()
@@ -976,6 +1186,9 @@ def main():
             code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
         elif args.early_readout_weight:
             counts, *early = model(inputs, **forward_options)
+        elif on_streams:
+            # The state carries no gradient: a window learns from what it fires itself.
+            counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
         else:
             counts = model(inputs, **forward_options)
         logits = scoring_logits(counts, event, args.spike_resolution)
@@ -1005,6 +1218,9 @@ def main():
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
+        if event:
+            # A neuron whose summed synapses left the range of exact sums shrinks them all by one factor.
+            scaled_neurons += model.synaptic_scaling()
         if average is not None:
             # The average follows the weights closely at first, so the starting weights do not linger in it.
             decay = min(args.weight_average, step / (step + 10))
@@ -1012,24 +1228,40 @@ def main():
                 for mean, parameter in zip(average, model.parameters(), strict=True):
                     mean.lerp_(parameter, 1 - decay)
         if step % args.eval_every == 0 or step == args.steps:
+            scaled_neurons = int(scaled_neurons)
             metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
-            averaged_metrics = None
+            flowing = evaluate_stream(model, val, batches=args.eval_batches, **evaluate_options) if streams else None
+            averaged_metrics = averaged_flowing = None
             if average is not None:
                 with averaged_weights(model, average):
                     averaged_metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
+                    if streams:
+                        averaged_flowing = evaluate_stream(model, val, batches=args.eval_batches, **evaluate_options)
                 print(f"{name} averaged weights at {step}: {averaged_metrics['bpb']:.4f} bpb", flush=True)
+                if streams:
+                    print(f"{name} averaged weights on streams at {step}: {averaged_flowing['bpb']:.4f} bpb",
+                          flush=True)
             curve.append(dict(step=step, tokens=step * args.bs * args.ctx,
                               train_bpb=language_loss.item() / math.log(2), val_bpb=metrics["bpb"],
                               val_argmax_accuracy=metrics["argmax_accuracy"],
                               **({} if averaged_metrics is None else {"averaged_val_bpb": averaged_metrics["bpb"]}),
+                              **({} if flowing is None else {"stream_val_bpb": flowing["bpb"]}),
+                              **({} if averaged_flowing is None else
+                                 {"averaged_stream_val_bpb": averaged_flowing["bpb"]}),
                               **({"train_pulses_per_byte": pulses.item(), "val_pulses_per_byte": metrics["pulses_per_byte"],
                                   "spike_price": spike_price.item()} if pulse_counts is not None else {}),
                               **({"teacher_selected_fraction": teacher_fraction.item()} if teacher is not None else {}),
                               **({"bank_read_rank_loss": bank_read_loss.item()} if args.bank_read_rank_weight else {}),
                               **({"code_loss": code_loss.item()} if args.code_loss_weight else {}),
                               **({"early_train_bpb": early_loss.item() / math.log(2)}
-                                 if args.early_readout_weight else {})))
+                                 if args.early_readout_weight else {}),
+                              **({"scaled_neurons": scaled_neurons} if scaled_neurons else {})))
             activity = f" pulses/byte={metrics['pulses_per_byte']:.0f}" if pulse_counts is not None else ""
+            if scaled_neurons:
+                activity += f" scaled neurons={scaled_neurons}"
+                scaled_neurons = 0
+            if flowing is not None:
+                activity += f" streams={flowing['bpb']:.4f} bpb"
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
                   f"accuracy={metrics['argmax_accuracy']:.4f} ({earlier_seconds + timer():.1f}s){activity}", flush=True)
 
@@ -1062,12 +1294,22 @@ def main():
     val_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,
                                                             **evaluate_options)
+    final_options = dict(evaluate_options, batches=args.final_eval_batches)
+    stream_scores = {}
+    if streams:
+        stream_scores["stream_val"] = evaluate_stream(model, val, **final_options)
+        if not args.validation_only:
+            stream_scores["stream_test"] = evaluate_stream(model, test, **final_options)
     averaged_score = None
     if average is not None:
         with averaged_weights(model, average):
             averaged_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
+            if streams:
+                stream_scores["averaged_stream_val"] = evaluate_stream(model, val, **final_options)
             averaged_state = {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
         print(f"{name} averaged weights: validation={averaged_score['bpb']:.4f} bpb", flush=True)
+    for label, score in stream_scores.items():
+        print(f"{name} {label.replace('_', ' ')}: {score['bpb']:.4f} bpb", flush=True)
     args_record = dict(vars(args), data=str(args.data), results_dir=None if results_dir is None else str(results_dir),
                        synapse_readout=None if args.synapse_readout is None else str(args.synapse_readout),
                        head_readout=None if args.head_readout is None else str(args.head_readout),
@@ -1092,7 +1334,7 @@ def main():
                   data_sha1=ENWIK8_SHA1, train_target_bytes=args.steps * args.bs * args.ctx, curve=curve,
                   val_bpb=val_score["bpb"], test_bpb=test_score["bpb"] if test_score else None,
                   **({} if averaged_score is None else {"averaged_val_bpb": averaged_score["bpb"]}),
-                  val=val_score, test=test_score,
+                  val=val_score, test=test_score, **stream_scores,
                   scoring=("normalized exponential of scaled output" if event else "softmax over logits"),
                   seconds=earlier_seconds + timer(), **({"resumed_at_steps": resumed_at} if resumed_at else {}),
                   **teacher_details, **mixture_details)

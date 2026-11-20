@@ -1,0 +1,313 @@
+{
+  "release": "spiking-byte-lm-v15",
+  "model": {
+    "file": null,
+    "note": "The weights are not in the repository. They are in the long-windows archive of the release.",
+    "source_checkpoint": "stream_form/long-windows/model.pt.averaged",
+    "sha256": "3243151fcc8a7b3af70b157fd3f080f57a9707e02f45d8fac9bf1943b332144b",
+    "bytes": 139518644,
+    "archive": "spiking-byte-lm-v15-checkpoints-long-windows.tar.gz",
+    "parameters": 34810812,
+    "training_targets": 368640000,
+    "seed": 20001,
+    "training_record": "results/event_lm/stream_form/runs/long-windows.json",
+    "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates, the matrices of three-dimensional weights turned as well",
+    "weights": "running average with decay 0.999",
+    "resumed_at_updates": [
+      16500,
+      24000,
+      28500
+    ],
+    "training_windows": "512 bytes in batches of 8 up to 24,000 updates, then 1,024 bytes in batches of 4 with a read reach of 1,024 cells; 4,096 targets an update throughout",
+    "architecture": {
+      "stack": "eleven levels, each a state read of 8 heads and then a layer of threshold cells, both writing their spikes back into one stream of 512 channels",
+      "cells_per_layer": 1188,
+      "cell_fibres": "every channel now and once more after one to three bytes",
+      "read_tag_fibres": "every channel now and once more after one to three bytes",
+      "pool": "threshold quanta 16 times finer than v14, a rest of 4 quanta, one pool spike for every 64 pulses of the stream; the output neurons have a pool with 128 quanta to a threshold",
+      "pulse_budget_per_byte": 310000
+    },
+    "stream_scores": {
+      "enwik8_test": [
+        {
+          "record": "results/event_lm/stream_form/scores/test_long_windows_stream.json",
+          "reading": "a stream, as trained",
+          "device": "cuda",
+          "targets": 4999999,
+          "bpb": 1.1535934161379868
+        },
+        {
+          "record": "results/event_lm/stream_form/scores/test_long_windows_reach.json",
+          "reading": "a stream, the reads after levels 5 to 7 reach 4,096 cells",
+          "device": "cuda",
+          "targets": 4999999,
+          "bpb": 1.1405768403605485,
+          "over": "the reference Transformer in warmed windows of 496 bytes of history before 16 scored, along the same streams",
+          "bpb_difference": -0.003302335630686397,
+          "paired_95": [
+            -0.004765599137488668,
+            -0.0018286668208449268
+          ]
+        },
+        {
+          "record": "results/event_lm/stream_form/scores/test_long_windows_taught.json",
+          "reading": "a stream, the reads after levels 5 to 7 reach 4,096 cells, with fast output synapses from the cells of all eleven levels at a threshold of 2^24",
+          "device": "cuda",
+          "targets": 4999999,
+          "bpb": 1.1339367720385556,
+          "over": "the reference Transformer in warmed windows of 496 bytes of history before 16 scored, along the same streams, with fast output synapses at a rate of 0.07",
+          "bpb_difference": -0.00045823612414639477,
+          "paired_95": [
+            -0.0018180483683352044,
+            0.0009098809629800726
+          ]
+        }
+      ],
+      "enwik8_validation": [
+        {
+          "record": "results/event_lm/stream_form/scores/validation_long_windows_stream.json",
+          "reading": "a stream, as trained",
+          "device": "cuda",
+          "targets": 4999999,
+          "bpb": 1.1827794259012248
+        },
+        {
+          "record": "results/event_lm/stream_form/scores/validation_long_windows_reach.json",
+          "reading": "a stream, the reads after levels 5 to 7 reach 4,096 cells",
+          "device": "cuda",
+          "targets": 4999999,
+          "bpb": 1.1693594994175978,
+          "over": "the reference Transformer in warmed windows of 496 bytes of history before 16 scored, along the same streams",
+          "bpb_difference": 0.0064723642617532115,
+          "paired_95": [
+            0.005018677923560291,
+            0.00791817673764581
+          ]
+        },
+        {
+          "record": "results/event_lm/stream_form/scores/validation_long_windows_taught.json",
+          "reading": "a stream, the reads after levels 5 to 7 reach 4,096 cells, with fast output synapses from the cells of all eleven levels at a threshold of 2^24",
+          "device": "cuda",
+          "targets": 4999999,
+          "bpb": 1.1649187573392952,
+          "over": "the reference Transformer in warmed windows of 496 bytes of history before 16 scored, along the same streams, with fast output synapses at a rate of 0.07",
+          "bpb_difference": 0.007519157270224837,
+          "paired_95": [
+            0.0061529423444054805,
+            0.008889027871670084
+          ]
+        }
+      ],
+      "pg19_test": [
+        {
+          "record": "results/event_lm/stream_form/scores/pg19_long_windows_stream.json",
+          "reading": "a stream, as trained",
+          "device": "cuda",
+          "targets": 8404368,
+          "bpb": 1.445590432195653
+        },
+        {
+          "record": "results/event_lm/stream_form/scores/pg19_long_windows_reach.json",
+          "reading": "a stream, the reads after levels 5 to 7 reach 4,096 cells",
+          "device": "cuda",
+          "targets": 8404368,
+          "bpb": 1.424904127327115
+        },
+        {
+          "record": "results/event_lm/stream_form/scores/pg19_long_windows_taught.json",
+          "reading": "a stream, the reads after levels 5 to 7 reach 4,096 cells, with fast output synapses from the cells of all eleven levels at a threshold of 2^24",
+          "device": "cuda",
+          "targets": 8404368,
+          "bpb": 1.4046897684807895
+        }
+      ]
+    },
+    "warmed_window_scores": {
+      "enwik8_test": [
+        {
+          "record": "results/event_lm/stream_form/scores/test_long_windows_warmed.json",
+          "reading": "warmed windows of 256 bytes of history before 256 scored",
+          "device": "cuda",
+          "targets": 4999999,
+          "bpb": 1.1950894198924396
+        }
+      ]
+    }
+  },
+  "archives": {
+    "spiking-byte-lm-v15-checkpoints-long-windows.tar.gz": {
+      "sha256": "df4dde722aa5142612df728ebdd3c9b6cdfc05894c87c34d2c8911465380ba28",
+      "bytes": 258429131,
+      "contents_checksums": "checkpoints/SHA256SUMS-v15-long-windows"
+    },
+    "spiking-byte-lm-v15-checkpoints-windows.tar.gz": {
+      "sha256": "ddc7e4e0f3ce869a14539f5b1a29c0ca1fb07b4869b59bea4c776836b86a6e67",
+      "bytes": 258428769,
+      "contents_checksums": "checkpoints/SHA256SUMS-v15-windows"
+    },
+    "spiking-byte-lm-v15-checkpoints-transformer.tar.gz": {
+      "sha256": "c32871f52d4a879d30a0e0ca9592830b8d0e8979384cd44e3879f5d06a2f6ed7",
+      "bytes": 259017896,
+      "contents_checksums": "checkpoints/SHA256SUMS-v15-transformer"
+    },
+    "spiking-byte-lm-v15-stream-bits.tar.gz": {
+      "sha256": "c065a8130017369bbd38c51240719d57c4e966b89399e3383e4f61259262aca2",
+      "bytes": 30541703,
+      "contents": "checkpoints/stream_form/bits: the bits of every piece of every stream of the scorings along streams, as [checkpoints or rates, streams, pieces]"
+    }
+  },
+  "checkpoints": {
+    "stream_form/long-windows/model.pt": {
+      "bytes": 139510959,
+      "sha256": "61628e2620bf761ecff47acda79e6a4117a478942367e49167c687ab77378d19",
+      "archive": "spiking-byte-lm-v15-checkpoints-long-windows.tar.gz",
+      "arm": "fp16-d4-rd4-w1024-3e-4",
+      "run_name": "event_steered_s20001_v15g_fp16_d4_rd4_w1024_3e_4",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/stream_form/runs/long-windows.json",
+      "parameters": 34810812,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates, the matrices of three-dimensional weights turned as well",
+      "weights": "last update",
+      "resumed_at_updates": [
+        16500,
+        24000,
+        28500
+      ],
+      "forked_at_updates": 24000,
+      "forked_from": "the state of the windows run at 24,000 updates"
+    },
+    "stream_form/long-windows/model.pt.averaged": {
+      "bytes": 139518644,
+      "sha256": "3243151fcc8a7b3af70b157fd3f080f57a9707e02f45d8fac9bf1943b332144b",
+      "archive": "spiking-byte-lm-v15-checkpoints-long-windows.tar.gz",
+      "arm": "fp16-d4-rd4-w1024-3e-4",
+      "run_name": "event_steered_s20001_v15g_fp16_d4_rd4_w1024_3e_4",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/stream_form/runs/long-windows.json",
+      "parameters": 34810812,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates, the matrices of three-dimensional weights turned as well",
+      "weights": "running average with decay 0.999",
+      "resumed_at_updates": [
+        16500,
+        24000,
+        28500
+      ],
+      "forked_at_updates": 24000,
+      "forked_from": "the state of the windows run at 24,000 updates"
+    },
+    "stream_form/windows/model.pt": {
+      "bytes": 139510895,
+      "sha256": "758acf87671516087a0027c01b661d9fea791fb8dae407e15d09d05bccb3c1b9",
+      "archive": "spiking-byte-lm-v15-checkpoints-windows.tar.gz",
+      "arm": "fp16-d4-rd4-3e-4",
+      "run_name": "event_steered_s20001_v15g_fp16_d4_rd4_3e_4",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/stream_form/runs/windows.json",
+      "parameters": 34810812,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates, the matrices of three-dimensional weights turned as well",
+      "weights": "last update",
+      "resumed_at_updates": [
+        16500
+      ]
+    },
+    "stream_form/windows/model.pt.averaged": {
+      "bytes": 139518516,
+      "sha256": "679198b82b4d9bbcfa95993fcf02620ab05ef7e13e224c005c55eef3cbd0ac40",
+      "archive": "spiking-byte-lm-v15-checkpoints-windows.tar.gz",
+      "arm": "fp16-d4-rd4-3e-4",
+      "run_name": "event_steered_s20001_v15g_fp16_d4_rd4_3e_4",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/stream_form/runs/windows.json",
+      "parameters": 34810812,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates, the matrices of three-dimensional weights turned as well",
+      "weights": "running average with decay 0.999",
+      "resumed_at_updates": [
+        16500
+      ]
+    },
+    "stream_form/transformer/model.pt": {
+      "bytes": 139560075,
+      "sha256": "8b7157c55106b4942a816cb330d46e1b03fc7d8c8f0bd92719631f39d0c1eda4",
+      "archive": "spiking-byte-lm-v15-checkpoints-transformer.tar.gz",
+      "arm": "tf-rot-3e-4",
+      "run_name": "transformer_s20001_v15g_tf_rot_3e_4",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/stream_form/runs/transformer.json",
+      "parameters": 34752000,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates",
+      "weights": "last update",
+      "resumed_at_updates": [
+        70500
+      ]
+    },
+    "stream_form/transformer/model.pt.averaged": {
+      "bytes": 139566257,
+      "sha256": "248464b8b92c75927a1269a010026a80f5a6974af1d9e168b76642be0f396592",
+      "archive": "spiking-byte-lm-v15-checkpoints-transformer.tar.gz",
+      "arm": "tf-rot-3e-4",
+      "run_name": "transformer_s20001_v15g_tf_rot_3e_4",
+      "seed": 20001,
+      "updates": 90000,
+      "training_targets": 368640000,
+      "training_mixture": "training-v1",
+      "training_record": "results/event_lm/stream_form/runs/transformer.json",
+      "parameters": 34752000,
+      "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates",
+      "weights": "running average with decay 0.999",
+      "resumed_at_updates": [
+        70500
+      ]
+    }
+  },
+  "reference_checkpoints": {
+    "note": "The 256-wide Transformer of the earlier releases, scored in the same warmed windows. It is released with v12.",
+    "upstream_manifests": [
+      "models/spiking-byte-lm-v12/manifest.json"
+    ],
+    "checkpoints": {
+      "scratch-study/transformer_s20001.pt": {
+        "sha256": "de13da3ee9fe715bd59e227716252fc1fabe956ee4337e6bed82e59d5d2aa733",
+        "warmed_window_scores": {
+          "enwik8_test": [
+            {
+              "record": "results/event_lm/stream_form/scores/test_transformer_history256.json",
+              "reading": "warmed windows of 256 bytes of history before 256 scored",
+              "device": "cuda",
+              "targets": 4999999,
+              "bpb": 1.2068393599648921
+            }
+          ]
+        }
+      }
+    }
+  },
+  "resaved_checkpoints": "results/event_lm/stream_form/resaved_checkpoints.json",
+  "upstream_manifest": "models/spiking-byte-lm-v14/manifest.json",
+  "training_mixtures": {
+    "training-v1": {
+      "catalogue": "results/event_lm/training_mixture/prepared_v1.json",
+      "sources": "results/event_lm/training_mixture/sources_v1.json"
+    },
+    "ordered_input_and_target_windows_sha256": {
+      "long-windows": "d97e4856aaa8c11de6729aa39da58cc809326331160cbcd3271edec68bb4fb2b",
+      "windows": "3eda0822fa56122bc9cf631ed730c87b22347fb67122fae786c122eb941b1a68",
+      "transformer": "3eda0822fa56122bc9cf631ed730c87b22347fb67122fae786c122eb941b1a68"
+    },
+    "note": "The windows and transformer runs read the windows of v14 in the same order. The long-window run reads windows of 1,024 bytes from 24,000 updates."
+  }
+}

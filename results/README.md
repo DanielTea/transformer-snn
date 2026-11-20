@@ -58,6 +58,23 @@ hashes of the checkpoints before and after their paths were
 rewritten. `read_clocks_checkpoints.sha256` lists the six
 released checkpoints and the v12 Transformer scored beside them.
 
+The [stream-form study](../docs/STREAM_FORM.md) uses
+`event_lm/stream_form`. `arms.json` holds the settings and the
+validation curve of every arm and `runs` the training records of
+the three released runs. `scores` holds their scores on the
+enwik8 test and validation splits and on PG-19: the stacks as
+unbroken streams, the Transformer in warmed windows, and both
+with fast output synapses. The bits of every piece of those
+scorings, which the paired intervals resample, are a release
+asset. `reach_by_level.json` holds the scans of the reach of the
+reads, `fast_synapses.json` the probes of the fast output
+synapses and `small_test_bed.json` the learning rates on a small
+stack and Transformer. `leaderboard.json` is the table of the
+leaderboard page and `resaved_checkpoints.json` the hashes of the
+checkpoints before and after their paths were rewritten.
+`stream_form_checkpoints.sha256` lists the six released
+checkpoints and the v12 Transformer scored beside them.
+
 The recall figure uses `recall_distance/*_gap_v1_*.json` and
 `recall_distance/dendrite_event_s0_anchored_extrapolation.json`.
 The successor loss figure uses `lm_successor/scaled_v2_continuous.json`

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 import torch
 from torch import nn
@@ -52,12 +52,26 @@ _READ_CLOCKS = ("word", "end", "learned")
 _RACE_UNIT = 1.5
 # Multiples of the golden ratio spread the starting phases of a race's cells evenly.
 _GOLDEN = (math.sqrt(5) - 1) / 2
+# The golden ratio in steps of a phase that counts 2 ** 32 steps to a turn.
+_PHASE_STEPS = 1 << 32
+# At a fast output synapse a fibre's rate counts in 65,536ths of a spike against its running mean over the last
+# 1,024 bytes, the activities of all fibres share 65,536 units at each byte, a synapse holds up to 2 ** 35 units,
+# and a fast neuron fires up to 4,096 spikes.
+_TEACH_RATE = 1 << 16
+_TEACH_SLOW = 1024
+_TEACH_UNITS = 1 << 16
+_TEACH_LIMIT = 1 << 35
+_TEACH_SPIKES = 4096
+_TEACH_FIBRES = 1 << 17
+_GOLDEN_STEP = round(_GOLDEN * _PHASE_STEPS)
 # The kinds of slow synapses a granule cluster can have. The slowest then passes a 256th of its charge on per byte.
 _GRANULE_TRACES = 4
 # Bytes over which a slow synapse's held charge is summed in one piece.
 _TRACE_STRETCH = 512
 # The most spikes of resting charge a granule cell can hold below its threshold.
 _GRANULE_REST_LIMIT = 16
+# The most thresholds of charge that the gate dendrite of a gated cell answers with spikes, before inhibition.
+_GATE_CAP = 16
 # What opens a new stretch on a granule cluster's beat fibres, and what such a fibre brings of a stretch.
 _GRANULE_CLOCKS = ("word", "end", "every", "learned")
 _GRANULE_HOLDS = ("mean", "sum", "last")
@@ -68,6 +82,21 @@ _GRANULE_BEATS = 8
 _CLOCK_BITS = 4
 # The clock cell of a read's head hears the read's tags, and its threshold is this many bits above a stream neuron's.
 _READ_CLOCK_BITS = 4
+# The most pairs of pacemaker cells a state read can hear, the largest count of a pacemaker in spikes of either
+# sign, and the shortest period of a bank in bytes. The longest period is twice the read window.
+_READ_PHASES = 64
+# The longest delay of a state read's delayed fibres is one byte less than this.
+_READ_DELAYS = 16
+_PHASE_SPIKES = 64
+_PHASE_SHORTEST = 3.0
+# The synapses from the pacemakers start with this gain. At a quarter the pacemakers charge a probe or tag neuron
+# about as much as the stream does, and the heads start on a few cells picked by chance. At an eighth the reads
+# start nearly as broad as without pacemakers, and the synapses still hold several ticks each.
+_PHASE_GAIN = 0.125
+# The pacemakers that turn the probes and tags of a read: the fastest turns by one radian a byte, and with ever
+# more pairs the slowest would turn this many times slower.
+_TURN_SHORTEST = 2 * math.pi
+_TURN_SPAN = 10_000.0
 
 
 def _delay_group_widths(channels, groups):
@@ -179,6 +208,7 @@ class EventLMConfig:
     granule_soften: float = 1.0
     granule_soft: bool = False
     granule_slope: bool = False
+    granule_slope_width: int = 1
     granule_delays: int = 1
     granule_relays: int = 0
     granule_traces: int = 0
@@ -186,6 +216,42 @@ class EventLMConfig:
     granule_clock: str = "word"
     granule_hold: str = "sum"
     granule_clock_rate: float = 0.25
+    stack: bool = False
+    granule_cap: int | None = None
+    granule_gate: int = 0
+    granule_veto: int = 0
+    read_cap: int | None = None
+    read_phases: int = 0
+    read_turn: bool = False
+    # The tag neurons of a state read hear every channel as it is now and once more after a delay of one to this
+    # many bytes less one, and with ``read_delay_probes`` the probe neurons do too.
+    read_delays: int = 1
+    read_delay_probes: bool = False
+    # In a stream a state read reaches this many cells back, where that is more than ``read_window``. The cells
+    # beyond the window take the age offset of the window's oldest cell, so a longer reach adds no synapse.
+    read_reach: int | None = None
+    # An output neuron fires up to this many eighths of a bit of evidence for or against its byte.
+    output_cap: int = _OUTPUT_CAP
+    # The neurons of state reads and cell layers count their threshold in quanta this many times finer than the
+    # four of a packet threshold, and every spike of their pool adds one of those.
+    pool_fine: int = 1
+    # The quanta of threshold that such a neuron has while its pool is silent: by default a whole threshold.
+    pool_rest: int | None = None
+    # The spikes that such a pool fires for each one that the pool of a block fires at the same activity.
+    pool_rate: int = 1
+    # A membrane holds the charge of a neuron's largest count at its resting threshold, so a pool that raises the
+    # threshold leaves the neuron fewer spikes. With this the pool divides the charge before the membrane bounds
+    # it, and the neurons of race reads and plain cells fire up to their largest count at every threshold.
+    pool_lifts_ceiling: bool = False
+    # The quanta to a threshold of a stack's output neurons, which then have a pool like a level's and one
+    # quantum while it is silent. At zero they have no pool and their threshold does not move.
+    output_pool: int = 0
+    # The levels whose cells the fast output synapses hear in a stream, the units of their charge to one spike of
+    # an output neuron, and the spikes with which every arriving byte teaches them. Without levels the output has
+    # no fast synapses.
+    teach_after: tuple[int, ...] | None = None
+    teach_threshold: int = 0
+    teach_budget: int = 256
 
     @property
     def group_widths(self) -> tuple[int, ...]:
@@ -202,6 +268,15 @@ class EventLMConfig:
         population = 2 * self.hidden if self.inhibition_by_expansion else self.dim
         return ((population * self.resolution - 1) // _PACKET_UNITS).bit_length()
 
+    @property
+    def pool_quanta(self) -> int:
+        """The quanta to a threshold of a neuron of a state read or a cell layer."""
+        return _PACKET_UNITS * self.pool_fine
+
+    @property
+    def pool_rest_quanta(self) -> int:
+        return self.pool_quanta if self.pool_rest is None else self.pool_rest
+
 
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
     if not weight.is_floating_point():
@@ -211,8 +286,32 @@ def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
     return ticks.detach().round() + (ticks - ticks.detach()) if quantized else ticks
 
 
+def _unrounded_sums(weight, charge_bits):
+    """The summed sizes of each neuron's synapses in weight ticks, before the ticks are rounded."""
+    limit = _WEIGHT_LIMIT << (charge_bits - _CHARGE_BITS)
+    return (weight * (1 << charge_bits)).clamp(-limit, limit).abs().sum(-1)
+
+
+def _shrink_synapses(weight, factor, charge_bits):
+    """Shrink in place all synapses of the neurons whose ``factor`` is below one, and count those neurons.
+
+    ``weight`` holds one neuron's synapses along its last axis. A synapse beyond the largest weight counts as the
+    largest weight. The synapses of every other neuron stay as they are, bit for bit. The count is a tensor, so
+    that a pass over a whole decoder waits for no result on a graphics processor.
+    """
+    over = (factor < 1).unsqueeze(-1)
+    limit = (_WEIGHT_LIMIT << (charge_bits - _CHARGE_BITS)) / (1 << charge_bits)
+    weight.copy_(torch.where(over, weight.clamp(-limit, limit) * factor.unsqueeze(-1), weight))
+    return over.sum()
+
+
 def emitted_pulses(population, counts):
-    """A firing population's pulses for a pulse budget, whose price pushes on them with the population's share."""
+    """A firing population's pulses for a pulse budget, whose price pushes on them with the population's share.
+
+    A dendrite that does not fire has none: its steps stay inside its cell.
+    """
+    if population.dendrite:
+        return counts.new_zeros(())
     total = counts.abs().sum()
     share = population.price_share
     if share == 1:
@@ -265,9 +364,13 @@ class _IntegrateFire(nn.Module):
 
     # The share of a pulse budget's price that pushes on this population. Its pulses count in full either way.
     price_share = 1.0
+    # A dendrite counts its charge in steps and sends no spike.
+    dendrite = False
+    # The pool of a lifted population divides the charge before the membrane bounds it.
+    lifted = False
 
     def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False,
-                 quanta_per_threshold: int = _PACKET_UNITS):
+                 quanta_per_threshold: int = _PACKET_UNITS, capped: bool | int = False):
         super().__init__()
         self.cap = cap
         self.bits = charge_bits
@@ -275,6 +378,9 @@ class _IntegrateFire(nn.Module):
         self.carry = carry
         self.continuous = continuous
         self.quanta_per_threshold = quanta_per_threshold
+        # A membrane holds the charge of ``cap`` whole thresholds, so a threshold below a whole one would let
+        # more spikes through than the cap. A capped population fires the cap at most, or the number given.
+        self.capped = cap if capped is True else int(capped)
 
     def _charge(self, bounded):
         rails = torch.stack((bounded.clamp_min(0), (-bounded).clamp_min(0)), dim=-1)
@@ -299,9 +405,20 @@ class _IntegrateFire(nn.Module):
             units = quanta.to(torch.int32)
             quantum = self.threshold // self.quanta_per_threshold
             threshold = units * quantum
+            if self.lifted:
+                # The membrane holds the charge of the largest count at the present threshold, so the neuron
+                # fires and learns up to that count however high its pool has raised the threshold.
+                charge = current.to(torch.int32)
+                counts = ((charge.abs() + threshold // 2) // threshold).clamp(max=self.capped) * charge.sign()
+                if current.is_floating_point():
+                    surrogate = (current / (quanta * quantum)).clamp(-self.capped, self.capped)
+                    return counts.to(current.dtype) + (surrogate - surrogate.detach())
+                return counts
             charge = bounded.to(torch.int32)
             magnitude = (charge.abs() + threshold // 2) // threshold
             limit = (self.cap * self.quanta_per_threshold) // units
+            if self.capped:
+                limit = limit.clamp(max=self.capped)
             counts = magnitude.minimum(limit) * charge.sign()
             if current.is_floating_point():
                 surrogate = bounded / (quanta * quantum)
@@ -334,6 +451,36 @@ class _IntegrateFire(nn.Module):
         counts = total >> self.bits
         phase = (total & (self.threshold - 1)) if self.carry else None
         return self._signed(counts), phase
+
+
+class _ShuntedFire(_IntegrateFire):
+    """Neurons whose pool sets their threshold in quanta that need not be whole ticks of charge.
+
+    ``quanta_per_threshold`` quanta make the threshold that the neurons have
+    without a pool. A count is the charge over the present threshold, rounded
+    half away from zero and found in whole numbers, and the largest count is
+    the cap however high the threshold stands. Without quanta the neurons
+    fire as plain ones do.
+    """
+
+    def forward(self, current, quanta=None, *, reference=None):
+        if quanta is None:
+            return super().forward(current, reference=reference)
+        units = quanta.to(torch.int64)
+        charge = current.to(torch.int64)
+        doubled = 2 * self.quanta_per_threshold * charge.abs() + units * self.threshold
+        counts = (doubled // (2 * self.threshold * units)).clamp(max=self.cap) * charge.sign()
+        if not current.is_floating_point():
+            return counts.to(current.dtype)
+        surrogate = (current * (self.quanta_per_threshold / self.threshold) / quanta).clamp(-self.cap, self.cap)
+        return counts.to(current.dtype) + (surrogate - surrogate.detach())
+
+
+def _stream_pool(cfg):
+    """The inhibitory pool of a state read, a cell layer or a stack's output: it hears every pulse of the stream
+    there, and each of its spikes adds a quantum to the thresholds of the neurons that hear the stream with it."""
+    return _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS * cfg.pool_fine,
+                          cfg.inhibition_bits - cfg.pool_rate.bit_length() + 1, False)
 
 
 class _ResidualMembraneFire(_IntegrateFire):
@@ -1762,6 +1909,17 @@ class _DelayBlock(nn.Module):
         return spikes
 
 
+class _Level(nn.Module):
+    """A level of a stack. It has no relay neurons of its own: the stream passes as it is to the state read and to
+    the cells that follow the level."""
+
+    history_size = 0
+    correction = None
+
+    def forward(self, spikes, **_):
+        return spikes
+
+
 @dataclass
 class EventLMState:
     layers: list[_DelayState]
@@ -1784,6 +1942,65 @@ class EventChunkState:
     clock: ClockState | None = None
     synapses: SynapseState | None = None
     heads: HeadState | None = None
+
+
+@dataclass
+class ReadTape:
+    """What a state read keeps of a stream: the tags and payloads of the cells that later bytes can still reach,
+    as [batch, heads, cells, channels], and the last bytes of the stream for its late fibres."""
+    tag: torch.Tensor | None = None
+    payload: torch.Tensor | None = None
+    late: torch.Tensor | None = None
+
+
+@dataclass
+class FibreState:
+    """What a cell layer keeps of a stream: the last bytes that its delayed fibres still bring, and the charges
+    that its slow synapses hold."""
+    late: torch.Tensor | None = None
+    held: list[torch.Tensor] | None = None
+
+
+@dataclass
+class TaughtState:
+    """What the fast output synapses keep of a stream: their sizes as [batch, vocabulary, fibres], every fibre's
+    running mean rate, the bytes heard, the bytes since the sizes were last bounded, and the activity and the
+    counts of the last byte, which the next byte teaches."""
+    fast: torch.Tensor | None = None
+    mean: torch.Tensor | None = None
+    heard: int = 0
+    unbounded: int = 0
+    active: torch.Tensor | None = None
+    said: torch.Tensor | None = None
+
+
+@dataclass
+class StreamState:
+    """The state of a stack after some bytes of a stream: how many have gone by, what every read and every cell
+    layer keeps of them, and what the fast output synapses have learned from them."""
+    position: int = 0
+    reads: dict[str, ReadTape] = field(default_factory=dict)
+    cells: dict[str, FibreState] = field(default_factory=dict)
+    taught: TaughtState | None = None
+
+
+def _late(present, before, delay):
+    """``present`` as it stood ``delay`` bytes earlier, as [batch, bytes, channels]. ``before`` holds the last
+    bytes of the stream before ``present``, and what lies before the first byte of all is silent."""
+    length = present.shape[1]
+    joined = present if before is None else torch.cat((before, present), 1)
+    lead = max(0, delay + length - joined.shape[1])
+    return F.pad(joined, (0, 0, lead, 0))[:, joined.shape[1] + lead - length - delay:][:, :length]
+
+
+def _spread_phases(first, count, device, dtype):
+    """The phases at which the membranes of ``count`` cells start a race, from cell ``first`` of a stream on.
+
+    The golden ratio spreads the phases evenly over the cells. They are found in whole numbers, so that a cell
+    has its phase however far into a stream it stands.
+    """
+    cells = torch.arange(first + 1, first + count + 1)
+    return ((cells * _GOLDEN_STEP) % _PHASE_STEPS).to(dtype).div(_PHASE_STEPS).to(device)
 
 
 def _word_bytes():
@@ -1848,11 +2065,47 @@ class _StateRead(nn.Module):
     complete word, the one of age one the first byte after the word before
     it, and so on. One offset then addresses the single cell that holds the
     stream's state at the end of a chosen word.
+
+    With ``read_phases`` the probe and tag neurons also hear a bank of that
+    many pairs of pacemaker cells. A pacemaker fires in a fixed rhythm: the
+    counts of a pair follow the cosine and the sine of a phase that turns
+    once in the pair's period, and the periods run from three bytes to twice
+    the window. The phases at two bytes tell how far apart the bytes are, so
+    a probe that carries its own phases turned back by some bytes meets the
+    tag of the cell that many bytes back. The match of probe and tag then
+    addresses a cell by what it holds, by how old it is, and by both at once,
+    and all of it is learned by the synapses from the stream and from the
+    pacemakers. The age offsets remain beside it.
+
+    With ``read_turn`` the pacemakers gate where they were only heard. The
+    neurons of a probe or tag come in pairs that share two dendrites, and
+    every pair has a pair of pacemaker cells with a period of its own. Each
+    spike of a pacemaker lets the charge of a dendrite into a body once, on
+    the rail of the pacemaker's sign, so the two bodies fire for the two
+    charges turned by the pacemaker's phase. A probe sent at one byte and a
+    tag left at an earlier one then match by what both hold and by the phase
+    that passed between them, at each pair's own period. One head can so look
+    for one thing a few bytes back and for another thing far back, where an
+    age offset gives a head one preference for every probe. The fastest pair
+    turns by a radian a byte and the periods grow in equal ratios. Most pairs
+    turn little within a window and match by what the cells hold alone. This
+    is the spike form of a Transformer's rotary phases.
+
+    With ``read_delays`` above one the tag neurons hear every channel twice:
+    as it is now, and through a second fibre that brings it some bytes late.
+    Channel ``c`` is late by ``1 + c % (read_delays - 1)`` bytes, so every
+    delay is on the same share of the channels. A cell's tag then tells what
+    led up to the cell beside what the cell holds, and a probe that matches
+    it finds the cells that followed bytes like the present ones: one read
+    looks up how such bytes went on, which takes two reads in a row without
+    the delays. With ``read_delay_probes`` the probe neurons hear the late
+    fibres too, and a probe tells the last few bytes where it told one.
     """
 
     def __init__(self, cfg: EventLMConfig):
         super().__init__()
         self.heads, self.window, self.mode, self.levels = cfg.read_heads, cfg.read_window, cfg.read_mode, cfg.read_levels
+        self.reach = self.window if cfg.read_reach is None else cfg.read_reach
         self.resolution = cfg.resolution
         # The age offsets and the gains are charges, which move further than a synapse does. This factor on
         # their stored values lets them cover that range at the synapses' learning rate.
@@ -1861,12 +2114,36 @@ class _StateRead(nn.Module):
         cap = _HIDDEN_CAP * cfg.resolution
         # A payload pulse of a single addressed cell arrives as this many read pulses.
         self.read_resolution = cfg.resolution if cfg.read_resolution is None else cfg.read_resolution
+        self.delays, self.delay_probes = cfg.read_delays, cfg.read_delay_probes
         if self.mode != "age":
-            self.probe = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
-            self.tag = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
+            # A neuron that hears the late fibres has a second synapse from every channel.
+            late = cfg.dim if self.delays > 1 else 0
+            self.probe = _Synapse(cfg.dim + late * self.delay_probes, cfg.read_width, gain=cfg.read_synapse_gain,
+                                  charge_bits=bits)
+            self.tag = _Synapse(cfg.dim + late, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
             # Each head has its own gain on the match of probe and tag.
             self.gain = nn.Parameter(torch.zeros(self.heads, 1, 1))
+        self.phases = cfg.read_phases
+        if self.phases:
+            # The probe and tag neurons also hear the pacemakers, through synapses of their own.
+            gain = _PHASE_GAIN * cfg.read_synapse_gain
+            self.probe_phase = _Synapse(2 * self.phases, cfg.read_width, gain=gain, charge_bits=bits)
+            self.tag_phase = _Synapse(2 * self.phases, cfg.read_width, gain=gain, charge_bits=bits)
+            self.register_buffer("pacemakers", _pacemaker_counts(self.window, self.phases, 2 * self.window),
+                                 persistent=False)
         self.payload = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
+        self.turn = cfg.read_turn
+        if self.turn:
+            # Every pair of a head's probe or tag neurons has a pacemaker pair, slower from pair to pair, and the
+            # heads share the pacemakers.
+            pairs = cfg.read_width // self.heads // 2
+            self.turn_longest = _TURN_SHORTEST * _TURN_SPAN ** ((pairs - 1) / pairs)
+            self.register_buffer("turners", _pacemaker_counts(self.window, pairs, self.turn_longest, _TURN_SHORTEST),
+                                 persistent=False)
+            # A pulse of a turned neuron takes a threshold of charge at every spike of a pacemaker's largest count.
+            self.turned = _IntegrateFire(cap if cfg.read_cap is None else cfg.read_cap,
+                                         bits + _PHASE_SPIKES.bit_length() - 1, False,
+                                         quanta_per_threshold=cfg.pool_quanta, capped=True)
         # A cell's charge starts from a learned offset for its age.
         self.age = nn.Parameter(torch.zeros(self.heads, self.window))
         self.beats, self.clock, self.beat_mark = cfg.read_beats, None, None
@@ -1909,8 +2186,12 @@ class _StateRead(nn.Module):
             self.signed = cfg.read_signed
             # Larger synapses meet thresholds raised by the same whole factor, so the pulses start as they were.
             self.threshold_scale = round(cfg.read_synapse_gain)
-            self.fire = _IntegrateFire(cap, bits, False)
-            self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
+            # A probe, tag or payload neuron fires up to a stream neuron's largest count, or up to its own cap. A
+            # lower cap leaves the read's output synapses more room within the range of exact sums.
+            self.fire = _IntegrateFire(cap if cfg.read_cap is None else cfg.read_cap, bits, False,
+                                       quanta_per_threshold=cfg.pool_quanta, capped=True)
+            self.fire.lifted = cfg.pool_lifts_ceiling
+            self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
             self.budget = cfg.read_budget
             if self.budget is None:
                 # Cells fire once more for every ``spacing`` of charge they come closer to the most charged cell.
@@ -1928,7 +2209,8 @@ class _StateRead(nn.Module):
 
     def shares(self, spikes, tokens=None):
         """Each visible cell's share of every read and the payloads, as [batch, heads, cells, cells or channels]."""
-        return self._address(spikes, tokens)[:2]
+        fired, total, payload, _ = self._address(spikes, tokens)
+        return (fired if total is None else fired / total), payload
 
     def word_beats(self, tokens):
         """The bytes at which the fixed clock beats, as [batch, bytes]."""
@@ -1940,22 +2222,66 @@ class _StateRead(nn.Module):
         started = self.word_beats(tokens).cumsum(1)
         return (started[:, :, None] - started[:, None, :]).clamp(0, self.beats)
 
-    def packets(self, spikes):
+    def heard(self, spikes, before=None):
+        """The stream and what the late fibres bring of it, as [batch, bytes, 2 * channels]: the channels as they
+        are, then the channels of each delay in turn, the shortest first. A fibre is silent until its first byte
+        has had the time to arrive. ``before`` holds the last bytes of a stream before these."""
+        if self.delays == 1:
+            return spikes
+        kinds = self.delays - 1
+        late = [_late(spikes[..., delay - 1::kinds], None if before is None else before[..., delay - 1::kinds], delay)
+                for delay in range(1, self.delays)]
+        return torch.cat((spikes, *late), -1)
+
+    def packets(self, spikes, before=None):
         """The probes, tags and payloads of all cells as [batch, heads, cells, channels]: whole pulses in a race and
-        drives of unit size for a softmax. A read by age alone has payloads only."""
+        drives of unit size for a softmax. A read by age alone has payloads only. ``before`` holds the last bytes
+        of a stream before these, for the late fibres."""
         if self.mode == "age":
             return None, None, self._unit(self.payload(spikes)) * self.read_resolution
+        heard = self.heard(spikes, before)
+        probe, tag = self.probe(heard if self.delay_probes else spikes), self.tag(heard)
+        if self.phases:
+            # The pacemakers charge the probe and tag neurons beside the stream.
+            beats = self.phase_counts(spikes.shape[1]).to(spikes.dtype)
+            probe, tag = probe + self.probe_phase(beats), tag + self.tag_phase(beats)
         if self.mode == "soft":
-            probe, tag, payload = (self._unit(synapse(spikes)) for synapse in (self.probe, self.tag, self.payload))
+            probe, tag, payload = (self._unit(drive) for drive in (probe, tag, self.payload(spikes)))
             return probe, tag, payload * self.read_resolution
         # The inhibitory pool raises every firing threshold with the stream's activity, as it does in a block.
-        quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+        quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         quanta = quanta * self.threshold_scale
-        probe, tag = self.probe(spikes), self.tag(spikes)
         if not self.signed:
             probe, tag = probe.clamp_min(0), tag.clamp_min(0)
-        probe, tag = self._split(self.fire(probe, quanta)), self._split(self.fire(tag, quanta))
+        if self.turn:
+            probe, tag = (self._split(self.turned(self.let_in(drive), quanta)) for drive in (probe, tag))
+        else:
+            probe, tag = self._split(self.fire(probe, quanta)), self._split(self.fire(tag, quanta))
         return probe, tag, self._split(self.fire(self.payload(spikes), quanta))
+
+    def phase_counts(self, steps):
+        """The pacemakers' spikes at the first ``steps`` bytes of a window, as [bytes, cells]."""
+        if steps > self.pacemakers.shape[0]:
+            longer = _pacemaker_counts(steps, self.phases, 2 * self.window)
+            self.pacemakers = longer.to(self.pacemakers.device)
+        return self.pacemakers[:steps]
+
+    def turn_counts(self, steps):
+        """The spikes of the pacemakers that gate the probes and tags at the first ``steps`` bytes of a window, as
+        [bytes, cells]: the cells of the cosines, then those of the sines."""
+        if steps > self.turners.shape[0]:
+            longer = _pacemaker_counts(steps, self.turners.shape[1] // 2, self.turn_longest, _TURN_SHORTEST)
+            self.turners = longer.to(self.turners.device)
+        return self.turners[:steps]
+
+    def let_in(self, drive):
+        """The charge that the pacemakers let into the bodies of probe or tag neurons, as [batch, cells, channels]:
+        the charges of each pair's two dendrites, turned by the phase of the pair's pacemakers."""
+        # A dendrite holds no more charge than a neuron counts.
+        limit = self.fire.threshold * self.fire.cap
+        first, second = drive.clamp(-limit, limit).unflatten(-1, (self.heads, -1, 2)).unbind(-1)
+        cosine, sine = self.turn_counts(drive.shape[1]).to(drive.dtype)[:, None].chunk(2, -1)
+        return torch.stack((first * cosine - second * sine, first * sine + second * cosine), -1).flatten(-3)
 
     def clock_ticks(self):
         """The clock cells' synapses in weight ticks, each within the limit that keeps their sums exact."""
@@ -2010,29 +2336,59 @@ class _StateRead(nn.Module):
             offset = offset + (mean - mean.detach())
         return offset, spent
 
-    def _address(self, spikes, tokens=None):
-        """The shares, the payloads and the number of cell spikes, which is none for a softmax."""
+    def _address(self, spikes, tokens=None, tape=None, position=0):
+        """The spikes of every cell at every read as [batch, heads, bytes, cells], their sum at each read (none
+        where the shares are a softmax's), the payloads and the number of cell spikes.
+
+        In a stream the ``tape`` holds the cells that earlier bytes have left within reach. They stand before
+        the cells of ``spikes``, ``position`` bytes have gone by before these, and the tape then takes up the
+        cells that the next bytes can still reach.
+        """
         steps = spikes.shape[1]
-        distance = torch.arange(steps, device=spikes.device)
-        distance = distance[:, None] - distance
-        visible = (distance >= 0) & (distance < self.window)
-        # Row t holds the offset of age t - j in column j. Padding one column and folding the rows shifts
-        # each row by its position, which costs far less to differentiate than indexing by distance.
-        ages = F.pad(self.age[:, :steps] * self.rate, (0, max(0, steps - self.window))).flip(-1)
-        offset = F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
-        probe, tag, payload = self.packets(spikes)
+        probe, tag, payload = self.packets(spikes, None if tape is None else tape.late)
+        kept = 0
+        if tape is not None:
+            if self.beats or self.phases or self.turn:
+                raise ValueError("the clocks and pacemakers of a read are not wired to a stream yet")
+            if tape.payload is not None:
+                kept = tape.payload.shape[2]
+                payload = torch.cat((tape.payload, payload), 2)
+                tag = tag if tag is None else torch.cat((tape.tag, tag), 2)
+            # A later byte reaches the cells of the last ``window`` bytes, its own among them.
+            oldest = max(0, payload.shape[2] - self.reach + 1)
+            tape.payload = payload[:, :, oldest:].detach()
+            tape.tag = tag if tag is None else tag[:, :, oldest:].detach()
+            if self.delays > 1:
+                late = spikes if tape.late is None else torch.cat((tape.late, spikes), 1)
+                tape.late = late[:, max(0, late.shape[1] - self.delays + 1):].detach()
+        cells = kept + steps
+        place = torch.arange(cells, device=spikes.device)
+        distance = place[kept:, None] - place
+        visible = (distance >= 0) & (distance < self.reach)
+        # The cells that a longer reach adds take the offset of the oldest age that has one.
+        aged = self.age if self.reach == self.window else torch.cat(
+            (self.age, self.age[:, -1:].expand(-1, self.reach - self.window)), 1)
+        if kept:
+            # Row t holds the offset of age kept + t - j in column j: the ages in reverse, one step further on
+            # from row to row.
+            ages = F.pad(aged * self.rate, (0, max(0, cells - self.reach)))[:, :cells].flip(-1)
+            offset = F.pad(ages, (0, steps - 1)).unfold(-1, cells, 1).flip(1)
+        else:
+            # Row t holds the offset of age t - j in column j. Padding one column and folding the rows shifts
+            # each row by its position, which costs far less to differentiate than indexing by distance.
+            ages = F.pad(aged[:, :steps] * self.rate, (0, max(0, steps - self.reach))).flip(-1)
+            offset = F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
         beats = 0
         if self.beats:
             by_beat, beats = self.beat_offsets(spikes, tokens, tag)
             offset = offset + by_beat
         if self.mode == "age":
             shares = offset.masked_fill(~visible, -torch.inf).softmax(-1)
-            shares = shares if shares.ndim == 4 else shares[None]
-            return shares, payload, None
+            return (shares if shares.ndim == 4 else shares[None]), None, payload, None
         if self.mode == "soft":
             gain = (self.gain * self.rate).exp()
             charge = probe @ tag.transpose(2, 3) * (gain / math.sqrt(probe.shape[-1])) + offset
-            return charge.masked_fill(~visible, -torch.inf).softmax(-1), payload, None
+            return charge.masked_fill(~visible, -torch.inf).softmax(-1), None, payload, None
         # Pulse pairs charge a cell. The unit keeps the spread of the charge over cells near one at the start.
         unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
         charge = probe @ tag.transpose(2, 3) * ((self.gain * self.rate).exp() / unit) + offset
@@ -2041,18 +2397,27 @@ class _StateRead(nn.Module):
             behind = (charge.masked_fill(~visible, -torch.inf).amax(-1, keepdim=True) - charge) / spacing
             fired = (integer_spike(1 - behind / self.levels, self.levels) * self.levels).masked_fill(~visible, 0)
         else:
-            rate = charge.masked_fill(~visible, -torch.inf).softmax(-1) * self.budget
+            # Every unit of charge multiplies a cell's rate by e, and the rates share the budget. Their sum runs
+            # over the cells in the order of their ages, so that a race fires the same spikes however a stream
+            # is cut into pieces.
+            charge = charge.masked_fill(~visible, -torch.inf)
+            grown = (charge - charge.amax(-1, keepdim=True)).exp()
+            back = place[kept:, None] - torch.arange(self.reach, device=spikes.device)
+            total = (grown.gather(-1, back.clamp_min(0).expand(*grown.shape[:-1], -1)) * (back >= 0)).sum(-1, keepdim=True)
+            rate = grown / total * self.budget
             # The cells' membranes start the race at evenly spread phases, so a rate below one spike still fires
             # in a part of the cells. Each head shifts the phases by its own amount.
-            cells = torch.arange(1, steps + 1, device=spikes.device)
             heads = torch.arange(self.heads, device=spikes.device)[:, None, None]
-            phase = (cells * _GOLDEN + heads / self.heads) % 1
-            fired = rate + ((rate + phase).floor() - rate).detach()
-        return fired / fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum() + beats
+            phase = (_spread_phases(position - kept, cells, spikes.device, rate.dtype) + heads / self.heads) % 1
+            fired = (rate + phase).floor().detach() + (rate - rate.detach())
+        return fired, fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum() + beats
 
-    def forward(self, spikes, pulse_counts=None, tokens=None):
-        shares, payload, cell_spikes = self._address(spikes, tokens)
-        packet = shares @ payload
+    def forward(self, spikes, pulse_counts=None, tokens=None, tape=None, position=0):
+        fired, total, payload, cell_spikes = self._address(spikes, tokens, tape, position)
+        # Whole cell spikes pass whole payload pulses on, and their sum is the same in any order.
+        packet = fired @ payload
+        if total is not None:
+            packet = packet / total
         if self.mode == "race":
             # Every cell spike raises the threshold of its head's read neurons, so the shunted sum of the payload
             # pulses is their mean, counted in whole read pulses.
@@ -2071,15 +2436,63 @@ class _StateRead(nn.Module):
         """
         if self.mode != "race":
             return ()
-        bounds = [synapse.weight_ticks().abs().sum(-1).amax() for synapse in (self.probe, self.tag, self.payload)]
-        # A head's read neurons count up to a cell's largest count, in read pulses of that head's grain.
-        pulses = self.read_resolution * self.grain.detach().exp().flatten() + 0.5 / self.fire.cap
+        bounds = [synapse.weight_ticks().abs().sum(-1) for synapse in (self.probe, self.tag, self.payload)]
+        if self.phases:
+            # A pacemaker's largest count is a part of a stream neuron's, and its synapses weigh that part.
+            part = _PHASE_SPIKES / self.emit.cap
+            for index, synapse in enumerate((self.probe_phase, self.tag_phase)):
+                bounds[index] = bounds[index] + (synapse.weight_ticks().abs().sum(-1) * part).ceil()
+        bounds = [bound.amax() for bound in bounds]
+        # A head's read neurons count up to a cell's largest payload, in read pulses of that head's grain. The
+        # bound is in ticks per unit of a stream neuron's largest count.
+        pulses = (self.read_resolution * self.grain.detach().exp().flatten() * self.fire.cap + 0.5) / self.emit.cap
         heads = self.project.weight_ticks().abs().unflatten(-1, (self.heads, -1)).sum(-1)
         bounds.append(((heads * pulses).sum(-1) + self.emit.threshold).amax())
         if self.clock is not None:
             # With a clock cell's largest resting charge, in ticks per unit of the largest tag.
             bounds.append(self.clock_ticks().abs().sum(-1).amax() + self.clock_rest_ticks)
         return tuple(bounds)
+
+    @torch.no_grad()
+    def scale_synapses(self, limit):
+        """Shrink the synapses of each probe, tag, payload and read neuron whose summed weights would exceed
+        ``limit`` ticks per unit of a stream neuron's largest count, and count those neurons.
+
+        The sums are those of ``accumulator_bounds``. Rounding moves a synapse by at most half a tick, so the sums
+        of the unrounded synapses are held that far below the limit.
+        """
+        if self.mode != "race":
+            return 0
+        bits, scaled = self.probe.charge_bits, 0
+        for index, synapse in enumerate((self.probe, self.tag, self.payload)):
+            allowed = limit - (synapse.weight.shape[-1] / 2 + 1)
+            if self.phases and index < 2:
+                phase = (self.probe_phase, self.tag_phase)[index]
+                allowed = allowed - (phase.weight_ticks().abs().sum(-1) * (_PHASE_SPIKES / self.emit.cap)).ceil()
+            sums = _unrounded_sums(synapse.weight, bits)
+            scaled += _shrink_synapses(synapse.weight, allowed / sums.clamp_min(1), bits)
+        # A read neuron of the stream sums each head's synapses at that head's largest count of read pulses.
+        pulses = (self.read_resolution * self.grain.exp().flatten() * self.fire.cap + 0.5) / self.emit.cap
+        weight = self.project.weight
+        heads = (weight * (1 << bits)).clamp(-(_WEIGHT_LIMIT << (bits - _CHARGE_BITS)),
+                                             _WEIGHT_LIMIT << (bits - _CHARGE_BITS)).abs()
+        heads = heads.unflatten(-1, (self.heads, -1)).sum(-1)
+        spare = (weight.shape[-1] / self.heads / 2 * pulses).sum() + 1
+        allowed = limit - self.emit.threshold - spare
+        return scaled + _shrink_synapses(weight, allowed / (heads * pulses).sum(-1).clamp_min(1), bits)
+
+
+def _pacemaker_counts(steps, pairs, longest, shortest=_PHASE_SHORTEST):
+    """The spikes of a bank of pacemaker cells at each byte, as [bytes, 2 * pairs] whole counts of either sign.
+
+    The two cells of a pair fire with one period, a quarter of it apart: their counts follow the cosine and the
+    sine of the pair's phase. The periods run in equal ratios from ``shortest`` to ``longest`` bytes. The phases
+    at two bytes then tell how many bytes lie between them, at every scale from a few bytes to the whole window,
+    whatever the bytes are.
+    """
+    ratio = (longest / shortest) ** (torch.arange(pairs, dtype=torch.float64) / max(pairs - 1, 1))
+    phase = 2 * math.pi * torch.arange(steps, dtype=torch.float64)[:, None] / (shortest * ratio)
+    return torch.cat((phase.cos(), phase.sin()), -1).mul(_PHASE_SPIKES).round().to(torch.float32)
 
 
 def _beat_age_chances(rates, limit):
@@ -2128,6 +2541,9 @@ class _ExcitatoryFire(_IntegrateFire):
     spikes are the same and the slope is that of a smooth threshold of the
     charge, which is small and positive just below the threshold. A silent
     cell then still learns from the bytes that bring it near its threshold.
+    Where a population fires several fine spikes for a threshold of charge,
+    ``smooth`` is that number, and the smooth threshold is as wide as it is
+    for whole spikes.
     """
 
     def forward(self, current, quanta=None, *, reference=None, smooth=False):
@@ -2135,7 +2551,72 @@ class _ExcitatoryFire(_IntegrateFire):
         if not smooth or not current.is_floating_point():
             return counts
         threshold = self.threshold if quanta is None else quanta * (self.threshold // self.quanta_per_threshold)
-        learned = F.gelu(current / threshold)
+        learned = smooth * F.gelu(current / (threshold * smooth))
+        return counts.detach() + (learned - learned.detach())
+
+
+class _GatedFire(_IntegrateFire):
+    """The body of a gated cell: it fires for the charge that its gate lets in.
+
+    The value dendrite of the cell collects charge and does not fire. Every
+    spike of the gate dendrite lets the collected charge into the body once,
+    and the body fires a spike on the rail of the charge's sign for every
+    ``unit`` thresholds of what it was let in. So ``unit`` gate spikes pass the
+    collected charge as a plain cell would count it, more gate spikes pass it
+    more than once and a closed gate passes nothing. The collected charge is
+    bounded as a plain cell's is, which keeps its product with the gate's
+    count within the range of exact sums.
+    """
+
+    def __init__(self, cap: int, charge_bits: int, unit: int, quanta_per_threshold: int = _PACKET_UNITS):
+        super().__init__(cap, charge_bits, False, quanta_per_threshold=quanta_per_threshold, capped=True)
+        self.unit = unit
+
+    def forward(self, current, quanta=None, *, reference=None, opened=None):
+        bounded = current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
+        passed = bounded * opened
+        units = quanta.to(torch.int32)
+        threshold = units * (self.threshold // self.quanta_per_threshold * self.unit)
+        charge = passed.to(torch.int32)
+        magnitude = (charge.abs() + threshold // 2) // threshold
+        limit = ((self.cap * self.quanta_per_threshold) // units).clamp(max=self.capped)
+        counts = magnitude.minimum(limit) * charge.sign()
+        if not current.is_floating_point():
+            return counts
+        surrogate = passed / (quanta * (self.threshold // self.quanta_per_threshold * self.unit))
+        return counts.to(current.dtype) + (surrogate - surrogate.detach())
+
+
+class _VetoedFire(_IntegrateFire):
+    """The body of a cell with a veto dendrite: it fires for the share of its charge that the veto leaves.
+
+    The cell's own dendrite collects charge above the cell's rest, as a plain
+    cell's does. The veto dendrite does not fire. Its charge closes the cell in
+    ``steps`` equal steps: with none the body fires as a plain cell, every
+    step keeps one more ``steps``-th of the charge from the body, and with all
+    of them the cell is shut. The body counts its threshold ``steps`` times as
+    fine, so that the share that passes is a whole number of ticks.
+
+    The cell learns from the smooth threshold of a plain cell times the share
+    that passes. A veto on a cell that would not have fired changes no spike
+    and learns nothing from it.
+    """
+
+    def __init__(self, cap: int, charge_bits: int, steps: int, quanta_per_threshold: int = _PACKET_UNITS):
+        super().__init__(cap, charge_bits + steps.bit_length() - 1, False, quanta_per_threshold=quanta_per_threshold,
+                         capped=True)
+        self.steps = steps
+
+    def forward(self, current, quanta=None, *, reference=None, vetoed=None, smooth=1):
+        # A whole threshold of the cell's own dendrite.
+        whole = self.threshold // self.steps
+        bounded = current.clamp(-whole * self.cap, whole * self.cap)
+        counts = super().forward(bounded.clamp_min(0) * (self.steps - vetoed.detach()), quanta)
+        if not current.is_floating_point():
+            return counts
+        plain = smooth * F.gelu(current / (quanta * (whole // self.quanta_per_threshold) * smooth))
+        share = 1 - vetoed / self.steps
+        learned = plain * share.detach() + plain.detach().clamp_min(0) * share
         return counts.detach() + (learned - learned.detach())
 
 
@@ -2330,7 +2811,11 @@ class _GranuleLayer(nn.Module):
     they fire in, so that a cell far behind can still be drawn into use.
     With ``granule_slope`` cells that do not race learn below their
     thresholds as well: their spikes are unchanged and their slope is that
-    of a smooth threshold, so that a silent cell is not lost.
+    of a smooth threshold, so that a silent cell is not lost. The smooth
+    threshold is as wide as one spike of the cell, and as wide as
+    ``granule_slope_width`` of them where that is set. A cell under a fine
+    pool fires ``pool_fine`` spikes for the charge of a whole one, so that
+    width keeps the slope as wide as it is without the pool.
     With ``granule_soft`` the cells neither race nor spike: each answers
     with a real number, a smooth threshold of its own charge, through the
     synapses and the gains of the race. That is a stand-in for diagnosis,
@@ -2340,13 +2825,41 @@ class _GranuleLayer(nn.Module):
     With ``granule_delays`` the fibres of a cluster conduct at different
     speeds: each brings its channel as it was zero to ``granule_delays - 1``
     bytes ago. A cell then hears the last bytes side by side and can answer
-    to a run of them, which a cell on the present stream cannot.
+    to a run of them, which a cell on the present stream cannot. A fan of two
+    or more times the stream gives every channel that many fibres to each
+    cluster: one brings the channel as it is now, and each of the others
+    brings it after a delay of its own. A cell then hears the whole present
+    stream and a part or all of the last bytes beside it.
 
     With ``granule_traces`` a cluster also has slow fibres. A slow synapse
     holds the charge it receives and passes a fixed share of it on with
     every byte: a quarter at the first kind of slow fibre, a sixteenth at
     the second, and so on. Through them a cell hears what the last words
     left behind, beside the exact bytes that the delayed fibres bring.
+
+    With ``granule_cap`` a cell fires at most that many spikes at a byte, where it otherwise fires up to a stream
+    neuron's largest count. A channel that hears many cells can then take larger synapses from each within the
+    range of exact sums.
+
+    With ``granule_gate`` every cell has two dendrites on the same fibres, each
+    with its own synapses. The gate dendrite has the cell's resting charge
+    and fires above it, ``granule_gate`` spikes for a threshold of charge. The
+    value dendrite collects charge of either sign and does not fire. Every
+    gate spike lets the collected charge into the cell body once, and the
+    body fires on the rail of the charge's sign. A cell then answers with the
+    product of two views of the stream: one says whether and how far the
+    cell opens, the other what it passes on. A plain cell has one view for
+    both. A gated cell has three rows of synapses where a plain cell has two.
+
+    With ``granule_veto`` every cell has a second dendrite on the same fibres
+    that does not fire. Its charge closes the cell, in ``granule_veto`` steps
+    over the charge of one whole spike: a quarter of the cell's own charge is
+    kept from the body with every step of four, and at the last the cell is
+    shut. So a cell fires for what one view of the stream collects unless
+    another view forbids it, as shunting inhibition on a dendrite vetoes the
+    excitation that passes it. The veto's synapses start silent, so the layer
+    starts as one of plain cells, and they add no pulse: the steps stay
+    inside the cell. A cell with a veto has three rows of synapses.
 
     With ``granule_relays`` the fibres do not come from the stream itself.
     That many relay neurons each hear the whole stream and fire for it, and
@@ -2391,14 +2904,28 @@ class _GranuleLayer(nn.Module):
             self.relay = _Synapse(cfg.dim, cfg.granule_relays, gain=1.0, charge_bits=cfg.router_charge_bits)
             self.relay_fire = _IntegrateFire(cap, cfg.router_charge_bits, False)
             sources = cfg.granule_relays
-        self.register_buffer("inputs", _spread_channels(sources, clusters, fan, generator))
-        reach = fan if cfg.granule_reach is None else cfg.granule_reach
-        self.register_buffer("outputs", _spread_channels(cfg.dim, clusters, reach, generator))
         self.delays, self.traces = cfg.granule_delays, cfg.granule_traces
         # Beat fibres come in one order for the present stretch and one for each held stretch.
         self.orders = cfg.granule_beats + 1 if cfg.granule_beats else 0
         plain = self.delays + self.traces
-        if plain + self.orders > 1:
+        copies = fan // sources
+        if copies > 1:
+            # A fan of several times the stream: every channel sends that many fibres to each cluster.
+            self.register_buffer("inputs", torch.arange(sources).repeat(clusters, copies))
+        else:
+            self.register_buffer("inputs", _spread_channels(sources, clusters, fan, generator))
+        reach = min(fan, cfg.dim) if cfg.granule_reach is None else cfg.granule_reach
+        self.register_buffer("outputs", _spread_channels(cfg.dim, clusters, reach, generator))
+        if copies > 1:
+            # One fibre brings the channel as it is now. Each of the others brings it after a delay of its own,
+            # and every delay is on about the same number of a cluster's fibres.
+            taps = []
+            for _ in range(clusters):
+                first = torch.randperm(sources, generator=generator)
+                later = [(first + copy) % (self.delays - 1) + 1 for copy in range(copies - 1)]
+                taps.append(torch.cat([torch.zeros_like(first), *later]))
+            self.register_buffer("taps", torch.stack(taps))
+        elif plain + self.orders > 1:
             # Every cluster hears each delay, each slow synapse and each order of beat fibre on about the same
             # number of its fibres.
             self.register_buffer("taps", torch.stack([torch.randperm(fan, generator=generator)
@@ -2431,19 +2958,46 @@ class _GranuleLayer(nn.Module):
         # Spikes of charge a cell needs before its threshold counts, stored in quarter spikes.
         self.rest = nn.Parameter(torch.full((clusters, cells, 1), float(cfg.granule_rest)))
         self.budget = cfg.granule_budget
-        if self.budget is None:
-            self.fire = _ExcitatoryFire(cap, self.bits, False)
+        # The most spikes of a cell at a byte with no inhibition from the pool.
+        cell_cap = cap if cfg.granule_cap is None else cfg.granule_cap
+        self.gated, self.vetoed = cfg.granule_gate, cfg.granule_veto
+        if self.gated:
+            # ``receive`` holds the synapses of the value dendrite and ``gate`` those of the gate dendrite.
+            self.gate = nn.Parameter(torch.empty(clusters, cells, fan))
+            nn.init.normal_(self.gate, std=cfg.granule_gain / math.sqrt(fan))
+            # A gate counts sixteen thresholds of charge at most, and no more spikes than those are at a whole
+            # threshold.
+            self.open = _ExcitatoryFire(_GATE_CAP, self.bits, False, quanta_per_threshold=cfg.pool_quanta * self.gated,
+                                        capped=_GATE_CAP * self.gated)
+            self.fire = _GatedFire(cell_cap, self.bits, self.gated, cfg.pool_quanta)
+            self.open.price_share = self.fire.price_share = cfg.granule_price
+        elif cfg.granule_veto:
+            # ``veto`` holds the synapses of the veto dendrite. They start silent.
+            self.veto = nn.Parameter(torch.zeros(clusters, cells, fan))
+            # The veto counts its steps over the charge of one whole spike, and reaches the last one under the
+            # strongest inhibition of the pool.
+            steps = _PACKET_UNITS * cfg.granule_veto
+            most = cfg.pool_rest_quanta + _HIDDEN_CAP * _PACKET_UNITS * cfg.pool_fine
+            self.shut = _ExcitatoryFire(-(-cfg.granule_veto * most // steps), self.bits, False,
+                                        quanta_per_threshold=steps, capped=cfg.granule_veto)
+            self.shut.dendrite = True
+            self.fire = _VetoedFire(cell_cap, self.bits, cfg.granule_veto, cfg.pool_quanta)
+            self.fire.price_share = cfg.granule_price
+        elif self.budget is None:
+            self.fire = _ExcitatoryFire(cell_cap, self.bits, False, quanta_per_threshold=cfg.pool_quanta, capped=True)
+            self.fire.lifted = cfg.pool_lifts_ceiling
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
             # that they cause.
             self.fire.price_share = cfg.granule_price
         else:
             # The starting phases are spread evenly over a cluster's cells and shifted from cluster to cluster.
             phase = (torch.arange(1, cells + 1) * _GOLDEN + torch.arange(clusters)[:, None] / clusters) % 1
-            self.fire = _RaceFire(cap, self.bits, self.budget, phase, cfg.granule_races, cfg.granule_soften)
+            self.fire = _RaceFire(cell_cap, self.bits, self.budget, phase, cfg.granule_races, cfg.granule_soften)
             # Each cluster has its own gain on its cells' charges.
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
-        self.soft, self.slope = cfg.granule_soft, cfg.granule_slope
-        self.pool = _IntegrateFire(_HIDDEN_CAP * _PACKET_UNITS, cfg.inhibition_bits, False)
+        # A plain cell's smooth threshold is that many of its spikes wide, and a gate's that many thresholds.
+        self.soft, self.slope, self.slope_width = cfg.granule_soft, cfg.granule_slope, cfg.granule_slope_width
+        self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
         self.emit = _IntegrateFire(cap, self.bits, False)
 
     def rest_quarters(self):
@@ -2454,15 +3008,17 @@ class _GranuleLayer(nn.Module):
         """The spikes that the fibres carry: the stream's own, or those of the relays that hear the whole stream."""
         return spikes if self.relay is None else self.relay_fire(self.relay(spikes))
 
-    def held(self, spikes):
+    def held(self, spikes, carried=None):
         """What the slow synapses pass on at every byte: kind ``j`` a ``4 ** -j`` share of the charge it holds.
 
-        The shares are computed in floating point, as the rates of a race are.
+        The shares are computed in floating point, as the rates of a race are. In a stream ``carried`` brings
+        the charges that the synapses held before these bytes and takes up those that they hold after them.
         """
-        passed = []
+        passed, charges = [], []
         for kind in range(1, self.traces + 1):
             share = 0.25 ** kind
-            parts, charge = [], 0.0
+            parts = []
+            charge = 0.0 if carried is None or carried.held is None else carried.held[kind - 1]
             # A synapse holds the sum of what arrived, each arrival shrunk once per byte since. The sum is taken in
             # stretches, so that the shrinking stays within the range of the numbers.
             for part in spikes.double().split(_TRACE_STRETCH, dim=1):
@@ -2471,6 +3027,9 @@ class _GranuleLayer(nn.Module):
                 parts.append(((part / shrink).cumsum(1) + charge) * shrink)
                 charge = parts[-1][:, -1:]
             passed.append((torch.cat(parts, 1) * share).to(spikes.dtype))
+            charges.append(charge.detach())
+        if carried is not None and charges:
+            carried.held = charges
         return passed
 
     def beats(self, spikes, tokens=None, quanta=None):
@@ -2486,7 +3045,7 @@ class _GranuleLayer(nn.Module):
             opens = self.beat_at(self.word_bytes[tokens])
             return opens[..., None].expand(-1, -1, clusters).to(spikes.dtype), None
         if quanta is None:
-            quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+            quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
         rest = self.clock_rest.clamp(-_GRANULE_REST_LIMIT, _GRANULE_REST_LIMIT) * _PACKET_UNITS
         rest = rest.detach().round() + (rest - rest.detach())
@@ -2494,15 +3053,22 @@ class _GranuleLayer(nn.Module):
         fired = self.tick(charge, quanta)
         return fired.detach(), self.tick.rates(charge, quanta) if fired.requires_grad else None
 
-    def heard(self, spikes, beats=None, rates=None):
+    def heard(self, spikes, beats=None, rates=None, carried=None):
         """What every cluster's fibres bring as [batch, bytes, clusters, fan]: their channels, each after its delay,
-        through its slow synapse or as a stretch between beats of the cluster's clock."""
+        through its slow synapse or as a stretch between beats of the cluster's clock. In a stream ``carried``
+        brings what the fibres and the slow synapses keep of the bytes before and takes up what they keep of
+        these."""
         plain = self.delays + self.traces
         if plain + self.orders == 1:
             return spikes[..., self.inputs]
-        length = spikes.shape[1]
-        views = [spikes] + [F.pad(spikes, (0, 0, delay, 0))[:, :length] for delay in range(1, self.delays)]
-        views += self.held(spikes)
+        if carried is not None and self.orders:
+            raise ValueError("beat fibres are not wired to a stream yet")
+        before = None if carried is None else carried.late
+        views = [spikes] + [_late(spikes, before, delay) for delay in range(1, self.delays)]
+        views += self.held(spikes, carried)
+        if carried is not None and self.delays > 1:
+            late = spikes if before is None else torch.cat((before, spikes), 1)
+            carried.late = late[:, max(0, late.shape[1] - self.delays + 1):].detach()
         taps = self.plain_taps if self.orders else self.taps
         heard = torch.stack(views, dim=-1).flatten(-2)[..., self.inputs * len(views) + taps]
         if not self.orders:
@@ -2516,27 +3082,44 @@ class _GranuleLayer(nn.Module):
                               rates if rates is not None and rates.requires_grad else None)
         return heard.scatter(-1, place, brought)
 
-    def cells(self, spikes, tokens=None):
+    def quarter(self):
+        """The ticks of a quarter spike of a cell at one quantum of threshold."""
+        return (1 << self.bits) // (self.fire.quanta_per_threshold * _PACKET_UNITS)
+
+    def cells(self, spikes, tokens=None, carried=None):
         """The spike counts of all cells as [batch, bytes, clusters, cells]."""
-        quanta = _PACKET_UNITS + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+        quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
         beats, rates = self.beats(spikes, tokens, quanta) if self.orders else (None, None)
         quanta = quanta[..., None]
-        heard = self.heard(self.fibres(spikes), beats, rates)
+        heard = self.heard(self.fibres(spikes), beats, rates, carried)
         charge = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.receive, charge_bits=self.bits))
         # A quarter spike of rest is a quarter of the cell's present threshold.
-        quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
-        charge = charge - self.rest_quarters().squeeze(-1) * quanta * quarter
+        rest = self.rest_quarters().squeeze(-1) * quanta * self.quarter()
+        if self.gated:
+            # The gate dendrite fires above the rest, and its spikes let the value dendrite's charge into the body.
+            opening = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.gate, charge_bits=self.bits))
+            return self.fire(charge, quanta,
+                             opened=self.open(opening - rest, quanta, smooth=self.gated * self.slope_width))
+        charge = charge - rest
+        if self.vetoed:
+            # The veto dendrite's steps keep that many shares of the cell's charge from its body.
+            closing = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.veto, charge_bits=self.bits))
+            return self.fire(charge, quanta, vetoed=self.shut(closing, quanta, smooth=self.vetoed),
+                             smooth=self.slope * self.slope_width)
         if self.budget is None:
-            return self.fire(charge, quanta, smooth=self.slope)
+            return self.fire(charge, quanta, smooth=self.slope * self.slope_width)
         if self.soft:
             # The charge in thresholds, as the race takes it, and no competition between the cells.
             thresholds = charge / (quanta * (self.fire.threshold // self.fire.quanta_per_threshold))
             return F.gelu(thresholds * self.sharpness.exp())
         return self.fire(charge, quanta, sharpness=self.sharpness.exp())
 
-    def forward(self, spikes, tokens=None):
-        sent = torch.einsum("btgn,gkn->btgk", self.cells(spikes, tokens),
-                            _weight_ticks(self.send, charge_bits=self.bits))
+    def forward(self, spikes, tokens=None, carried=None, fired=None):
+        cells = self.cells(spikes, tokens, carried)
+        if fired is not None:
+            # The fast output synapses hear the cells as fibres of their own.
+            fired.append(cells.detach())
+        sent = torch.einsum("btgn,gkn->btgk", cells, _weight_ticks(self.send, charge_bits=self.bits))
         arriving = torch.zeros_like(spikes).index_add_(spikes.ndim - 1, self.outputs.flatten(), sent.flatten(-2))
         current = spikes * self.emit.threshold + arriving
         return self.emit(current, reference=spikes) + spikes
@@ -2545,19 +3128,65 @@ class _GranuleLayer(nn.Module):
         """The largest sums of weight ticks that a cell, a stream channel and a relay can receive."""
         receive = _weight_ticks(self.receive, charge_bits=self.bits).abs().sum(-1).amax()
         # The resting charge at the strongest inhibition, in ticks per unit of the largest input count.
-        quarter = self.fire.threshold // (self.fire.quanta_per_threshold * _PACKET_UNITS)
-        most_quanta = _PACKET_UNITS + self.pool.cap
-        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.fire.cap)
+        most_quanta = self.rest_quanta + self.pool.cap
+        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * self.quarter() // self.emit.cap)
+        if self.gated:
+            # The rest belongs to the gate dendrite. The value dendrite collects without it.
+            gate = _weight_ticks(self.gate, charge_bits=self.bits).abs().sum(-1).amax()
+            receive, rest = torch.maximum(receive, gate + rest), 0
+        if self.vetoed:
+            # The veto dendrite has no rest.
+            veto = _weight_ticks(self.veto, charge_bits=self.bits).abs().sum(-1).amax()
+            receive, rest = torch.maximum(receive + rest, veto), 0
         send = _weight_ticks(self.send, charge_bits=self.bits).abs().sum(-1)
         arriving = send.new_zeros(self.channels).index_add_(0, self.outputs.flatten(), send.flatten())
-        bounds = (receive + rest, arriving.amax() + self.emit.threshold)
+        # A cell brings at most its own largest count, which may be below a stream neuron's.
+        arriving = (arriving.amax() * (self.fire.cap / self.emit.cap)).ceil()
+        bounds = (receive + rest, arriving + self.emit.threshold)
         if self.relay is not None:
             bounds += (self.relay.weight_ticks().abs().sum(-1).amax(),)
         if self.clock is not None:
             quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
-            rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.fire.cap)
+            rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * quarter // self.emit.cap)
             bounds += (self.clock.weight_ticks().abs().sum(-1).amax() + rest,)
         return bounds
+
+    @torch.no_grad()
+    def scale_synapses(self, limit):
+        """Shrink the synapses of each cell, stream channel and relay whose summed weights would exceed ``limit``
+        ticks per unit of a stream neuron's largest count, and count those neurons.
+
+        The sums are those of ``accumulator_bounds``, with half a tick of rounding spared for every synapse. A
+        stream channel sums the synapses that all the cells of all its clusters send to it, so those shrink
+        together.
+        """
+        most_quanta = self.rest_quanta + self.pool.cap
+        rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * self.quarter() // self.emit.cap)
+        spare = self.receive.shape[-1] / 2 + 1
+        # The resting charge belongs to a gated cell's gate dendrite and to the own dendrite of any other cell.
+        dendrites = [(self.receive, 0 if self.gated else rest)]
+        if self.gated:
+            dendrites.append((self.gate, rest))
+        if self.vetoed:
+            dendrites.append((self.veto, 0))
+        scaled = 0
+        for weight, resting in dendrites:
+            allowed = limit - resting - spare
+            scaled += _shrink_synapses(weight, allowed / _unrounded_sums(weight, self.bits).clamp_min(1), self.bits)
+        # What arrives at a channel is counted at a cell's largest count, in units of a stream neuron's.
+        sums = _unrounded_sums(self.send, self.bits)
+        targets = self.outputs.flatten()
+        arriving = sums.new_zeros(self.channels).index_add_(0, targets, sums.flatten())
+        fibres = sums.new_zeros(self.channels).index_add_(0, targets, torch.ones_like(sums.flatten()))
+        ratio = self.fire.cap / self.emit.cap
+        allowed = (limit - self.emit.threshold - 1) / ratio - fibres * self.send.shape[-1] / 2
+        factor = (allowed / arriving.clamp_min(1))[self.outputs]
+        scaled += _shrink_synapses(self.send, factor, self.bits)
+        if self.relay is not None:
+            weight, bits = self.relay.weight, self.relay.charge_bits
+            allowed = limit - weight.shape[-1] / 2 - 1
+            scaled += _shrink_synapses(weight, allowed / _unrounded_sums(weight, bits).clamp_min(1), bits)
+        return scaled
 
 
 class EventLM(nn.Module):
@@ -2580,6 +3209,13 @@ class EventLM(nn.Module):
             raise ValueError("invalid spike packet route")
         if cfg.continuous and (cfg.route != "steered" or cfg.carry):
             raise ValueError("the continuous control uses the reset-per-byte steered topology")
+        if cfg.stack and (cfg.route != "steered" or cfg.carry or cfg.continuous or cfg.clock_start is not None
+                          or cfg.local_trace or cfg.compact_delays or cfg.activity_inhibition
+                          or cfg.residual_correction_start is not None or cfg.learn_packet_thresholds
+                          or cfg.output_reference or cfg.synapse_orders is not None or cfg.head_orders is not None
+                          or (cfg.read_after is None and cfg.granule_after is None)):
+            raise ValueError("a stack has no blocks: its levels are state reads and cell layers on a "
+                             "reset-per-byte stream, with no clock and no option of a block")
         if cfg.route in _PREDICTION_ROUTES and cfg.carry:
             raise ValueError("prediction memory requires reset-per-byte local neurons (--no-carry)")
         if (cfg.forecast_key_channels or cfg.match_forecast_key) and cfg.route != "steered_correction_code":
@@ -2714,7 +3350,37 @@ class EventLM(nn.Module):
             if cfg.output_reference:
                 raise ValueError("the clock's forecast population has no shared output reference")
         output_bits = 3
-        output_cap = _OUTPUT_CAP * cfg.resolution
+        if not isinstance(cfg.output_cap, int) or not 1 <= (cfg.output_cap * cfg.resolution) << output_bits <= _FP32_EXACT:
+            raise ValueError("the output cap is a whole number of eighths of a bit, and an output neuron's largest "
+                             "charge stays within the range of exact sums")
+        output_cap = cfg.output_cap * cfg.resolution
+        if (not all(isinstance(size, int) and size >= 1 and not size & (size - 1)
+                    for size in (cfg.pool_fine, cfg.pool_rate))
+                or cfg.pool_rate.bit_length() > cfg.inhibition_bits + 1
+                or (cfg.pool_rest is not None and (not isinstance(cfg.pool_rest, int) or cfg.pool_rest < 1))):
+            raise ValueError("a pool's quanta are finer and its spikes more frequent by powers of two, down to a "
+                             "pool spike for every pulse, and its neurons keep a whole number of quanta at rest")
+        if (cfg.pool_fine, cfg.pool_rest, cfg.pool_rate) != (1, None, 1):
+            charge_bits = cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits
+            if (cfg.read_after is None and cfg.granule_after is None) or (cfg.read_after is not None
+                                                                          and cfg.read_mode != "race"):
+                raise ValueError("a pool with its own quanta inhibits race reads and cell layers")
+            if cfg.granule_after is not None and (cfg.granule_budget is not None
+                                                  or cfg.granule_beats and cfg.granule_clock == "learned"):
+                raise ValueError("racing cells and learned clocks are not wired to a pool with its own quanta")
+            if (cfg.pool_quanta * _PACKET_UNITS) > 1 << min(cfg.router_charge_bits, charge_bits):
+                raise ValueError("a quarter of a quantum must be a whole number of charge ticks: fewer quanta to a "
+                                 "threshold or more charge bits")
+        if not isinstance(cfg.pool_lifts_ceiling, bool) or (cfg.pool_lifts_ceiling and (
+                (cfg.read_after is None and cfg.granule_after is None)
+                or (cfg.read_after is not None and (cfg.read_mode != "race" or cfg.read_turn))
+                or (cfg.granule_after is not None and (cfg.granule_budget is not None or cfg.granule_gate
+                                                       or cfg.granule_veto)))):
+            raise ValueError("a pool lifts the ceilings of race reads that no pacemaker turns and of plain cells, "
+                             "which neither race nor have a gate or a veto")
+        if not isinstance(cfg.output_pool, int) or cfg.output_pool < 0 or (cfg.output_pool and not cfg.stack):
+            raise ValueError("the output neurons of a stack count their threshold in a whole number of quanta "
+                             "under a pool of their own")
         if cfg.output_reference:
             if cfg.carry or cfg.continuous or cfg.route not in ("steered", "steered_correction_code"):
                 raise ValueError("output reference needs a reset-per-byte spike router")
@@ -2764,10 +3430,16 @@ class EventLM(nn.Module):
         taps = 2 if cfg.route == "convergent" else 0
         self.delayed_input = nn.ModuleList(_Synapse(_VOCAB, cfg.dim, gain=0.5, byte_input=True) for _ in range(taps))
         self.input_emit = _IntegrateFire(cap, _CHARGE_BITS, cfg.carry, continuous=cfg.continuous)
-        self.blocks = nn.ModuleList(_DelayBlock(cfg, i) for i in range(cfg.depth))
+        self.blocks = nn.ModuleList(_Level() if cfg.stack else _DelayBlock(cfg, i) for i in range(cfg.depth))
         self.local_history = len(self.delayed_input) + sum(block.history_size for block in self.blocks)
         self.output = _Synapse(cfg.dim, _VOCAB, gain=0.8, continuous=cfg.continuous)
         self.output_emit = _IntegrateFire(output_cap, output_bits, cfg.carry, continuous=cfg.continuous)
+        self.output_pool = None
+        if cfg.output_pool:
+            # The pool divides what the stream's activity multiplies: the evidence of the output neurons then
+            # does not grow with the number of pulses that carry it.
+            self.output_emit = _ShuntedFire(output_cap, output_bits, False, quanta_per_threshold=cfg.output_pool)
+            self.output_pool = _stream_pool(cfg)
         # A second vocabulary population reads the byte-rate stream through the same
         # synapses. Its higher threshold removes the finer spike resolution.
         coarse = cfg.resolution.bit_length() - 1
@@ -2814,6 +3486,10 @@ class EventLM(nn.Module):
                     or (cfg.read_mode == "race" and cfg.read_synapse_gain != round(cfg.read_synapse_gain))
                     or cfg.read_width % cfg.read_heads):
                 raise ValueError("state reads need positive sizes and a width that the heads divide")
+            if cfg.read_cap is not None and (cfg.read_mode != "race" or not isinstance(cfg.read_cap, int)
+                                             or not 1 <= cfg.read_cap <= _HIDDEN_CAP * cfg.resolution):
+                raise ValueError("the neurons of a race read fire a whole number of pulses up to a stream neuron's "
+                                 "largest count")
             if (not isinstance(cfg.read_beats, int) or not 0 <= cfg.read_beats <= _READ_BEATS
                     or not math.isfinite(cfg.read_beat_start) or (cfg.read_beat_start and not cfg.read_beats)):
                 raise ValueError("a state read counts a cell's age in words up to sixteen, and a starting charge "
@@ -2827,6 +3503,31 @@ class EventLM(nn.Module):
                 raise ValueError("a learned clock hears the tags of its read, which a read by age alone has not")
             if cfg.read_marks and not cfg.read_beats:
                 raise ValueError("a beat marks its cell only where a state read counts ages in beats")
+            if (not isinstance(cfg.read_phases, int) or not 0 <= cfg.read_phases <= _READ_PHASES
+                    or (cfg.read_phases and cfg.read_mode == "age")
+                    or _PHASE_SPIKES > _HIDDEN_CAP * cfg.resolution):
+                raise ValueError("the probes and tags of a state read hear up to 64 pairs of pacemaker cells, whose "
+                                 "counts stay within a stream neuron's; a read by age alone has no probes or tags")
+            if cfg.read_reach is not None and (
+                    not isinstance(cfg.read_reach, int) or isinstance(cfg.read_reach, bool)
+                    or cfg.read_reach < cfg.read_window or cfg.read_beats or cfg.read_phases or cfg.read_turn):
+                raise ValueError("a read reaches at least its window of cells back, and one with clocks or "
+                                 "pacemakers reaches no further")
+            if (not isinstance(cfg.read_delays, int) or not 1 <= cfg.read_delays <= _READ_DELAYS
+                    or (cfg.read_delays > 1 and (cfg.read_mode == "age" or cfg.read_delays - 1 > cfg.dim))
+                    or (cfg.read_delay_probes and cfg.read_delays == 1)):
+                raise ValueError("the tags of a state read hear every channel once more after one of up to fifteen "
+                                 "delays, each on a channel at least, and the probes hear those late fibres only "
+                                 "where the tags do; a read by age alone has no tags")
+            if cfg.read_turn:
+                if (cfg.read_mode != "race" or not cfg.read_signed or cfg.read_budget is None
+                        or cfg.read_width // cfg.read_heads % 2):
+                    raise ValueError("pacemakers turn the probes and tags of a race read with a budget, whose "
+                                     "neurons come in pairs and fire pulses of both signs")
+                held = (_HIDDEN_CAP * cfg.resolution if cfg.read_cap is None else cfg.read_cap) << cfg.router_charge_bits
+                if 2 * _PHASE_SPIKES * held > _FP32_EXACT:
+                    raise ValueError("the charge that the pacemakers let into a turned probe or tag neuron exceeds "
+                                     "the range of exact sums; lower the read cap")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
         if cfg.granule_after is not None:
@@ -2835,15 +3536,26 @@ class EventLM(nn.Module):
                     or len(set(cfg.granule_after)) != len(cfg.granule_after)
                     or any(not isinstance(index, int) or not 0 <= index < below for index in cfg.granule_after)):
                 raise ValueError("granule layers follow distinct byte-rate blocks of a reset-per-byte decoder")
-            if (min(cfg.granule_clusters, cfg.granule_cells, cfg.granule_fan) < 1 or cfg.granule_fan > cfg.dim
+            copies = cfg.granule_fan // cfg.dim
+            if (min(cfg.granule_clusters, cfg.granule_cells, cfg.granule_fan) < 1
+                    or (cfg.granule_fan > cfg.dim and cfg.granule_fan % cfg.dim)
                     or cfg.granule_gain <= 0 or not 0 <= cfg.granule_rest <= _GRANULE_REST_LIMIT
                     or not 0 <= cfg.granule_price <= 1):
-                raise ValueError("granule layers need positive sizes, a fan within the stream, a rest within its "
-                                 "limit and a price share from 0 to 1")
+                raise ValueError("granule layers need positive sizes, a fan within the stream or of a whole number "
+                                 "of streams, a rest within its limit and a price share from 0 to 1")
+            if copies > 1 and (not isinstance(cfg.granule_delays, int) or copies > cfg.granule_delays
+                               or cfg.granule_traces or cfg.granule_beats or cfg.granule_relays):
+                raise ValueError("with a fan of several streams every channel has one fibre for the present and "
+                                 "one for each of as many delays as the others need, and a cluster has no relays, "
+                                 "slow fibres or beat fibres")
             if cfg.granule_soft and cfg.granule_budget is None:
                 raise ValueError("soft granule cells stand in for racing cells and take their cluster gains")
             if cfg.granule_slope and cfg.granule_budget is not None:
                 raise ValueError("the slope below the threshold belongs to granule cells that do not race")
+            if (not isinstance(cfg.granule_slope_width, int) or not 1 <= cfg.granule_slope_width <= 64
+                    or cfg.granule_slope_width > 1 and not (cfg.granule_slope or cfg.granule_gate)):
+                raise ValueError("the smooth threshold of a granule cell is 1 to 64 of its spikes wide, and wider "
+                                 "than one only for cells that learn below their thresholds")
             if cfg.granule_reach is not None and (
                     not isinstance(cfg.granule_reach, int) or not 1 <= cfg.granule_reach <= cfg.dim):
                 raise ValueError("the axons of a granule cluster reach a whole number of the stream's channels")
@@ -2851,9 +3563,35 @@ class EventLM(nn.Module):
                     not isinstance(cfg.granule_bits, int) or cfg.granule_bits < _CHARGE_BITS
                     or (_HIDDEN_CAP * cfg.resolution) << cfg.granule_bits > _FP32_EXACT):
                 raise ValueError("granule cells need charge bits from 6 that keep a full stream channel exact in FP32")
+            if cfg.granule_cap is not None and (not isinstance(cfg.granule_cap, int)
+                                                or not 1 <= cfg.granule_cap <= _HIDDEN_CAP * cfg.resolution):
+                raise ValueError("a granule cell's largest count is a whole number of spikes up to a stream neuron's")
+            if not isinstance(cfg.granule_gate, int) or cfg.granule_gate < 0 or (
+                    cfg.granule_gate and (cfg.granule_budget is not None or cfg.granule_soft)):
+                raise ValueError("gated granule cells have a whole number of gate spikes to a threshold and do "
+                                 "not race")
+            if cfg.granule_gate:
+                # The largest charge a body collects, times the most spikes of its gate.
+                collected = (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution) << (
+                    cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits)
+                if collected * _GATE_CAP * cfg.granule_gate > _FP32_EXACT:
+                    raise ValueError("the charge that the gate of a gated granule cell lets in at its largest "
+                                     "count exceeds the range of exact sums")
+                if cfg.pool_quanta * cfg.granule_gate > 1 << (
+                        cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits):
+                    raise ValueError("a gate spike of a gated granule cell must be a whole number of charge ticks "
+                                     "at one quantum of threshold: fewer gate spikes or quanta to a threshold")
+            if cfg.granule_veto:
+                bits = cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits
+                if (not isinstance(cfg.granule_veto, int) or cfg.granule_veto not in (2, 4, 8, 16)
+                        or cfg.granule_gate or cfg.granule_budget is not None or not cfg.granule_slope
+                        or _PACKET_UNITS * cfg.granule_veto > 1 << bits):
+                    raise ValueError("a veto dendrite closes a cell in 2, 4, 8 or 16 steps, each a whole number of "
+                                     "charge ticks at one quantum of threshold, and belongs to cells that neither "
+                                     "race nor have a gate and that learn below their thresholds")
             if cfg.granule_budget is not None and (
                     not isinstance(cfg.granule_budget, int)
-                    or not 1 <= cfg.granule_budget <= _HIDDEN_CAP * cfg.resolution):
+                    or not 1 <= cfg.granule_budget <= (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution)):
                 raise ValueError("a race of granule cells spends a whole budget of spikes within a cell's largest count")
             if (not isinstance(cfg.granule_races, int) or cfg.granule_races < 1
                     or cfg.granule_cells % cfg.granule_races
@@ -2883,6 +3621,35 @@ class EventLM(nn.Module):
                 raise ValueError("granule relays are none or at least one for every fibre of a cluster")
             self.granule_layers = nn.ModuleDict({str(index): _GranuleLayer(cfg, index)
                                                  for index in sorted(cfg.granule_after)})
+        self.teach_after = self._taught_levels(cfg)
+
+    @staticmethod
+    def _taught_levels(cfg):
+        """The levels whose cells the fast output synapses hear, in order, or None for an output without them."""
+        if cfg.teach_after is None:
+            return None
+        levels = () if cfg.granule_after is None else cfg.granule_after
+        whole = all(isinstance(value, int) and not isinstance(value, bool) and value >= 1
+                    for value in (cfg.teach_threshold, cfg.teach_budget))
+        if (not cfg.stack or not cfg.teach_after or len(set(cfg.teach_after)) != len(cfg.teach_after)
+                or any(level not in levels for level in cfg.teach_after) or not whole
+                or cfg.teach_budget > _TEACH_SPIKES
+                or len(cfg.teach_after) * cfg.granule_clusters * cfg.granule_cells > _TEACH_FIBRES):
+            raise ValueError("the fast output synapses of a stack hear the cells after distinct levels that have a "
+                             "cell layer, up to 131,072 of them, under a whole threshold and up to 4,096 teaching "
+                             "spikes a byte")
+        return tuple(sorted(cfg.teach_after))
+
+    def teach(self, levels, threshold=0, budget=EventLMConfig.teach_budget):
+        """Give the output its fast synapses from the cells after ``levels``, or take them away with None.
+
+        The fast synapses hold nothing that training has set: they start silent in every stream. A stack can
+        therefore be given them after its training, and it then learns along every stream that it reads.
+        """
+        cfg = replace(self.cfg, teach_after=None if levels is None else tuple(levels), teach_threshold=threshold,
+                      teach_budget=budget)
+        self.teach_after = self._taught_levels(cfg)
+        self.cfg = cfg
 
     @property
     def has_correction(self):
@@ -2922,7 +3689,7 @@ class EventLM(nn.Module):
             return synapse.weight_ticks().abs().sum(-1)
 
         bounds = [row_sums(self.output).amax()]
-        for block in self.blocks:
+        for block in () if self.cfg.stack else self.blocks:
             bounds.append(row_sums(block.expand).amax())
             if block.inhibition_redistribution is not None:
                 bounds.append(row_sums(block.inhibition_redistribution.synapse).amax())
@@ -2960,6 +3727,91 @@ class EventLM(nn.Module):
         limit = _FP32_EXACT // self.input_emit.cap
         if not torch.stack(bounds).amax().item() <= limit:
             raise ValueError("quantized weights exceed the exact FP32 accumulator range at this spike resolution")
+
+    @torch.no_grad()
+    def synaptic_scaling(self):
+        """Keep every neuron of the state reads, the cell layers and the output within the range of exact sums.
+
+        A neuron's membrane sums its synapses' charges exactly as long as the summed sizes of its synapses, at
+        the largest count of what it hears, stay below 2 ** 24 ticks. Training can carry a neuron beyond that,
+        and the decoder then refuses to run. Here every such neuron shrinks all of its synapses by one factor,
+        which brings their sum back to the range and leaves their proportions as they are: the neuron keeps what
+        it listens for and gives up size, as a neuron that scales its synapses to its own activity does. No other
+        synapse changes. Returns the number of neurons that shrank, as a tensor. Called after every step of
+        training, this is a rule of the learning and not of the network: the weights it leaves pass
+        ``_check_accumulator``.
+        """
+        if not self.input.weight.is_floating_point():
+            return 0
+        limit = _FP32_EXACT // self.input_emit.cap
+        weight, bits = self.output.weight, self.output.charge_bits
+        allowed = limit - weight.shape[-1] / 2 - 1
+        scaled = _shrink_synapses(weight, allowed / _unrounded_sums(weight, bits).clamp_min(1), bits)
+        for layers in (self.state_reads, self.granule_layers):
+            for layer in () if layers is None else layers.values():
+                scaled += layer.scale_synapses(limit)
+        return scaled
+
+    def _teach(self, counts, fibres, tokens, stream):
+        """The counts with the spikes of the fast output synapses, which every arriving byte teaches.
+
+        Every output neuron has a second, fast set of synapses from the cells after the taught levels. They are
+        silent at the start of a stream and belong to that stream alone. A fibre's activity at a byte is its
+        cell's spikes less the cell's running mean over the last bytes, and the activities of all fibres share a
+        fixed number of units, as under a pool. The charge that the fast synapses collect fires a fast neuron for
+        every byte value, whose spikes count with those of the output neuron for the same byte.
+
+        When the next byte arrives it teaches the synapses that were active for it. The output neurons race for a
+        budget of spikes by their counts, the neuron of the byte that came receives the whole budget as teaching
+        spikes, and every fast synapse changes by its fibre's activity times the spikes that its neuron was
+        taught beyond those it fired in the race. A neuron that fired too little for the byte that came gains
+        size from the active fibres, and one that fired for another byte loses it. No synapse changes before
+        its byte is predicted, and nothing here is trained by gradient descent.
+
+        All of it counts in whole numbers below 2 ** 53, so a stream cut anywhere teaches the same synapses and
+        fires the same spikes.
+        """
+        if counts.device.type == "mps":
+            raise ValueError("the fast output synapses count in 64-bit whole numbers, which MPS does not have")
+        taught = stream.taught = TaughtState() if stream.taught is None else stream.taught
+        steps = tokens.shape[1]
+        first = stream.position - steps
+        threshold, budget = self.cfg.teach_threshold, self.cfg.teach_budget
+        # The sizes stay in the range of exact sums if they are bounded every so many bytes.
+        interval = max(1, (_TEACH_LIMIT >> 1) // (budget * (_TEACH_UNITS + 1)))
+        with torch.no_grad():
+            heard = torch.cat([cells.flatten(2) for cells in fibres], -1).to(torch.float64) * _TEACH_RATE
+            said = counts.detach().to(torch.float64)
+            if taught.fast is None:
+                taught.fast = heard.new_zeros(heard.shape[0], _VOCAB, heard.shape[-1])
+                taught.mean = heard.new_zeros(heard.shape[0], heard.shape[-1])
+            elif taught.fast.shape[0] != heard.shape[0]:
+                raise ValueError("the state belongs to another number of streams")
+            scale = math.log(2) / (8 * self.cfg.resolution)
+            rows = torch.arange(heard.shape[0], device=counts.device)
+            fired = torch.zeros_like(said)
+            for step in range(steps):
+                if taught.active is not None:
+                    # The neurons race for the budget, with membranes that start at evenly spread phases which
+                    # move on from byte to byte, and the byte that came teaches its own neuron.
+                    phase = _spread_phases((first + step - 1) * _VOCAB, _VOCAB, counts.device, torch.float64)
+                    missed = -(torch.softmax(taught.said * scale, -1) * budget + phase).floor()
+                    missed[rows, tokens[:, step]] += budget
+                    taught.fast.addcmul_(missed[:, :, None], taught.active[:, None, :])
+                    taught.unbounded += 1
+                    if taught.unbounded >= interval:
+                        taught.fast.clamp_(-_TEACH_LIMIT, _TEACH_LIMIT)
+                        taught.unbounded = 0
+                centred = heard[:, step] - taught.mean
+                taught.heard += 1
+                taught.mean += (centred / min(taught.heard, _TEACH_SLOW)).floor()
+                size = centred.abs().sum(-1, keepdim=True).clamp_min(1)
+                active = centred.sign() * ((2 * _TEACH_UNITS * centred.abs() + size) / (2 * size)).floor()
+                charge = torch.bmm(taught.fast, active[:, :, None]).squeeze(2)
+                spikes = charge.sign() * ((charge.abs() + threshold // 2) / threshold).floor()
+                fired[:, step] = spikes.clamp_(-_TEACH_SPIKES, _TEACH_SPIKES)
+                taught.active, taught.said = active, said[:, step] + fired[:, step]
+        return counts + fired.to(counts.dtype)
 
     def _forecast_counts(self, spikes):
         return self.forecast_emit(self.output(spikes))
@@ -3074,9 +3926,13 @@ class EventLM(nn.Module):
 
     def forward(self, tokens, *, delay_limit=None, shuffle_phase=False, correction_access=None,
                 return_prediction=False, corrected_prediction=False, memory_pulses=None, bank_read_losses=None,
-                early_readout=None):
+                early_readout=None, stream=None):
         if tokens.ndim != 2 or tokens.shape[1] == 0:
             raise ValueError("expected a nonempty [batch, bytes] tensor")
+        if stream is not None and (not self.cfg.stack or correction_access is not None or return_prediction
+                                   or early_readout is not None):
+            raise ValueError("a stack of reads and cells carries its state through a stream; other decoders "
+                             "use forward_chunk")
         if delay_limit is not None and (delay_limit < 1 or self.cfg.route not in _DELAY_ROUTES):
             raise ValueError("delay_limit needs a positive value and a selectable delay line")
         if shuffle_phase and self.cfg.route not in _PHASE_ROUTES:
@@ -3108,6 +3964,7 @@ class EventLM(nn.Module):
         if tap is not None and (not 0 < tap <= len(self.blocks) or (forecast_tap is not None and tap != forecast_tap)):
             raise ValueError("the early readout follows a byte-rate block and coincides with the surprise forecast")
         early = surprise = None
+        fibres = [] if stream is not None and self.teach_after is not None else None
         for index, block in enumerate(self.blocks):
             if index == tap:
                 early = self._forecast_counts(spikes)
@@ -3120,15 +3977,31 @@ class EventLM(nn.Module):
                            local_state=None if local_layers is None else local_layers[index])
             if self.state_reads is not None and str(index) in self.state_reads:
                 if local_layers is not None:
-                    raise ValueError("state reads have no carried stream state yet")
-                spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens)
+                    raise ValueError("state reads have no carried stream state yet outside a stack")
+                if stream is None:
+                    spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens)
+                else:
+                    spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens,
+                                                          stream.reads.setdefault(str(index), ReadTape()),
+                                                          stream.position)
             if self.granule_layers is not None and str(index) in self.granule_layers:
                 if local_layers is not None:
-                    raise ValueError("granule layers are not wired into the carried stream yet")
-                spikes = self.granule_layers[str(index)](spikes, tokens)
+                    raise ValueError("granule layers are not wired into the carried stream yet outside a stack")
+                spikes = self.granule_layers[str(index)](
+                    spikes, tokens, None if stream is None else stream.cells.setdefault(str(index), FibreState()),
+                    fibres if fibres is not None and index in self.teach_after else None)
         if tap == len(self.blocks):
             early = self._forecast_counts(spikes)
             surprise = self._surprise(early, tokens, correction_access)
+        if stream is not None:
+            stream.position += tokens.shape[1]
+        if memory_pulses is not None and self.state_reads is not None:
+            # One bank of pacemakers fires for all the reads that hear it, and one for all whose neurons it gates.
+            read = next(iter(self.state_reads.values()))
+            if self.cfg.read_phases:
+                memory_pulses.append(read.phase_counts(tokens.shape[1]).abs().sum() * tokens.shape[0])
+            if self.cfg.read_turn:
+                memory_pulses.append(read.turn_counts(tokens.shape[1]).abs().sum() * tokens.shape[0])
         if self.prediction_memory is not None:
             prediction = self._prediction_code(spikes)
             recall = self.prediction_memory(
@@ -3137,7 +4010,14 @@ class EventLM(nn.Module):
             )
             spikes = self._apply_recall(spikes, recall)
         current = self.output(spikes)
-        counts = self.output_emit(current, reference=self._reference_counts(current))
+        if self.output_pool is not None:
+            # One quantum of threshold at rest and one more for every spike of the pool.
+            counts = self.output_emit(
+                current, 1 + self.output_pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)))
+        else:
+            counts = self.output_emit(current, reference=self._reference_counts(current))
+        if fibres is not None:
+            counts = self._teach(counts, fibres, tokens, stream)
         if self.fast_synapses is not None:
             counts = self._excite_vocabulary(counts, tokens, surprise, early, correction_access)
         if self.read_heads is not None:
@@ -3152,6 +4032,30 @@ class EventLM(nn.Module):
             outputs = (counts, prediction, self.prediction_memory.observation_code(observed))
             return outputs if early_readout is None else (*outputs, early)
         return counts if early_readout is None else (counts, early)
+
+    def stream(self, tokens, state=None, *, memory_pulses=None):
+        """The counts for the next bytes of a stream, and the state after them.
+
+        A stack takes a stream in pieces of any length, down to a byte at a time. Its state is what the bytes
+        before have left within reach: for every read the tags and payloads of the cells that it reaches back
+        and the bytes that its late fibres still bring, for every cell layer the bytes that its delayed fibres
+        still bring and the charges of its slow synapses. The spikes are those of one pass over the whole
+        stream, however it is cut. The state carries no gradient, so a piece learns from what it fires itself.
+        """
+        if state is None:
+            state = StreamState()
+        else:
+            held = next((tape.payload for tape in state.reads.values() if tape.payload is not None), None)
+            if held is not None and held.shape[0] != tokens.shape[0]:
+                raise ValueError("the state belongs to another number of streams")
+            taught = state.taught
+            if taught is not None:
+                # The fast synapses change in place from byte to byte, so the piece works on a copy of them.
+                taught = replace(taught, fast=None if taught.fast is None else taught.fast.clone(),
+                                 mean=None if taught.mean is None else taught.mean.clone())
+            state = StreamState(state.position, {key: copy.copy(tape) for key, tape in state.reads.items()},
+                                {key: copy.copy(fibres) for key, fibres in state.cells.items()}, taught)
+        return self(tokens, memory_pulses=memory_pulses, stream=state), state
 
     def forward_chunk(self, tokens, state=None, *, hide_age=None, stats=None, shuffle_keys=False):
         """Carry the bank and either replay local context or carry the trace and delays.
@@ -3388,6 +4292,9 @@ class EventLM(nn.Module):
         """Apply one byte per stream using bounded integer state."""
         if self.input.weight.is_floating_point() or self.training:
             raise ValueError("step requires an eval-mode integer export from to_integer()")
+        if self.state_reads is not None or self.granule_layers is not None:
+            raise ValueError("state reads and cell layers carry no state through a stream yet: "
+                             "run this decoder on whole windows")
         if tokens.ndim != 1 or tokens.device.type != "cpu":
             raise ValueError("step expects a CPU tensor of shape [batch]")
         if state is None:

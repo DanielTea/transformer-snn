@@ -71,13 +71,26 @@ def _sliding_window_attention(
 
 
 class _CausalAttention(nn.Module):
-    def __init__(self, dim: int, heads: int, window: int | None) -> None:
+    def __init__(self, dim: int, heads: int, window: int | None, ages: int = 0, age_rate: float = 1.0) -> None:
         super().__init__()
         self.heads = heads
         self.head_dim = dim // heads
         self.window = window
         self.qkv = nn.Linear(dim, 3 * dim, bias=False)
         self.out = nn.Linear(dim, dim, bias=False)
+        # With ages every head adds a learned offset to a key by its distance from the query, as the heads of the
+        # spike decoder's state reads do. The offsets start level and move ``age_rate`` times as fast as a weight.
+        self.age = nn.Parameter(torch.zeros(heads, ages)) if ages else None
+        self.age_rate = age_rate
+
+    def _offsets(self, length):
+        distance = torch.arange(length, device=self.age.device)
+        distance = distance[:, None] - distance
+        # A distance beyond the table takes its last offset. Selecting along one axis keeps the way back a scattered
+        # sum: an indexed assignment sorts its indices on a GPU, and waits for it in every layer.
+        chosen = distance.clamp(0, self.age.shape[1] - 1).reshape(-1)
+        offsets = (self.age * self.age_rate).index_select(1, chosen).view(-1, length, length)
+        return offsets.masked_fill(distance < 0, -torch.inf)
 
     def _project(self, x, rope):
         batch, length, _ = x.shape
@@ -91,7 +104,9 @@ class _CausalAttention(nn.Module):
     def forward(self, x: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor] | None) -> torch.Tensor:
         batch, length, dim = x.shape
         q, k, v = self._project(x, rope)
-        if self.window is None:
+        if self.age is not None:
+            mixed = F.scaled_dot_product_attention(q, k, v, attn_mask=self._offsets(length).to(q.dtype))
+        elif self.window is None:
             mixed = F.scaled_dot_product_attention(q, k, v, is_causal=True)
         else:
             mixed = _sliding_window_attention(q, k, v, self.window)
@@ -122,21 +137,32 @@ class _CausalAttention(nn.Module):
         return self.out(mixed.transpose(1, 2).reshape_as(x)), state
 
 
+# The feed-forward units by name: whether a unit is gated, and whether it opens smoothly.
+_UNITS = {"swiglu": (True, True), "reglu": (True, False), "gelu": (False, True), "relu": (False, False)}
+
+
 class _TransformerBlock(nn.Module):
-    def __init__(self, dim: int, heads: int, hidden: int, window: int | None) -> None:
+    def __init__(self, dim: int, heads: int, hidden: int, window: int | None, *, plain: int = 0, smooth: bool = True,
+                 ages: int = 0, age_rate: float = 1.0) -> None:
         super().__init__()
         self.attn_norm = nn.LayerNorm(dim)
-        self.attn = _CausalAttention(dim, heads, window)
+        self.attn = _CausalAttention(dim, heads, window, ages, age_rate)
         self.mlp_norm = nn.LayerNorm(dim)
-        self.mlp_in = nn.Linear(dim, 2 * hidden, bias=False)
-        self.mlp_out = nn.Linear(hidden, dim, bias=False)
+        # ``plain`` units each have one row of input weights. A gated unit has two rows: one opens the unit and
+        # the other is what it passes on. A unit opens smoothly, or not at all below a threshold at zero.
+        self.plain, self.smooth = plain, smooth
+        self.mlp_in = nn.Linear(dim, plain or 2 * hidden, bias=False)
+        self.mlp_out = nn.Linear(plain or hidden, dim, bias=False)
 
     def _mix(self, x: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor] | None) -> torch.Tensor:
         return self.attn(x, rope)
 
     def _feed_forward(self, x):
+        if self.plain:
+            drive = self.mlp_in(self.mlp_norm(x))
+            return x + self.mlp_out(F.gelu(drive) if self.smooth else F.relu(drive))
         gate, value = self.mlp_in(self.mlp_norm(x)).chunk(2, dim=-1)
-        return x + self.mlp_out(F.silu(gate) * value)
+        return x + self.mlp_out((F.silu(gate) if self.smooth else F.relu(gate)) * value)
 
     def forward(self, x: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor] | None) -> torch.Tensor:
         return self._feed_forward(x + self._mix(self.attn_norm(x), rope))
@@ -195,8 +221,18 @@ class TransformerLM(nn.Module):
 
         self.cfg = cfg
         self.ctx = ctx
-        self.rotary_dim = 2 * ((dim // heads) // 2) if cfg.position_embeddings else 0
+        if cfg.feed_forward not in _UNITS or cfg.age_offsets < 0:
+            raise ValueError("the feed-forward units are swiglu, reglu, gelu or relu and the rate of the age offsets "
+                             "is not negative")
+        if (cfg.feed_forward != "swiglu" or cfg.age_offsets or cfg.untied_output) and cfg.attn != "transformer":
+            raise ValueError("other units, age offsets and an output layer of its own are controls of the full "
+                             "Transformer")
+        # Offsets by age replace the rotary phases: a head then addresses by content and by distance in two terms.
+        self.rotary_dim = 2 * ((dim // heads) // 2) if cfg.position_embeddings and not cfg.age_offsets else 0
         hidden = max(1, round(2 * cfg.mlp_ratio * dim / 3))
+        gated, smooth = _UNITS[cfg.feed_forward]
+        options = dict(plain=0 if gated else max(1, round(cfg.mlp_ratio * dim)), smooth=smooth,
+                       ages=ctx if cfg.age_offsets else 0, age_rate=cfg.age_offsets or 1.0)
         self.tok = nn.Embedding(vocab, dim)
         window = cfg.local_window if cfg.attn in ("transformer_local", "transformer_event", "transformer_successor") else None
         if window is not None and window < 1:
@@ -212,11 +248,15 @@ class TransformerLM(nn.Module):
                 _EventTransformerBlock(dim, heads, hidden, window, memory_cfg) for _ in range(depth)
             )
         else:
-            self.blocks = nn.ModuleList(_TransformerBlock(dim, heads, hidden, width) for width in windows)
+            self.blocks = nn.ModuleList(_TransformerBlock(dim, heads, hidden, width, **options) for width in windows)
         self.norm = nn.LayerNorm(dim)
         self.head = nn.Linear(dim, vocab, bias=False)
         self._init_weights(self.tok)
-        self.head.weight = self.tok.weight
+        if cfg.untied_output:
+            # A control: the output layer has weights of its own, as the output synapses of a stack have.
+            self._init_weights(self.head)
+        else:
+            self.head.weight = self.tok.weight
         residual_std = 0.02 / math.sqrt(2 * depth)
         for block in self.blocks:
             # Keep the memory module's own spike-specific initialization.

@@ -1,55 +1,129 @@
 # ShuntFormer
 
 ShuntFormer is an integer spiking byte language model. Its
-neurons exchange signed spike counts over fixed axons, local
-charge holds history, and a tagged error bank drives a
-correction into the vocabulary neurons. Every release is
-measured against a full-attention Transformer of the same size
-and training.
+neurons exchange signed spike counts over fixed axons, and
+local charge holds history. Every release is measured against
+a full-attention Transformer of the same size and training.
 
-The newest decoder, **v14**, scores **1.244 bits per byte** on
-the full enwik8 test split. Under the same scoring the v13
-decoder scores 1.262. The gain comes from one change: the read
-heads learn their **addresses** eight times as fast. v14 also
-gives every read head a **clock cell**. The decoder with clock
-cells is the one released, and it is 0.0013 bpb ahead of the one
-without, which is less than a second training run moves a
-decoder.
+The newest model, **v15**, is a spike-only stack that reads a
+**stream**. Each of its eleven levels is a state read of eight
+heads and then a layer of threshold cells, which is the layout
+of a Transformer in spike parts, and it carries its state from
+byte to byte. Read as unbroken streams, the released stack
+scores **1.141 bits per byte** on the full enwik8 test split.
+The Transformer of the same size and training scores 1.144 with
+the window that suits it best.
 
-![enwik8 test loss of the two v14 decoders, the v13 decoder and two Transformers](results/figures/event_lm_read_clocks.png)
+![Complete enwik8 test and validation of the two stacks as streams and of the Transformer in warmed windows](results/figures/event_lm_stream_form.png)
 
-The Transformer is still ahead. The 256-wide Transformer that
-v12 and v13 were measured against scores 1.207, which leaves
-0.038 bpb where v13 left 0.055. A Transformer of the standard
-shape and the same size, trained for this release, scores
-**1.182** and is the stronger reference. The v14 decoder runs in
-512-byte windows only. It has no stream form yet, so it has no
-streaming score and no native integer run. Its weights are
-release assets, and the model that runs from a clone is v11.
+The two are **level**. On the validation split the order turns,
+1.169 against 1.163, and on 16 PG-19 books they are 0.002 apart.
+The stack is level only as a stream, and only with a Transformer
+that reads 512 bytes: it trained on windows of 1,024 bytes for
+its last 66,000 updates, and its reads reach 4,096 cells back.
+The same stack trained on windows of 512 bytes is 0.027 behind,
+and a Transformer trained on windows of 1,024 bytes is still
+training as the control. The v15 weights are release assets, and
+the model that runs from a clone is v11.
 
 | Release | Adds | enwik8 test | Transformer | Scored in |
 |---|---|---:|---:|---|
-| [v14](#v14-read-clocks-and-the-address-rate) | A faster address rate and clock cells for the read heads | **1.244** | 1.182 | 512-byte windows |
+| [v15](#v15-a-stack-that-reads-a-stream) | A stack of state reads and threshold cells that reads a stream | **1.141** | 1.144 | Unbroken streams |
+| [v14](#v14-read-clocks-and-the-address-rate) | A faster address rate and clock cells for the read heads | 1.244 | 1.182 | 512-byte windows |
 | [v13](#v13-state-reads-and-race-cells) | State reads and race cells on delayed fibres | 1.262 | 1.182 | 512-byte windows |
 | [v12](#v12-coasting-read-heads) | Read heads on a tape of the stream | 1.414 | 1.182 | One continuous stream |
 | [v11](#v11-surprise-clock-and-fast-synapses) | Fast synapses written by error spikes | 1.645 | 1.704 | One continuous stream |
 
 Each Transformer has the size and the training of its row and
-reads 512 bytes. v14, v13 and v12 have about 34.8M parameters
-and 368.64M training targets from random weights. Their
-Transformer is the one of the standard shape that v14 trained.
-The 256-wide Transformer that v12 and v13 published scores
-1.207. In the windows of v13 and v14 the v12 decoder scores
-1.467, because it gives up the stream it carries. v11 has 25.79M
-parameters and 140.90M targets. Its fast synapses carry the
-whole stream, and with the same synapses on its output the v11
-Transformer scores 1.578. Every arm is one seed.
+reads 512 bytes. v15 to v12 have about 34.8M parameters and
+368.64M training targets from random weights. The Transformer of
+v15 has the standard shape and trained under the rotated
+optimizer of the spiking models. It reads a stream in windows of
+496 bytes of history before 16 scored ones, and in the windows
+of v13 and v14, 256 before 256, it scores 1.156. The rows of v14
+to v12 name the Transformer of the standard shape that v14
+trained with AdamW. The 256-wide Transformer that v12 and v13
+published scores 1.207. In the windows of v13 and v14 the v12
+decoder scores 1.467, because it gives up the stream it carries.
+v11 has 25.79M parameters and 140.90M targets. Its fast synapses
+carry the whole stream, and with the same synapses on its output
+the v11 Transformer scores 1.578. Every arm is one seed.
 
-[Read-clock study](docs/READ_CLOCKS.md) ·
-[Model card](models/spiking-byte-lm-v14/README.md) ·
+[Stream-form study](docs/STREAM_FORM.md) ·
+[Model card](models/spiking-byte-lm-v15/README.md) ·
 [Leaderboard](docs/LEADERBOARD.md) ·
-[Research handoff](docs/V14_HANDOFF.md) ·
-[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v14)
+[Research handoff](docs/V15_HANDOFF.md) ·
+[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v15)
+
+## v15: a stack that reads a stream
+
+The v15 study drops the blocks of the decoders. Its **stack**
+keeps the two parts that v13 and v14 added, state reads and
+threshold cells, and gives them the layout of a Transformer: a
+stream of 512 channels runs through eleven levels, each a state
+read of 8 heads and then a layer of 1,188 threshold cells, and
+both write their spikes back into the stream. A **pool** cell at
+every level divides what a neuron hears by how loud the stream
+is, in spikes, and takes the place of a normalisation. The cells
+and the tags of the reads hear every channel now and once more
+after one to three bytes. The stack has 34.81M parameters.
+
+![The stack as it reads a stream: eleven levels of a state read and a layer of threshold cells](results/figures/event_lm_stream_form_circuit.png)
+
+The stack reads a **stream**. It carries the tags and payloads
+of its reads and the last bytes of its fibres from piece to
+piece, and a stream cut anywhere fires exactly the spikes of one
+pass over the whole of it. In a stream the reads can reach
+further back than in training at no cost in synapses, and fast
+output synapses that every arriving byte teaches learn the text
+as it is read.
+
+| Trained from scratch, 368.64M targets | Reads the text as | enwik8 test | enwik8 validation | PG-19 |
+|---|---|---:|---:|---:|
+| 34.81M SNN stack, long windows | A stream, the reads after levels 5 to 7 reach 4,096 cells | **1.14058** | 1.16936 | **1.42490** |
+| | A stream, as trained | 1.15359 | 1.18278 | 1.44559 |
+| 34.81M SNN stack, windows of 512 bytes | A stream, the reads after levels 4 to 7 reach 2,048 cells | 1.17095 | 1.19872 | 1.46178 |
+| | A stream, as trained | 1.18518 | 1.20930 | 1.47610 |
+| 34.75M full attention, standard shape | Windows, 496 bytes of history before 16 scored | 1.14388 | **1.16289** | 1.42649 |
+| | 448 before 64 | 1.14533 | 1.16416 | 1.42786 |
+
+The stack on long windows is 0.0033 bpb below the Transformer on
+the test, with a paired 95% interval of −0.0048 to −0.0018, and
+0.0065 above it on the validation split (+0.0050 to +0.0079).
+With fast output synapses on both sides it scores 1.1339 on the
+test against the Transformer's 1.1344, and 1.1649 against 1.1574
+on validation. Every row is one seed, and the rows received
+identical windows from random weights up to 24,000 updates.
+
+![Validation loss over training in windows, and the stacks' distance to the Transformer](results/figures/event_lm_stream_form_training.png)
+
+In windows from an empty state the stack trained on windows of
+512 bytes follows the Transformer at about 0.048 bits per byte
+to the end of training. What closes that distance is the stream.
+The same weights of the released stack score 0.041 better as a
+stream than in the warmed windows of v14, and a reach of 4,096
+cells gains another 0.013. The long windows count as well: the
+stack that read windows of 1,024 bytes from 24,000 updates is
+0.030 ahead of the one that stayed on 512.
+
+![From the Transformer to spikes, one change at a time](results/figures/event_lm_stream_form_ladder.png)
+
+A walk from the Transformer to the spiking stack, one change per
+run, places the rest of the distance. Whole spikes and synapses
+on the 8-bit grid cost 0.0008, and age offsets in place of
+rotary phases cost nothing. The plain units that threshold cells
+compute in place of the Transformer's gated ones cost most,
+0.025. Gated cells, the spike form of that unit, were built in
+four variants and stalled. Training on streams with the state
+handed on did not beat training on windows.
+[Next pilots](docs/V15_HANDOFF.md#next-pilots)
+
+[Stream-form study](docs/STREAM_FORM.md) ·
+[Every training arm](docs/STREAM_FORM_ARMS.md) ·
+[Leaderboard](docs/LEADERBOARD.md) ·
+[Model card](models/spiking-byte-lm-v15/README.md) ·
+[Research handoff](docs/V15_HANDOFF.md) ·
+[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v15)
 
 ## v14: read clocks and the address rate
 
@@ -378,6 +452,14 @@ on the released files and the next pilots.
 [Restore and rescore](docs/V14_HANDOFF.md#restore-the-checkpoints) ·
 [Exact manifest](models/spiking-byte-lm-v14/manifest.json)
 
+The v15 archives hold the six checkpoints of the stream-form
+study, and a fourth asset holds the bits of every scored piece.
+Its handoff has the restore commands, the stream scorer, the
+Transformer along the same streams, the paired intervals, the
+stream generator and the next pilots.
+[Restore and rescore](docs/V15_HANDOFF.md#restore-the-checkpoints) ·
+[Exact manifest](models/spiking-byte-lm-v15/manifest.json)
+
 Regenerate the leaderboards, scientific figures and browser report
 from the checked-in records.
 
@@ -387,6 +469,7 @@ python experiments/plot_depth_inhibition.py
 python experiments/plot_coasting_heads.py
 python experiments/plot_state_reads.py
 python experiments/plot_read_clocks.py
+python experiments/plot_stream_form.py
 python experiments/make_report.py docs/report.html
 ```
 

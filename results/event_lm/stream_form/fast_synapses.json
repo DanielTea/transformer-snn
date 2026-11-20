@@ -1,0 +1,599 @@
+{
+ "note": "Fast output synapses that every arriving byte teaches, measured during training on weights saved then. All rows score the first bytes of the enwik8 validation split as unbroken streams with a lead of 8,192 bytes. The synapses start at zero in every stream and learn from the unscored lead too. 'over_plain' is the difference to the same streams without fast synapses. The levels and the threshold of the final scorings were chosen from these rows.",
+ "float_probes": {
+  "note": "The rule in floats beside a frozen stack (not the model's whole-number mechanism): the change of a synapse is the rate times the share of the readout that its output neuron missed times the activity of the fibre. 'keep' below 1 lets the synapses leak towards zero at every byte. First 300,000 validation bytes, 16 streams, the window-trained stack.",
+  "populations": {
+   "stream": "the stream into the output neurons, scaled to unit length",
+   "cells": "the cells after the last level, less each cell's running mean, scaled to unit length",
+   "both": "the stream and the last level's cells together",
+   "raw": "the last level's cells without centring",
+   "pool": "the last level's cells less the mean of the population at that byte",
+   "l1": "the last level's cells less each cell's running mean, scaled by the summed sizes",
+   "cells3": "the cells after the last three levels, less each cell's running mean",
+   "c3": "the cells after the last three levels, one rate",
+   "c3f": "the cells after the last three levels, a rate per fibre that falls with the root of the fibre's summed squared activity",
+   "c3s": "the cells after the last three levels, a rate per synapse that falls with the root of its summed squared changes",
+   "c11": "the cells after all eleven levels, one rate"
+  },
+  "windows_at_21000_updates_last_weights": {
+   "plain_bpb": 1.37906,
+   "rows": [
+    {
+     "heard": "stream",
+     "rate": 0.03,
+     "keep": 1.0,
+     "bpb": 1.37366,
+     "over_plain": -0.00541
+    },
+    {
+     "heard": "stream",
+     "rate": 0.03,
+     "keep": 0.9995,
+     "bpb": 1.37682,
+     "over_plain": -0.00224
+    },
+    {
+     "heard": "stream",
+     "rate": 0.03,
+     "keep": 0.995,
+     "bpb": 1.37886,
+     "over_plain": -0.0002
+    },
+    {
+     "heard": "stream",
+     "rate": 0.1,
+     "keep": 1.0,
+     "bpb": 1.37448,
+     "over_plain": -0.00458
+    },
+    {
+     "heard": "stream",
+     "rate": 0.1,
+     "keep": 0.9995,
+     "bpb": 1.37724,
+     "over_plain": -0.00182
+    },
+    {
+     "heard": "stream",
+     "rate": 0.1,
+     "keep": 0.995,
+     "bpb": 1.37931,
+     "over_plain": 0.00025
+    },
+    {
+     "heard": "stream",
+     "rate": 0.3,
+     "keep": 1.0,
+     "bpb": 1.38784,
+     "over_plain": 0.00878
+    },
+    {
+     "heard": "stream",
+     "rate": 0.3,
+     "keep": 0.9995,
+     "bpb": 1.38795,
+     "over_plain": 0.00889
+    },
+    {
+     "heard": "stream",
+     "rate": 0.3,
+     "keep": 0.995,
+     "bpb": 1.38496,
+     "over_plain": 0.0059
+    },
+    {
+     "heard": "stream",
+     "rate": 1.0,
+     "keep": 1.0,
+     "bpb": 1.46231,
+     "over_plain": 0.08325
+    },
+    {
+     "heard": "stream",
+     "rate": 1.0,
+     "keep": 0.9995,
+     "bpb": 1.45027,
+     "over_plain": 0.07121
+    },
+    {
+     "heard": "stream",
+     "rate": 1.0,
+     "keep": 0.995,
+     "bpb": 1.42648,
+     "over_plain": 0.04742
+    },
+    {
+     "heard": "cells",
+     "rate": 0.03,
+     "keep": 1.0,
+     "bpb": 1.37275,
+     "over_plain": -0.00631
+    },
+    {
+     "heard": "cells",
+     "rate": 0.03,
+     "keep": 0.9995,
+     "bpb": 1.37674,
+     "over_plain": -0.00232
+    },
+    {
+     "heard": "cells",
+     "rate": 0.03,
+     "keep": 0.995,
+     "bpb": 1.37886,
+     "over_plain": -0.0002
+    },
+    {
+     "heard": "cells",
+     "rate": 0.1,
+     "keep": 1.0,
+     "bpb": 1.37041,
+     "over_plain": -0.00865
+    },
+    {
+     "heard": "cells",
+     "rate": 0.1,
+     "keep": 0.9995,
+     "bpb": 1.37503,
+     "over_plain": -0.00403
+    },
+    {
+     "heard": "cells",
+     "rate": 0.1,
+     "keep": 0.995,
+     "bpb": 1.3788,
+     "over_plain": -0.00026
+    },
+    {
+     "heard": "cells",
+     "rate": 0.3,
+     "keep": 1.0,
+     "bpb": 1.3771,
+     "over_plain": -0.00196
+    },
+    {
+     "heard": "cells",
+     "rate": 0.3,
+     "keep": 0.9995,
+     "bpb": 1.37882,
+     "over_plain": -0.00024
+    },
+    {
+     "heard": "cells",
+     "rate": 0.3,
+     "keep": 0.995,
+     "bpb": 1.38087,
+     "over_plain": 0.00181
+    },
+    {
+     "heard": "cells",
+     "rate": 1.0,
+     "keep": 1.0,
+     "bpb": 1.43603,
+     "over_plain": 0.05697
+    },
+    {
+     "heard": "cells",
+     "rate": 1.0,
+     "keep": 0.9995,
+     "bpb": 1.41874,
+     "over_plain": 0.03968
+    },
+    {
+     "heard": "cells",
+     "rate": 1.0,
+     "keep": 0.995,
+     "bpb": 1.40277,
+     "over_plain": 0.02371
+    },
+    {
+     "heard": "both",
+     "rate": 0.03,
+     "keep": 1.0,
+     "bpb": 1.37305,
+     "over_plain": -0.00601
+    },
+    {
+     "heard": "both",
+     "rate": 0.03,
+     "keep": 0.9995,
+     "bpb": 1.37669,
+     "over_plain": -0.00237
+    },
+    {
+     "heard": "both",
+     "rate": 0.03,
+     "keep": 0.995,
+     "bpb": 1.37885,
+     "over_plain": -0.00021
+    },
+    {
+     "heard": "both",
+     "rate": 0.1,
+     "keep": 1.0,
+     "bpb": 1.37203,
+     "over_plain": -0.00703
+    },
+    {
+     "heard": "both",
+     "rate": 0.1,
+     "keep": 0.9995,
+     "bpb": 1.37587,
+     "over_plain": -0.00319
+    },
+    {
+     "heard": "both",
+     "rate": 0.1,
+     "keep": 0.995,
+     "bpb": 1.37897,
+     "over_plain": -0.0001
+    },
+    {
+     "heard": "both",
+     "rate": 0.3,
+     "keep": 1.0,
+     "bpb": 1.38128,
+     "over_plain": 0.00222
+    },
+    {
+     "heard": "both",
+     "rate": 0.3,
+     "keep": 0.9995,
+     "bpb": 1.38282,
+     "over_plain": 0.00376
+    },
+    {
+     "heard": "both",
+     "rate": 0.3,
+     "keep": 0.995,
+     "bpb": 1.38249,
+     "over_plain": 0.00343
+    },
+    {
+     "heard": "both",
+     "rate": 1.0,
+     "keep": 1.0,
+     "bpb": 1.44457,
+     "over_plain": 0.0655
+    },
+    {
+     "heard": "both",
+     "rate": 1.0,
+     "keep": 0.9995,
+     "bpb": 1.43272,
+     "over_plain": 0.05366
+    },
+    {
+     "heard": "both",
+     "rate": 1.0,
+     "keep": 0.995,
+     "bpb": 1.41303,
+     "over_plain": 0.03397
+    },
+    {
+     "heard": "cells",
+     "rate": 0.05,
+     "bpb": 1.37142,
+     "over_plain": -0.00765
+    },
+    {
+     "heard": "cells",
+     "rate": 0.1,
+     "bpb": 1.37041,
+     "over_plain": -0.00865
+    },
+    {
+     "heard": "cells",
+     "rate": 0.2,
+     "bpb": 1.37248,
+     "over_plain": -0.00658
+    },
+    {
+     "heard": "raw",
+     "rate": 0.05,
+     "bpb": 1.37345,
+     "over_plain": -0.00561
+    },
+    {
+     "heard": "raw",
+     "rate": 0.1,
+     "bpb": 1.37446,
+     "over_plain": -0.0046
+    },
+    {
+     "heard": "raw",
+     "rate": 0.2,
+     "bpb": 1.37958,
+     "over_plain": 0.00052
+    },
+    {
+     "heard": "pool",
+     "rate": 0.05,
+     "bpb": 1.37215,
+     "over_plain": -0.00691
+    },
+    {
+     "heard": "pool",
+     "rate": 0.1,
+     "bpb": 1.37189,
+     "over_plain": -0.00717
+    },
+    {
+     "heard": "pool",
+     "rate": 0.2,
+     "bpb": 1.37507,
+     "over_plain": -0.00399
+    },
+    {
+     "heard": "l1",
+     "rate": 0.05,
+     "bpb": 1.37372,
+     "over_plain": -0.00534
+    },
+    {
+     "heard": "l1",
+     "rate": 0.1,
+     "bpb": 1.37181,
+     "over_plain": -0.00726
+    },
+    {
+     "heard": "l1",
+     "rate": 0.2,
+     "bpb": 1.37038,
+     "over_plain": -0.00868
+    },
+    {
+     "heard": "cells3",
+     "rate": 0.05,
+     "bpb": 1.37101,
+     "over_plain": -0.00806
+    },
+    {
+     "heard": "cells3",
+     "rate": 0.1,
+     "bpb": 1.36898,
+     "over_plain": -0.01008
+    },
+    {
+     "heard": "cells3",
+     "rate": 0.2,
+     "bpb": 1.36909,
+     "over_plain": -0.00998
+    }
+   ]
+  },
+  "windows_at_27000_updates_averaged_weights": {
+   "plain_bpb": 1.35479,
+   "rows": [
+    {
+     "heard": "c3",
+     "rate": 0.1,
+     "bpb": 1.34548,
+     "over_plain": -0.00932,
+     "over_plain_last_quarter": -0.00985
+    },
+    {
+     "heard": "c3",
+     "rate": 0.2,
+     "bpb": 1.3455,
+     "over_plain": -0.0093,
+     "over_plain_last_quarter": -0.00992
+    },
+    {
+     "heard": "c3f",
+     "rate": 0.03,
+     "bpb": 1.35103,
+     "over_plain": -0.00376,
+     "over_plain_last_quarter": -0.00363
+    },
+    {
+     "heard": "c3f",
+     "rate": 0.1,
+     "bpb": 1.34773,
+     "over_plain": -0.00706,
+     "over_plain_last_quarter": -0.00666
+    },
+    {
+     "heard": "c3f",
+     "rate": 0.3,
+     "bpb": 1.34627,
+     "over_plain": -0.00852,
+     "over_plain_last_quarter": -0.00874
+    },
+    {
+     "heard": "c3s",
+     "rate": 0.002,
+     "bpb": 1.35213,
+     "over_plain": -0.00266,
+     "over_plain_last_quarter": -0.00276
+    },
+    {
+     "heard": "c3s",
+     "rate": 0.006,
+     "bpb": 1.3491,
+     "over_plain": -0.0057,
+     "over_plain_last_quarter": -0.00568
+    },
+    {
+     "heard": "c11",
+     "rate": 0.15,
+     "bpb": 1.34286,
+     "over_plain": -0.01193,
+     "over_plain_last_quarter": -0.01268
+    }
+   ]
+  }
+ },
+ "whole_stack_learning": {
+  "note": "A control: the whole stack takes one Adam step on every scored piece of 512 bytes after it has predicted it. 8 streams, first 400,000 validation bytes, the window-trained stack at 21,000 updates, last weights. Plain gradient steps of 0.1 left the range of exact sums.",
+  "plain_bpb": 1.3837,
+  "plain_bpb_second_half": 1.42276,
+  "rows": [
+   {
+    "rule": "Adam",
+    "rate": 1e-05,
+    "bpb": 1.37731,
+    "over_plain": -0.00639,
+    "over_plain_second_half": -0.00803
+   },
+   {
+    "rule": "Adam",
+    "rate": 3e-05,
+    "bpb": 1.37796,
+    "over_plain": -0.00574,
+    "over_plain_second_half": -0.01014
+   },
+   {
+    "rule": "Adam",
+    "rate": 0.0001,
+    "bpb": 1.39462,
+    "over_plain": 0.01092,
+    "over_plain_second_half": -0.00071
+   }
+  ]
+ },
+ "whole_numbers": {
+  "note": "The model's mechanism (experiments/eval_stream.py --teach-levels --teach-threshold): 256 teaching spikes a byte, sizes in whole numbers. First 300,000 validation bytes, 16 streams of 18,750 bytes, reach as trained, averaged weights.",
+  "long_windows_at_31500_updates": {
+   "plain_bpb": 1.310318,
+   "all_eleven_levels": [
+    {
+     "threshold": 8388608,
+     "bpb": 1.304958,
+     "over_plain": -0.00536
+    },
+    {
+     "threshold": 2097152,
+     "bpb": 1.324475,
+     "over_plain": 0.014157
+    },
+    {
+     "threshold": 33554432,
+     "bpb": 1.306627,
+     "over_plain": -0.003691
+    },
+    {
+     "threshold": 16777216,
+     "bpb": 1.305255,
+     "over_plain": -0.005063
+    }
+   ],
+   "levels_4_to_10": [
+    {
+     "threshold": 33554432,
+     "bpb": 1.306062,
+     "over_plain": -0.004256
+    },
+    {
+     "threshold": 16777216,
+     "bpb": 1.30511,
+     "over_plain": -0.005208
+    }
+   ],
+   "levels_8_to_10": [
+    {
+     "threshold": 67108864,
+     "bpb": 1.306429,
+     "over_plain": -0.003889
+    },
+    {
+     "threshold": 33554432,
+     "bpb": 1.305859,
+     "over_plain": -0.004459
+    },
+    {
+     "threshold": 134217728,
+     "bpb": 1.307565,
+     "over_plain": -0.002753
+    }
+   ]
+  },
+  "windows_at_27000_updates": {
+   "plain_bpb": 1.354794,
+   "all_eleven_levels": [
+    {
+     "threshold": 16777216,
+     "bpb": 1.345289,
+     "over_plain": -0.009505
+    }
+   ]
+  }
+ },
+ "course_along_the_stream": {
+  "note": "The long-window stack at 31,500 updates, averaged weights, reach of 4,096 cells after levels 5 to 7, fast synapses from all eleven levels. First 1,000,000 validation bytes as 8 streams of 125,000 bytes. 'over_plain_by_part' is the difference to the same streams without fast synapses in eight equal parts of a stream, the first stream's unwarmed start left out.",
+  "plain_bpb": 1.285689,
+  "scored_bytes_of_a_stream_at_each_part_end": [
+   15872,
+   31744,
+   47616,
+   62976,
+   78336,
+   93696,
+   109056,
+   124416
+  ],
+  "rows": [
+   {
+    "threshold": 8388608,
+    "bpb": 1.27944,
+    "over_plain": -0.006249,
+    "over_plain_by_part": [
+     -0.0092,
+     -0.0127,
+     -0.0073,
+     -0.0056,
+     -0.0041,
+     -0.0014,
+     -0.0071,
+     -0.0026
+    ]
+   },
+   {
+    "threshold": 16777216,
+    "bpb": 1.279378,
+    "over_plain": -0.006311,
+    "over_plain_by_part": [
+     -0.0078,
+     -0.0102,
+     -0.0067,
+     -0.0061,
+     -0.0052,
+     -0.0032,
+     -0.007,
+     -0.0044
+    ]
+   },
+   {
+    "threshold": 33554432,
+    "bpb": 1.280742,
+    "over_plain": -0.004947,
+    "over_plain_by_part": [
+     -0.0056,
+     -0.0071,
+     -0.0049,
+     -0.0049,
+     -0.0046,
+     -0.003,
+     -0.0054,
+     -0.0042
+    ]
+   },
+   {
+    "threshold": 67108864,
+    "bpb": 1.282255,
+    "over_plain": -0.003434,
+    "over_plain_by_part": [
+     -0.0036,
+     -0.0045,
+     -0.0032,
+     -0.0035,
+     -0.0035,
+     -0.0024,
+     -0.0036,
+     -0.0034
+    ]
+   }
+  ],
+  "chosen_threshold": 16777216
+ }
+}

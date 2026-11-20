@@ -1,0 +1,183 @@
+{
+ "note": "The reach of the state reads at scoring, by level. Every row scores the first 1,000,000 bytes of the enwik8 validation split as 16 unbroken streams with a lead of 8,192 bytes (experiments/eval_stream.py --bytes 1000000 --reach CELLS --reach-levels LEVELS), with weights saved during training. 'as trained' is the reach of training at every level. '4-7@2048' lets the reads after levels 4 to 7 reach 2,048 cells back and leaves the others as trained; a '+' joins two such settings. A longer reach adds no synapse: the cells beyond the window of training take the age offset of its oldest cell. The scoring reach of each arm was chosen from these rows, before any final weights were scored.",
+ "scans": [
+  {
+   "arm": "windows",
+   "updates": 21000,
+   "weights": "last",
+   "trained_reach": 512,
+   "rows": [
+    {
+     "reach": "as trained",
+     "bpb": 1.37101
+    },
+    {
+     "reach": "0-10@1024",
+     "bpb": 1.36029
+    },
+    {
+     "reach": "4-7@1024",
+     "bpb": 1.35502
+    },
+    {
+     "reach": "8-10@1024",
+     "bpb": 1.37143
+    },
+    {
+     "reach": "0-2@1024",
+     "bpb": 1.37228
+    },
+    {
+     "reach": "10@2048",
+     "bpb": 1.3735
+    },
+    {
+     "reach": "8-10@2048",
+     "bpb": 1.37468
+    },
+    {
+     "reach": "10@4096",
+     "bpb": 1.3763
+    }
+   ]
+  },
+  {
+   "arm": "windows",
+   "updates": 27000,
+   "weights": "averaged",
+   "trained_reach": 512,
+   "rows": [
+    {
+     "reach": "as trained",
+     "bpb": 1.34617
+    },
+    {
+     "reach": "0-10@1024",
+     "bpb": 1.33528
+    },
+    {
+     "reach": "4-7@1024",
+     "bpb": 1.32824
+    },
+    {
+     "reach": "3-7@1024",
+     "bpb": 1.32839
+    },
+    {
+     "reach": "3-8@1024",
+     "bpb": 1.32887
+    },
+    {
+     "reach": "2-7@1024",
+     "bpb": 1.3284
+    },
+    {
+     "reach": "5-7@1024",
+     "bpb": 1.32808
+    },
+    {
+     "reach": "4-6@1024",
+     "bpb": 1.34824
+    },
+    {
+     "reach": "4-7@2048",
+     "bpb": 1.32444
+    },
+    {
+     "reach": "4-7@4096",
+     "bpb": 1.33123
+    },
+    {
+     "reach": "3-7@2048",
+     "bpb": 1.325
+    },
+    {
+     "reach": "4-7@1024+8-10@768",
+     "bpb": 1.33071
+    },
+    {
+     "reach": "4-7@1024+0-3@768",
+     "bpb": 1.3289
+    }
+   ],
+   "chosen": "4-7@2048"
+  },
+  {
+   "arm": "long-windows",
+   "updates": 27000,
+   "weights": "averaged",
+   "trained_reach": 1024,
+   "rows": [
+    {
+     "reach": "as trained",
+     "bpb": 1.31957
+    },
+    {
+     "reach": "0-3@512+8-10@512",
+     "bpb": 1.32206
+    },
+    {
+     "reach": "8-10@512",
+     "bpb": 1.32187
+    },
+    {
+     "reach": "0-3@512",
+     "bpb": 1.31974
+    }
+   ]
+  },
+  {
+   "arm": "long-windows",
+   "updates": 31500,
+   "weights": "averaged",
+   "trained_reach": 1024,
+   "rows": [
+    {
+     "reach": "as trained",
+     "bpb": 1.3017
+    },
+    {
+     "reach": "4-7@2048",
+     "bpb": 1.28957
+    },
+    {
+     "reach": "3-8@2048",
+     "bpb": 1.28987
+    },
+    {
+     "reach": "0-10@2048",
+     "bpb": 1.29133
+    },
+    {
+     "reach": "4-7@4096",
+     "bpb": 1.28626
+    },
+    {
+     "reach": "2-9@2048",
+     "bpb": 1.29078
+    },
+    {
+     "reach": "4-7@8192",
+     "bpb": 1.29307
+    },
+    {
+     "reach": "4-7@4096+8-10@2048",
+     "bpb": 1.28804
+    },
+    {
+     "reach": "4-7@4096+0-3@2048",
+     "bpb": 1.28652
+    },
+    {
+     "reach": "5-7@4096",
+     "bpb": 1.28561
+    },
+    {
+     "reach": "3-8@4096",
+     "bpb": 1.28981
+    }
+   ],
+   "chosen": "5-7@4096"
+  }
+ ]
+}

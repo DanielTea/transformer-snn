@@ -71,6 +71,8 @@ STATE_READS = "event_lm/state_reads"
 STATE_READS_CHECKPOINTS = "event_lm/state_reads_checkpoints.sha256"
 READ_CLOCKS = "event_lm/read_clocks"
 READ_CLOCKS_CHECKPOINTS = "event_lm/read_clocks_checkpoints.sha256"
+STREAM_FORM = "event_lm/stream_form"
+STREAM_FORM_CHECKPOINTS = "event_lm/stream_form_checkpoints.sha256"
 TRACE_COINCIDENCE = "event_lm/trace_coincidence"
 WRITE_CONFIRM = "event_lm/trace_write_confirm"
 EXPANSION = "event_lm/expansion_8740k"
@@ -257,6 +259,32 @@ READ_CLOCKS_ARMS = (
      f"{STATE_READS}/scores/pg19_rotated", "checkpoints/state_reads/full-transformer-rot/model.pt.averaged", ORANGE),
     ("34.75M full attention, standard shape", "AdamW, averaged", "test_transformer_standard",
      "pg19_transformer_standard", "checkpoints/read_clocks/transformer-std/model.pt.averaged", ORANGE),
+)
+# The stream-form study: model, how it reads the test, its enwik8 record, the rate of a Transformer's fast output
+# synapses where the record holds several, its PG-19 record, checkpoint and colour.
+STREAM_FORM_STACK, STREAM_FORM_CONTROL, STREAM_FORM_REFERENCE = (
+    f"checkpoints/stream_form/{folder}/model.pt.averaged" for folder in ("long-windows", "windows", "transformer"))
+STREAM_FORM_ARMS = (
+    ("34.81M SNN stack, long windows", "Stream, longer reach, taught output synapses", "test_long_windows_taught",
+     None, "pg19_long_windows_taught", STREAM_FORM_STACK, VIOLET),
+    ("34.81M SNN stack, long windows", "Stream, longer reach", "test_long_windows_reach", None,
+     "pg19_long_windows_reach", STREAM_FORM_STACK, VIOLET),
+    ("34.81M SNN stack, long windows", "Stream", "test_long_windows_stream", None, "pg19_long_windows_stream",
+     STREAM_FORM_STACK, VIOLET),
+    ("34.81M SNN stack, windows of 512 bytes", "Stream, longer reach, taught output synapses", "test_windows_taught",
+     None, None, STREAM_FORM_CONTROL, "#138372"),
+    ("34.81M SNN stack, windows of 512 bytes", "Stream, longer reach", "test_windows_reach", None,
+     "pg19_windows_reach", STREAM_FORM_CONTROL, "#138372"),
+    ("34.81M SNN stack, windows of 512 bytes", "Stream", "test_windows_stream", None, "pg19_windows_stream",
+     STREAM_FORM_CONTROL, "#138372"),
+    ("34.75M full attention, standard shape", "Windows with 496 bytes of history, taught output synapses",
+     "test_transformer_taught_history496", 0.07, None, STREAM_FORM_REFERENCE, ORANGE),
+    ("34.75M full attention, standard shape", "Windows with 496 bytes of history", "test_transformer_history496",
+     None, "pg19_transformer_history496", STREAM_FORM_REFERENCE, ORANGE),
+    ("34.75M full attention, standard shape", "Windows with 448 bytes of history", "test_transformer_history448",
+     None, "pg19_transformer_history448", STREAM_FORM_REFERENCE, ORANGE),
+    ("34.75M full attention, standard shape", "Windows with 256 bytes of history", "test_transformer_history256",
+     None, None, STREAM_FORM_REFERENCE, ORANGE),
 )
 TRACE_READ_DRIVE_116326K = (
     ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
@@ -471,6 +499,50 @@ def read_warmed_windows(arms=STATE_READS_ARMS, study=STATE_READS):
             "unscored_history_bytes": 256, "training_targets": 368_640_000, "seeds": [20001], "rows": rows}
 
 
+def read_stream_form():
+    """The stream-form study: the stacks scored as unbroken streams and the Transformer in warmed windows."""
+    def scored(name, rate, checkpoint, targets):
+        record = read_result(f"{STREAM_FORM}/scores/{name}.json")
+        if rate is None:
+            row = next(row for row in record["checkpoints"] if row["checkpoint"] == checkpoint)
+        else:
+            # A Transformer with fast output synapses: one record holds every rate that was scored.
+            if record["checkpoint"] != checkpoint:
+                raise ValueError(f"{name}: expected {checkpoint}")
+            row = dict(record, **next(row for row in record["fast_output_synapses"] if row["rate"] == rate))
+        if (record["split"], row["targets"], row["training_targets"]) != ("test", targets, 368_640_000):
+            raise ValueError(f"{name}: {checkpoint} must score {targets:,} test targets after 368,640,000 "
+                             "training targets")
+        return row
+
+    rows = []
+    for model, reads, enwik8, rate, pg19, checkpoint, color in STREAM_FORM_ARMS:
+        row = scored(enwik8, rate, checkpoint, CORPORA[0][2])
+        scores = {"enwik8": {"mean": row["bpb"]}}
+        if pg19 and (RESULTS / f"{STREAM_FORM}/scores/{pg19}.json").is_file():
+            scores["pg19_full"] = {"mean": scored(pg19, None, checkpoint, CORPORA[1][2])["bpb"]}
+        rows.append({"model": model, "reads_the_test_as": reads, "parameters": row["parameters"],
+                     "checkpoint": checkpoint, "scores": scores, "color": color})
+    for corpus, _, _ in CORPORA:
+        ordered = sorted((row["scores"][corpus] for row in rows if corpus in row["scores"]),
+                         key=lambda score: score["mean"])
+        for rank, score in enumerate(ordered, start=1):
+            score["rank"] = rank
+    return {"unit": "bits per byte", "protocol": "unbroken_streams for the stacks, causal_warmed_windows for the "
+            "Transformer", "training_targets": 368_640_000, "seeds": [20001], "rows": rows}
+
+
+def stream_table(rows):
+    lines = ["| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |",
+             "|---|---:|---|---:|---:|---:|---:|"]
+    for row in rows:
+        enwik8, pg19 = row["scores"]["enwik8"], row["scores"].get("pg19_full")
+        books = f'{score_cell(pg19)} | {pg19["rank"]}' if pg19 else "— | —"
+        lines.append(f'| {row["model"]} | {row["parameters"]:,} | {row["reads_the_test_as"]} | {score_cell(enwik8)} | '
+                     f'{enwik8["rank"]} | {books} |')
+    return "\n".join(lines)
+
+
 def width_gap_by_prefix_age(narrow, wide, narrow_full, wide_full):
     age_scores = [read_result(row["score_files"]["enwik8"])["models"][0]["prefix_age"]
                   for row in (narrow, wide, narrow_full, wide_full)]
@@ -674,7 +746,7 @@ def warmed_table(rows):
     return "\n".join(lines)
 
 
-def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=None):
+def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=None, streams=None):
     latest = depth["groups"]["depth"]
     paragraphs = [
         "# Spiking byte model leaderboards",
@@ -755,6 +827,42 @@ def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=Non
             "![Generated pulses with identical output counts within each pair](../results/figures/event_lm_residual_emissions.png)",
         ),
     }
+    if streams:
+        test = {(row["checkpoint"], row["reads_the_test_as"]): row["scores"]["enwik8"]["mean"]
+                for row in streams["rows"]}
+        stack = test[(STREAM_FORM_STACK, "Stream, longer reach")]
+        reference = test[(STREAM_FORM_REFERENCE, "Windows with 496 bytes of history")]
+        # The validation split is not ranked here, but it reverses the order of the two, and the table must say so.
+        stack_validation = read_result(f"{STREAM_FORM}/scores/validation_long_windows_reach.json")
+        stack_validation = next(row["bpb"] for row in stack_validation["checkpoints"]
+                                if row["checkpoint"] == STREAM_FORM_STACK)
+        reference_validation = read_result(f"{STREAM_FORM}/scores/validation_transformer_taught_history496.json")
+        reference_validation = next(row["bpb"] for row in reference_validation["fast_output_synapses"]
+                                    if row["rate"] == 0)
+        paragraphs.extend([
+            "## A stack that reads a stream, trained from scratch · 368,640,000 training targets · seed 20001",
+            stream_table(streams["rows"]),
+            "![Complete enwik8 test and validation of the two stacks as streams and of the Transformer in warmed "
+            "windows](../results/figures/event_lm_stream_form.png)",
+            "![The stack as it reads a stream: eleven levels of a state read and a layer of threshold cells]"
+            "(../results/figures/event_lm_stream_form_circuit.png)",
+            "![Averaged validation loss over training in windows, and the stacks' distance to the Transformer]"
+            "(../results/figures/event_lm_stream_form_training.png)",
+            "[Measurements, circuit and limits](STREAM_FORM.md) · [Every training arm](STREAM_FORM_ARMS.md)",
+            "This comparison reads the test as a stream. A stack carries its state through 16 unbroken parts of "
+            "the enwik8 test split and through every PG-19 book. The Transformer carries no state and reads the "
+            "same texts in windows that hold the named bytes of history before the scored ones. A longer reach "
+            "lets the reads of a stack reach cells beyond its window of training, which adds no synapse. Taught "
+            "output synapses start at zero in every stream and learn from each byte after it was predicted, and "
+            "the Transformer gets the same rule on its last layer as a control.",
+            f"On the enwik8 test the stack on long windows with its longer reach is {reference - stack:.4f} bpb "
+            "below the Transformer at its best window. On the validation split it is "
+            f"{stack_validation - reference_validation:.4f} above it ({stack_validation:.4f} against "
+            f"{reference_validation:.4f}), so the two are level. That stack trained on windows of 1,024 bytes from "
+            "24,000 updates, and the Transformer and the other stack on windows of 512 bytes. A Transformer trained "
+            "on windows of 1,024 bytes is the control that this comparison does not have yet. The three models "
+            "received identical windows from random weights up to 24,000 updates. Every row is one seed.",
+        ])
     if clocks:
         scores = {row["checkpoint"].split("/")[2]: row["scores"]["enwik8"]["mean"] for row in clocks["rows"]}
         paragraphs.extend([
@@ -1452,7 +1560,11 @@ def main():
     if clocks:
         summary = RESULTS / READ_CLOCKS / "leaderboard.json"
         summary.write_text(json.dumps(clocks, indent=2) + "\n", encoding="utf-8")
-    write_leaderboards(data, depth, research, transfers, warmed, clocks)
+    streams = read_stream_form() if (RESULTS / STREAM_FORM_CHECKPOINTS).is_file() else None
+    if streams:
+        summary = RESULTS / STREAM_FORM / "leaderboard.json"
+        summary.write_text(json.dumps(streams, indent=2) + "\n", encoding="utf-8")
+    write_leaderboards(data, depth, research, transfers, warmed, clocks, streams)
     output = RESULTS / "figures"
     output.mkdir(parents=True, exist_ok=True)
     plot_loss(data, output)
