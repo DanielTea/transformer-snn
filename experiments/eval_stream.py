@@ -11,7 +11,9 @@ split are predicted from an empty state.
 The spikes do not depend on ``--piece``: a stream cut anywhere fires the
 spikes of one pass over the whole of it. ``--reach`` lets every read reach
 further back than it did in training, which a stream allows at no cost in
-synapses.
+synapses. ``--teach-levels`` gives the output its fast synapses from the
+cells after those levels: every arriving byte then teaches them, in each
+stream by itself, and no byte is learned from before it is predicted.
 
 A model without such state, as the Transformer, is scored in warmed windows
 by eval_warmed_windows.py.
@@ -30,7 +32,7 @@ from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
 from snnformer import count_params
-from snnformer.event_lm import EventLM
+from snnformer.event_lm import EventLM, EventLMConfig
 from train_event_lm import load_checkpoint, scoring_logits, training_exposure
 from train_lm import load_splits
 
@@ -98,6 +100,11 @@ def main():
     parser.add_argument("--reach", type=int, help="cells that every read reaches back, if more than in training")
     parser.add_argument("--reach-levels", type=int, nargs="+",
                         help="lengthen the reach of the reads after these levels only")
+    parser.add_argument("--teach-levels", type=int, nargs="+",
+                        help="levels whose cells the fast output synapses hear, which every arriving byte teaches")
+    parser.add_argument("--teach-threshold", type=int, help="units of fast charge to one spike of an output neuron")
+    parser.add_argument("--teach-budget", type=int, default=EventLMConfig.teach_budget,
+                        help="teaching spikes of every arriving byte")
     parser.add_argument("--averaged", action="store_true",
                         help="score the averaged weights that a partial checkpoint holds beside its last ones")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
@@ -108,6 +115,8 @@ def main():
         parser.error("streams, piece and threads must be positive and the lead not negative")
     if args.reach_levels is not None and args.reach is None:
         parser.error("--reach-levels names the levels that take --reach")
+    if (args.teach_levels is None) != (args.teach_threshold is None):
+        parser.error("--teach-levels and --teach-threshold go together")
     if args.json.exists():
         parser.error(f"{args.json} already exists")
     torch.set_num_threads(args.threads)
@@ -133,6 +142,8 @@ def main():
             model.synaptic_scaling()
         if args.reach is not None:
             lengthen_reach(model, args.reach, args.reach_levels)
+        if args.teach_levels is not None:
+            model.teach(args.teach_levels, args.teach_threshold, args.teach_budget)
         bits, targets = score(model, data, args.streams, args.lead, args.piece, device)
         reaches = {int(level): read.reach for level, read in model.state_reads.items()}
         row = {"checkpoint": str(path), "run_name": checkpoint.get("run_name"), "parameters": count_params(model),
@@ -141,6 +152,9 @@ def main():
                                else dict(sorted(reaches.items()))),
                "training_targets": training_exposure(checkpoint), "targets": targets,
                "bpb": float(bits.sum() / targets), "averaged_weights": args.averaged}
+        if args.teach_levels is not None:
+            row["taught"] = {"levels": sorted(args.teach_levels), "threshold": args.teach_threshold,
+                             "teaching_spikes_per_byte": args.teach_budget}
         # The pieces are resampled together for the difference to the first checkpoint.
         paired = bits.reshape(-1)
         if first is None:
