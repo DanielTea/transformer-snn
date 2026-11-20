@@ -119,3 +119,23 @@ def test_a_layer_refuses_to_gate_cells_by_themselves_without_a_gate(setting):
 def test_a_stack_without_cell_layers_has_nothing_to_gate():
     with pytest.raises(ValueError, match="granule_self_gate"):
         EventLM(EventLMConfig(**dict(_STACK, granule_after=None, granule_self_gate=True)))
+
+
+def test_the_gate_of_a_cell_that_gates_itself_is_a_dendrite_that_sends_no_pulse():
+    from snnformer.event_lm import _IntegrateFire, emitted_pulses
+
+    model, tokens = _stack(**_SQUARE, **_POOLED), _bytes()
+    counted = {}
+    for name, module in model.named_modules():
+        if isinstance(module, _IntegrateFire):
+            module.register_forward_hook(
+                lambda population, _, counts, name=name: counted.__setitem__(name, emitted_pulses(population, counts)))
+    model(tokens)
+    gates = {name: pulses for name, pulses in counted.items() if name.endswith(".open")}
+    bodies = {name: pulses for name, pulses in counted.items() if name.endswith(".fire") and "granule" in name}
+    assert len(gates) == len(bodies) == 2
+    # The gates step and the bodies fire, but only the bodies' spikes are pulses.
+    assert all(pulses == 0 for pulses in gates.values()) and all(pulses > 0 for pulses in bodies.values())
+    # A gated cell with a gate of its own still counts its gate's spikes.
+    gated = _stack(granule_gate=4, **_POOLED)
+    assert not any(layer.open.dendrite for layer in gated.granule_layers.values())

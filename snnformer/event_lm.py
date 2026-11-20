@@ -2881,7 +2881,10 @@ class _GranuleLayer(nn.Module):
     the rest and lets the same charge in, so a cell with k thresholds of charge
     fires about k times k spikes: the spike form of a squared rectifier. Its
     count grows smoothly from silence, where a plain cell's jumps to one spike
-    a threshold, and it has two rows of synapses as a plain cell has.
+    a threshold, and it has two rows of synapses as a plain cell has. Its gate
+    is a dendrite, as a veto is: the gate's steps are the cell's own charge
+    counted once more and stay inside the cell, so only the body's spikes count
+    as pulses.
 
     With ``granule_veto`` every cell has a second dendrite on the same fibres
     that does not fire. Its charge closes the cell, in ``granule_veto`` steps
@@ -3006,6 +3009,8 @@ class _GranuleLayer(nn.Module):
                                         capped=_GATE_CAP * self.gated)
             self.fire = _GatedFire(cell_cap, self.bits, self.gated, cfg.pool_quanta)
             self.open.price_share = self.fire.price_share = cfg.granule_price
+            # The gate of a cell that gates itself counts the cell's own charge and sends no spike.
+            self.open.dendrite = cfg.granule_self_gate
         elif cfg.granule_veto:
             # ``veto`` holds the synapses of the veto dendrite. They start silent.
             self.veto = nn.Parameter(torch.zeros(clusters, cells, fan))
