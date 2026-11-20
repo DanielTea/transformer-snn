@@ -219,6 +219,9 @@ class EventLMConfig:
     stack: bool = False
     granule_cap: int | None = None
     granule_gate: int = 0
+    # A gated cell whose gate dendrite hears its fibres through the cell's own synapses: it fires about the square
+    # of its charge above the rest, with no synapses beyond a plain cell's.
+    granule_self_gate: bool = False
     granule_veto: int = 0
     read_cap: int | None = None
     read_phases: int = 0
@@ -2873,6 +2876,13 @@ class _GranuleLayer(nn.Module):
     cell opens, the other what it passes on. A plain cell has one view for
     both. A gated cell has three rows of synapses where a plain cell has two.
 
+    With ``granule_self_gate`` as well, a gated cell's gate dendrite hears its
+    fibres through the cell's own synapses. The gate opens by the charge above
+    the rest and lets the same charge in, so a cell with k thresholds of charge
+    fires about k times k spikes: the spike form of a squared rectifier. Its
+    count grows smoothly from silence, where a plain cell's jumps to one spike
+    a threshold, and it has two rows of synapses as a plain cell has.
+
     With ``granule_veto`` every cell has a second dendrite on the same fibres
     that does not fire. Its charge closes the cell, in ``granule_veto`` steps
     over the charge of one whole spike: a quarter of the cell's own charge is
@@ -2984,9 +2994,12 @@ class _GranuleLayer(nn.Module):
         cell_cap = cap if cfg.granule_cap is None else cfg.granule_cap
         self.gated, self.vetoed = cfg.granule_gate, cfg.granule_veto
         if self.gated:
-            # ``receive`` holds the synapses of the value dendrite and ``gate`` those of the gate dendrite.
-            self.gate = nn.Parameter(torch.empty(clusters, cells, fan))
-            nn.init.normal_(self.gate, std=cfg.granule_gain / math.sqrt(fan))
+            # ``receive`` holds the synapses of the value dendrite and ``gate`` those of the gate dendrite. A cell
+            # that gates itself has none of its own: both dendrites hear through ``receive``.
+            self.gate = None
+            if not cfg.granule_self_gate:
+                self.gate = nn.Parameter(torch.empty(clusters, cells, fan))
+                nn.init.normal_(self.gate, std=cfg.granule_gain / math.sqrt(fan))
             # A gate counts sixteen thresholds of charge at most, and no more spikes than those are at a whole
             # threshold.
             self.open = _ExcitatoryFire(_GATE_CAP, self.bits, False, quanta_per_threshold=cfg.pool_quanta * self.gated,
@@ -3119,7 +3132,9 @@ class _GranuleLayer(nn.Module):
         rest = self.rest_quarters().squeeze(-1) * quanta * self.quarter()
         if self.gated:
             # The gate dendrite fires above the rest, and its spikes let the value dendrite's charge into the body.
-            opening = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.gate, charge_bits=self.bits))
+            # A cell that gates itself opens by its own charge.
+            opening = charge if self.gate is None else torch.einsum(
+                "btgk,gnk->btgn", heard, _weight_ticks(self.gate, charge_bits=self.bits))
             return self.fire(charge, quanta,
                              opened=self.open(opening - rest, quanta, smooth=self.gated * self.slope_width))
         charge = charge - rest
@@ -3154,7 +3169,7 @@ class _GranuleLayer(nn.Module):
         rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * self.quarter() // self.emit.cap)
         if self.gated:
             # The rest belongs to the gate dendrite. The value dendrite collects without it.
-            gate = _weight_ticks(self.gate, charge_bits=self.bits).abs().sum(-1).amax()
+            gate = receive if self.gate is None else _weight_ticks(self.gate, charge_bits=self.bits).abs().sum(-1).amax()
             receive, rest = torch.maximum(receive, gate + rest), 0
         if self.vetoed:
             # The veto dendrite has no rest.
@@ -3185,9 +3200,11 @@ class _GranuleLayer(nn.Module):
         most_quanta = self.rest_quanta + self.pool.cap
         rest = -(-_GRANULE_REST_LIMIT * _PACKET_UNITS * most_quanta * self.quarter() // self.emit.cap)
         spare = self.receive.shape[-1] / 2 + 1
-        # The resting charge belongs to a gated cell's gate dendrite and to the own dendrite of any other cell.
-        dendrites = [(self.receive, 0 if self.gated else rest)]
-        if self.gated:
+        # The resting charge belongs to a gated cell's gate dendrite and to the own dendrite of any other cell. The
+        # synapses of a cell that gates itself also serve its gate.
+        separate = self.gated and self.gate is not None
+        dendrites = [(self.receive, 0 if separate else rest)]
+        if separate:
             dendrites.append((self.gate, rest))
         if self.vetoed:
             dendrites.append((self.veto, 0))
@@ -3558,6 +3575,8 @@ class EventLM(nn.Module):
                                      "the range of exact sums; lower the read cap")
             self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
         self.granule_layers = None
+        if cfg.granule_self_gate and cfg.granule_after is None:
+            raise ValueError("granule_self_gate gates the cells of granule layers, and there are none")
         if cfg.granule_after is not None:
             below = cfg.depth if cfg.clock_start is None else cfg.clock_start
             if (cfg.carry or cfg.continuous or not cfg.granule_after
@@ -3598,6 +3617,8 @@ class EventLM(nn.Module):
                     cfg.granule_gate and (cfg.granule_budget is not None or cfg.granule_soft)):
                 raise ValueError("gated granule cells have a whole number of gate spikes to a threshold and do "
                                  "not race")
+            if not isinstance(cfg.granule_self_gate, bool) or cfg.granule_self_gate and not cfg.granule_gate:
+                raise ValueError("a cell that gates itself is a gated cell: granule_self_gate needs granule_gate")
             if cfg.granule_gate:
                 # The largest charge a body collects, times the most spikes of its gate.
                 collected = (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution) << (
