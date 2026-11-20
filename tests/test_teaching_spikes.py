@@ -199,10 +199,11 @@ def test_the_scorer_teaches_every_stream_by_itself(monkeypatch):
 
     data = torch.from_numpy(np.random.default_rng(1).integers(0, 256, 1000, dtype=np.uint8))
     model = _stack()
-    plain, count = eval_stream.score(model, data, 4, 30, 50, torch.device("cpu"))
+    streams = eval_stream.stream_rows(data, 4, 30)
+    plain, count = eval_stream.score(model, streams, 50, torch.device("cpu"))
     model.teach((1,), 1 << 24)
-    taught, _ = eval_stream.score(model, data, 4, 30, 50, torch.device("cpu"))
+    taught, _ = eval_stream.score(model, streams, 50, torch.device("cpu"))
     assert count == 999 and taught.shape == plain.shape and not np.array_equal(taught, plain)
     # The pieces do not change what is learned or scored.
-    other, _ = eval_stream.score(model, data, 4, 30, 273, torch.device("cpu"))
+    other, _ = eval_stream.score(model, streams, 273, torch.device("cpu"))
     assert taught.sum() == pytest.approx(other.sum(), rel=1e-12)
