@@ -1,0 +1,868 @@
+{
+ "note": "A small test bed for the learning rate: a stack of 6 levels, 256 channels wide, with a read of 4 heads and 1,022 threshold cells in a level, beside a Transformer of the same layout, both on windows of 256 bytes for 6,000 updates on one CPU. An arm is the command of its model with the arm's flags added, where a flag given again replaces the value of that command, and then the shared command line. diagnosis_build names switches of experiments/stack/diagnosis_build.py. Curves hold the validation loss of the last weights (val_bpb) and of the running weight average (averaged_val_bpb) over 16 batches of 16 windows, which all arms share. One seed each.",
+ "commands": {
+  "stack": "--variant event_steered --no-carry --stack --dim 256 --hidden 4 --depth 6 --spike-resolution 16 --router-charge-bits 8 --pulse-budget 113000 --read-after 0,1,2,3,4,5 --read-width 256 --read-heads 4 --read-window 256 --read-mode race --read-budget 256 --read-resolution 4 --read-cap 128 --read-address-rate 64 --granule-after 0,1,2,3,4,5 --granule-clusters 1 --granule-fan 256 --granule-cells 1022 --granule-slope --granule-cap 128 --rotate-stacks",
+  "float_stack": "--variant event_steered --no-carry --stack --dim 256 --hidden 4 --depth 6 --spike-resolution 16 --router-charge-bits 8 --pulse-budget 113000 --read-after 0,1,2,3,4,5 --read-width 256 --read-heads 4 --read-window 256 --read-mode soft --read-address-rate 64 --granule-after 0,1,2,3,4,5 --granule-clusters 1 --granule-fan 256 --granule-cells 1022 --granule-budget 64 --granule-soft --rotate-stacks",
+  "transformer": "--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 4",
+  "shared": "--data data/enwik8 --training-mixture data/training-v1/prepared/catalogue.json --ctx 256 --bs 16 --steps 6000 --warmup 300 --lr 3e-4 --wd 0.05 --seed 20001 --eval-every 750 --eval-bs 16 --eval-batches 16 --final-eval-batches 64 --validation-only --save-every 1500 --resume --device cpu --threads 6 --rotated-adam 50 --weight-average 0.999"
+ },
+ "training": {
+  "batch": 16,
+  "context": 256,
+  "mixture": "enwik8-c4-pg19-v1",
+  "seed": 20001,
+  "schedule": {
+   "steps": 6000,
+   "warmup": 300,
+   "lr": 0.0003
+  }
+ },
+ "arms": [
+  {
+   "name": "stack-3e-4",
+   "started_utc": "2026-11-19T12:52:46Z",
+   "model": "stack",
+   "parameters": 4855844,
+   "flags": "",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.6679,
+     "val_bpb": 2.638,
+     "accuracy": 0.493,
+     "pulses_per_byte": 114355
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.2942,
+     "val_bpb": 2.2988,
+     "accuracy": 0.5497,
+     "pulses_per_byte": 114420
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 2.1643,
+     "val_bpb": 2.1744,
+     "accuracy": 0.5706,
+     "pulses_per_byte": 114284
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 2.0885,
+     "val_bpb": 2.1054,
+     "accuracy": 0.5815,
+     "pulses_per_byte": 114801
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 2.0439,
+     "val_bpb": 2.0499,
+     "accuracy": 0.5927,
+     "pulses_per_byte": 115150
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 2.0161,
+     "val_bpb": 2.0142,
+     "accuracy": 0.5981,
+     "pulses_per_byte": 114532
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 2.0005,
+     "val_bpb": 1.9955,
+     "accuracy": 0.6024,
+     "pulses_per_byte": 114827
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.9932,
+     "val_bpb": 1.9909,
+     "accuracy": 0.6022,
+     "pulses_per_byte": 114654
+    }
+   ]
+  },
+  {
+   "name": "stack-1e-3",
+   "started_utc": "2026-11-19T14:02:22Z",
+   "model": "stack",
+   "parameters": 4855844,
+   "flags": "--lr 1e-3",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.306,
+     "val_bpb": 2.3908,
+     "accuracy": 0.5341,
+     "pulses_per_byte": 113327
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.0815,
+     "val_bpb": 2.1672,
+     "accuracy": 0.5676,
+     "pulses_per_byte": 114019
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 1.9951,
+     "val_bpb": 2.0599,
+     "accuracy": 0.5865,
+     "pulses_per_byte": 114126
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 1.9374,
+     "val_bpb": 1.9938,
+     "accuracy": 0.595,
+     "pulses_per_byte": 115213
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 1.8908,
+     "val_bpb": 1.9134,
+     "accuracy": 0.6133,
+     "pulses_per_byte": 114393
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 1.8531,
+     "val_bpb": 1.8537,
+     "accuracy": 0.6246,
+     "pulses_per_byte": 114732
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.8231,
+     "val_bpb": 1.8152,
+     "accuracy": 0.6324,
+     "pulses_per_byte": 114302
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.8078,
+     "val_bpb": 1.8013,
+     "accuracy": 0.6345,
+     "pulses_per_byte": 114536
+    }
+   ]
+  },
+  {
+   "name": "stack-3e-3",
+   "started_utc": "2026-11-19T14:11:47Z",
+   "model": "stack",
+   "parameters": 4855844,
+   "flags": "--lr 3e-3",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.2678,
+     "val_bpb": 2.4232,
+     "accuracy": 0.5249,
+     "pulses_per_byte": 115265
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.0836,
+     "val_bpb": 2.2327,
+     "accuracy": 0.5553,
+     "pulses_per_byte": 114773
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 1.937,
+     "val_bpb": 2.0482,
+     "accuracy": 0.5952,
+     "pulses_per_byte": 113373
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 1.8556,
+     "val_bpb": 1.9326,
+     "accuracy": 0.6119,
+     "pulses_per_byte": 113889
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 1.7987,
+     "val_bpb": 1.8497,
+     "accuracy": 0.6281,
+     "pulses_per_byte": 114734
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 1.7587,
+     "val_bpb": 1.7772,
+     "accuracy": 0.6411,
+     "pulses_per_byte": 114423
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.7346,
+     "val_bpb": 1.7326,
+     "accuracy": 0.6482,
+     "pulses_per_byte": 114796
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.7197,
+     "val_bpb": 1.715,
+     "accuracy": 0.6519,
+     "pulses_per_byte": 114966
+    }
+   ]
+  },
+  {
+   "name": "stack-6e-3",
+   "started_utc": "2026-11-19T15:08:23Z",
+   "model": "stack",
+   "parameters": 4855844,
+   "flags": "--lr 6e-3",
+   "note": "Stopped at 3,750 updates, far behind.",
+   "updates_in_the_curve": 3750,
+   "finished": false,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.3605,
+     "val_bpb": 2.5707,
+     "accuracy": 0.5031,
+     "pulses_per_byte": 115288
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.2166,
+     "val_bpb": 2.3887,
+     "accuracy": 0.5264,
+     "pulses_per_byte": 114211
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 2.3135,
+     "val_bpb": 2.3503,
+     "accuracy": 0.531,
+     "pulses_per_byte": 109422
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 2.1691,
+     "val_bpb": 2.3224,
+     "accuracy": 0.5347,
+     "pulses_per_byte": 114617
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 2.1085,
+     "val_bpb": 2.1508,
+     "accuracy": 0.5665,
+     "pulses_per_byte": 115694
+    }
+   ]
+  },
+  {
+   "name": "stack-free-budget-3e-4",
+   "started_utc": "2026-11-19T13:01:01Z",
+   "model": "stack",
+   "parameters": 4855844,
+   "flags": "--pulse-budget 100000000",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.7613,
+     "val_bpb": 2.7233,
+     "accuracy": 0.4735,
+     "pulses_per_byte": 233223
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.3248,
+     "val_bpb": 2.327,
+     "accuracy": 0.5424,
+     "pulses_per_byte": 241992
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 2.1789,
+     "val_bpb": 2.1898,
+     "accuracy": 0.5665,
+     "pulses_per_byte": 253427
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 2.1024,
+     "val_bpb": 2.1191,
+     "accuracy": 0.5763,
+     "pulses_per_byte": 265620
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 2.0525,
+     "val_bpb": 2.0545,
+     "accuracy": 0.5895,
+     "pulses_per_byte": 270552
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 2.0204,
+     "val_bpb": 2.0153,
+     "accuracy": 0.5959,
+     "pulses_per_byte": 273159
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.9994,
+     "val_bpb": 1.9917,
+     "accuracy": 0.6012,
+     "pulses_per_byte": 276970
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.9875,
+     "val_bpb": 1.9836,
+     "accuracy": 0.6026,
+     "pulses_per_byte": 277118
+    }
+   ]
+  },
+  {
+   "name": "stack-floats-3e-4",
+   "started_utc": "2026-11-19T13:01:01Z",
+   "model": "float_stack",
+   "parameters": 4855826,
+   "flags": "",
+   "note": "A float control and no spiking network: softmax reads and real-valued cells. Its command is float_stack in place of stack.",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.8072,
+     "val_bpb": 2.7517,
+     "accuracy": 0.4691,
+     "pulses_per_byte": 100379
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.3386,
+     "val_bpb": 2.3253,
+     "accuracy": 0.5418,
+     "pulses_per_byte": 109979
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 2.1796,
+     "val_bpb": 2.1838,
+     "accuracy": 0.5676,
+     "pulses_per_byte": 110685
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 2.0971,
+     "val_bpb": 2.1081,
+     "accuracy": 0.5786,
+     "pulses_per_byte": 112504
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 2.0449,
+     "val_bpb": 2.0436,
+     "accuracy": 0.5918,
+     "pulses_per_byte": 112744
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 2.0123,
+     "val_bpb": 2.0079,
+     "accuracy": 0.5966,
+     "pulses_per_byte": 112937
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.9926,
+     "val_bpb": 1.9875,
+     "accuracy": 0.6019,
+     "pulses_per_byte": 113128
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.9838,
+     "val_bpb": 1.9786,
+     "accuracy": 0.6039,
+     "pulses_per_byte": 113336
+    }
+   ]
+  },
+  {
+   "name": "stack-layernorm-3e-3",
+   "started_utc": "2026-11-19T15:49:35Z",
+   "model": "stack",
+   "parameters": 4862500,
+   "flags": "--lr 3e-3",
+   "diagnosis_build": "SNN_LN=1 SNN_LN_OUT=1",
+   "note": "A float stand-in: every read, cell layer and the output hear a LayerNorm of the stream.",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.2314,
+     "val_bpb": 2.3636,
+     "accuracy": 0.5352,
+     "pulses_per_byte": 114576
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.0611,
+     "val_bpb": 2.1772,
+     "accuracy": 0.5636,
+     "pulses_per_byte": 114706
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 1.9889,
+     "val_bpb": 2.0792,
+     "accuracy": 0.5827,
+     "pulses_per_byte": 113272
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 1.9275,
+     "val_bpb": 1.9983,
+     "accuracy": 0.5964,
+     "pulses_per_byte": 114633
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 1.8566,
+     "val_bpb": 1.8869,
+     "accuracy": 0.6187,
+     "pulses_per_byte": 114153
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 1.7995,
+     "val_bpb": 1.8109,
+     "accuracy": 0.6328,
+     "pulses_per_byte": 114705
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.7673,
+     "val_bpb": 1.7646,
+     "accuracy": 0.6416,
+     "pulses_per_byte": 114205
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.7532,
+     "val_bpb": 1.7479,
+     "accuracy": 0.6448,
+     "pulses_per_byte": 114528
+    }
+   ]
+  },
+  {
+   "name": "stack-turned-gated-3e-4",
+   "started_utc": "2026-11-19T12:52:46Z",
+   "model": "stack",
+   "parameters": 4856876,
+   "flags": "--read-turn --granule-cells 682 --granule-gate 4",
+   "note": "Turned probes and gated cells. Stopped at 3,000 updates, behind the plain stack.",
+   "updates_in_the_curve": 3000,
+   "finished": false,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.6791,
+     "val_bpb": 2.6525,
+     "accuracy": 0.5008,
+     "pulses_per_byte": 105185
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.2494,
+     "val_bpb": 2.2784,
+     "accuracy": 0.5549,
+     "pulses_per_byte": 115392
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 2.1267,
+     "val_bpb": 2.1554,
+     "accuracy": 0.5749,
+     "pulses_per_byte": 115213
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 2.0679,
+     "val_bpb": 2.0967,
+     "accuracy": 0.5844,
+     "pulses_per_byte": 115959
+    }
+   ]
+  },
+  {
+   "name": "transformer-3e-4",
+   "started_utc": "2026-11-19T12:52:46Z",
+   "model": "transformer",
+   "parameters": 4792320,
+   "flags": "",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.6044,
+     "val_bpb": 2.596,
+     "accuracy": 0.514
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.1429,
+     "val_bpb": 2.1894,
+     "accuracy": 0.5671
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 2.0149,
+     "val_bpb": 2.0558,
+     "accuracy": 0.5873
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 1.9497,
+     "val_bpb": 1.9864,
+     "accuracy": 0.5965
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 1.9044,
+     "val_bpb": 1.9199,
+     "accuracy": 0.611
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 1.872,
+     "val_bpb": 1.8779,
+     "accuracy": 0.6154
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.8544,
+     "val_bpb": 1.852,
+     "accuracy": 0.6215
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.8464,
+     "val_bpb": 1.8437,
+     "accuracy": 0.6226
+    }
+   ]
+  },
+  {
+   "name": "transformer-1e-3",
+   "started_utc": "2026-11-19T14:11:47Z",
+   "model": "transformer",
+   "parameters": 4792320,
+   "flags": "--lr 1e-3",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.2716,
+     "val_bpb": 2.3637,
+     "accuracy": 0.5338
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.0311,
+     "val_bpb": 2.1251,
+     "accuracy": 0.5721
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 1.9389,
+     "val_bpb": 2.0088,
+     "accuracy": 0.5956
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 1.8665,
+     "val_bpb": 1.9259,
+     "accuracy": 0.6109
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 1.8075,
+     "val_bpb": 1.8342,
+     "accuracy": 0.6277
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 1.7629,
+     "val_bpb": 1.7686,
+     "accuracy": 0.6414
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.7348,
+     "val_bpb": 1.7308,
+     "accuracy": 0.6493
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.722,
+     "val_bpb": 1.7175,
+     "accuracy": 0.6523
+    }
+   ]
+  },
+  {
+   "name": "transformer-3e-3",
+   "started_utc": "2026-11-19T15:06:03Z",
+   "model": "transformer",
+   "parameters": 4792320,
+   "flags": "--lr 3e-3",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.2843,
+     "val_bpb": 2.4193,
+     "accuracy": 0.523
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.0665,
+     "val_bpb": 2.1891,
+     "accuracy": 0.5614
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 1.9779,
+     "val_bpb": 2.0724,
+     "accuracy": 0.5837
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 1.9048,
+     "val_bpb": 1.9765,
+     "accuracy": 0.6016
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 1.839,
+     "val_bpb": 1.8776,
+     "accuracy": 0.6198
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 1.7875,
+     "val_bpb": 1.8011,
+     "accuracy": 0.6348
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.7569,
+     "val_bpb": 1.7543,
+     "accuracy": 0.6422
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.7406,
+     "val_bpb": 1.7349,
+     "accuracy": 0.6475
+    }
+   ]
+  },
+  {
+   "name": "transformer-plain-units-3e-4",
+   "started_utc": "2026-11-19T12:52:46Z",
+   "model": "transformer",
+   "parameters": 4796928,
+   "flags": "--feed-forward relu --age-offsets 64",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.4188,
+     "val_bpb": 2.4562,
+     "accuracy": 0.5406
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.0743,
+     "val_bpb": 2.142,
+     "accuracy": 0.5747
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 1.98,
+     "val_bpb": 2.0319,
+     "accuracy": 0.5912
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 1.9234,
+     "val_bpb": 1.9724,
+     "accuracy": 0.6013
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 1.8807,
+     "val_bpb": 1.9062,
+     "accuracy": 0.6133
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 1.8503,
+     "val_bpb": 1.8573,
+     "accuracy": 0.6225
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.8328,
+     "val_bpb": 1.831,
+     "accuracy": 0.6278
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.8241,
+     "val_bpb": 1.8209,
+     "accuracy": 0.63
+    }
+   ]
+  },
+  {
+   "name": "transformer-plain-units-1e-3",
+   "started_utc": "2026-11-19T14:11:47Z",
+   "model": "transformer",
+   "parameters": 4796928,
+   "flags": "--feed-forward relu --age-offsets 64 --lr 1e-3",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.207,
+     "val_bpb": 2.3306,
+     "accuracy": 0.5415
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.0257,
+     "val_bpb": 2.1323,
+     "accuracy": 0.5722
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 1.9412,
+     "val_bpb": 2.0093,
+     "accuracy": 0.5955
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 1.8193,
+     "val_bpb": 1.8697,
+     "accuracy": 0.6235
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 1.7551,
+     "val_bpb": 1.787,
+     "accuracy": 0.6394
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 1.7194,
+     "val_bpb": 1.7319,
+     "accuracy": 0.6501
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.7005,
+     "val_bpb": 1.6994,
+     "accuracy": 0.6555
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.6902,
+     "val_bpb": 1.6871,
+     "accuracy": 0.6582
+    }
+   ]
+  },
+  {
+   "name": "transformer-plain-units-3e-3",
+   "started_utc": "2026-11-19T14:50:12Z",
+   "model": "transformer",
+   "parameters": 4796928,
+   "flags": "--feed-forward relu --age-offsets 64 --lr 3e-3",
+   "updates_in_the_curve": 6000,
+   "finished": true,
+   "curve": [
+    {
+     "step": 750,
+     "averaged_val_bpb": 2.2559,
+     "val_bpb": 2.4065,
+     "accuracy": 0.5281
+    },
+    {
+     "step": 1500,
+     "averaged_val_bpb": 2.0576,
+     "val_bpb": 2.1762,
+     "accuracy": 0.5629
+    },
+    {
+     "step": 2250,
+     "averaged_val_bpb": 1.8865,
+     "val_bpb": 1.9824,
+     "accuracy": 0.6041
+    },
+    {
+     "step": 3000,
+     "averaged_val_bpb": 1.8079,
+     "val_bpb": 1.8861,
+     "accuracy": 0.6204
+    },
+    {
+     "step": 3750,
+     "averaged_val_bpb": 1.7598,
+     "val_bpb": 1.8055,
+     "accuracy": 0.6359
+    },
+    {
+     "step": 4500,
+     "averaged_val_bpb": 1.7241,
+     "val_bpb": 1.7415,
+     "accuracy": 0.6469
+    },
+    {
+     "step": 5250,
+     "averaged_val_bpb": 1.7001,
+     "val_bpb": 1.701,
+     "accuracy": 0.6544
+    },
+    {
+     "step": 6000,
+     "averaged_val_bpb": 1.6884,
+     "val_bpb": 1.6855,
+     "accuracy": 0.6574
+    }
+   ]
+  }
+ ]
+}
