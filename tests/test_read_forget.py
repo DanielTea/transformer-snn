@@ -126,3 +126,27 @@ def test_a_fork_turns_the_slope_on_where_its_windows_grow_and_its_control_holds_
         slopes[name] = torch.cat([read.forget.detach() for read in model.state_reads.values()])
     # The arm that forgets has learned slopes in its six updates on longer windows. Its control has none.
     assert slopes["forgets"].abs().sum() > 0 and torch.equal(slopes["held"], torch.zeros(4))
+
+
+def test_a_fixed_slope_at_scoring_is_the_slope_a_read_would_learn(monkeypatch):
+    _trainer(monkeypatch)
+    import eval_stream
+
+    tokens = _bytes()
+    fixed = _stack().eval()
+    eval_stream.lengthen_reach(fixed, 96)
+    eval_stream.forget_by_power(fixed, -0.75)
+    learned = _stack(read_reach=96, read_forget=True).eval()
+    with torch.no_grad():
+        for read in learned.state_reads.values():
+            read.forget.fill_(-0.75 / read.rate)
+        assert torch.equal(fixed(tokens), learned(tokens))
+    # No parameter is added, and a read that learned its slope keeps it.
+    assert sum(p.numel() for p in fixed.parameters()) == sum(p.numel() for p in _stack().parameters())
+    with pytest.raises(ValueError):
+        eval_stream.forget_by_power(learned, -0.5)
+    # Only the reads that take the longer reach get the slope.
+    partial = _stack().eval()
+    eval_stream.lengthen_reach(partial, 96, levels=[1])
+    eval_stream.forget_by_power(partial, -0.75, levels=[1])
+    assert partial.state_reads["0"].forget is None and partial.state_reads["1"].forget is not None

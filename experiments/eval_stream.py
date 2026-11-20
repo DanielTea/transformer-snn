@@ -93,6 +93,23 @@ def lengthen_reach(model, cells, levels=None):
         read.reach = cells
 
 
+def forget_by_power(model, slope, levels=None):
+    """Give every read of a stack, or the reads after ``levels``, a fixed forgetting slope: ``slope`` units of charge
+    for every doubling of the age of a cell beyond the read's window, as a learned slope of ``read_forget`` would
+    give. It adds no parameter, and a read whose slope was learned keeps it."""
+    reads = model.state_reads
+    if levels is not None and not {str(level) for level in levels} <= set(reads):
+        raise ValueError("the stack has no read after one of these levels")
+    for level, read in reads.items():
+        if levels is not None and int(level) not in levels:
+            continue
+        if read.forget is not None:
+            raise ValueError("a read that learned its slope keeps it")
+        # The slope counts on top of the address rate, as a learned one does.
+        read.forget = torch.full((read.heads,), slope / read.rate, dtype=read.age.dtype, device=read.age.device)
+        read.forget_rate = 1.0
+
+
 @torch.inference_mode()
 def score(model, rows, piece, device):
     """The bits of every piece of every stream as [streams, pieces], and the number of scored targets. The rows
@@ -131,6 +148,9 @@ def main():
     parser.add_argument("--reach", type=int, help="cells that every read reaches back, if more than in training")
     parser.add_argument("--reach-levels", type=int, nargs="+",
                         help="lengthen the reach of the reads after these levels only")
+    parser.add_argument("--forget-slope", type=float,
+                        help="units of charge that the offset of a cell beyond a read's window takes for every "
+                             "doubling of its age, at the reads that take --reach: a fixed power-law forgetting")
     parser.add_argument("--teach-levels", type=int, nargs="+",
                         help="levels whose cells the fast output synapses hear, which every arriving byte teaches")
     parser.add_argument("--teach-threshold", type=int, help="units of fast charge to one spike of an output neuron")
@@ -151,6 +171,8 @@ def main():
         parser.error("--bytes shortens an enwik8 split")
     if args.reach_levels is not None and args.reach is None:
         parser.error("--reach-levels names the levels that take --reach")
+    if args.forget_slope is not None and (args.reach is None or not math.isfinite(args.forget_slope)):
+        parser.error("--forget-slope is a finite slope for the cells that --reach adds")
     if (args.teach_levels is None) != (args.teach_threshold is None):
         parser.error("--teach-levels and --teach-threshold go together")
     if args.json.exists():
@@ -189,6 +211,11 @@ def main():
             model.synaptic_scaling()
         if args.reach is not None:
             lengthen_reach(model, args.reach, args.reach_levels)
+        if args.forget_slope is not None:
+            try:
+                forget_by_power(model, args.forget_slope, args.reach_levels)
+            except ValueError as error:
+                parser.error(f"{path}: {error}")
         if args.teach_levels is not None:
             model.teach(args.teach_levels, args.teach_threshold, args.teach_budget)
         bits, targets = score(model, streams, args.piece, device)
@@ -202,6 +229,8 @@ def main():
         if args.averaged:
             # A partial checkpoint was scored at the average that it holds, not at the weights that its file names.
             row["averaged_weights"] = True
+        if args.forget_slope is not None:
+            row["forget_slope"] = args.forget_slope
         if args.teach_levels is not None:
             row["taught"] = {"levels": sorted(args.teach_levels), "threshold": args.teach_threshold,
                              "teaching_spikes_per_byte": args.teach_budget}
