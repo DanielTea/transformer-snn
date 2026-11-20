@@ -1,9 +1,11 @@
 """Score checkpoints on a complete enwik8 split or on PG-19 books in warmed windows.
 
 Every window starts from an empty state and holds ``--history`` unscored bytes
-before its ``--context`` scored ones, so each target after the first window
-has at least that many bytes before it. This is the protocol of the
-Transformer's reference score. Here it is applied to any model that
+before its ``--context`` scored ones, so each target after the first
+``--history`` bytes has at least that many bytes before it. This is the
+protocol of the Transformer's reference score. A history longer than the
+scored bytes, as 448 before 64, gives a model with a window of 512 bytes
+nearly all of its context at every target. Here it is applied to any model that
 train_event_lm.py saves, so a decoder and the Transformer see the same bytes
 before every target. A decoder scored this way gives up the state it would
 carry through a stream.
@@ -36,17 +38,25 @@ PG19_BOOKS = Path(__file__).resolve().parents[1] / "results/event_lm/correction_
 
 
 def window_batches(data, context, history, batch_size):
-    """Windows and the number of unscored bytes at the start of each, as eval_event_lm.py forms them."""
+    """Windows and the number of unscored bytes at the start of each, as eval_event_lm.py forms them.
+
+    A history longer than the scored bytes gives every target more bytes before it: 448 unscored bytes before 64
+    scored ones fill a window of 512, and no target after the first 448 has fewer than 448 bytes behind it.
+    """
     full_windows, tail = divmod(data.numel() - 1, context)
-    if history or not full_windows:
+    # The first windows begin with the passage and have less than the history before their scored bytes.
+    early = -(-history // context)
+    if not full_windows:
         yield data[:context + 1].unsqueeze(0), 0
-    first_full = int(bool(history))
-    if full_windows > first_full:
-        start = first_full * context - history
+    for window in range(min(early, full_windows)):
+        yield data[:(window + 1) * context + 1].unsqueeze(0), window * context
+    if full_windows > early:
+        start = early * context - history
         for window in data[start:].unfold(0, history + context + 1, context).split(batch_size):
             yield window, history
     if full_windows and tail:
-        yield data[full_windows * context - history:].unsqueeze(0), history
+        start = max(0, full_windows * context - history)
+        yield data[start:].unsqueeze(0), full_windows * context - start
 
 
 @torch.inference_mode()
@@ -92,8 +102,8 @@ def main():
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
-    if min(args.context, args.batch_size, args.threads) < 1 or not 0 <= args.history <= args.context:
-        parser.error("context, batch size and threads must be positive and the history within the context")
+    if min(args.context, args.batch_size, args.threads) < 1 or args.history < 0:
+        parser.error("context, batch size and threads must be positive and the history not negative")
     if args.enwik8 is not None and args.calibration_books is not None:
         parser.error("temperatures are fitted for PG-19 books only")
     if args.bytes is not None and (args.enwik8 is None or args.bytes <= args.context + args.history):

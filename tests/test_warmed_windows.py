@@ -27,7 +27,7 @@ class _NeedsHistory(torch.nn.Module):
 
 
 @pytest.mark.parametrize("targets", (4, 8, 9, 16, 17, 23, 41, 64))
-@pytest.mark.parametrize("history", (0, 3, 8))
+@pytest.mark.parametrize("history", (0, 3, 8, 11, 16, 29))
 def test_windows_score_every_target_once_behind_its_history(evaluator, targets, history):
     data = torch.arange(targets + 1)
     scored = []
@@ -37,9 +37,21 @@ def test_windows_score_every_target_once_behind_its_history(evaluator, targets, 
             assert torch.equal(window, torch.arange(int(window[0]), int(window[0]) + window.numel()))
             # Only a window that starts the passage scores targets with less than the history before them.
             assert skipped == history or int(window[0]) == 0
-            assert window.numel() - skipped - 1 <= 8
+            assert window.numel() - skipped - 1 <= 8 and window.numel() <= history + 8 + 1
             scored.append(window[skipped + 1:])
     assert torch.equal(torch.cat(scored), data[1:])
+
+
+def test_a_history_longer_than_the_scored_bytes_fills_the_window(evaluator):
+    passages = [torch.arange(70) % 256]
+    # A model that needs 20 bytes: with 24 bytes of history before every 8 scored ones only the first 19 targets
+    # of the passage are read too early, and with 8 bytes of history every window's first 12 scored ones are.
+    model = _NeedsHistory(needed=20)
+    bits, whole, targets = evaluator.score(model, passages, 8, 24, 4, torch.device("cpu"))
+    assert targets == 69 and bits.sum() == pytest.approx(19 * 8, rel=1e-6)
+    assert whole.tolist() == [False] * 3 + [True] * 5 + [False]
+    short, _, _ = evaluator.score(model, passages, 8, 8, 4, torch.device("cpu"))
+    assert short.sum() == pytest.approx(69 * 8, rel=1e-6)
 
 
 def test_scored_targets_have_the_history_before_them(evaluator):
