@@ -15,6 +15,11 @@ synapses. ``--teach-levels`` gives the output its fast synapses from the
 cells after those levels: every arriving byte then teaches them, in each
 stream by itself, and no byte is learned from before it is predicted.
 
+With ``--books-dir`` every book of a verified PG-19 manifest is a passage of
+its own that starts from an empty state. A book longer than ``--part`` bytes
+is cut into equal parts as a split is, each with its lead, so that the
+streams are of similar length and run side by side.
+
 A model without such state, as the Transformer, is scored in warmed windows
 by eval_warmed_windows.py.
 """
@@ -22,6 +27,7 @@ by eval_warmed_windows.py.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -31,6 +37,8 @@ import torch
 from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
+from eval_stream_lm import load_books
+from eval_warmed_windows import PG19_BOOKS
 from snnformer import count_params
 from snnformer.event_lm import EventLM, EventLMConfig
 from train_event_lm import load_checkpoint, scoring_logits, training_exposure
@@ -55,6 +63,22 @@ def stream_rows(data, streams, lead):
     return data[places].long(), data[places + 1].long(), scored
 
 
+def book_rows(books, part, lead):
+    """The inputs and targets of the streams of several books as [streams, bytes], and which targets count.
+
+    Every book is a passage of its own and is scored from its first target. A book of more than ``part`` targets
+    is cut into equal parts as ``stream_rows`` cuts a split, and every part after the first hears ``lead``
+    unscored bytes of its book. Shorter streams are filled up with zeros that are not scored.
+    """
+    rows = []
+    for book in books:
+        parts = -(-(book.numel() - 1) // part)
+        rows.append(stream_rows(book, parts, lead if parts > 1 else 0))
+    longest = max(inputs.shape[1] for inputs, _, _ in rows)
+    return tuple(torch.cat([F.pad(row[kind], (0, longest - row[kind].shape[1])) for row in rows])
+                 for kind in range(3))
+
+
 def lengthen_reach(model, cells, levels=None):
     """Let every read of a stack reach ``cells`` back, or only the reads after ``levels``. The cells beyond a
     read's window take the age offset of the window's oldest cell, as under the setting ``read_reach``."""
@@ -70,9 +94,11 @@ def lengthen_reach(model, cells, levels=None):
 
 
 @torch.inference_mode()
-def score(model, data, streams, lead, piece, device):
-    """The bits of every piece of every stream as [streams, pieces], and the number of scored targets."""
-    inputs, targets, scored = stream_rows(data, streams, lead)
+def score(model, rows, piece, device):
+    """The bits of every piece of every stream as [streams, pieces], and the number of scored targets. The rows
+    are the inputs, the targets and which of them count, as ``stream_rows`` or ``book_rows`` give them."""
+    inputs, targets, scored = rows
+    streams = inputs.shape[0]
     resolution = model.cfg.resolution
     bits, state = [], None
     for start in range(0, inputs.shape[1], piece):
@@ -91,10 +117,15 @@ def score(model, data, streams, lead, piece, device):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkpoint", type=Path, required=True, nargs="+")
-    parser.add_argument("--enwik8", type=Path, required=True, help="canonical enwik8 file")
+    dataset = parser.add_mutually_exclusive_group(required=True)
+    dataset.add_argument("--enwik8", type=Path, help="canonical enwik8 file, score a complete split")
+    dataset.add_argument("--books-dir", type=Path, help="directory of prepared PG-19 excerpts, each book a passage")
+    parser.add_argument("--manifest", type=Path, default=PG19_BOOKS, help="manifest of the PG-19 excerpts")
     parser.add_argument("--split", choices=("validation", "test"), default="test")
-    parser.add_argument("--bytes", type=int, help="score only the first bytes of the split, for a quick look")
-    parser.add_argument("--streams", type=int, default=16, help="parts of the split that run side by side")
+    parser.add_argument("--bytes", type=int, help="score only the first bytes of the enwik8 split, for a quick look")
+    parser.add_argument("--streams", type=int, default=16, help="parts of the enwik8 split that run side by side")
+    parser.add_argument("--part", type=int, default=262144,
+                        help="a book of more bytes than this is cut into equal parts that run side by side")
     parser.add_argument("--lead", type=int, default=8192, help="unscored bytes that a part after the first hears")
     parser.add_argument("--piece", type=int, default=512, help="bytes that the stack takes at a time")
     parser.add_argument("--reach", type=int, help="cells that every read reaches back, if more than in training")
@@ -114,8 +145,10 @@ def main():
                         help="keep the bits of every piece as [checkpoints, streams, pieces] in this .npy file, so "
                              "that another scoring of the same streams can be compared piece by piece")
     args = parser.parse_args()
-    if min(args.streams, args.piece, args.threads) < 1 or args.lead < 0:
-        parser.error("streams, piece and threads must be positive and the lead not negative")
+    if min(args.streams, args.piece, args.part, args.threads) < 1 or args.lead < 0:
+        parser.error("streams, piece, part and threads must be positive and the lead not negative")
+    if args.bytes is not None and args.enwik8 is None:
+        parser.error("--bytes shortens an enwik8 split")
     if args.reach_levels is not None and args.reach is None:
         parser.error("--reach-levels names the levels that take --reach")
     if (args.teach_levels is None) != (args.teach_threshold is None):
@@ -126,14 +159,23 @@ def main():
         parser.error("--bits names a new .npy file")
     torch.set_num_threads(args.threads)
     device = resolve_device(args.device)
-    _, validation, test = load_splits(args.enwik8)
-    data = torch.from_numpy(np.array(test if args.split == "test" else validation))
     record = {"protocol": "unbroken_streams", "split": args.split, "streams": args.streams,
               "unscored_lead_bytes": args.lead, "piece_bytes": args.piece, "device": str(device)}
-    if args.bytes is not None:
-        # A shortened split is named in the record, so its score is not taken for the whole split's.
-        data = data[:args.bytes]
-        record["first_bytes_of_split"] = args.bytes
+    if args.enwik8 is not None:
+        _, validation, test = load_splits(args.enwik8)
+        data = torch.from_numpy(np.array(test if args.split == "test" else validation))
+        if args.bytes is not None:
+            # A shortened split is named in the record, so its score is not taken for the whole split's.
+            data = data[:args.bytes]
+            record["first_bytes_of_split"] = args.bytes
+        streams = stream_rows(data, args.streams, args.lead)
+    else:
+        manifest = args.manifest.read_bytes()
+        books = load_books(manifest, args.books_dir, 0, split=args.split)
+        streams = book_rows([book.data for book in books], args.part, args.lead)
+        record = {"dataset": "PG-19", "manifest": args.manifest.name,
+                  "manifest_sha256": hashlib.sha256(manifest).hexdigest(), "books": len(books),
+                  **record, "streams": streams[0].shape[0], "part_bytes": args.part}
     resamples, rows, first, kept = None, [], None, []
     for path in args.checkpoint:
         model, checkpoint = load_checkpoint(path, device)
@@ -149,7 +191,7 @@ def main():
             lengthen_reach(model, args.reach, args.reach_levels)
         if args.teach_levels is not None:
             model.teach(args.teach_levels, args.teach_threshold, args.teach_budget)
-        bits, targets = score(model, data, args.streams, args.lead, args.piece, device)
+        bits, targets = score(model, streams, args.piece, device)
         reaches = {int(level): read.reach for level, read in model.state_reads.items()}
         row = {"checkpoint": str(path), "run_name": checkpoint.get("run_name"), "parameters": count_params(model),
                # One number where all reads reach equally far, and the reach after every level otherwise.

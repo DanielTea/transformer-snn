@@ -24,7 +24,7 @@ import numpy as np
 from common import _atomic_output
 
 # What two scorings must share to score the same targets of the same streams.
-SHARED = ("split", "streams", "unscored_lead_bytes", "first_bytes_of_split")
+SHARED = ("dataset", "manifest_sha256", "split", "streams", "unscored_lead_bytes", "part_bytes", "first_bytes_of_split")
 
 
 def scoring(record, bits, row):

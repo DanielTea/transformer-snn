@@ -438,15 +438,37 @@ def test_a_split_is_scored_as_streams_that_run_side_by_side(monkeypatch, tmp_pat
         eval_stream.stream_rows(data[:30], 4, 30)
 
     model = _stack(**_LATE, **_DELAYED).eval()
-    bits, count = eval_stream.score(model, data, 4, 30, 50, torch.device("cpu"))
+    bits, count = eval_stream.score(model, (inputs, targets, scored), 50, torch.device("cpu"))
     assert count == 999 and bits.shape == (4, 6)
     # The pieces do not change the score, and one pass over each stream gives it too.
-    other, _ = eval_stream.score(model, data, 4, 30, 273, torch.device("cpu"))
+    other, _ = eval_stream.score(model, (inputs, targets, scored), 273, torch.device("cpu"))
     assert bits.sum() == pytest.approx(other.sum(), rel=1e-9)
     with torch.no_grad():
         logits = eval_stream.scoring_logits(model(inputs), True, model.cfg.resolution)
         losses = torch.nn.functional.cross_entropy(logits.flatten(0, 1), targets.flatten(), reduction="none")
     assert bits.sum() == pytest.approx((losses.view(4, -1) * scored).sum().item() / math.log(2), rel=1e-6)
+
+
+def test_books_are_scored_as_passages_of_their_own(monkeypatch):
+    _trainer(monkeypatch)
+    import eval_stream
+
+    generator = np.random.default_rng(2)
+    books = [torch.from_numpy(generator.integers(0, 256, size, dtype=np.uint8)) for size in (61, 500, 140)]
+    inputs, targets, scored = eval_stream.book_rows(books, 200, 30)
+    # A short book is one stream. The book of 499 targets is cut into three parts, the later two with a lead.
+    assert inputs.shape == targets.shape == scored.shape == (5, 187)
+    assert scored.sum() == 60 + 499 + 139
+    assert scored[0, :60].all() and not scored[0, 60:].any()
+    assert torch.equal(inputs[0, :60], books[0][:60].long()) and torch.equal(targets[0, :60], books[0][1:].long())
+    assert scored[1].all() and not scored[2:4, :30].any() and scored[2, 30:].all()
+    assert torch.equal(inputs[2, :40], books[1][157:197].long()) and torch.equal(targets[2, 30:35], books[1][188:193].long())
+    assert scored[4, :139].all() and not scored[4, 139:].any()
+    # A book that starts a stream is scored from an empty state: its bits are those of the book alone.
+    model = _stack(**_LATE, **_DELAYED).eval()
+    bits, count = eval_stream.score(model, (inputs, targets, scored), 64, torch.device("cpu"))
+    alone, _ = eval_stream.score(model, eval_stream.stream_rows(books[2], 1, 0), 64, torch.device("cpu"))
+    assert count == 698 and bits[4].sum() == pytest.approx(alone.sum(), rel=1e-9)
 
 
 def test_a_read_reaches_further_back_in_a_stream_than_in_training(monkeypatch):
