@@ -110,13 +110,19 @@ def lengthen_reach(model, cells, levels=None):
         read.reach = cells
 
 
-def forget_by_power(model, slope, levels=None):
+def forget_by_power(model, slope, levels=None, replace=False):
     """Give every read of a stack, or the reads after ``levels``, a fixed forgetting slope: ``slope`` units of charge
     for every doubling of the age of a cell beyond the read's window, as a learned slope of ``read_forget`` would
-    give. It adds no parameter, and a read whose slope was learned keeps it."""
+    give. It adds no parameter. A read whose slope was learned keeps it, unless ``replace`` sets the fixed slope in
+    its place."""
     for read in chosen_reads(model, levels):
+        if read.forget is not None and replace:
+            with torch.no_grad():
+                read.forget.fill_(slope / read.rate)
+            read.forget_rate = 1.0
+            continue
         if read.forget is not None:
-            raise ValueError("a read that learned its slope keeps it")
+            raise ValueError("a read that learned its slope keeps it; --forget-slope-replaces sets it anyway")
         # The slope counts on top of the address rate, as a learned one does.
         read.forget = torch.full((read.heads,), slope / read.rate, dtype=read.age.dtype, device=read.age.device)
         read.forget_rate = 1.0
@@ -163,6 +169,8 @@ def main():
     parser.add_argument("--forget-slope", type=float,
                         help="units of charge that the offset of a cell beyond a read's window takes for every "
                              "doubling of its age, at the reads that take --reach: a fixed power-law forgetting")
+    parser.add_argument("--forget-slope-replaces", action="store_true",
+                        help="set --forget-slope also in reads that learned their slope, in place of it")
     parser.add_argument("--teach-levels", type=int, nargs="+",
                         help="levels whose cells the fast output synapses hear, which every arriving byte teaches")
     parser.add_argument("--teach-threshold", type=int, help="units of fast charge to one spike of an output neuron")
@@ -238,7 +246,7 @@ def main():
             lengthen_reach(model, args.reach, args.reach_levels)
         if args.forget_slope is not None:
             try:
-                forget_by_power(model, args.forget_slope, args.reach_levels)
+                forget_by_power(model, args.forget_slope, args.reach_levels, replace=args.forget_slope_replaces)
             except ValueError as error:
                 parser.error(f"{path}: {error}")
         trained = model.plastic_after is not None
@@ -275,6 +283,8 @@ def main():
             row["averaged_weights"] = True
         if args.forget_slope is not None:
             row["forget_slope"] = args.forget_slope
+            if args.forget_slope_replaces:
+                row["forget_slope_replaced_learned_slopes"] = True
         if args.teach_levels is not None:
             row["taught"] = {"levels": sorted(args.teach_levels), "threshold": args.teach_threshold,
                              "teaching_spikes_per_byte": args.teach_budget,

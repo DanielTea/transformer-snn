@@ -240,3 +240,21 @@ def test_local_cells_learn_from_the_stream_they_write_and_pass_nothing_back():
     # passes the layer unchanged still carries the error below.
     assert torch.equal(fired[None], fired["local"]) and torch.allclose(learned[None], learned["local"])
     assert not torch.allclose(grads[None], grads["local"]) and grads["local"].abs().sum() > 0
+
+
+def test_a_fixed_slope_replaces_a_learned_one_only_when_asked(monkeypatch):
+    import sys
+    from pathlib import Path
+
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "experiments"))
+    sys.modules.pop("eval_stream", None)
+    import eval_stream
+
+    torch.manual_seed(0)
+    model = EventLM(EventLMConfig(**dict(_STACK, read_forget=True, read_forget_rate=0.0)))
+    with pytest.raises(ValueError, match="replaces"):
+        eval_stream.forget_by_power(model, -1.0)
+    eval_stream.forget_by_power(model, -1.0, replace=True)
+    for read in model.state_reads.values():
+        assert read.forget_rate == 1.0
+        assert torch.allclose(read.forget * read.forget_rate, torch.full_like(read.forget, -1.0 / read.rate))
