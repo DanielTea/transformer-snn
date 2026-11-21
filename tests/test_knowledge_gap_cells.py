@@ -260,3 +260,50 @@ def test_silent_groups_send_no_pulses():
 def test_settings_that_do_not_fit_are_refused(settings):
     with pytest.raises(ValueError):
         EventLM(EventLMConfig(**dict(_STACK, **settings)))
+
+
+@pytest.mark.parametrize("growth, flags", [(dict(read_knowledge=4), ["--read-knowledge", "4"]),
+                                           (dict(granule_apical=8), ["--granule-apical", "8"])])
+@pytest.mark.parametrize("recipe", [[], ["--rotated-adam", "3", "--rotate-stacks"]])
+def test_a_saved_run_grows_new_synapses_and_goes_on(monkeypatch, tmp_path, growth, flags, recipe):
+    import sys
+    from pathlib import Path
+
+    from test_stream_form import _train, _trainer
+
+    trainer, _ = _trainer(monkeypatch)
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "experiments" / "stack"))
+    import fork_state
+
+    assert _train(trainer, monkeypatch, tmp_path / "parent", *recipe, "--stop-at", "6") is None
+    parent = torch.load(tmp_path / "parent" / "model.pt.resume", weights_only=True)
+    forked = fork_state.fork(parent, "grown", growth)
+    # All that the run learned is kept: its synapses, their running averages and the optimizer's moments.
+    assert all(torch.equal(forked["state_dict"][key], value) for key, value in parent["state_dict"].items())
+    new = sorted(set(forked["state_dict"]) - set(parent["state_dict"]))
+    assert new and all(("known_" in key) or ("apical" in key) for key in new)
+    assert len(forked["average"]) > len(parent["average"])
+    old_model, _, old_order = fork_state._models(parent["args"])
+    model, _, order = fork_state._models(forked["args"])
+    for index, name in enumerate(order):
+        if name in old_order and old_order.index(name) in parent["optimizer"]["state"]:
+            kept = forked["optimizer"]["state"][index]
+            saved = parent["optimizer"]["state"][old_order.index(name)]
+            assert all(torch.equal(kept[key], saved[key]) for key in saved if torch.is_tensor(saved[key]))
+        elif name not in old_order:
+            assert index not in forked["optimizer"]["state"]
+    # The grown stack starts as the parent's: silent tufts change nothing, knowledge cells far behind next to nothing.
+    old_model.load_state_dict(parent["state_dict"])
+    model.load_state_dict(forked["state_dict"])
+    tokens = torch.randint(0, 256, (2, 48), generator=torch.Generator().manual_seed(4))
+    with torch.no_grad():
+        before, after = old_model.eval()(tokens), model.eval()(tokens)
+    changed = (before != after).any(-1).float().mean().item()
+    assert changed == 0 if "granule_apical" in growth else changed < 0.1
+    (tmp_path / "child").mkdir()
+    torch.save(forked, tmp_path / "child" / "model.pt.resume")
+    record = _train(trainer, monkeypatch, tmp_path / "child", *recipe, *flags, "--tag", "grown")
+    assert record["resumed_at_steps"] == [6]
+    final = torch.load(tmp_path / "child" / "model.pt", weights_only=True)["state_dict"]
+    assert any(not torch.equal(final[key], forked["state_dict"][key]) for key in new if final[key].is_floating_point())
+    assert sys.modules["fork_state"] is fork_state

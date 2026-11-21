@@ -22,6 +22,13 @@ A fork that gives a stack trained fast output synapses (``plastic_levels``)
 also gives it their gains, at zero: the arm goes on as the same stack, and the
 gains learn from the fork on, with no moments of the optimizer yet. Those
 settings may be given to a run whose trainer did not have them yet.
+
+A fork that gives a stack knowledge cells (``read_knowledge``) or apical tufts
+(``granule_apical``) grows their synapses beside all that the run has learned:
+tufts start silent, and knowledge cells start so far behind in every race that
+they rarely fire, so the arm starts as about the same stack. The new synapses
+have no moments of the optimizer yet, and the running average starts them at
+their first values.
 """
 
 from __future__ import annotations
@@ -30,12 +37,80 @@ import argparse
 import copy
 import json
 from pathlib import Path
+import sys
 
 import torch
 
 # Settings of trainers newer than a saved run, which a fork may give it all the same.
 LATER_SETTINGS = {"plastic_levels", "plastic_rule", "plastic_chunk", "plastic_decay_shift", "plastic_threshold",
-                  "plastic_shuffle", "read_credit", "cell_credit"}
+                  "plastic_shuffle", "read_credit", "cell_credit", "read_knowledge", "granule_apical"}
+# Settings that add synapses to a stack, which a fork grows.
+GROWN_SETTINGS = {"read_knowledge", "granule_apical"}
+# The charge at which a grown knowledge cell starts, below a stream cell's: e ** -8 of its rate.
+KNOWN_START = -8.0
+
+
+def _models(args):
+    """The model and optimizer that the trainer builds from these settings, with the optimizer's parameters by name in
+    the order of its saved state."""
+    experiments = str(Path(__file__).resolve().parents[1])
+    if experiments not in sys.path:
+        sys.path.insert(0, experiments)
+    from common import make_optimizer
+    from train_event_lm import build_model
+
+    namespace = argparse.Namespace(**args)
+    model, _, _ = build_model(namespace)
+    optimizer = make_optimizer(model, args["lr"], args["wd"], betas=(0.9, args.get("adam_beta2", 0.99)),
+                               rotated=args.get("rotated_adam"), stacks=args.get("rotate_stacks", False),
+                               scales=args.get("lr_scale") or ())
+    names = {id(parameter): name for name, parameter in model.named_parameters()}
+    order = [names[id(parameter)] for group in optimizer.param_groups for parameter in group["params"]]
+    return model, optimizer, order
+
+
+def grow(state, settings):
+    """The saved state with the synapses that ``settings`` add to the stack grown beside the ones it has: the new
+    synapses at their silent start, without moments of the optimizer, and in the running average at that start."""
+    older, model_args = state["args"], state["args"] | settings
+    old_model, _, old_order = _models(older)
+    # The new synapses start from the run's own seed, so that a fork can be made again.
+    torch.manual_seed(model_args.get("seed", 0))
+    model, optimizer, order = _models(model_args)
+    shapes = {key: value.shape for key, value in old_model.state_dict().items()}
+    with torch.no_grad():
+        for name, parameter in model.named_parameters():
+            if name.endswith("known_offset"):
+                read = model.get_submodule(name.rsplit(".", 1)[0])
+                parameter.fill_(KNOWN_START / read.rate)
+    fresh = model.state_dict()
+    for key, value in state["state_dict"].items():
+        if key not in fresh or fresh[key].shape != value.shape:
+            raise ValueError(f"the grown stack has no place for {key} as it was saved")
+    new = sorted(set(fresh) - set(shapes))
+    if not new:
+        raise ValueError("the settings add no synapse to the stack")
+    state_dict = {key: state["state_dict"][key] if key in state["state_dict"] else value.detach().clone()
+                  for key, value in fresh.items()}
+    saved = state["optimizer"]
+    old_index = {name: index for index, name in enumerate(old_order)}
+    moments = {}
+    for index, name in enumerate(order):
+        if name in old_index and old_index[name] in saved["state"]:
+            moments[index] = saved["state"][old_index[name]]
+    groups, start = [], 0
+    for group, old_group in zip(optimizer.state_dict()["param_groups"], saved["param_groups"], strict=True):
+        count = len(group["params"])
+        groups.append(old_group | {"params": list(range(start, start + count))})
+        start += count
+    forked = state | {"args": model_args, "state_dict": state_dict,
+                      "optimizer": saved | {"state": moments, "param_groups": groups}}
+    if state.get("average") is not None:
+        old_names = [name for name, _ in old_model.named_parameters()]
+        averaged = dict(zip(old_names, state["average"], strict=True))
+        forked["average"] = [averaged[name] if name in averaged else parameter.detach().clone()
+                             for name, parameter in model.named_parameters()]
+    return forked
 
 
 def add_plastic_gains(state, count):
@@ -74,6 +149,8 @@ def fork(state, tag, settings):
     if settings.get("plastic_levels") is not None:
         # The trainer reads the levels as the text of its flag.
         settings["plastic_levels"] = str(settings["plastic_levels"])
+    if GROWN_SETTINGS & set(settings):
+        state = grow(state, {key: settings[key] for key in GROWN_SETTINGS & set(settings)})
     forked = state | {"args": state["args"] | settings | {"tag": tag}}
     if settings.get("plastic_levels") is not None:
         forked = add_plastic_gains(forked, len(settings["plastic_levels"].split(",")))
