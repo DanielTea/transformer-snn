@@ -377,3 +377,98 @@ def test_knowledge_fibres_change_what_the_fast_synapses_learn():
 def test_knowledge_fibres_need_taught_levels_with_knowledge_cells(settings):
     with pytest.raises(ValueError):
         EventLM(EventLMConfig(**dict(_STACK, **settings)))
+
+
+_KEEPING = dict(read_kept=6)
+
+
+@pytest.mark.parametrize("design", [_KEEPING, dict(**_KEEPING, **_KNOWING)])
+@pytest.mark.parametrize("cuts", [(200,), (47, 1, 49, 103), (64, 64, 72), (1, 2, 3, 194), (130, 70)])
+def test_kept_cells_fire_the_spikes_of_one_pass_however_a_stream_is_cut(design, cuts):
+    model, tokens = _stack(**design).eval(), _bytes(length=200)
+    with torch.no_grad():
+        whole, state = _pieces(model, tokens, (200,))
+        fired, cut_state = _pieces(model, tokens, cuts)
+    assert torch.equal(fired, whole) and torch.equal(whole, whole.round())
+    for key, tape in state.reads.items():
+        other = cut_state.reads[key]
+        assert torch.equal(tape.kept_score, other.kept_score) and torch.equal(tape.kept_tag, other.kept_tag)
+
+
+def test_a_stream_byte_at_a_time_keeps_the_same_cells():
+    model, tokens = _stack(**_KEEPING).eval(), _bytes(length=140)
+    with torch.no_grad():
+        whole, state = _pieces(model, tokens, (140,))
+        single, single_state = _pieces(model, tokens, (1,) * 140)
+    assert torch.equal(whole, single)
+    assert all(torch.equal(tape.kept_score, single_state.reads[key].kept_score) for key, tape in state.reads.items())
+
+
+def test_cells_that_left_the_reach_fill_the_slots_with_whole_pulses():
+    model, tokens = _stack(**_KEEPING).eval(), _bytes(length=200)
+    with torch.no_grad():
+        _, state = _pieces(model, tokens, (200,))
+    for tape in state.reads.values():
+        # The reach is 48: by byte 192 three changes have let the cells that left it compete for 6 slots a head.
+        assert tape.kept_tag.shape == (2, 4, 6, 8) and (tape.kept_score >= 0).sum() > 0
+        assert torch.equal(tape.kept_tag, tape.kept_tag.round()) and torch.equal(tape.kept_payload, tape.kept_payload.round())
+        assert torch.equal(tape.kept_score, tape.kept_score.round())
+        # The tape holds the cells within reach and those that left it since the last change, 200 - 192 + 47 of them.
+        assert tape.payload.shape[2] == 47 + 200 - 192
+
+
+def test_silent_kept_cells_leave_the_read_as_it_was():
+    model = _stack(**_KEEPING)
+    with torch.no_grad():
+        for read in model.state_reads.values():
+            read.kept_offset.fill_(-1e4)
+    plain = _plain_twin(model)
+    tokens = _bytes(length=200)
+    with torch.no_grad():
+        kept, _ = _pieces(model.eval(), tokens, (73, 127))
+        reference, _ = _pieces(plain.eval(), tokens, (73, 127))
+    assert torch.equal(kept, reference)
+
+
+def test_a_state_with_kept_cells_serves_any_number_of_continuations():
+    model, tokens = _stack(**_KEEPING).eval(), _bytes(length=200)
+    with torch.no_grad():
+        _, state = model.stream(tokens[:, :130])
+        saved = {key: (tape.kept_score.clone(), tape.importance.clone()) for key, tape in state.reads.items()}
+        first, _ = model.stream(tokens[:, 130:], state)
+        second, _ = model.stream(tokens[:, 130:], state)
+    assert torch.equal(first, second)
+    for key, tape in state.reads.items():
+        assert torch.equal(tape.kept_score, saved[key][0]) and torch.equal(tape.importance, saved[key][1])
+
+
+def test_the_most_important_cells_take_the_slots():
+    read = _stack(**dict(_KEEPING, read_kept=2)).state_reads["0"]
+    kept_score = torch.tensor([[[5.0, -1.0]]])
+    importance = torch.tensor([[[3.0, 0.0, 7.0]]])
+    tags = torch.arange(3.0).view(1, 1, 3, 1).expand(1, 1, 3, 8)
+    kept_tags = torch.full((1, 1, 2, 8), 9.0)
+    new_tag, _, new_score = read._keep(kept_tags, kept_tags, kept_score, tags, tags, importance)
+    # The newcomer with 7 spikes and the kept cell with 5 (faded by a 128th, rounded down) take the two slots.
+    assert new_score.tolist() == [[[7.0, 5.0]]] and new_tag[0, 0, :, 0].tolist() == [2.0, 9.0]
+    # At equal importance a kept cell stays ahead of a newcomer.
+    _, _, tied = read._keep(kept_tags, kept_tags, torch.tensor([[[3.0, -1.0]]]), tags, tags,
+                            torch.tensor([[[3.0, 0.0, 0.0]]]))
+    assert tied.tolist() == [[[3.0, 3.0]]]
+
+
+def test_kept_cells_learn_when_trained_on_streams():
+    model, tokens = _stack(**_KEEPING).train(), _bytes(length=200)
+    _, state = model.stream(tokens[:, :160])
+    model.zero_grad()
+    fired, _ = model.stream(tokens[:, 160:], state)
+    fired.float().square().mean().backward()
+    grads = [read.kept_offset.grad for read in model.state_reads.values()]
+    assert all(grad is not None and grad.abs().sum() > 0 for grad in grads)
+
+
+@pytest.mark.parametrize("settings", [dict(read_kept=-1), dict(read_kept=4, read_budget=None),
+                                      dict(read_kept=4, read_mode="soft", read_budget=None)])
+def test_kept_cells_need_a_race_with_a_budget(settings):
+    with pytest.raises(ValueError):
+        EventLM(EventLMConfig(**dict(_STACK, **settings)))

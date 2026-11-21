@@ -87,6 +87,10 @@ _BURST_LIMIT = 3
 _KNOWN_SPREAD = 8.0
 # A router cell's threshold moves by this many thresholds for every share of bytes it wins above or below its own.
 _ROUTER_HOMEOSTASIS = 0.01
+# A read's kept cells change at every this many bytes of a stream, counted from its first byte, and at every change
+# a kept cell's importance loses one part in 2 ** _KEPT_FADE.
+_KEPT_PERIOD = 64
+_KEPT_FADE = 7
 # What opens a new stretch on a granule cluster's beat fibres, and what such a fibre brings of a stretch.
 _GRANULE_CLOCKS = ("word", "end", "every", "learned")
 _GRANULE_HOLDS = ("mean", "sum", "last")
@@ -272,6 +276,11 @@ class EventLMConfig:
     # level, which each level addresses through its own probes and ranks by offsets of its own. A level then reaches
     # as many knowledge cells as all levels hold, at the synapses of one level's.
     read_knowledge_shared: bool = False
+    # In a stream every head of a race read keeps this many cells that have left its reach: when a cell leaves, it
+    # competes for a slot by the spikes it won while the read could reach it, against the kept cells, whose importance
+    # fades slowly and grows with every spike they win. Kept cells race beside the stream's cells with an offset of
+    # their head's own, so what mattered stays within reach long after its bytes.
+    read_kept: int = 0
     read_cap: int | None = None
     read_phases: int = 0
     read_turn: bool = False
@@ -2040,10 +2049,17 @@ class EventChunkState:
 @dataclass
 class ReadTape:
     """What a state read keeps of a stream: the tags and payloads of the cells that later bytes can still reach,
-    as [batch, heads, cells, channels], and the last bytes of the stream for its late fibres."""
+    as [batch, heads, cells, channels], and the last bytes of the stream for its late fibres. A read with kept cells
+    also keeps the spikes that every cell on the tape has won (its importance, [batch, heads, cells]) and its kept
+    cells: their tags and payloads, [batch, heads, slots, channels], and their importance, below zero in an empty
+    slot."""
     tag: torch.Tensor | None = None
     payload: torch.Tensor | None = None
     late: torch.Tensor | None = None
+    importance: torch.Tensor | None = None
+    kept_tag: torch.Tensor | None = None
+    kept_payload: torch.Tensor | None = None
+    kept_score: torch.Tensor | None = None
 
 
 @dataclass
@@ -2402,6 +2418,10 @@ class _StateRead(nn.Module):
             self.known_tag = nn.Parameter(torch.randn(self.heads, self.knowledge, width) * spread)
             self.known_payload = nn.Parameter(torch.randn(self.heads, self.knowledge, width) * spread)
             self.known_offset = nn.Parameter(torch.zeros(self.heads, self.knowledge))
+        self.kept = cfg.read_kept
+        if self.kept:
+            # The charge that a head's kept cells take beside their match, stored at the address rate.
+            self.kept_offset = nn.Parameter(torch.zeros(self.heads))
 
     def known(self):
         """The knowledge cells' tags and payloads in whole pulses as [heads, cells, channels], within the pulses that
@@ -2571,6 +2591,132 @@ class _StateRead(nn.Module):
             far = far + (self.forget * self.forget_rate)[:, None] * torch.log2(ages / (self.window - 1))
         return torch.cat((self.age, far), 1)
 
+    def _age_offsets(self, before, steps):
+        """Every read's offset for the age of every cell it might reach, as [heads, bytes, cells]: the ``before``
+        cells that a tape holds, then the cells of these bytes."""
+        cells = before + steps
+        aged = self.aged()
+        if before:
+            # Row t holds the offset of age before + t - j in column j: the ages in reverse, one step further on
+            # from row to row.
+            ages = F.pad(aged * self.rate, (0, max(0, cells - self.reach)))[:, :cells].flip(-1)
+            return F.pad(ages, (0, steps - 1)).unfold(-1, cells, 1).flip(1)
+        # Row t holds the offset of age t - j in column j. Padding one column and folding the rows shifts each row by
+        # its position, which costs far less to differentiate than indexing by distance.
+        ages = F.pad(aged[:, :steps] * self.rate, (0, max(0, steps - self.reach))).flip(-1)
+        return F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
+
+    def _keep(self, kept_tag, kept_payload, kept_score, tag, payload, importance):
+        """The kept cells after a change of a stream: the kept cells, their importance faded, and the cells that left
+        the reach since the last change compete, and the most important take the slots. A cell that won no spike is
+        not kept. The importance decides, then a kept cell before a newcomer, then a later newcomer before an
+        earlier one, so the choice is the same however a stream is cut."""
+        faded = torch.where(kept_score >= 0, kept_score - (kept_score / (1 << _KEPT_FADE)).floor(), kept_score)
+        scores = torch.cat((faded, torch.where(importance > 0, importance, -1.0)), -1)
+        slots, newcomers = kept_score.shape[-1], importance.shape[-1]
+        # At equal importance the kept cells come first, the first slot before the next, then the newcomers, the
+        # latest first: every key is a different whole number.
+        priority = torch.cat((torch.arange(newcomers + slots, newcomers, -1), torch.arange(1, newcomers + 1)))
+        key = scores.to(torch.float64) * (slots + newcomers + 2) + priority.to(scores.device, torch.float64)
+        chosen = key.topk(slots, dim=-1).indices
+        pick = chosen[..., None].expand(*chosen.shape, tag.shape[-1])
+        new_score = scores.gather(-1, chosen)
+        return (torch.cat((kept_tag, tag), 2).gather(2, pick), torch.cat((kept_payload, payload), 2).gather(2, pick),
+                torch.where(new_score >= 0, new_score, -1.0))
+
+    def _address_kept(self, spikes, tape, position):
+        """The race of a read with kept cells, in a stream: as ``_address``, with every head's kept cells racing
+        beside the stream's cells and the knowledge cells. The kept cells change only at every ``_KEPT_PERIOD``
+        bytes of the stream, so a piece runs in stretches between those bytes, and every sum runs over the same
+        cells in the same order however the stream is cut. The tape keeps the cells that later bytes can reach and
+        those that have left the reach since the last change, which compete at the next."""
+        steps, batch = spikes.shape[1], spikes.shape[0]
+        probe, tag, payload = self.packets(spikes, tape.late)
+        before = 0 if tape.payload is None else tape.payload.shape[2]
+        fresh = payload.new_zeros(batch, self.heads, steps)
+        if before:
+            payload, tag = torch.cat((tape.payload, payload), 2), torch.cat((tape.tag, tag), 2)
+            importance = torch.cat((tape.importance, fresh), -1)
+        else:
+            importance = fresh
+        if self.delays > 1:
+            late = spikes if tape.late is None else torch.cat((tape.late, spikes), 1)
+            tape.late = late[:, max(0, late.shape[1] - self.delays + 1):].detach()
+        if tape.kept_score is None:
+            width = payload.shape[-1]
+            kept_tag = payload.new_zeros(batch, self.heads, self.kept, width)
+            kept_payload = payload.new_zeros(batch, self.heads, self.kept, width)
+            kept_score = payload.new_full((batch, self.heads, self.kept), -1.0)
+        else:
+            kept_tag, kept_payload, kept_score = tape.kept_tag, tape.kept_payload, tape.kept_score
+        cells = before + steps
+        place = torch.arange(cells, device=spikes.device)
+        distance = place[before:, None] - place
+        visible = (distance >= 0) & (distance < self.reach)
+        unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
+        scale = (self.gain * self.rate).exp() / unit
+        charge = (probe @ tag.transpose(2, 3) * scale + self._age_offsets(before, steps)).masked_fill(~visible, -torch.inf)
+        if self.knowledge:
+            known_tag, known_payload, known_offset = self.known()
+            known = probe @ known_tag.transpose(1, 2) * scale + known_offset[:, None]
+        heads = torch.arange(self.heads, device=spikes.device)[:, None, None]
+        phase = (_spread_phases(position - before, cells, spikes.device, charge.dtype) + heads / self.heads) % 1
+        kept_phase = (_spread_phases(-self.knowledge - self.kept - 1, self.kept, spikes.device, charge.dtype)
+                      + heads / self.heads) % 1
+        known_phase = (_spread_phases(-self.knowledge - 1, max(self.knowledge, 1), spikes.device, charge.dtype)
+                       + heads / self.heads) % 1
+        stretches, start = [], 0
+        while start < steps:
+            end = min(steps, start + _KEPT_PERIOD - (position + start) % _KEPT_PERIOD)
+            rows = charge[:, :, start:end]
+            kept_charge = (probe[:, :, start:end] @ kept_tag.transpose(2, 3) * scale
+                           + (self.kept_offset * self.rate)[:, None, None])
+            kept_charge = kept_charge.masked_fill((kept_score < 0)[:, :, None], -torch.inf)
+            peak = torch.maximum(rows.amax(-1, keepdim=True), kept_charge.amax(-1, keepdim=True))
+            if self.knowledge:
+                peak = torch.maximum(peak, known[:, :, start:end].amax(-1, keepdim=True))
+            grown = (rows - peak).exp()
+            back = place[before + start:before + end, None] - torch.arange(self.reach, device=spikes.device)
+            total = (grown.gather(-1, back.clamp_min(0).expand(*grown.shape[:-1], -1)) * (back >= 0)).sum(-1, keepdim=True)
+            kept_grown = (kept_charge - peak).exp()
+            total = total + kept_grown.sum(-1, keepdim=True)
+            if self.knowledge:
+                known_grown = (known[:, :, start:end] - peak).exp()
+                total = total + known_grown.sum(-1, keepdim=True)
+            parts = []
+            for grown_part, phase_part in ((grown, phase), (kept_grown, kept_phase)) + (
+                    ((known_grown, known_phase),) if self.knowledge else ()):
+                rate = grown_part / total * self.budget
+                parts.append((rate + phase_part).floor().detach() + (rate - rate.detach()))
+            stretches.append((start, end, parts, kept_payload))
+            # Every cell's importance grows by the spikes it won, a kept cell's too.
+            importance = importance + parts[0].detach().sum(2)
+            kept_score = torch.where(kept_score >= 0, kept_score + parts[1].detach().sum(2), kept_score)
+            boundary = position + end
+            if boundary % _KEPT_PERIOD == 0:
+                # The cells whose last reachable byte has gone by since the last change compete for the slots.
+                last = position - before + place + self.reach
+                leaving = (last <= boundary) & (last > boundary - _KEPT_PERIOD)
+                kept_tag, kept_payload, kept_score = self._keep(
+                    kept_tag, kept_payload, kept_score, tag[:, :, leaving].detach(), payload[:, :, leaving].detach(),
+                    importance[:, :, leaving])
+            start = end
+        # The kept cells of every stretch get columns of their own, silent outside their stretch.
+        blocks = len(stretches)
+        fired_rows = []
+        for block, (start, end, parts, _) in enumerate(stretches):
+            kept_cols = F.pad(parts[1], (block * self.kept, (blocks - 1 - block) * self.kept))
+            fired_rows.append(torch.cat((parts[0], kept_cols, *parts[2:]), -1))
+        fired = torch.cat(fired_rows, 2)
+        payload_all = torch.cat((payload, *(block_payload for *_, block_payload in stretches),
+                                 *((known_payload.expand(batch, -1, -1, -1),) if self.knowledge else ())), 2)
+        done = (position + steps) // _KEPT_PERIOD * _KEPT_PERIOD
+        oldest = max(0, min(position + steps - self.reach + 1, done - self.reach + 1) - (position - before))
+        tape.payload, tape.tag = payload[:, :, oldest:].detach(), tag[:, :, oldest:].detach()
+        tape.importance = importance[:, :, oldest:]
+        tape.kept_tag, tape.kept_payload, tape.kept_score = kept_tag, kept_payload, kept_score
+        return fired, fired.sum(-1, keepdim=True).clamp_min(1), payload_all, fired.sum()
+
     def _address(self, spikes, tokens=None, tape=None, position=0):
         """The spikes of every cell at every read as [batch, heads, bytes, cells], their sum at each read (none
         where the shares are a softmax's), the payloads and the number of cell spikes.
@@ -2579,6 +2725,8 @@ class _StateRead(nn.Module):
         the cells of ``spikes``, ``position`` bytes have gone by before these, and the tape then takes up the
         cells that the next bytes can still reach.
         """
+        if self.kept and tape is not None:
+            return self._address_kept(spikes, tape, position)
         steps = spikes.shape[1]
         probe, tag, payload = self.packets(spikes, None if tape is None else tape.late)
         kept = 0
@@ -2600,17 +2748,7 @@ class _StateRead(nn.Module):
         place = torch.arange(cells, device=spikes.device)
         distance = place[kept:, None] - place
         visible = (distance >= 0) & (distance < self.reach)
-        aged = self.aged()
-        if kept:
-            # Row t holds the offset of age kept + t - j in column j: the ages in reverse, one step further on
-            # from row to row.
-            ages = F.pad(aged * self.rate, (0, max(0, cells - self.reach)))[:, :cells].flip(-1)
-            offset = F.pad(ages, (0, steps - 1)).unfold(-1, cells, 1).flip(1)
-        else:
-            # Row t holds the offset of age t - j in column j. Padding one column and folding the rows shifts
-            # each row by its position, which costs far less to differentiate than indexing by distance.
-            ages = F.pad(aged[:, :steps] * self.rate, (0, max(0, steps - self.reach))).flip(-1)
-            offset = F.pad(ages[:, None].expand(-1, steps, -1), (1, 0)).reshape(self.heads, steps + 1, steps)[:, 1:]
+        offset = self._age_offsets(kept, steps)
         beats = 0
         if self.beats:
             by_beat, beats = self.beat_offsets(spikes, tokens, tag)
@@ -3915,6 +4053,11 @@ class EventLM(nn.Module):
                              "state reads that race for a budget")
         if not isinstance(cfg.read_knowledge_shared, bool) or (cfg.read_knowledge_shared and not cfg.read_knowledge):
             raise ValueError("a shared library holds knowledge cells: read_knowledge_shared needs read_knowledge")
+        if (not isinstance(cfg.read_kept, int) or isinstance(cfg.read_kept, bool) or cfg.read_kept < 0
+                or (cfg.read_kept and (cfg.read_after is None or cfg.read_mode != "race" or cfg.read_budget is None
+                                       or cfg.read_beats or cfg.read_phases or cfg.read_turn))):
+            raise ValueError("kept cells are a whole number of slots of a race read with a budget, without clocks or "
+                             "pacemakers")
         if cfg.read_after is not None:
             below = cfg.depth if cfg.clock_start is None else cfg.clock_start
             if (cfg.carry or cfg.continuous or cfg.read_mode not in _READ_MODES
