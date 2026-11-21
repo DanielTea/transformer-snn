@@ -258,6 +258,7 @@ _NORMALIZED = dict(plastic_after=(1,), plastic_rule="normalized")
                                            (dict(_CHUNKED, plastic_chunk=16), [1.0]),
                                            (dict(_CHUNKED, plastic_chunk=64), [0.5]),
                                            (dict(_CHUNKED, plastic_after=(0, 1), plastic_chunk=16), [2.0, -0.5]),
+                                           (dict(_CHUNKED, plastic_chunk=16, plastic_shuffle=True), [1.0]),
                                            (_NORMALIZED, [4.0]),
                                            (dict(_NORMALIZED, plastic_after=(0, 1)), [1.0, -2.0])])
 def test_the_new_rules_fire_in_a_window_what_they_fire_in_its_stream(design, gains):
@@ -278,7 +279,8 @@ def test_a_normalized_window_with_a_decay_keeps_to_its_stream_within_rounding():
     assert differs.max() <= 1 and (differs > 0).float().mean() < 0.02
 
 
-@pytest.mark.parametrize("design", [dict(_CHUNKED, plastic_chunk=16), _NORMALIZED])
+@pytest.mark.parametrize("design", [dict(_CHUNKED, plastic_chunk=16), dict(_CHUNKED, plastic_chunk=16, plastic_shuffle=True),
+                                    _NORMALIZED])
 def test_the_new_rules_change_no_spike_before_a_later_byte(design):
     model, tokens = _stack(gains=[1.0], **design), _bytes()
     changed = tokens.clone()
@@ -289,7 +291,8 @@ def test_the_new_rules_change_no_spike_before_a_later_byte(design):
 
 
 @pytest.mark.parametrize("design", [dict(_CHUNKED, plastic_chunk=16), dict(_CHUNKED, plastic_chunk=64), _NORMALIZED,
-                                    dict(_NORMALIZED, plastic_decay_shift=7)])
+                                    dict(_NORMALIZED, plastic_decay_shift=7),
+                                    dict(_CHUNKED, plastic_chunk=16, plastic_shuffle=True)])
 def test_the_new_rules_cut_anywhere_fire_and_learn_the_same(design):
     model, tokens = _stack(gains=[0.5 if design["plastic_rule"] == "chunked" else 4.0], **design), _bytes(length=520)
     whole, after = _pieces(model, tokens, (520,))
@@ -297,7 +300,7 @@ def test_the_new_rules_cut_anywhere_fire_and_learn_the_same(design):
     for cuts in ((1,) * 520, (7,) * 74 + (2,), (100,) * 5 + (20,), (512, 8)):
         fired, state = _pieces(model, tokens, cuts)
         assert torch.equal(fired, whole)
-        for name in ("fast", "mean", "total", "pending", "norm"):
+        for name in ("fast", "mean", "total", "pending", "norm", "errors"):
             mine, theirs = getattr(state.taught, name), getattr(after.taught, name)
             assert (mine is None and theirs is None) or torch.equal(mine, theirs)
 
@@ -308,6 +311,18 @@ def test_the_new_rules_at_gains_of_zero_are_the_stack_without_fast_synapses(desi
     with torch.no_grad():
         assert torch.equal(trained(tokens), plain(tokens))
     assert torch.equal(_pieces(trained, tokens, (160,))[0], _pieces(plain, tokens, (160,))[0])
+
+
+def test_the_shuffled_chunked_control_keeps_the_compute_and_loses_the_memory():
+    # The control stores other bytes' errors: it fires otherwise than the rule, and as much.
+    tokens = _bytes(length=400)
+    plain, rule, control = (_stack(gains=gains, dtype=torch.float64, **design) for gains, design in (
+        (None, {}), ([1.0], dict(_CHUNKED, plastic_chunk=16)),
+        ([1.0], dict(_CHUNKED, plastic_chunk=16, plastic_shuffle=True))))
+    with torch.no_grad():
+        silent, real, shuffled = plain(tokens), rule(tokens), control(tokens)
+    assert not torch.equal(real, shuffled)
+    assert 0.25 < (shuffled - silent).abs().sum() / (real - silent).abs().sum() < 4
 
 
 def test_chunks_of_one_byte_race_on_what_the_synapses_fire():
@@ -404,7 +419,6 @@ def test_the_trainer_trains_trained_synapses_on_streams(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("setting", [dict(plastic_after=(1,), plastic_rule="chunked", plastic_chunk=0),
                                      dict(plastic_after=(1,), plastic_rule="chunked", plastic_decay_shift=4),
-                                     dict(plastic_after=(1,), plastic_rule="chunked", plastic_shuffle=True),
                                      dict(plastic_after=(1,), plastic_rule="normalized", plastic_shuffle=True),
                                      dict(plastic_after=(1,), plastic_rule="delta")])
 def test_the_new_rules_refuse_settings_they_do_not_have(setting):

@@ -276,7 +276,8 @@ class EventLMConfig:
     # teaches with the error of a pseudo-random earlier byte, a control that keeps the compute and loses the memory.
     # Under the "chunked" rule (Rule B) a byte teaches with the race of the counts plus the fast spikes that the
     # synapses fired at the start of its chunk of plastic_chunk bytes, and the synapses take a chunk's teaching at
-    # its end: with chunks of one byte it is the rule of fast synapses given after training. Under "normalized"
+    # its end: with chunks of one byte it is the rule of fast synapses given after training. Its shuffled control
+    # stores the error of a pseudo-random earlier byte as the base-error rule's does. Under "normalized"
     # (N) the fast charge is divided by one plus the summed coincidence of every fibre's activity now and before,
     # which bounds the fast spikes by the gain times the largest error however long a stream runs.
     plastic_after: tuple[int, ...] | None = None
@@ -3791,8 +3792,8 @@ class EventLM(nn.Module):
                              "a cell layer, up to 131,072 of them, by a known rule under a whole threshold, with a "
                              f"decay shift of 0 to {_PLASTIC_SHIFT_LIMIT} and chunks of at least one byte, and "
                              "instead of fast synapses given after training")
-        if cfg.plastic_rule != "base-error" and cfg.plastic_shuffle:
-            raise ValueError("the shuffled control is built for the base-error rule")
+        if cfg.plastic_rule == "normalized" and cfg.plastic_shuffle:
+            raise ValueError("the shuffled control is built for the base-error and chunked rules")
         if cfg.plastic_rule == "chunked" and shift:
             raise ValueError("the chunked rule limits itself and has no decay")
         return tuple(sorted(cfg.plastic_after))
@@ -4187,10 +4188,13 @@ class EventLM(nn.Module):
         """The fast spikes of a window under the chunked rule, chunk by chunk from a silent start. A byte's charge is
         that of the synapses at the start of its chunk and of the chunk's earlier bytes, and what it teaches comes
         from the race of the counts with the spikes of the synapses at the chunk's start. The synapses take the
-        chunk's teaching at its end, with their gradient: the errors alone carry none."""
+        chunk's teaching at its end, with their gradient: the errors alone carry none. The shuffled control
+        teaches every byte with the error of a pseudo-random earlier byte of the window, from this chunk or one
+        before it."""
         steps, chunk, threshold = tokens.shape[1], self.cfg.plastic_chunk, self.cfg.plastic_threshold
         synapses = active.new_zeros(active.shape[0], _VOCAB, active.shape[-1])
-        pieces = []
+        earlier = _earlier_bytes(0, steps).to(counts.device) if self.cfg.plastic_shuffle else None
+        pieces, raced = [], []
         for begin in range(0, steps, chunk):
             end = min(begin + chunk, steps)
             here = active[:, begin:end]
@@ -4203,6 +4207,11 @@ class EventLM(nn.Module):
                 said = counts[:, begin:end].detach().to(torch.float64) + spikes.clamp(-_TEACH_SPIKES, _TEACH_SPIKES)
                 # The race at the chunk's last byte is taught by the next chunk's first byte, if the window has one.
                 errors = self._race_errors(said, self._successors(tokens, begin, end), begin).to(dtype)
+                if earlier is not None:
+                    raced.append(errors)
+                    source = earlier[begin:end]
+                    errors = torch.where((source >= 0)[None, :, None], torch.cat(raced, 1)[:, source.clamp_min(0)],
+                                         0.0)
             causal = torch.ones(end - begin, end - begin, device=counts.device, dtype=dtype).tril(-1)
             fired = 0
             for gain, fibres_of, charge in zip(gains, slices, held):
