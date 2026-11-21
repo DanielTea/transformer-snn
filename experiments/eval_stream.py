@@ -13,7 +13,12 @@ spikes of one pass over the whole of it. ``--reach`` lets every read reach
 further back than it did in training, which a stream allows at no cost in
 synapses. ``--teach-levels`` gives the output its fast synapses from the
 cells after those levels: every arriving byte then teaches them, in each
-stream by itself, and no byte is learned from before it is predicted.
+stream by itself, and no byte is learned from before it is predicted. A
+stack trained with fast synapses in its windows (``--plastic-levels`` of the
+trainer) runs its trained rule with its trained gains, in whole numbers;
+``--plastic-off`` scores it without them. ``--teach-freeze-after`` lets the
+fast synapses of every part stop changing after that many bytes, its lead
+included, while they keep firing.
 
 With ``--books-dir`` every book of a verified PG-19 manifest is a passage of
 its own that starts from an empty state. A book longer than ``--part`` bytes
@@ -79,18 +84,48 @@ def book_rows(books, part, lead):
                  for kind in range(3))
 
 
-def lengthen_reach(model, cells, levels=None):
-    """Let every read of a stack reach ``cells`` back, or only the reads after ``levels``. The cells beyond a
-    read's window take the age offset of the window's oldest cell, as under the setting ``read_reach``."""
+def chosen_reads(model, levels=None):
+    """The reads after ``levels``, or all of them, each once. The passes of a level in a loop share its read, and a
+    setting of that read holds for all of them, so ``levels`` names all its passes or none."""
     reads = model.state_reads
     if levels is not None and not {str(level) for level in levels} <= set(reads):
         raise ValueError("the stack has no read after one of these levels")
-    for level, read in reads.items():
-        if levels is not None and int(level) not in levels:
-            continue
+    named = set(reads) if levels is None else {str(level) for level in levels}
+    chosen = []
+    for read in dict.fromkeys(reads.values()):
+        passes = {level for level, other in reads.items() if other is read}
+        if passes & named and not passes <= named:
+            raise ValueError("the passes of a level in a loop share its read: name all of them or none")
+        if passes <= named:
+            chosen.append(read)
+    return chosen
+
+
+def lengthen_reach(model, cells, levels=None):
+    """Let every read of a stack reach ``cells`` back, or only the reads after ``levels``. The cells beyond a
+    read's window take the age offset of the window's oldest cell, as under the setting ``read_reach``."""
+    for read in chosen_reads(model, levels):
         if cells < read.window:
             raise ValueError("a read reaches at least its window of cells back")
         read.reach = cells
+
+
+def forget_by_power(model, slope, levels=None, replace=False):
+    """Give every read of a stack, or the reads after ``levels``, a fixed forgetting slope: ``slope`` units of charge
+    for every doubling of the age of a cell beyond the read's window, as a learned slope of ``read_forget`` would
+    give. It adds no parameter. A read whose slope was learned keeps it, unless ``replace`` sets the fixed slope in
+    its place."""
+    for read in chosen_reads(model, levels):
+        if read.forget is not None and replace:
+            with torch.no_grad():
+                read.forget.fill_(slope / read.rate)
+            read.forget_rate = 1.0
+            continue
+        if read.forget is not None:
+            raise ValueError("a read that learned its slope keeps it; --forget-slope-replaces sets it anyway")
+        # The slope counts on top of the address rate, as a learned one does.
+        read.forget = torch.full((read.heads,), slope / read.rate, dtype=read.age.dtype, device=read.age.device)
+        read.forget_rate = 1.0
 
 
 @torch.inference_mode()
@@ -131,11 +166,25 @@ def main():
     parser.add_argument("--reach", type=int, help="cells that every read reaches back, if more than in training")
     parser.add_argument("--reach-levels", type=int, nargs="+",
                         help="lengthen the reach of the reads after these levels only")
+    parser.add_argument("--forget-slope", type=float,
+                        help="units of charge that the offset of a cell beyond a read's window takes for every "
+                             "doubling of its age, at the reads that take --reach: a fixed power-law forgetting")
+    parser.add_argument("--forget-slope-replaces", action="store_true",
+                        help="set --forget-slope also in reads that learned their slope, in place of it")
     parser.add_argument("--teach-levels", type=int, nargs="+",
                         help="levels whose cells the fast output synapses hear, which every arriving byte teaches")
     parser.add_argument("--teach-threshold", type=int, help="units of fast charge to one spike of an output neuron")
     parser.add_argument("--teach-budget", type=int, default=EventLMConfig.teach_budget,
                         help="teaching spikes of every arriving byte")
+    parser.add_argument("--teach-cascade", type=int, default=EventLMConfig.teach_cascade, metavar="STAGES",
+                        help="stages of charge in every fast output synapse, through which what a byte taught "
+                             "consolidates and fades as a power of its age; one stage does not consolidate")
+    parser.add_argument("--plastic-off", action="store_true",
+                        help="score a stack trained with fast output synapses without them, to see how much the "
+                             "rest of it leans on them")
+    parser.add_argument("--teach-freeze-after", type=int, metavar="BYTES",
+                        help="the fast output synapses of every part stop changing after this many bytes, its lead "
+                             "included, and keep firing")
     parser.add_argument("--averaged", action="store_true",
                         help="score the averaged weights that a partial checkpoint holds beside its last ones")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
@@ -151,8 +200,14 @@ def main():
         parser.error("--bytes shortens an enwik8 split")
     if args.reach_levels is not None and args.reach is None:
         parser.error("--reach-levels names the levels that take --reach")
+    if args.forget_slope is not None and (args.reach is None or not math.isfinite(args.forget_slope)):
+        parser.error("--forget-slope is a finite slope for the cells that --reach adds")
     if (args.teach_levels is None) != (args.teach_threshold is None):
         parser.error("--teach-levels and --teach-threshold go together")
+    if args.teach_cascade != 1 and args.teach_levels is None:
+        parser.error("--teach-cascade gives stages to the fast synapses of --teach-levels")
+    if args.teach_freeze_after is not None and args.teach_freeze_after < 0:
+        parser.error("--teach-freeze-after counts bytes")
     if args.json.exists():
         parser.error(f"{args.json} already exists")
     if args.bits is not None and (args.bits.suffix != ".npy" or args.bits.exists()):
@@ -189,8 +244,32 @@ def main():
             model.synaptic_scaling()
         if args.reach is not None:
             lengthen_reach(model, args.reach, args.reach_levels)
+        if args.forget_slope is not None:
+            try:
+                forget_by_power(model, args.forget_slope, args.reach_levels, replace=args.forget_slope_replaces)
+            except ValueError as error:
+                parser.error(f"{path}: {error}")
+        trained = model.plastic_after is not None
+        if args.plastic_off:
+            if not trained:
+                parser.error(f"{path}: --plastic-off silences fast synapses that training ran, and it ran none")
+            plastic = {"levels": list(model.plastic_after), "gains": model.plastic_gains.tolist()}
+            model.silence_plasticity()
+        elif trained:
+            if args.teach_levels is not None:
+                parser.error(f"{path}: the stack was trained with fast output synapses; give none after training")
+            plastic = {"levels": list(model.plastic_after), "rule": model.cfg.plastic_rule,
+                       **({"chunk": model.cfg.plastic_chunk} if model.cfg.plastic_rule == "chunked" else {}),
+                       "decay_shift": model.cfg.plastic_decay_shift, "threshold": model.cfg.plastic_threshold,
+                       "shuffled": model.cfg.plastic_shuffle, "teaching_spikes_per_byte": model.cfg.teach_budget,
+                       "gains": model.plastic_gains.tolist()}
         if args.teach_levels is not None:
-            model.teach(args.teach_levels, args.teach_threshold, args.teach_budget)
+            try:
+                model.teach(args.teach_levels, args.teach_threshold, args.teach_budget, args.teach_cascade)
+            except ValueError as error:
+                parser.error(f"{path}: {error}")
+        if args.teach_freeze_after is not None:
+            model.freeze_teaching_after(args.teach_freeze_after)
         bits, targets = score(model, streams, args.piece, device)
         reaches = {int(level): read.reach for level, read in model.state_reads.items()}
         row = {"checkpoint": str(path), "run_name": checkpoint.get("run_name"), "parameters": count_params(model),
@@ -202,9 +281,18 @@ def main():
         if args.averaged:
             # A partial checkpoint was scored at the average that it holds, not at the weights that its file names.
             row["averaged_weights"] = True
+        if args.forget_slope is not None:
+            row["forget_slope"] = args.forget_slope
+            if args.forget_slope_replaces:
+                row["forget_slope_replaced_learned_slopes"] = True
         if args.teach_levels is not None:
             row["taught"] = {"levels": sorted(args.teach_levels), "threshold": args.teach_threshold,
-                             "teaching_spikes_per_byte": args.teach_budget}
+                             "teaching_spikes_per_byte": args.teach_budget,
+                             **({"stages": args.teach_cascade} if args.teach_cascade != 1 else {})}
+        if trained:
+            row["plastic_silenced" if args.plastic_off else "plastic"] = plastic
+        if args.teach_freeze_after is not None:
+            row["teach_freeze_after"] = args.teach_freeze_after
         kept.append(bits)
         # The pieces are resampled together for the difference to the first checkpoint.
         paired = bits.reshape(-1)

@@ -17,11 +17,15 @@ predicted, and the unscored lead of a part teaches like any other byte.
 The stack's fast synapses follow the same rule in whole numbers. Here it runs
 in floats, and several rates are scored side by side on the same pass. A rate
 of 0 leaves the Transformer as it is.
+
+The PG-19 books are cut into parts as eval_stream.py cuts them (``--part``),
+so that a Transformer and a stack learn along the same streams of a book.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -31,7 +35,9 @@ import torch
 from torch.nn import functional as F
 
 from common import _atomic_output, resolve_device
-from eval_stream import stream_rows
+from eval_stream import book_rows, stream_rows
+from eval_stream_lm import load_books
+from eval_warmed_windows import PG19_BOOKS
 from snnformer import count_params
 from snnformer.event_lm import EventLM
 from train_event_lm import load_checkpoint, training_exposure
@@ -42,11 +48,12 @@ SLOW = 1024
 
 
 @torch.inference_mode()
-def score(model, data, streams, lead, context, history, rates, device, batch=8):
+def score(model, data, streams, lead, context, history, rates, device, batch=8, rows=None):
     """The bits of every ``context`` bytes of every stream at each rate as [rates, streams, windows], and the
-    number of scored targets."""
-    inputs, targets, scored = stream_rows(data, streams, lead)
-    length = inputs.shape[1]
+    number of scored targets. The streams are ``data`` cut into ``streams`` parts with their ``lead``, or the
+    ``rows`` of inputs, targets and which of them count, as eval_stream's ``book_rows`` gives them."""
+    inputs, targets, scored = stream_rows(data, streams, lead) if rows is None else rows
+    streams, length = inputs.shape
     seen = {}
     hook = model.norm.register_forward_hook(lambda module, args, output: seen.__setitem__("activity", output))
     rate = torch.tensor(rates, dtype=torch.float32, device=device)
@@ -96,10 +103,15 @@ def score(model, data, streams, lead, context, history, rates, device, batch=8):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument("--enwik8", type=Path, required=True, help="canonical enwik8 file")
+    dataset = parser.add_mutually_exclusive_group(required=True)
+    dataset.add_argument("--enwik8", type=Path, help="canonical enwik8 file")
+    dataset.add_argument("--books-dir", type=Path, help="directory of prepared PG-19 excerpts")
+    parser.add_argument("--manifest", type=Path, default=PG19_BOOKS, help="manifest of the PG-19 excerpts")
+    parser.add_argument("--part", type=int, default=262144,
+                        help="a book of more bytes than this is cut into equal parts that run side by side")
     parser.add_argument("--split", choices=("validation", "test"), default="test")
-    parser.add_argument("--bytes", type=int, help="score only the first bytes of the split, for a quick look")
-    parser.add_argument("--streams", type=int, default=16, help="parts of the split that run side by side")
+    parser.add_argument("--bytes", type=int, help="score only the first bytes of the enwik8 split, for a quick look")
+    parser.add_argument("--streams", type=int, default=16, help="parts of the enwik8 split that run side by side")
     parser.add_argument("--lead", type=int, default=8192, help="unscored bytes that a part after the first hears")
     parser.add_argument("--context", type=int, default=64, help="bytes that a window predicts")
     parser.add_argument("--history", type=int, default=448, help="bytes of the stream that a window holds before them")
@@ -113,8 +125,11 @@ def main():
                         help="keep the bits of every window's new bytes as [rates, streams, windows] in this .npy "
                              "file, so that a stack's scoring of the same streams can be compared piece by piece")
     args = parser.parse_args()
-    if min(args.streams, args.context, args.batch, args.threads) < 1 or min(args.lead, args.history) < 0:
-        parser.error("streams, context, batch and threads must be positive, the lead and the history not negative")
+    if min(args.streams, args.context, args.batch, args.threads, args.part) < 1 or min(args.lead, args.history) < 0:
+        parser.error("streams, context, batch, threads and part must be positive, the lead and the history not "
+                     "negative")
+    if args.bytes is not None and args.enwik8 is None:
+        parser.error("--bytes shortens an enwik8 split")
     if min(args.rates) < 0 or len(set(args.rates)) != len(args.rates):
         parser.error("the rates are distinct and not negative")
     if args.json.exists():
@@ -123,20 +138,29 @@ def main():
         parser.error("--bits names a new .npy file")
     torch.set_num_threads(args.threads)
     device = resolve_device(args.device)
-    _, validation, test = load_splits(args.enwik8)
-    data = torch.from_numpy(np.array(test if args.split == "test" else validation))
     record = {"protocol": "unbroken_streams_in_warmed_windows", "split": args.split, "streams": args.streams,
               "unscored_lead_bytes": args.lead, "context_bytes": args.context,
               "history_bytes": args.history, "device": str(device)}
-    if args.bytes is not None:
-        # A shortened split is named in the record, so its score is not taken for the whole split's.
-        data = data[:args.bytes]
-        record["first_bytes_of_split"] = args.bytes
+    data, rows = None, None
+    if args.enwik8 is not None:
+        _, validation, test = load_splits(args.enwik8)
+        data = torch.from_numpy(np.array(test if args.split == "test" else validation))
+        if args.bytes is not None:
+            # A shortened split is named in the record, so its score is not taken for the whole split's.
+            data = data[:args.bytes]
+            record["first_bytes_of_split"] = args.bytes
+    else:
+        manifest = args.manifest.read_bytes()
+        books = load_books(manifest, args.books_dir, 0, split=args.split)
+        rows = book_rows([book.data for book in books], args.part, args.lead)
+        record = {"dataset": "PG-19", "manifest": args.manifest.name,
+                  "manifest_sha256": hashlib.sha256(manifest).hexdigest(), "books": len(books),
+                  **record, "streams": rows[0].shape[0], "part_bytes": args.part}
     model, checkpoint = load_checkpoint(args.checkpoint, device)
     if isinstance(model, EventLM):
         parser.error(f"{args.checkpoint}: a stack is scored and taught as a stream by eval_stream.py")
     bits, targets = score(model, data, args.streams, args.lead, args.context, args.history, args.rates, device,
-                          args.batch)
+                          args.batch, rows=rows)
     record.update(checkpoint=str(args.checkpoint), run_name=checkpoint.get("run_name"),
                   parameters=count_params(model), training_targets=training_exposure(checkpoint), targets=targets)
     rows = [{"rate": rate, "bpb": float(bits[index].sum() / targets)} for index, rate in enumerate(args.rates)]

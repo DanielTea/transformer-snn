@@ -1,0 +1,17 @@
+{
+  "study": "echo_learning_diagnostics",
+  "recorded_utc": "2026-11-21T15:07:55Z",
+  "why": "The ladder of preregistered.json failed. Its curves (averaged validation in windows, 16 batches) say how: the random echo got worse as it trained (5.97 at 750 updates, 8.03 at 6,000) while its pulses rose to 436,000 a byte; the mirror echo opened a gap of 0.25 by 750 updates and held it at 0.33 to the end, a worse solution rather than a slower one; with mirror echoes in the cells alone the gap grew from 0.04 to 0.09. The hypothesis: a part that hears only the error at the top learns to predict the next byte itself, as if it were the last part, and no part learns to make what the parts above it read. If so, the mirror's gap grows with depth, and the credit that a gradient-free rule must carry is the one that tells a level what the reads above it used.",
+  "arms": {
+    "g2, m2": "the test bed at depth 2, by the gradient and by the mirror echo for every part, budget 37,667 (113,000 per six levels)",
+    "g4, m4": "the same at depth 4, budget 75,333",
+    "o-probe": "depth 6 by the gradient, but each read passes its error down only through its probes, the drive of the byte it reads for (--read-credit probe)",
+    "o-memory": "depth 6 by the gradient, but each read passes its error down only through its tags and payloads, the cells it reads from earlier bytes (--read-credit memory)"
+  },
+  "references": "g6 1.9860 and m6 2.3180 (averaged validation in windows at 6,000, 64 batches) from the ladder.",
+  "predictions": {
+    "depth": "If the gap is missing credit between levels, m2 - g2 is small (the tiny two-level run had 0.055 at 400 updates) and the gap grows from depth 2 to 4 to 6 (0.33).",
+    "credit_paths": "Whichever oracle stays nearer g6 names the path a gradient-free rule must carry: probes (the present byte; credit that stays at one position) or tags and payloads (earlier bytes; credit that follows the race back in time). Both oracles behind g6 by much more than 0.02 would mean both paths matter."
+  },
+  "no_pass_mark": "These are diagnostics: they choose the design of the next rule, and none of them is a candidate."
+}

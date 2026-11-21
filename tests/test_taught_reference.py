@@ -82,3 +82,20 @@ def test_every_stream_teaches_its_own_synapses(scorers):
     # With no lead the first of two parts is the first half of the split, scored as one stream by itself.
     alone, _ = taught.score(model, data[:251], 1, 0, 8, 24, [0.3], torch.device("cpu"))
     assert both[0, 0].sum() == pytest.approx(alone.sum(), rel=1e-5)
+
+
+def test_books_are_taught_along_the_parts_that_a_stack_reads(scorers):
+    taught, _ = scorers
+    import eval_stream
+
+    model = _transformer()
+    books = [_bytes(size, seed=size) for size in (61, 500, 140)]
+    rows = eval_stream.book_rows(books, 200, 30)
+    bits, targets = taught.score(model, None, None, None, 8, 24, [0.0, 0.3], torch.device("cpu"), rows=rows)
+    # Five streams: the short book, three parts of the long one with a lead before the later two, and the last book.
+    assert targets == 60 + 499 + 139 and bits.shape[:2] == (2, 5)
+    # A book that starts a stream is learned from nothing: its bits are those of the book alone.
+    alone, _ = taught.score(model, books[2], 1, 0, 8, 24, [0.0, 0.3], torch.device("cpu"))
+    assert bits[:, 4].sum(-1) == pytest.approx(alone[:, 0].sum(-1), rel=1e-5)
+    # The bytes after a book's end are not scored, whatever the fast synapses learned from them.
+    assert bits[:, 0, 8:].sum() == 0

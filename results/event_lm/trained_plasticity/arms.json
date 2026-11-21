@@ -1,0 +1,2038 @@
+{
+  "study": "trained_plasticity",
+  "note": "Fast output synapses run inside every training window (EventLM._plastic_window) and, in a stream, the same rule in whole numbers (EventLM._teach with plastic_after). Test bed: the stack of results/event_lm/stream_form/small_test_bed.json (6 levels, 256 channels, 4.86 million parameters, windows of 256 bytes, batch 16, 6,000 updates on a CPU, seed 20001, rate 3e-4, averaged weights). Scored on the enwik8 validation split as 16 streams of about 312 KB with experiments/eval_stream.py, paired over pieces with experiments/compare_stream_scores.py and experiments/stream_quarters.py. One seed per arm.",
+  "criteria": {
+    "recorded_utc": "2026-11-20T22:54:24Z",
+    "replaces": "The first prompt's go/no-go: c or d beats b by more than b's own gain over a, and f does not gain. That bar was set to b's gain on this small stack (0.0945), about 14 times v15's full-size gain, so it measured how weak the small stack is rather than whether training helps.",
+    "comparison": "Validation streams of the test-bed scorings: 16 streams of about 312 KB, a lead of 8,192 and the same pieces. Every comparison paired with experiments/compare_stream_scores.py. References: a, the stack with no fast synapses; b, the stack with v15's teach given after training, the strongest reading-time learner that needs no training (the stronger of b-all and b-last); a candidate is any arm trained with plasticity in the loop, scored with its own trained rule (the decay arms already running and the arms of the revised prompt: Rule B with C = 16 and C = 64, N, A-carry).",
+    "go_if_a_candidate_meets_all": [
+      "1. Better than b: it beats b by more than the paired 95% interval and by at least 0.010 bpb.",
+      "2. Stable along the stream: no quarter of the stream scores worse than a in that quarter; the gain over a in the last quarter is at least 0.8 times the gain in the first quarter; and on one long stream (a lead of 262,144 bytes, or one stream of 1 MB or more) it is still better than b.",
+      "3. The control fails: the same arm with the stored values shuffled gains less than a fifth of the candidate's gain over a. Run for every arm that passes 1 and 2.",
+      "4. The tests pass."
+    ],
+    "second_route": "If no candidate passes, but the trained cells scored with v15's teach beat b by more than the interval and by at least 0.010, and are stable as in criterion 2: GO with that setting (train with plasticity in the loop, run v15's rule at inference), reported as that.",
+    "no_go": "Otherwise. Write up the null result with the table and do not move to full size. After the results are in, add no arms beyond those named.",
+    "always_report": [
+      "every arm scored with its rule switched off (the dependence check; not a criterion)",
+      "the gain by quarter for every arm",
+      "the in-window gains beside the stream gains"
+    ],
+    "analysis_rules_given_with_the_criteria": [
+      "Judge 'are the trained cells worse for v15's rule' by the gain, not the score: each trained stack's rule-off score minus its score with v15's teach, against the baseline's gain from teach (b over a). Near that gain: the cells are fine and the loss is in the base. Clearly smaller: the cells serve the rule worse.",
+      "v15's teach threshold was tuned on untrained cells. Re-pick it per arm on the first part of the validation streams, as v15 picked its own, before comparing teach scores across arms.",
+      "The shuffled control's teach score: also worse than the baseline means the damage comes from training with any plastic readout in the loop; as good as the baseline means it is specific to learning to use real memory.",
+      "Compare the 65,536-byte lead with the 8,192 lead for v15's rule and the trained rules: a gain that shrinks with the longer lead means the rule adapts rather than accumulates."
+    ],
+    "seen_before_recording": {
+      "stream_scorings_bpb": {
+        "a-8k": 1.95134,
+        "a-64k": 1.95138,
+        "b-last-8k": 1.85686,
+        "b-all-8k": 1.84989,
+        "c-8k": 22.22322,
+        "g-8k (c, rule off)": 1.98415,
+        "c-teach-8k (c, rule off, v15 teach on level 5 at 2^24)": 1.98805,
+        "e8-8k": 1.85283,
+        "e8-teach-8k": 2.03159,
+        "e10-8k": 1.9239,
+        "e10-teach-8k": 1.98318,
+        "f-8k": 1.94802
+      },
+      "analyses": "experiments/stream_quarters.py at the 8,192 lead against a, b-all and b-last for b-all, b-last, c, e8, f and g (gains and quarters).",
+      "training_logs": "In-window averaged validation of every arm at every evaluation; d up to 4,500 of 6,000 updates."
+    },
+    "pending_at_recording": [
+      "f-teach-8k",
+      "c-64k",
+      "b-last-64k",
+      "b-all-64k",
+      "e8-64k",
+      "e10-64k",
+      "f-64k",
+      "d-8k",
+      "d-64k"
+    ],
+    "readings_recorded_before_the_long_stream": {
+      "recorded_utc": "2026-11-21T07:09:00Z",
+      "criterion_1": "'Beats b by more than the paired 95% interval and by at least 0.010': the lower end of the paired interval of b less the setting is above zero, and the difference itself is at least 0.010.",
+      "criterion_2_long_stream": "'Still better than b on one long stream': the setting and b scored on the validation split as 16 streams with a lead of 262,144 bytes (every byte still scored once; each stream after the first hears 262,144 bytes before its scored part); the lower end of the paired interval of b less the setting is above zero.",
+      "state_at_recording": "Second route: e10's cells with v15's rule on levels 0-5 at 2^22 pass criterion 1 (+0.0130 [+0.0122, +0.0138]) and the quarter tests of criterion 2 (gains over a of +0.160, +0.134, +0.130, +0.178). Their long-stream scoring and b's are running and unseen. B16's (+0.0096), B64's (+0.0087), e8's (+0.0088) and c's (+0.0083) cells fail criterion 1; d's and carry's are scoring."
+    }
+  },
+  "teach_thresholds": {
+    "chosen_utc": "2026-11-21T00:24:00Z",
+    "rule": "v15's teach threshold re-picked per arm on the first million validation bytes (eval_stream.py --bytes 1000000, 16 streams, lead 8,192), as v15 picked its own; the full split is then scored at the chosen threshold and the remaining 4 million bytes are also reported alone.",
+    "scans": {
+      "a, level 5": {
+        "first_million_validation_bpb": {
+          "2^22": 2.20543,
+          "2^23": 1.96041,
+          "2^24": 1.88735,
+          "2^25": 1.87472,
+          "2^26": 1.88443
+        },
+        "chosen": "2^25"
+      },
+      "a, levels 0-5": {
+        "first_million_validation_bpb": {
+          "2^20": 1.97558,
+          "2^21": 1.86483,
+          "2^22": 1.84391,
+          "2^23": 1.85543,
+          "2^24": 1.87715,
+          "2^25": 1.8996,
+          "2^26": 1.91914
+        },
+        "chosen": "2^22"
+      },
+      "c, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 4.19066,
+          "2^23": 2.52274,
+          "2^24": 2.01261,
+          "2^25": 1.87037,
+          "2^26": 1.8407,
+          "2^27": 1.85068,
+          "2^28": 1.87445
+        },
+        "chosen": "2^26"
+      },
+      "e8, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 4.58917,
+          "2^23": 2.66617,
+          "2^24": 2.05634,
+          "2^25": 1.88463,
+          "2^26": 1.84453,
+          "2^27": 1.85022,
+          "2^28": 1.8724
+        },
+        "chosen": "2^26"
+      },
+      "e10, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 4.18432,
+          "2^23": 2.51659,
+          "2^24": 2.00761,
+          "2^25": 1.86604,
+          "2^26": 1.83655,
+          "2^27": 1.84668,
+          "2^28": 1.87069
+        },
+        "chosen": "2^26"
+      },
+      "f, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 2.21912,
+          "2^23": 1.96199,
+          "2^24": 1.8851,
+          "2^25": 1.87125,
+          "2^26": 1.88068
+        },
+        "chosen": "2^25"
+      },
+      "c, levels 0-5, rule off": {
+        "first_million_validation_bpb": {
+          "2^21": 1.84975,
+          "2^22": 1.83314,
+          "2^23": 1.85044,
+          "2^24": 1.87804,
+          "2^25": 1.90595,
+          "2^26": 1.93055,
+          "2^27": 1.9504
+        },
+        "chosen": "2^22"
+      },
+      "e8, levels 0-5, rule off": {
+        "first_million_validation_bpb": {
+          "2^21": 1.85009,
+          "2^22": 1.83259,
+          "2^23": 1.84964,
+          "2^24": 1.87725,
+          "2^25": 1.90531,
+          "2^26": 1.93012,
+          "2^27": 1.95015
+        },
+        "chosen": "2^22"
+      },
+      "e10, levels 0-5, rule off": {
+        "first_million_validation_bpb": {
+          "2^21": 1.84506,
+          "2^22": 1.82871,
+          "2^23": 1.84631,
+          "2^24": 1.87432,
+          "2^25": 1.90272,
+          "2^26": 1.92777,
+          "2^27": 1.94805
+        },
+        "chosen": "2^22"
+      },
+      "f, levels 0-5, rule off": {
+        "first_million_validation_bpb": {
+          "2^21": 1.86123,
+          "2^22": 1.84042,
+          "2^23": 1.85208,
+          "2^24": 1.87387,
+          "2^25": 1.89629,
+          "2^26": 1.91578,
+          "2^27": 1.93111
+        },
+        "chosen": "2^22"
+      },
+      "B16, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 4.61367,
+          "2^23": 2.67714,
+          "2^24": 2.05215,
+          "2^25": 1.87704,
+          "2^26": 1.83708,
+          "2^27": 1.84368
+        },
+        "chosen": "2^26 if the last level is better"
+      },
+      "B16, levels 0-5, rule off": {
+        "first_million_validation_bpb": {
+          "2^21": 1.8473,
+          "2^22": 1.83127,
+          "2^23": 1.84907
+        },
+        "chosen": "2^22"
+      },
+      "B64, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 4.5282,
+          "2^23": 2.64539,
+          "2^24": 2.04531,
+          "2^25": 1.87717,
+          "2^26": 1.83894,
+          "2^27": 1.8459
+        },
+        "chosen": "2^26 if the last level is better"
+      },
+      "B64, levels 0-5, rule off": {
+        "first_million_validation_bpb": {
+          "2^21": 1.84843,
+          "2^22": 1.83186,
+          "2^23": 1.84943
+        },
+        "chosen": "2^22"
+      },
+      "N, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 2.37737,
+          "2^23": 2.12885,
+          "2^24": 2.05831,
+          "2^25": 2.05018,
+          "2^26": 2.0647
+        }
+      },
+      "carry, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 2.54059,
+          "2^23": 2.01921,
+          "2^24": 1.87259,
+          "2^25": 1.84124,
+          "2^26": 1.85049
+        }
+      },
+      "d, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^24": 1.89584,
+          "2^25": 1.87281,
+          "2^26": 1.87749,
+          "2^27": 1.89146
+        }
+      },
+      "d, levels 0-5, rule off": {
+        "first_million_validation_bpb": {
+          "2^21": 1.8702,
+          "2^22": 1.84007,
+          "2^23": 1.84744
+        },
+        "chosen": "2^22"
+      },
+      "carry, levels 0-5, rule off": {
+        "first_million_validation_bpb": {
+          "2^21": 1.84641,
+          "2^22": 1.83529,
+          "2^23": 1.85341
+        },
+        "chosen": "2^22"
+      }
+    },
+    "seen_before_choosing": "only these first-million scans; no full-split teach score at a re-picked threshold existed.",
+    "pending": null,
+    "all_levels_utc": "2026-11-21T03:35:00Z",
+    "all_levels_note": "The all-level scans of the trained cells first covered 2^22 to 2^27; their best lay at the edge, 2^22, so 2^21 was added for every arm (03:05 UTC), which bracketed it. The setting of each arm is the better of its last-level and all-level best on the first million: all levels at 2^22 for a (that is b), c, e8, e10 and f.",
+    "chosen_settings": {
+      "a (b)": "levels 0-5 at 2^22",
+      "c": "levels 0-5 at 2^22",
+      "e8": "levels 0-5 at 2^22",
+      "e10": "levels 0-5 at 2^22",
+      "f": "levels 0-5 at 2^22",
+      "B16": "levels 0-5 at 2^22",
+      "B64": "levels 0-5 at 2^22",
+      "d": "levels 0-5 at 2^22",
+      "carry": "levels 0-5 at 2^22"
+    },
+    "seen_before_choosing_all_levels": "These first-million scans, and the full-split scores of b-all at 2^22 (1.81412), b-last at 2^25 (1.84552), and the last-level teach of c, e8 and e10 at 2^26 (1.81373, 1.81717, 1.80983) and f at 2^25 (1.84107). No full-split all-level teach score of trained cells existed.",
+    "new_arms_utc": "2026-11-21T05:47:00Z",
+    "new_arms_note": "B16 and B64: last level 2^25 to 2^27 and all levels 2^21 to 2^23 on the laptop, 2^22 to 2^24 on the last level on the server; both bracketed, all levels at 2^22 better. Seen before choosing: these scans and every full-split score so far (the own-rule and rule-off scores of every arm, the all-level teach of c, e8, e10 and f); no full-split teach score of B16's or B64's cells. N's and carry's last-level scans are from the server queue.",
+    "d_and_carry_utc": "2026-11-21T07:06:00Z",
+    "d_and_carry_note": "d's cells were scanned after its rule-off score (1.93872, better than a) came in, and carry's on all levels, so that every arm's cells are in the second route. Both bracketed; all levels at 2^22 better than the last level. Seen before choosing: every full-split score so far, including the teach scores of c, e8, e10, f, B16 and B64 cells; none of d's or carry's."
+  },
+  "results": {
+    "scored": "validation split, 16 unbroken streams, pieces of 512 bytes; lead 8,192 unless named",
+    "b": "a with v15's rule on levels 0-5 at 2^22: the threshold re-picked on the first million bytes",
+    "b_bpb": 1.81412,
+    "gains": "reference less arm in bits per byte, with paired 95% intervals over pieces",
+    "arms": {
+      "a": {
+        "what": "the stack",
+        "in_windows_averaged_val_bpb": 1.9835,
+        "own_rule": {
+          "bpb": 1.95134,
+          "note": "the reference of every gain over a"
+        },
+        "own_rule_lead_65536": {
+          "bpb": 1.95138
+        },
+        "v15_rule_last_level": {
+          "bpb": 1.84552,
+          "gain_over_a": [
+            0.10583,
+            0.10253,
+            0.10932
+          ],
+          "gain_over_b": [
+            -0.03139,
+            -0.03223,
+            -0.03057
+          ],
+          "gain_over_b_after_first_million": [
+            -0.03184,
+            -0.03278,
+            -0.03088
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.11435,
+              0.1069,
+              0.12187
+            ],
+            [
+              0.09039,
+              0.08478,
+              0.09608
+            ],
+            [
+              0.08793,
+              0.08238,
+              0.09354
+            ],
+            [
+              0.13138,
+              0.12369,
+              0.13903
+            ]
+          ]
+        },
+        "v15_rule_levels_0_5_at_2^22": {
+          "bpb": 1.81412,
+          "gain_over_a": [
+            0.13722,
+            0.13331,
+            0.14136
+          ],
+          "gain_over_b": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "gain_over_b_after_first_million": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.14737,
+              0.13859,
+              0.15613
+            ],
+            [
+              0.12151,
+              0.11457,
+              0.12838
+            ],
+            [
+              0.11598,
+              0.10924,
+              0.12272
+            ],
+            [
+              0.1649,
+              0.15609,
+              0.17371
+            ]
+          ]
+        }
+      },
+      "c": {
+        "what": "Rule A on level 5 (--plastic-levels 5)",
+        "in_windows_averaged_val_bpb": 1.9337,
+        "own_rule": {
+          "bpb": 22.22322,
+          "gain_over_a": [
+            -20.27187,
+            -20.39899,
+            -20.14281
+          ],
+          "gain_over_b": [
+            -20.40909,
+            -20.53535,
+            -20.27938
+          ],
+          "gain_over_b_after_first_million": [
+            -20.9123,
+            -21.03799,
+            -20.78998
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -13.8273,
+              -14.06121,
+              -13.59863
+            ],
+            [
+              -21.30941,
+              -21.44724,
+              -21.16919
+            ],
+            [
+              -23.11231,
+              -23.23709,
+              -22.98082
+            ],
+            [
+              -23.00318,
+              -23.18337,
+              -22.82381
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 1.98415,
+          "gain_over_a": [
+            -0.03281,
+            -0.0347,
+            -0.03121
+          ],
+          "gain_over_b": [
+            -0.17003,
+            -0.17526,
+            -0.16518
+          ],
+          "gain_over_b_after_first_million": [
+            -0.1779,
+            -0.18405,
+            -0.17222
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -0.03016,
+              -0.03289,
+              -0.02753
+            ],
+            [
+              -0.02674,
+              -0.02887,
+              -0.02469
+            ],
+            [
+              -0.02522,
+              -0.02733,
+              -0.02323
+            ],
+            [
+              -0.04928,
+              -0.05484,
+              -0.04404
+            ]
+          ]
+        },
+        "v15_rule_last_level": {
+          "bpb": 1.81373,
+          "gain_over_a": [
+            0.13762,
+            0.13339,
+            0.14203
+          ],
+          "gain_over_b": [
+            0.0004,
+            -0.00066,
+            0.00149
+          ],
+          "gain_over_b_after_first_million": [
+            8e-05,
+            -0.00113,
+            0.00123
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.14997,
+              0.14025,
+              0.15966
+            ],
+            [
+              0.12278,
+              0.11501,
+              0.13062
+            ],
+            [
+              0.11651,
+              0.10897,
+              0.12423
+            ],
+            [
+              0.162,
+              0.1526,
+              0.17154
+            ]
+          ]
+        },
+        "v15_rule_levels_0_5_at_2^22": {
+          "bpb": 1.80585,
+          "gain_over_a": [
+            0.14549,
+            0.14134,
+            0.14985
+          ],
+          "gain_over_b": [
+            0.00827,
+            0.00746,
+            0.00906
+          ],
+          "gain_over_b_after_first_million": [
+            0.00803,
+            0.00716,
+            0.0089
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.15696,
+              0.14748,
+              0.16629
+            ],
+            [
+              0.12972,
+              0.12236,
+              0.13719
+            ],
+            [
+              0.12438,
+              0.11715,
+              0.13183
+            ],
+            [
+              0.17184,
+              0.16265,
+              0.18114
+            ]
+          ]
+        }
+      },
+      "d": {
+        "what": "Rule A on levels 0-5 (--plastic-levels 0,1,2,3,4,5)",
+        "in_windows_averaged_val_bpb": 1.9648,
+        "own_rule": {
+          "bpb": 9.55517,
+          "gain_over_a": [
+            -7.60383,
+            -7.69021,
+            -7.52157
+          ],
+          "gain_over_b": [
+            -7.74105,
+            -7.82677,
+            -7.65782
+          ],
+          "gain_over_b_after_first_million": [
+            -7.9017,
+            -7.99367,
+            -7.80947
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -2.54805,
+              -2.62191,
+              -2.47263
+            ],
+            [
+              -6.57728,
+              -6.66664,
+              -6.48973
+            ],
+            [
+              -9.50765,
+              -9.58814,
+              -9.42684
+            ],
+            [
+              -11.87133,
+              -11.98581,
+              -11.75827
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 1.93872,
+          "gain_over_a": [
+            0.01262,
+            0.01178,
+            0.01344
+          ],
+          "gain_over_b": [
+            -0.12459,
+            -0.12868,
+            -0.12077
+          ],
+          "gain_over_b_after_first_million": [
+            -0.12965,
+            -0.13444,
+            -0.1252
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.01157,
+              0.00992,
+              0.01326
+            ],
+            [
+              0.01302,
+              0.0115,
+              0.01455
+            ],
+            [
+              0.0122,
+              0.01073,
+              0.0137
+            ],
+            [
+              0.01375,
+              0.01182,
+              0.0157
+            ]
+          ]
+        },
+        "v15_rule_levels_0_5_at_2^22": {
+          "bpb": 1.80876,
+          "gain_over_a": [
+            0.14259,
+            0.13858,
+            0.14686
+          ],
+          "gain_over_b": [
+            0.00537,
+            0.00467,
+            0.00609
+          ],
+          "gain_over_b_after_first_million": [
+            0.00586,
+            0.00504,
+            0.00664
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.15377,
+              0.14462,
+              0.16279
+            ],
+            [
+              0.12667,
+              0.11943,
+              0.13403
+            ],
+            [
+              0.12122,
+              0.11418,
+              0.12836
+            ],
+            [
+              0.16963,
+              0.16042,
+              0.17874
+            ]
+          ]
+        }
+      },
+      "e8": {
+        "what": "c with a decay of shift 8 (--plastic-decay-shift 8)",
+        "in_windows_averaged_val_bpb": 1.9347,
+        "own_rule": {
+          "bpb": 1.85283,
+          "gain_over_a": [
+            0.09851,
+            0.09582,
+            0.10115
+          ],
+          "gain_over_b": [
+            -0.03871,
+            -0.0419,
+            -0.03571
+          ],
+          "gain_over_b_after_first_million": [
+            -0.04133,
+            -0.04498,
+            -0.03788
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.10029,
+              0.09439,
+              0.10648
+            ],
+            [
+              0.1037,
+              0.09841,
+              0.10927
+            ],
+            [
+              0.08946,
+              0.08543,
+              0.0938
+            ],
+            [
+              0.10109,
+              0.09549,
+              0.10632
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 1.98437,
+          "gain_over_a": [
+            -0.03303,
+            -0.03508,
+            -0.03128
+          ],
+          "gain_over_b": [
+            -0.17025,
+            -0.17564,
+            -0.16535
+          ],
+          "gain_over_b_after_first_million": [
+            -0.1777,
+            -0.18393,
+            -0.17181
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -0.03039,
+              -0.03319,
+              -0.02765
+            ],
+            [
+              -0.027,
+              -0.02918,
+              -0.02492
+            ],
+            [
+              -0.02502,
+              -0.0275,
+              -0.02267
+            ],
+            [
+              -0.04993,
+              -0.05616,
+              -0.04434
+            ]
+          ]
+        },
+        "v15_rule_last_level": {
+          "bpb": 1.81717,
+          "gain_over_a": [
+            0.13418,
+            0.12982,
+            0.13882
+          ],
+          "gain_over_b": [
+            -0.00304,
+            -0.00419,
+            -0.00194
+          ],
+          "gain_over_b_after_first_million": [
+            -0.00318,
+            -0.00445,
+            -0.00194
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.1458,
+              0.13611,
+              0.1555
+            ],
+            [
+              0.11992,
+              0.11204,
+              0.12779
+            ],
+            [
+              0.11223,
+              0.10458,
+              0.11998
+            ],
+            [
+              0.15953,
+              0.14985,
+              0.16941
+            ]
+          ]
+        },
+        "v15_rule_levels_0_5_at_2^22": {
+          "bpb": 1.80532,
+          "gain_over_a": [
+            0.14602,
+            0.14182,
+            0.15053
+          ],
+          "gain_over_b": [
+            0.00881,
+            0.00796,
+            0.00962
+          ],
+          "gain_over_b_after_first_million": [
+            0.00857,
+            0.00766,
+            0.00948
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.15694,
+              0.1476,
+              0.1663
+            ],
+            [
+              0.13065,
+              0.12307,
+              0.13818
+            ],
+            [
+              0.12439,
+              0.1172,
+              0.13193
+            ],
+            [
+              0.17304,
+              0.1638,
+              0.18233
+            ]
+          ]
+        },
+        "own_rule_lead_65536": {
+          "bpb": 1.85272,
+          "gain_over_a": [
+            0.09866,
+            0.09576,
+            0.10145
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.09958,
+              0.09366,
+              0.10557
+            ],
+            [
+              0.09598,
+              0.09104,
+              0.10114
+            ],
+            [
+              0.09251,
+              0.08747,
+              0.09782
+            ],
+            [
+              0.10991,
+              0.10463,
+              0.11512
+            ]
+          ]
+        }
+      },
+      "e10": {
+        "what": "c with a decay of shift 10 (--plastic-decay-shift 10)",
+        "in_windows_averaged_val_bpb": 1.9307,
+        "own_rule": {
+          "bpb": 1.9239,
+          "gain_over_a": [
+            0.02744,
+            0.02217,
+            0.03227
+          ],
+          "gain_over_b": [
+            -0.10978,
+            -0.11668,
+            -0.10325
+          ],
+          "gain_over_b_after_first_million": [
+            -0.11567,
+            -0.12341,
+            -0.10838
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.02477,
+              0.0139,
+              0.03516
+            ],
+            [
+              0.04762,
+              0.03968,
+              0.05565
+            ],
+            [
+              0.04665,
+              0.03902,
+              0.05362
+            ],
+            [
+              -0.00952,
+              -0.02288,
+              0.00311
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 1.9813,
+          "gain_over_a": [
+            -0.02995,
+            -0.03198,
+            -0.02821
+          ],
+          "gain_over_b": [
+            -0.16717,
+            -0.17264,
+            -0.16223
+          ],
+          "gain_over_b_after_first_million": [
+            -0.17428,
+            -0.18058,
+            -0.1683
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -0.02994,
+              -0.03292,
+              -0.02709
+            ],
+            [
+              -0.02475,
+              -0.0269,
+              -0.02262
+            ],
+            [
+              -0.02049,
+              -0.02291,
+              -0.01814
+            ],
+            [
+              -0.04489,
+              -0.05113,
+              -0.03922
+            ]
+          ]
+        },
+        "v15_rule_last_level": {
+          "bpb": 1.80983,
+          "gain_over_a": [
+            0.14152,
+            0.13722,
+            0.14601
+          ],
+          "gain_over_b": [
+            0.0043,
+            0.0032,
+            0.00535
+          ],
+          "gain_over_b_after_first_million": [
+            0.00401,
+            0.00281,
+            0.00525
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.15214,
+              0.14244,
+              0.1616
+            ],
+            [
+              0.12598,
+              0.11836,
+              0.13381
+            ],
+            [
+              0.12158,
+              0.11403,
+              0.12932
+            ],
+            [
+              0.16713,
+              0.15774,
+              0.17687
+            ]
+          ]
+        },
+        "v15_rule_levels_0_5_at_2^22": {
+          "bpb": 1.8011,
+          "gain_over_a": [
+            0.15024,
+            0.14606,
+            0.15463
+          ],
+          "gain_over_b": [
+            0.01302,
+            0.01222,
+            0.0138
+          ],
+          "gain_over_b_after_first_million": [
+            0.01283,
+            0.01193,
+            0.01378
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.1604,
+              0.15103,
+              0.1696
+            ],
+            [
+              0.13362,
+              0.12613,
+              0.141
+            ],
+            [
+              0.12998,
+              0.12269,
+              0.13746
+            ],
+            [
+              0.17787,
+              0.16864,
+              0.18711
+            ]
+          ]
+        },
+        "own_rule_lead_65536": {
+          "bpb": 1.92394,
+          "gain_over_a": [
+            0.02744,
+            0.0224,
+            0.03227
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.04748,
+              0.03897,
+              0.05589
+            ],
+            [
+              0.03518,
+              0.02655,
+              0.04373
+            ],
+            [
+              0.03392,
+              0.024,
+              0.04302
+            ],
+            [
+              -0.00697,
+              -0.01987,
+              0.00595
+            ]
+          ]
+        }
+      },
+      "f": {
+        "what": "control: c storing the error of a pseudo-random earlier byte (--plastic-shuffle)",
+        "in_windows_averaged_val_bpb": 1.9793,
+        "own_rule": {
+          "bpb": 1.94802,
+          "gain_over_a": [
+            0.00332,
+            0.00261,
+            0.00403
+          ],
+          "gain_over_b": [
+            -0.1339,
+            -0.13802,
+            -0.12999
+          ],
+          "gain_over_b_after_first_million": [
+            -0.13978,
+            -0.14459,
+            -0.13523
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.00509,
+              0.00368,
+              0.00653
+            ],
+            [
+              0.00352,
+              0.00208,
+              0.00494
+            ],
+            [
+              0.00463,
+              0.00327,
+              0.00603
+            ],
+            [
+              -1e-05,
+              -0.00147,
+              0.0016
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 1.94702,
+          "gain_over_a": [
+            0.00433,
+            0.00362,
+            0.00502
+          ],
+          "gain_over_b": [
+            -0.13289,
+            -0.137,
+            -0.12898
+          ],
+          "gain_over_b_after_first_million": [
+            -0.13879,
+            -0.14356,
+            -0.13423
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.00543,
+              0.00402,
+              0.00682
+            ],
+            [
+              0.0042,
+              0.00276,
+              0.00561
+            ],
+            [
+              0.0058,
+              0.00446,
+              0.00717
+            ],
+            [
+              0.00185,
+              0.00038,
+              0.00343
+            ]
+          ]
+        },
+        "v15_rule_last_level": {
+          "bpb": 1.84107,
+          "gain_over_a": [
+            0.11027,
+            0.10686,
+            0.11384
+          ],
+          "gain_over_b": [
+            -0.02695,
+            -0.02794,
+            -0.02586
+          ],
+          "gain_over_b_after_first_million": [
+            -0.02717,
+            -0.02833,
+            -0.02605
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.11838,
+              0.11067,
+              0.12614
+            ],
+            [
+              0.09367,
+              0.08775,
+              0.09965
+            ],
+            [
+              0.09297,
+              0.08733,
+              0.09886
+            ],
+            [
+              0.1368,
+              0.12873,
+              0.14478
+            ]
+          ]
+        },
+        "v15_rule_levels_0_5_at_2^22": {
+          "bpb": 1.80997,
+          "gain_over_a": [
+            0.14138,
+            0.13742,
+            0.14554
+          ],
+          "gain_over_b": [
+            0.00416,
+            0.00347,
+            0.00486
+          ],
+          "gain_over_b_after_first_million": [
+            0.0043,
+            0.00355,
+            0.00505
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.1512,
+              0.14228,
+              0.16001
+            ],
+            [
+              0.12479,
+              0.11758,
+              0.13187
+            ],
+            [
+              0.12048,
+              0.11375,
+              0.12747
+            ],
+            [
+              0.16991,
+              0.16093,
+              0.17897
+            ]
+          ]
+        },
+        "own_rule_lead_65536": {
+          "bpb": 1.94821,
+          "gain_over_a": [
+            0.00318,
+            0.00247,
+            0.00395
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.00503,
+              0.00362,
+              0.00646
+            ],
+            [
+              0.00498,
+              0.00352,
+              0.00648
+            ],
+            [
+              0.00356,
+              0.00212,
+              0.00502
+            ],
+            [
+              -0.0008,
+              -0.00228,
+              0.00075
+            ]
+          ]
+        }
+      },
+      "B16": {
+        "what": "Rule B, chunks of 16 bytes (--plastic-rule chunked --plastic-chunk 16)",
+        "in_windows_averaged_val_bpb": 1.9163,
+        "own_rule": {
+          "bpb": 1.83466,
+          "gain_over_a": [
+            0.11668,
+            0.11193,
+            0.1217
+          ],
+          "gain_over_b": [
+            -0.02054,
+            -0.02215,
+            -0.01888
+          ],
+          "gain_over_b_after_first_million": [
+            -0.02059,
+            -0.02245,
+            -0.01872
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.13102,
+              0.12035,
+              0.14172
+            ],
+            [
+              0.10202,
+              0.09314,
+              0.11094
+            ],
+            [
+              0.09478,
+              0.08608,
+              0.10347
+            ],
+            [
+              0.13953,
+              0.12919,
+              0.15018
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 1.98762,
+          "gain_over_a": [
+            -0.03628,
+            -0.03849,
+            -0.03435
+          ],
+          "gain_over_b": [
+            -0.1735,
+            -0.17914,
+            -0.16835
+          ],
+          "gain_over_b_after_first_million": [
+            -0.18137,
+            -0.18775,
+            -0.17539
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -0.03475,
+              -0.03804,
+              -0.03155
+            ],
+            [
+              -0.02847,
+              -0.03089,
+              -0.02617
+            ],
+            [
+              -0.02664,
+              -0.02907,
+              -0.02427
+            ],
+            [
+              -0.05551,
+              -0.06223,
+              -0.04937
+            ]
+          ]
+        },
+        "v15_rule_levels_0_5_at_2^22": {
+          "bpb": 1.80448,
+          "gain_over_a": [
+            0.14686,
+            0.14261,
+            0.1512
+          ],
+          "gain_over_b": [
+            0.00964,
+            0.00882,
+            0.01048
+          ],
+          "gain_over_b_after_first_million": [
+            0.00924,
+            0.00834,
+            0.01012
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.15797,
+              0.14856,
+              0.16739
+            ],
+            [
+              0.13105,
+              0.12363,
+              0.13848
+            ],
+            [
+              0.12612,
+              0.11887,
+              0.13347
+            ],
+            [
+              0.17315,
+              0.16394,
+              0.18252
+            ]
+          ]
+        },
+        "own_rule_lead_65536": {
+          "bpb": 1.83729,
+          "gain_over_a": [
+            0.11409,
+            0.10901,
+            0.11908
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.09945,
+              0.09023,
+              0.10852
+            ],
+            [
+              0.10493,
+              0.09596,
+              0.11404
+            ],
+            [
+              0.10943,
+              0.09988,
+              0.11922
+            ],
+            [
+              0.14698,
+              0.13529,
+              0.15828
+            ]
+          ]
+        }
+      },
+      "B64": {
+        "what": "Rule B, chunks of 64 bytes (--plastic-rule chunked --plastic-chunk 64)",
+        "in_windows_averaged_val_bpb": 1.9231,
+        "own_rule": {
+          "bpb": 1.83833,
+          "gain_over_a": [
+            0.11301,
+            0.10829,
+            0.11804
+          ],
+          "gain_over_b": [
+            -0.0242,
+            -0.02581,
+            -0.02253
+          ],
+          "gain_over_b_after_first_million": [
+            -0.02429,
+            -0.02615,
+            -0.02248
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.12838,
+              0.1176,
+              0.13889
+            ],
+            [
+              0.09856,
+              0.08984,
+              0.10736
+            ],
+            [
+              0.08992,
+              0.08139,
+              0.09856
+            ],
+            [
+              0.13586,
+              0.12552,
+              0.14666
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 1.98639,
+          "gain_over_a": [
+            -0.03505,
+            -0.03704,
+            -0.03329
+          ],
+          "gain_over_b": [
+            -0.17227,
+            -0.17766,
+            -0.1673
+          ],
+          "gain_over_b_after_first_million": [
+            -0.18008,
+            -0.18636,
+            -0.17431
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -0.03151,
+              -0.03447,
+              -0.02859
+            ],
+            [
+              -0.02725,
+              -0.02946,
+              -0.02504
+            ],
+            [
+              -0.02818,
+              -0.03068,
+              -0.02578
+            ],
+            [
+              -0.05351,
+              -0.05948,
+              -0.04793
+            ]
+          ]
+        },
+        "v15_rule_levels_0_5_at_2^22": {
+          "bpb": 1.80542,
+          "gain_over_a": [
+            0.14592,
+            0.14172,
+            0.15038
+          ],
+          "gain_over_b": [
+            0.0087,
+            0.00787,
+            0.00957
+          ],
+          "gain_over_b_after_first_million": [
+            0.00828,
+            0.00736,
+            0.00917
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.15782,
+              0.14835,
+              0.16726
+            ],
+            [
+              0.12986,
+              0.12236,
+              0.13722
+            ],
+            [
+              0.12421,
+              0.11702,
+              0.13164
+            ],
+            [
+              0.17271,
+              0.16347,
+              0.18204
+            ]
+          ]
+        },
+        "own_rule_lead_65536": {
+          "bpb": 1.84079,
+          "gain_over_a": [
+            0.11059,
+            0.10555,
+            0.11549
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.09621,
+              0.08715,
+              0.10523
+            ],
+            [
+              0.10208,
+              0.09334,
+              0.1112
+            ],
+            [
+              0.10421,
+              0.09505,
+              0.11434
+            ],
+            [
+              0.14436,
+              0.13248,
+              0.15571
+            ]
+          ]
+        }
+      },
+      "N": {
+        "what": "N, the normalized readout (--plastic-rule normalized)",
+        "in_windows_averaged_val_bpb": 2.18,
+        "own_rule": {
+          "bpb": 2.15236,
+          "gain_over_a": [
+            -0.20102,
+            -0.20264,
+            -0.19941
+          ],
+          "gain_over_b": [
+            -0.33824,
+            -0.34332,
+            -0.3333
+          ],
+          "gain_over_b_after_first_million": [
+            -0.34488,
+            -0.35065,
+            -0.33929
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -0.2057,
+              -0.20869,
+              -0.20278
+            ],
+            [
+              -0.19363,
+              -0.19668,
+              -0.19054
+            ],
+            [
+              -0.19302,
+              -0.19593,
+              -0.19025
+            ],
+            [
+              -0.2118,
+              -0.21502,
+              -0.20861
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 2.15242,
+          "gain_over_a": [
+            -0.20107,
+            -0.20269,
+            -0.19947
+          ],
+          "gain_over_b": [
+            -0.33829,
+            -0.34339,
+            -0.33336
+          ],
+          "gain_over_b_after_first_million": [
+            -0.34495,
+            -0.35072,
+            -0.33936
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -0.20587,
+              -0.20886,
+              -0.20294
+            ],
+            [
+              -0.19364,
+              -0.1967,
+              -0.19056
+            ],
+            [
+              -0.19303,
+              -0.19594,
+              -0.19026
+            ],
+            [
+              -0.21183,
+              -0.21505,
+              -0.20865
+            ]
+          ]
+        },
+        "own_rule_lead_65536": {
+          "bpb": 2.15247,
+          "gain_over_a": [
+            -0.20109,
+            -0.20339,
+            -0.19881
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -0.20261,
+              -0.20569,
+              -0.19943
+            ],
+            [
+              -0.19103,
+              -0.19395,
+              -0.18818
+            ],
+            [
+              -0.20154,
+              -0.2048,
+              -0.19839
+            ],
+            [
+              -0.20982,
+              -0.21313,
+              -0.2065
+            ]
+          ]
+        }
+      },
+      "carry": {
+        "what": "A-carry: Rule A trained on streams (--stream 15 --stream-groups 4)",
+        "in_windows_averaged_val_bpb": 2.0338,
+        "own_rule": {
+          "bpb": 8.81768,
+          "gain_over_a": [
+            -6.86634,
+            -6.94804,
+            -6.78758
+          ],
+          "gain_over_b": [
+            -7.00356,
+            -7.08515,
+            -6.92409
+          ],
+          "gain_over_b_after_first_million": [
+            -7.29335,
+            -7.38482,
+            -7.2048
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -2.33448,
+              -2.42902,
+              -2.24576
+            ],
+            [
+              -5.81655,
+              -5.91093,
+              -5.72245
+            ],
+            [
+              -8.50995,
+              -8.60098,
+              -8.41983
+            ],
+            [
+              -10.88572,
+              -11.00045,
+              -10.77661
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 1.97496,
+          "gain_over_a": [
+            -0.02362,
+            -0.02504,
+            -0.02228
+          ],
+          "gain_over_b": [
+            -0.16084,
+            -0.16578,
+            -0.15611
+          ],
+          "gain_over_b_after_first_million": [
+            -0.16886,
+            -0.17472,
+            -0.16336
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -0.02404,
+              -0.02706,
+              -0.02108
+            ],
+            [
+              -0.02052,
+              -0.02294,
+              -0.01833
+            ],
+            [
+              -0.01844,
+              -0.02077,
+              -0.01626
+            ],
+            [
+              -0.03158,
+              -0.0351,
+              -0.0281
+            ]
+          ]
+        },
+        "v15_rule_levels_0_5_at_2^22": {
+          "bpb": 1.80816,
+          "gain_over_a": [
+            0.14318,
+            0.13899,
+            0.14761
+          ],
+          "gain_over_b": [
+            0.00596,
+            0.00503,
+            0.00686
+          ],
+          "gain_over_b_after_first_million": [
+            0.00572,
+            0.00472,
+            0.0067
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.15578,
+              0.14654,
+              0.16501
+            ],
+            [
+              0.12627,
+              0.11905,
+              0.13353
+            ],
+            [
+              0.12231,
+              0.11508,
+              0.12962
+            ],
+            [
+              0.16927,
+              0.16016,
+              0.17848
+            ]
+          ]
+        },
+        "own_rule_lead_65536": {
+          "bpb": 10.86257,
+          "gain_over_a": [
+            -8.91119,
+            -9.02291,
+            -8.80634
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              -5.27617,
+              -5.38865,
+              -5.16921
+            ],
+            [
+              -8.03862,
+              -8.14864,
+              -7.92936
+            ],
+            [
+              -10.14514,
+              -10.25148,
+              -10.03995
+            ],
+            [
+              -12.63842,
+              -12.76459,
+              -12.51162
+            ]
+          ]
+        }
+      },
+      "B16s": {
+        "what": "control: B16 storing the error of a pseudo-random earlier byte (--plastic-shuffle)",
+        "in_windows_averaged_val_bpb": 1.9744,
+        "own_rule": {
+          "bpb": 1.93836,
+          "gain_over_a": [
+            0.01298,
+            0.0122,
+            0.01382
+          ],
+          "gain_over_b": [
+            -0.12424,
+            -0.12813,
+            -0.12045
+          ],
+          "gain_over_b_after_first_million": [
+            -0.12947,
+            -0.13407,
+            -0.12513
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.01411,
+              0.01249,
+              0.01578
+            ],
+            [
+              0.01315,
+              0.01145,
+              0.01486
+            ],
+            [
+              0.01223,
+              0.01068,
+              0.01375
+            ],
+            [
+              0.01236,
+              0.01072,
+              0.01406
+            ]
+          ]
+        },
+        "rule_off": {
+          "bpb": 1.93752,
+          "gain_over_a": [
+            0.01383,
+            0.01304,
+            0.01466
+          ],
+          "gain_over_b": [
+            -0.12339,
+            -0.12729,
+            -0.11964
+          ],
+          "gain_over_b_after_first_million": [
+            -0.12865,
+            -0.13325,
+            -0.1243
+          ],
+          "gain_over_a_by_quarter": [
+            [
+              0.0143,
+              0.01268,
+              0.01597
+            ],
+            [
+              0.01368,
+              0.012,
+              0.01536
+            ],
+            [
+              0.01326,
+              0.01174,
+              0.01477
+            ],
+            [
+              0.01401,
+              0.01237,
+              0.01571
+            ]
+          ]
+        }
+      }
+    },
+    "v15_rule_lead_65536": {
+      "b-all-64k": {
+        "bpb": 1.85031,
+        "gain_over_a": [
+          0.10107,
+          0.09813,
+          0.10383
+        ],
+        "gain_over_a_by_quarter": [
+          [
+            0.08758,
+            0.08315,
+            0.0923
+          ],
+          [
+            0.09097,
+            0.08636,
+            0.0956
+          ],
+          [
+            0.10048,
+            0.09522,
+            0.10584
+          ],
+          [
+            0.12808,
+            0.12083,
+            0.1352
+          ]
+        ]
+      },
+      "b-last-64k": {
+        "bpb": 1.85869,
+        "gain_over_a": [
+          0.0927,
+          0.08839,
+          0.09673
+        ],
+        "gain_over_a_by_quarter": [
+          [
+            0.079,
+            0.07193,
+            0.08622
+          ],
+          [
+            0.0804,
+            0.07335,
+            0.08762
+          ],
+          [
+            0.08997,
+            0.0822,
+            0.09821
+          ],
+          [
+            0.12579,
+            0.11583,
+            0.13578
+          ]
+        ]
+      }
+    },
+    "long_stream": {
+      "scored": "validation split, 16 streams, lead 262,144 bytes: every byte scored once, each stream after the first hears 262,144 bytes before its scored part",
+      "b_bpb": 1.81639,
+      "e10_cells_v15_rule_bpb": 1.80429,
+      "gain_over_b": [
+        0.0121,
+        0.01122,
+        0.0129
+      ],
+      "gain_over_b_by_quarter": [
+        [
+          0.0129,
+          0.01127,
+          0.01452
+        ],
+        [
+          0.01263,
+          0.01079,
+          0.01432
+        ],
+        [
+          0.01179,
+          0.01005,
+          0.01355
+        ],
+        [
+          0.01151,
+          0.00974,
+          0.01328
+        ]
+      ],
+      "pieces": 17456
+    }
+  },
+  "decision": {
+    "decided_utc": "2026-11-21T07:21:00Z",
+    "outcome": "GO by the second route",
+    "setting": "e10's: train with Rule A on the last level and a decay of shift 10 (a memory of four training windows) in the loop; read with v15's rule on levels 0-5 at a threshold re-picked on the first million validation bytes (2^22)",
+    "criterion_1": "+0.0130 [+0.0122, +0.0138] over b; +0.0128 [+0.0119, +0.0138] after the first million bytes",
+    "criterion_2": "gains over a by quarter +0.160, +0.134, +0.130, +0.178; at a lead of 262,144 bytes +0.0121 [+0.0112, +0.0129] over b",
+    "criterion_4": "tests pass (tests/test_trained_plasticity.py, tests/test_stream_quarters.py)",
+    "candidate_route": "no-go: no arm with its own rule beats b; the best, B16, is -0.0205 [-0.0221, -0.0189]",
+    "other_trained_cells_against_b": {
+      "B16": 0.0096,
+      "e8": 0.0088,
+      "B64": 0.0087,
+      "c": 0.0083,
+      "carry": 0.006,
+      "d": 0.0054
+    },
+    "caveats": [
+      "One seed per arm; e10 is the best of seven trained-cell settings, whose average margin over b is 0.0085 (0.0097 for the five trained on the last level).",
+      "The shuffled control's cells (f) beat b by 0.0042 through a better base, not a larger gain from v15's rule (0.1371 against 0.1372).",
+      "By b at v15's threshold of 2^24 (1.84989), the b scored when the criteria were recorded, B16 (+0.0152) and B64 (+0.0116) with their own rules would pass criterion 1; the per-arm re-pick, recorded at 00:24 UTC before their scores (03:50 UTC), made b 0.036 stronger. B16's shuffled control gains 0.0130 over a (a ninth of B16's gain), all from its base; B16's long stream was not scored.",
+      "The full-size decay (shift 13 for windows of 2,048 bytes) keeps e10's ratio of memory to window; it is not tested on the test bed."
+    ],
+    "full_size": {
+      "arm": "l2048-plastic",
+      "from": "the saved state from which l2048-flat started (p-forget at 24,000 updates), with l2048-flat's settings and --plastic-levels 10 --plastic-decay-shift 13, to 90,000 updates",
+      "scored": "its own rule off and v15's rule on all 11 levels at a threshold re-picked on the first million validation bytes, against l2048-flat with v15's rule at its own re-picked threshold, paired over the same streams, on both enwik8 splits and PG-19",
+      "success": "ahead by more than the paired interval and by more than 0.005 on both enwik8 splits, a gain that does not shrink along the stream, and no loss on PG-19 (the full-size mark set with the study)"
+    }
+  }
+}

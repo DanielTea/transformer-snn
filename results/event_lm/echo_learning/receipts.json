@@ -1,0 +1,17 @@
+{
+  "study": "read_receipts",
+  "recorded_utc": "2026-11-21T15:30:24Z",
+  "seen_before_recording": "The echo diagnostics at 15:27 UTC (averaged validation in windows, 16 batches): the mirror's gap is about the same at every depth (depth 2: 2.3272 against 2.7086 at 5,250 updates; depth 4: 2.0788 against 2.4395; depth 6: 1.9952 against 2.3293 at 6,000), so the depth hypothesis of diagnostics.json is wrong. At depth 6 by the gradient, reads that pass their error down only through their tags and payloads train level with full credit (2.0088 against g6's 2.0183 at 4,500), and through their probes alone 0.08 behind (2.0836 at 5,250). The credit that a part needs is how what it wrote at a byte was read at later bytes: credit back in time along the race.",
+  "idea": "Read receipts. Every time a read takes spikes from a cell, the cell keeps a receipt; when the error of the reading byte arrives, the receipt returns to the cell with how useful its tag and payload were, and enters the stream at the byte where the cell was written. Every part learns from the error of the stream at the bytes it wrote: the error at the top, as the mirror gives it, and the receipts of every read that read those bytes later. Nothing else passes back.",
+  "rung_1": "Exact receipts: the gradient, but with each read passing its error down only through its tags and payloads (--read-credit memory) and each cell layer passing none back to the stream it hears (--cell-credit local). The error then reaches a part only through the stream it writes into, from the top and from the receipts of later reads.",
+  "arms": {
+    "rc1": "exact receipts: --read-credit memory --cell-credit local",
+    "rc0": "the control without receipts: --read-credit residual --cell-credit local, which should train like the mirror echo"
+  },
+  "test_bed": "As the echo ladder: the small test bed at depth 6, 6,000 updates, on the server's GPU 1, code at the commit that records this file.",
+  "pass_marks": {
+    "rc1": "Within 0.02 bits per byte of g6 (1.9860, averaged validation in windows at 6,000): the receipts carry the credit the stack needs, and the spike form (rung 2: receipts as whole-spike messages along the race, through feedback synapses that learn to mirror the tag and payload synapses) is built next. Within 0.05: they carry most of it.",
+    "rc0": "Expected near m6 (2.3180); if it is not, the mirror's failure has another cause and is reported."
+  },
+  "next_rungs": "Rung 2, spike receipts, within 0.05 of g6. Rung 3, receipts beyond the window: training on unbroken streams with reads that reach 4,096 to 16,384 cells back and receipts all the way, against windowed gradient training at equal compute on validation streams."
+}

@@ -4,6 +4,32 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## Long streams at equal training context · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
+|---|---:|---|---:|---:|---:|---:|
+| 34.81M SNN stack, windows of 2,048 bytes, forgetting slopes | 34,810,900 | Stream, chosen reach, taught output synapses | 1.11994 | 4 | — | — |
+| 34.81M SNN stack, windows of 2,048 bytes, forgetting slopes | 34,810,900 | Stream, chosen reach | 1.12349 | 5 | — | — |
+| 34.81M SNN stack, windows of 2,048 bytes, forgetting slopes | 34,810,900 | Stream, as trained | 1.13667 | 7 | — | — |
+| 34.81M SNN stack, windows of 2,048 bytes | 34,810,900 | Stream, chosen reach, taught output synapses | 1.13472 | 6 | 1.40030 | 2 |
+| 34.81M SNN stack, windows of 2,048 bytes | 34,810,900 | Stream, chosen reach | 1.14038 | 9 | 1.41574 | 3 |
+| 34.81M SNN stack, windows of 2,048 bytes | 34,810,900 | Stream, as trained | 1.13903 | 8 | — | — |
+| 34.75M full attention, windows of 2,048 bytes | 34,752,000 | Windows with 2,032 bytes of history, taught output synapses | **1.10321** | 1 | — | — |
+| 34.75M full attention, windows of 2,048 bytes | 34,752,000 | Windows with 2,032 bytes of history | 1.10669 | 2 | — | — |
+| 34.75M full attention, windows of 1,024 bytes | 34,752,000 | Windows with 1,008 bytes of history | 1.11820 | 3 | **1.39800** | 1 |
+
+![The stack and the Transformer at training windows of 512, 1,024 and 2,048 bytes, test and validation](../results/figures/event_lm_long_streams.png)
+
+![The gain of the fast synapses against how much of a stream they have read](../results/figures/event_lm_long_streams_reading.png)
+
+![Validation loss of the stack and the Transformer along their training, at depths 11 and 22](../results/figures/event_lm_long_streams_scaling.png)
+
+[Measurements, forgetting slopes and limits](LONG_STREAMS.md) · [Trained plasticity](TRAINED_PLASTICITY.md)
+
+Every model of this comparison trained on windows of 512 bytes for 24,000 updates and on windows of 2,048 bytes for the remaining 66,000, from random weights, or on windows of 1,024 bytes where named. A stack reads the test as 16 unbroken streams; a chosen reach is the reach that scored best on the first million validation bytes. A Transformer reads the same streams in windows of its training length, 16 scored bytes after the rest as history. Taught output synapses start at zero in every stream and learn from each byte after it was predicted.
+
+At equal context, each read as it trained, the stack is 0.0323 bpb behind the Transformer on the enwik8 test. Read at its best, with slopes that learn, a chosen reach and taught output synapses, it is 0.0132 behind. The level score of the comparison below came from a stack that trained on longer windows than its Transformer read. Every row is one seed.
+
 ## A stack that reads a stream, trained from scratch · 368,640,000 training targets · seed 20001
 
 | Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
@@ -29,7 +55,7 @@ State is persistent tensor storage for one stream. Full attention reports FP32 k
 
 This comparison reads the test as a stream. A stack carries its state through 16 unbroken parts of the enwik8 test split and through every PG-19 book. The Transformer carries no state and reads the same texts in windows that hold the named bytes of history before the scored ones. A longer reach lets the reads of a stack reach cells beyond its window of training, which adds no synapse. Taught output synapses start at zero in every stream and learn from each byte after it was predicted, and the Transformer gets the same rule on its last layer as a control.
 
-On the enwik8 test the stack on long windows with its longer reach is 0.0033 bpb below the Transformer at its best window. On the validation split it is 0.0065 above it (1.1694 against 1.1629), so the two are level. That stack trained on windows of 1,024 bytes from 24,000 updates, and the Transformer and the other stack on windows of 512 bytes. A Transformer trained on windows of 1,024 bytes is the control that this comparison does not have yet. The three models received identical windows from random weights up to 24,000 updates. Every row is one seed.
+On the enwik8 test the stack on long windows with its longer reach is 0.0033 bpb below the Transformer at its best window. On the validation split it is 0.0065 above it (1.1694 against 1.1629), so the two are level. That stack trained on windows of 1,024 bytes from 24,000 updates, and the Transformer and the other stack on windows of 512 bytes. The Transformer trained on windows of 1,024 bytes, the control, is in the comparison above: against it the stack is behind. The three models received identical windows from random weights up to 24,000 updates. Every row is one seed.
 
 ## Read clocks and the address rate, trained from scratch · 368,640,000 training targets · seed 20001
 

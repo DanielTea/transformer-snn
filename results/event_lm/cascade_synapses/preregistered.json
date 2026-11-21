@@ -1,0 +1,17 @@
+{
+  "study": "cascade_synapses",
+  "recorded_utc": "2026-11-21T11:55:06Z",
+  "question": "v15's stream rule gives the output fast synapses that every arriving byte teaches, and they keep every lesson at the same weight for the rest of the stream. Synapses in the brain consolidate: a fast trace hands its charge on to slower and larger stores, which Benna and Fusi (2016) modelled as a chain of communicating vessels, and memory held that way fades as a power of time. Do fast synapses with six such stages predict streams better than synapses that weigh every lesson alike?",
+  "mechanism": "--teach-cascade 6 in experiments/eval_stream.py (EventLMConfig.teach_cascade). Stage k of every fast synapse holds a whole charge q_k in a capacity of 2^k. Every 2^(k+3) bytes, (2 q_k - q_(k+1)) / 4^(k+1), rounded to the nearest whole charge, flows from stage k to stage k+1. Bytes teach stage 0, and the output neurons hear stage 0 only. One lesson's share in stage 0 is 1 for 7 bytes, 1/2 at the 8th, 0.27 at 64 bytes, 0.10 at 1,024, 0.038 at 16,384 and 1/63 after about 500,000 bytes: it falls as about the cube root of its age and never below 1/63. Nothing is trained and nothing takes a gradient. Every quantity is a whole number below 2^53, so a stream cut anywhere fires the same spikes (tests/test_cascade_synapses.py).",
+  "test_bed": "Arm a of the trained-plasticity test bed (results/event_lm/trained_plasticity/arms.json): 6 levels, 256 channels, gradient-trained without fast synapses, 4,855,844 parameters. The fast synapses are given after training and hear the cells after all six levels (6,132 fibres), with 256 teaching spikes a byte.",
+  "arms": {
+    "b": "v15's rule: one stage, threshold 2^22, as picked in the trained-plasticity study (1.81412 on validation streams; its bits are kept)",
+    "c6": "six stages, at the threshold picked below"
+  },
+  "threshold": "c6's threshold is the power of two with the lowest bits on the first 1,000,000 bytes of the enwik8 validation split (16 streams, lead 8,192), out of 2^19, 2^20, 2^21 and 2^22. If the lowest is at an end of that range, the next power beyond it is scored too, until one inside is lowest. The same protocol picked b's 2^22.",
+  "scoring": "experiments/eval_stream.py on the whole enwik8 validation split as 16 unbroken streams, lead 8,192, pieces of 512, paired against b's bits with experiments/compare_stream_scores.py and by quarter with experiments/stream_quarters.py. Then b and c6, at the thresholds above, on the 8 PG-19 validation excerpts (results/event_lm/correction_pg19_validation_manifest.json, 131,072 bytes each, one stream a book).",
+  "pass_mark": "c6 passes if all of these hold: it is ahead of b by at least 0.005 bits a byte on validation streams, with the lower end of the paired 95% interval above zero; no quarter of the streams is behind b; and it is not behind b by more than 0.002 on the PG-19 validation excerpts. A null result is reported as one.",
+  "then": "If c6 passes, the released stack is scored with six stages on validation streams, at a threshold re-picked by the same protocol, before the cascade is used in any headline. No test text is scored with stages until then.",
+  "runs_on": "The laptop CPU, beside the queued cell pilots.",
+  "seen_before_recording": "A trace of one lesson through the stages (the shares above), and a smoke test of the scorer on the first 32,000 validation bytes at b's threshold 2^22, before any threshold was picked: 1.8353 with six stages, 1.8200 with one. No other score with stages exists."
+}

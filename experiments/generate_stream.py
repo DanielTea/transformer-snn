@@ -68,6 +68,8 @@ def main():
     parser.add_argument("--teach-threshold", type=int, help="units of fast charge to one spike of an output neuron")
     parser.add_argument("--teach-budget", type=int, default=EventLMConfig.teach_budget,
                         help="teaching spikes of every byte")
+    parser.add_argument("--teach-cascade", type=int, default=EventLMConfig.teach_cascade, metavar="STAGES",
+                        help="stages of charge in every fast output synapse, which consolidates itself")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
     parser.add_argument("--threads", type=int, default=4)
     args = parser.parse_args()
@@ -77,6 +79,8 @@ def main():
         parser.error("--reach-levels names the levels that take --reach")
     if (args.teach_levels is None) != (args.teach_threshold is None):
         parser.error("--teach-levels and --teach-threshold go together")
+    if args.teach_cascade != 1 and args.teach_levels is None:
+        parser.error("--teach-cascade gives stages to the fast synapses of --teach-levels")
     torch.set_num_threads(args.threads)
     try:
         prompt = args.prompt.encode("utf-8") if args.prompt_file is None else args.prompt_file.read_bytes()
@@ -87,7 +91,7 @@ def main():
         if args.reach is not None:
             lengthen_reach(model, args.reach, args.reach_levels)
         if args.teach_levels is not None:
-            model.teach(args.teach_levels, args.teach_threshold, args.teach_budget)
+            model.teach(args.teach_levels, args.teach_threshold, args.teach_budget, args.teach_cascade)
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
     if not prompt:

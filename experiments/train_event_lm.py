@@ -31,7 +31,7 @@ from common import (
 )
 from snnformer import SNNConfig, count_params
 from snnformer.event_lm import (
-    EventLM, EventLMConfig, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES,
+    EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES, echo_feedback,
 )
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
@@ -62,6 +62,43 @@ EVENT_ROUTES = {
 def scoring_logits(output: torch.Tensor, event: bool, resolution: int = 1) -> torch.Tensor:
     """Score the signed spike evidence outside the event decoder."""
     return output.float() * (math.log(2) / (8 * resolution)) if event else output
+
+
+class EchoFeedback:
+    """The fixed synapses of echo learning for every part of a stack, drawn once on the device of the error."""
+
+    def __init__(self, seed):
+        self.seed, self.drawn = seed, {}
+
+    def __call__(self, name, width, device):
+        if (name, width) not in self.drawn:
+            self.drawn[name, width] = echo_feedback(self.seed, name, width).to(device)
+        return self.drawn[name, width]
+
+
+def echo_backward(loss, logits, targets, tape, feedback, mirror=False):
+    """The update of echo learning. The loss teaches what its error reaches directly: the output neurons, and also
+    the reads and input synapses when only the cells learn from echoes; the pulse budget teaches each part its own
+    pulses. Every part on the tape learns from an echo of the error at the output: through fixed random synapses,
+    the error of each byte (its softmax less the byte that came) through the part's feedback synapses; as a mirror,
+    the error of the stream that the output hears, the same for every part, which comes back through the output's
+    own synapses and goes no further."""
+    parts = [added for _, added in tape.parts if added.requires_grad]
+    if mirror:
+        loss.backward(retain_graph=True)
+        top = tape.top.grad
+        torch.autograd.backward(parts, [top.to(added.dtype) for added in parts])
+        return
+    with torch.no_grad():
+        error = F.softmax(logits.detach().float(), -1)
+        error -= F.one_hot(targets, error.shape[-1]).to(error.dtype)
+        error /= targets.numel()
+    tensors, grads = [loss], [torch.ones_like(loss)]
+    for name, added in tape.parts:
+        if added.requires_grad:
+            tensors.append(added)
+            grads.append((error @ feedback(name, added.shape[-1], error.device)).to(added.dtype))
+    torch.autograd.backward(tensors, grads)
 
 
 def load_checkpoint(path: Path, device: torch.device):
@@ -314,6 +351,8 @@ def build_model(args):
                             granule_hold=getattr(args, "granule_hold", EventLMConfig.granule_hold),
                             granule_clock_rate=getattr(args, "granule_clock_rate", EventLMConfig.granule_clock_rate),
                             stack=getattr(args, "stack", EventLMConfig.stack),
+                            stack_loop=(None if getattr(args, "stack_loop", None) is None
+                                        else tuple(map(int, args.stack_loop.split(",")))),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
@@ -321,6 +360,8 @@ def build_model(args):
                             read_delays=getattr(args, "read_delays", EventLMConfig.read_delays),
                             read_delay_probes=getattr(args, "read_delay_probes", EventLMConfig.read_delay_probes),
                             read_reach=getattr(args, "read_reach", EventLMConfig.read_reach),
+                            read_forget=getattr(args, "read_forget", EventLMConfig.read_forget),
+                            read_forget_rate=getattr(args, "read_forget_rate", EventLMConfig.read_forget_rate),
                             output_cap=getattr(args, "output_cap", EventLMConfig.output_cap),
                             pool_fine=getattr(args, "pool_fine", EventLMConfig.pool_fine),
                             pool_rest=getattr(args, "pool_rest", EventLMConfig.pool_rest),
@@ -328,7 +369,17 @@ def build_model(args):
                             pool_lifts_ceiling=getattr(args, "pool_lifts_ceiling", EventLMConfig.pool_lifts_ceiling),
                             output_pool=getattr(args, "output_pool", EventLMConfig.output_pool),
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
+                            granule_self_gate=getattr(args, "granule_self_gate", EventLMConfig.granule_self_gate),
+                            granule_shunt=getattr(args, "granule_shunt", EventLMConfig.granule_shunt),
+                            output_tied=getattr(args, "tied_output", EventLMConfig.output_tied),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
+                            plastic_after=(None if getattr(args, "plastic_levels", None) is None
+                                           else tuple(map(int, args.plastic_levels.split(",")))),
+                            plastic_rule=getattr(args, "plastic_rule", EventLMConfig.plastic_rule),
+                            plastic_chunk=getattr(args, "plastic_chunk", EventLMConfig.plastic_chunk),
+                            plastic_decay_shift=getattr(args, "plastic_decay_shift", EventLMConfig.plastic_decay_shift),
+                            plastic_threshold=getattr(args, "plastic_threshold", EventLMConfig.plastic_threshold),
+                            plastic_shuffle=getattr(args, "plastic_shuffle", EventLMConfig.plastic_shuffle),
                             **synapses, **heads)
         model = EventLM(cfg)
         with torch.no_grad():
@@ -627,6 +678,9 @@ def main():
     parser.add_argument("--stack", action="store_true",
                         help="a decoder without blocks: every level is the state read and the cell layer that "
                              "--read-after and --granule-after name for it, and --depth counts the levels")
+    parser.add_argument("--stack-loop", metavar="FIRST,LAST,PASSES",
+                        help="a stack whose levels FIRST to LAST every byte passes PASSES times with the same reads "
+                             "and cell layers; every pass keeps its own state in a stream")
     parser.add_argument("--read-after", help="comma-separated byte-rate blocks that a state read follows")
     parser.add_argument("--read-width", type=int, default=EventLMConfig.read_width, help="channels of a state read")
     parser.add_argument("--read-heads", type=int, default=EventLMConfig.read_heads)
@@ -663,6 +717,12 @@ def main():
     parser.add_argument("--read-reach", type=int, metavar="CELLS",
                         help="in a stream a state read reaches this many cells back, more than --read-window: the "
                              "cells beyond the window take the age offset of its oldest cell, so no synapse is added")
+    parser.add_argument("--read-forget", action="store_true",
+                        help="beyond its window a state read forgets by a power of the age: every head learns a "
+                             "slope that a far cell's offset takes for every doubling of its age, starting at zero")
+    parser.add_argument("--read-forget-rate", type=float, default=EventLMConfig.read_forget_rate,
+                        help="the forgetting slope counts this many times on top of the address rate; 0 holds "
+                             "it at nothing, as the control of a fork")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
@@ -706,6 +766,14 @@ def main():
                         help="every granule cell has a gate dendrite and a value dendrite: each gate spike lets "
                              "the value dendrite's charge into the cell body once, and SPIKES of them are a "
                              "threshold of the gate; plain threshold cells when omitted or 0")
+    parser.add_argument("--granule-self-gate", action="store_true",
+                        help="with --granule-gate, the gate dendrite hears through the cell's own synapses, so a "
+                             "cell fires about the square of its charge above the rest: the spike form of a "
+                             "squared rectifier, with no synapses beyond a plain cell's")
+    parser.add_argument("--granule-shunt", action="store_true",
+                        help="with --granule-gate, the gate is a shunting conductance: k gate spikes let in the share "
+                             "k / (k + gate) of the collected charge, so a body never fires more than a plain cell; "
+                             "with --granule-self-gate a cell fires about k * k / (k + 1) for k thresholds")
     parser.add_argument("--granule-veto", type=int, default=EventLMConfig.granule_veto, metavar="STEPS",
                         help="every granule cell has a veto dendrite on the same fibres that does not fire: its "
                              "charge closes the cell in STEPS steps over the charge of one whole spike; no veto "
@@ -811,6 +879,29 @@ def main():
     parser.add_argument("--output-pool", type=int, default=EventLMConfig.output_pool, metavar="QUANTA",
                         help="give a stack's output neurons a pool of their own and this many quanta to a "
                              "threshold, of which one stands while the pool is silent")
+    parser.add_argument("--tied-output", action="store_true",
+                        help="a stack's output neurons hear the stream through the synapses by which the bytes enter "
+                             "it, with a threshold raised by the power of two that keeps their charge's size")
+    parser.add_argument("--plastic-levels",
+                        help="comma-separated levels whose cells fast output synapses hear in every training window "
+                             "as in a stream: every byte of a window teaches them after it is predicted, and each "
+                             "level learns, from zero, the gain of its fast neurons (trained plasticity)")
+    parser.add_argument("--plastic-rule", choices=("base-error", "chunked", "normalized"),
+                        default=EventLMConfig.plastic_rule,
+                        help="what an arriving byte teaches and how the fast neurons fire: base-error takes the race "
+                             "of the output neurons' own counts, without the fast spikes; chunked (Rule B) takes the "
+                             "race with the spikes that the synapses fired at the start of the byte's chunk, and the "
+                             "synapses take a chunk's teaching at its end; normalized (N) is base-error with the fast "
+                             "charge divided by one plus the summed coincidence of the fibres' sizes of activity")
+    parser.add_argument("--plastic-chunk", type=int, default=EventLMConfig.plastic_chunk, metavar="BYTES",
+                        help="bytes of a chunk under the chunked rule, at fixed places of a stream")
+    parser.add_argument("--plastic-decay-shift", type=int, default=EventLMConfig.plastic_decay_shift, metavar="K",
+                        help="the fast synapses lose one part in 2 ** K of their size at every byte; 0 keeps it")
+    parser.add_argument("--plastic-threshold", type=int, default=EventLMConfig.plastic_threshold,
+                        help="charge of one fast spike at a gain of one")
+    parser.add_argument("--plastic-shuffle", action="store_true",
+                        help="control: a byte teaches with the error of a pseudo-random earlier byte, so the fast "
+                             "synapses cost what they cost and remember nothing that follows from what came")
     parser.add_argument("--pulse-budget", type=float, help="target average spike emissions per training byte")
     parser.add_argument("--spike-resolution", type=int, default=1, help="number of finer spikes per original unit")
     parser.add_argument("--depth", type=int, default=3)
@@ -842,6 +933,21 @@ def main():
     parser.add_argument("--rotated-adam", type=int, metavar="STEPS",
                         help="run Adam in the eigenbasis of each weight matrix's gradient statistics and "
                              "update the bases every this many steps")
+    parser.add_argument("--echo", choices=("all", "cells"),
+                        help="echo learning: train the parts of a stack from fixed random echoes of the error at the "
+                             "output instead of from the error passed back through the parts above them; 'all' "
+                             "for the input synapses, reads and cells, 'cells' for the cell layers alone")
+    parser.add_argument("--echo-seed", type=int, default=0, help="seed of the fixed synapses that carry the echoes")
+    parser.add_argument("--echo-feedback", choices=("random", "mirror"), default="random",
+                        help="'random': each part hears the error at the output through fixed random synapses; "
+                             "'mirror': every part hears the error of the stream that the output hears, which comes "
+                             "back in one hop through the output's own synapses")
+    parser.add_argument("--read-credit", choices=("probe", "memory", "residual"),
+                        help="a diagnostic: each state read passes its error down to the stream only through its "
+                             "probes, only through its tags and payloads, or through neither")
+    parser.add_argument("--cell-credit", choices=("local",),
+                        help="a diagnostic: the cell layers learn from the error of the stream they write into and "
+                             "pass none of it back to the stream they hear")
     parser.add_argument("--rotate-stacks", action="store_true",
                         help="with --rotated-adam, also turn every matrix of a three-dimensional weight, such as "
                              "the synapses of granule cells")
@@ -965,6 +1071,10 @@ def main():
             or args.code_loss_weight or args.early_readout_weight or args.bank_read_rank_weight):
         parser.error("--stream takes two or more windows to a stretch, a number that divides --save-every, and "
                      "trains on the next byte alone")
+    if args.echo is not None and (
+            not args.stack or args.stream is not None or args.code_loss_weight or args.early_readout_weight
+            or args.bank_read_rank_weight or args.teacher_checkpoint is not None or args.plastic_levels is not None):
+        parser.error("--echo trains a stack in windows on the next byte alone")
     if args.stream_groups != 1 and (args.stream is None or args.stream_groups < 1):
         parser.error("--stream-groups needs --stream and one group at least")
     # All groups start a stretch together every this many updates, and a run saves and turns at such updates.
@@ -1101,6 +1211,17 @@ def main():
     optimizer = make_optimizer(model, args.lr, args.wd, betas=(0.9, args.adam_beta2), rotated=args.rotated_adam,
                                stacks=args.rotate_stacks, scales=args.lr_scale)
     average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
+    feedback = None if args.echo is None else EchoFeedback(args.echo_seed)
+    if args.read_credit is not None:
+        if not isinstance(model, EventLM) or model.state_reads is None:
+            raise ValueError("--read-credit sets the paths of state reads")
+        for read in model.state_reads.values():
+            read.credit = args.read_credit
+    if args.cell_credit is not None:
+        if not isinstance(model, EventLM) or model.granule_layers is None:
+            raise ValueError("--cell-credit sets the paths of cell layers")
+        for layer in dict.fromkeys(model.granule_layers.values()):
+            layer.credit = args.cell_credit
     generator = torch.Generator(device="cpu").manual_seed(args.seed)
 
     def draw(step):
@@ -1170,6 +1291,9 @@ def main():
         if pulse_counts is not None:
             pulse_counts.clear()
         forward_options = {} if pulse_counts is None else {"memory_pulses": pulse_counts}
+        tape = None
+        if args.echo is not None:
+            tape = forward_options["echo"] = EchoTape(everywhere=args.echo == "all")
         if args.bank_read_rank_weight:
             bank_read_losses = []
             forward_options["bank_read_losses"] = bank_read_losses
@@ -1215,7 +1339,10 @@ def main():
             loss = loss + spike_price * gap + 0.5 * gap.relu().square()
             spike_price = (spike_price + 0.04 * gap.detach()).clamp_min(0)
         optimizer.zero_grad(set_to_none=True)
-        loss.backward()
+        if tape is None:
+            loss.backward()
+        else:
+            echo_backward(loss, logits, targets, tape, feedback, mirror=args.echo_feedback == "mirror")
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         if event:
