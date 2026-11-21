@@ -17,5 +17,24 @@
   "pass_mark": "loop3 passes if its gain over depth 6 is at least half of the gain of depth 12 with the scaled budget over depth 6, and the lower end of its paired 95% interval over depth 6 is above zero. If depth 12 with the scaled budget gains less than 0.010 over depth 6, depth does not help the stack at this scale, and the pilot gives no verdict on loops.",
   "then": "If loop3 passes: feedback fibres from the loop's last cells into its first level on the next pass (the cross-pass message), and then a read across the levels of the present byte (attention over depth), one at a time as arms of their own; a full-size loop after the weekend's GPU runs. Every loop arm reports pulses per byte.",
   "seen_before_recording": "No loop arm has trained. The depth-6 references exist (a: 1.9835 in windows, 1.95134 on validation streams); the depth-12 arms are training and unseen.",
-  "recorded_note": "The time of the commit that recorded this file (95cccd3); an earlier draft named 09:05 by mistake. The first loop arms started at 08:51:07 UTC."
+  "recorded_note": "The time of the commit that recorded this file (95cccd3); an earlier draft named 09:05 by mistake. The first loop arms started at 08:51:07 UTC.",
+  "verdict": {
+    "recorded_utc": "2026-11-21T17:25:48Z",
+    "measure_used": "Averaged validation in windows at 6,000 updates (64 batches), all arms on the server's GPU 1 (loop3 retrained there when the laptop's battery ran out); the stream scores of loop3 paired against arm a and g6 are in jobs/laptop/scores/paired.",
+    "results": {
+      "depth 6 (g6, seeds 20001/20002/20003)": [
+        1.986,
+        1.9855,
+        1.9578
+      ],
+      "depth 12, budget 226,000 (s12b)": 1.8344,
+      "loop3 (seeds 20001/20002)": [
+        1.9389,
+        1.9239
+      ],
+      "loop3-fixed, budget 113,000 (l3f)": 1.9608
+    },
+    "verdict": "loop3 fails its pass mark: it gains 0.047 over depth 6 (0.062 at seed 20002), against half of depth 12's gain of 0.152. A pass of tied levels is worth about a third of a level of its own. The cross-pass message and attention over depth are not built.",
+    "seen_beside": "The plain stack with its budget doubled (g6-b2, v17_candidates) is behind the plain stack at 3,750 updates, so more pulses alone do not help; depth with its pulses does. Whether depth 12 needs its doubled budget is measured by s12 (depth 12 at 113,000) on the GPU."
+  }
 }
