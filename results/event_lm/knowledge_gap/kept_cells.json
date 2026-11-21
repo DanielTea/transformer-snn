@@ -1,0 +1,14 @@
+{
+ "study": "kept_cells",
+ "recorded_utc": "2026-11-21T23:01:14Z",
+ "why": "A read forgets a cell when it leaves the reach, however much it mattered. Kept cells let every head keep a few cells that won many spikes while they could be read, chosen at every 64 bytes of a stream; they fade unless they keep winning. They exist only in streams and add one offset a head (24 parameters on the bed).",
+ "device": "the laptop's GPU (MPS), seed 20001, trained on streams exactly as the second laptop screen",
+ "arms": {
+  "kept32-st-mps": "the delayed bed with 32 kept cells a head (--read-kept 32), every threshold cell kept",
+  "knowkept-st-mps": "128 knowledge cells a head and 893 threshold cells, with 32 kept cells a head"
+ },
+ "references": "g6d-st-mps and know128-st-mps of the second laptop screen",
+ "measure": "The trainer's averaged validation on streams, and the first 2,000,000 bytes of the enwik8 validation split as 16 unbroken streams (lead 8,192, pieces of 512) for all four arms, on the same GPU.",
+ "reading": "Kept cells earn four seeds if kept32 beats g6d-st by at least 0.010 on the long streams, or knowkept beats know128-st by at least 0.010. One seed: a screen. The bed's reach is 256 cells, so the effect is what a read gains from cells beyond 256 bytes.",
+ "seen_before_recording": "Tests and a 12-update smoke run on the laptop CPU; no run of these arms exists."
+}
