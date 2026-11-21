@@ -9,5 +9,13 @@
   },
   "measure": "Averaged validation in windows at every 1,500 updates and at 24,000 (64 batches); power laws loss = E + A t^-alpha fitted from 3,000 updates on, per arm; GPU 0 beside l2048-plastic, started once it runs.",
   "predictions": "From the 6,000-update curves: dn12 ends level with or behind g6 at 24,000, and the Transformer's exponent is larger than both stacks'. If dn12 ends ahead by more than its seed spread, depth at equal parameters scales better than the 6,000-update runs show.",
-  "no_pass_mark": "A diagnostic of scaling: it chooses what the next architecture change must improve."
+  "no_pass_mark": "A diagnostic of scaling: it chooses what the next architecture change must improve.",
+  "amendment": {
+    "recorded_utc": "2026-11-21T19:37:56Z",
+    "arms": {
+      "float6-24k": "the stack's float stand-in at depth 6 (softmax reads, real-valued cells, no pulse budget, as jobs/depth/bed.sh trains float6), 24,000 updates, seeds 20001 and 20002"
+    },
+    "question": "Is the stack's flattening curve a property of spikes or of its layout? If float6-24k keeps falling like tf6-24k while g6-24k flattens, the spiking machinery limits late learning; if float6-24k flattens like g6-24k, the layout of reads and cells does. At 6,000 updates the two were within 0.004 (float6 1.9798, a 1.9835).",
+    "added_before": "Added before any 24,000-update arm has started (they wait for l2048-plastic on GPU 0)."
+  }
 }
