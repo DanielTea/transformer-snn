@@ -26,13 +26,108 @@
     ],
     "seen_before_recording": {
       "stream_scorings_bpb": {
-        "a-8k": 1.95134, "a-64k": 1.95138, "b-last-8k": 1.85686, "b-all-8k": 1.84989, "c-8k": 22.22322,
-        "g-8k (c, rule off)": 1.98415, "c-teach-8k (c, rule off, v15 teach on level 5 at 2^24)": 1.98805,
-        "e8-8k": 1.85283, "e8-teach-8k": 2.03159, "e10-8k": 1.9239, "e10-teach-8k": 1.98318, "f-8k": 1.94802
+        "a-8k": 1.95134,
+        "a-64k": 1.95138,
+        "b-last-8k": 1.85686,
+        "b-all-8k": 1.84989,
+        "c-8k": 22.22322,
+        "g-8k (c, rule off)": 1.98415,
+        "c-teach-8k (c, rule off, v15 teach on level 5 at 2^24)": 1.98805,
+        "e8-8k": 1.85283,
+        "e8-teach-8k": 2.03159,
+        "e10-8k": 1.9239,
+        "e10-teach-8k": 1.98318,
+        "f-8k": 1.94802
       },
       "analyses": "experiments/stream_quarters.py at the 8,192 lead against a, b-all and b-last for b-all, b-last, c, e8, f and g (gains and quarters).",
       "training_logs": "In-window averaged validation of every arm at every evaluation; d up to 4,500 of 6,000 updates."
     },
-    "pending_at_recording": ["f-teach-8k", "c-64k", "b-last-64k", "b-all-64k", "e8-64k", "e10-64k", "f-64k", "d-8k", "d-64k"]
+    "pending_at_recording": [
+      "f-teach-8k",
+      "c-64k",
+      "b-last-64k",
+      "b-all-64k",
+      "e8-64k",
+      "e10-64k",
+      "f-64k",
+      "d-8k",
+      "d-64k"
+    ]
+  },
+  "teach_thresholds": {
+    "chosen_utc": "2026-11-21T00:24:00Z",
+    "rule": "v15's teach threshold re-picked per arm on the first million validation bytes (eval_stream.py --bytes 1000000, 16 streams, lead 8,192), as v15 picked its own; the full split is then scored at the chosen threshold and the remaining 4 million bytes are also reported alone.",
+    "scans": {
+      "a, level 5": {
+        "first_million_validation_bpb": {
+          "2^22": 2.20543,
+          "2^23": 1.96041,
+          "2^24": 1.88735,
+          "2^25": 1.87472,
+          "2^26": 1.88443
+        },
+        "chosen": "2^25"
+      },
+      "a, levels 0-5": {
+        "first_million_validation_bpb": {
+          "2^20": 1.97558,
+          "2^21": 1.86483,
+          "2^22": 1.84391,
+          "2^23": 1.85543,
+          "2^24": 1.87715,
+          "2^25": 1.8996,
+          "2^26": 1.91914
+        },
+        "chosen": "2^22"
+      },
+      "c, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 4.19066,
+          "2^23": 2.52274,
+          "2^24": 2.01261,
+          "2^25": 1.87037,
+          "2^26": 1.8407,
+          "2^27": 1.85068,
+          "2^28": 1.87445
+        },
+        "chosen": "2^26"
+      },
+      "e8, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 4.58917,
+          "2^23": 2.66617,
+          "2^24": 2.05634,
+          "2^25": 1.88463,
+          "2^26": 1.84453,
+          "2^27": 1.85022,
+          "2^28": 1.8724
+        },
+        "chosen": "2^26"
+      },
+      "e10, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 4.18432,
+          "2^23": 2.51659,
+          "2^24": 2.00761,
+          "2^25": 1.86604,
+          "2^26": 1.83655,
+          "2^27": 1.84668,
+          "2^28": 1.87069
+        },
+        "chosen": "2^26"
+      },
+      "f, level 5, rule off": {
+        "first_million_validation_bpb": {
+          "2^22": 2.21912,
+          "2^23": 1.96199,
+          "2^24": 1.8851,
+          "2^25": 1.87125,
+          "2^26": 1.88068
+        },
+        "chosen": "2^25"
+      }
+    },
+    "seen_before_choosing": "only these first-million scans; no full-split teach score at a re-picked threshold existed.",
+    "pending": "all-level teach scans of the trained cells (c, e8, e10, f at 2^22 to 2^27), then their full-split scorings at the chosen setting."
   }
 }
