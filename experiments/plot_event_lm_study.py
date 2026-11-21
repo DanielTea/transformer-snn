@@ -286,6 +286,32 @@ STREAM_FORM_ARMS = (
     ("34.75M full attention, standard shape", "Windows with 256 bytes of history", "test_transformer_history256",
      None, None, STREAM_FORM_REFERENCE, ORANGE),
 )
+# The long-streams study (v16): the same rows at equal training context of 2,048 bytes, from its public records.
+LONG_STREAMS = "event_lm/long_streams"
+LONG_STREAMS_CHECKPOINTS = "event_lm/long_streams_checkpoints.sha256"
+LONG_FORGET, LONG_FLAT, LONG_REFERENCE, LONG_REFERENCE_1024 = (
+    f"checkpoints/long_streams/{folder}/model.pt.averaged" for folder in ("l2048-forget", "l2048-flat", "tf2048",
+                                                                          "tf1024"))
+LONG_STREAMS_ARMS = (
+    ("34.81M SNN stack, windows of 2,048 bytes, forgetting slopes", "Stream, chosen reach, taught output synapses",
+     "l2048-forget.taught-test", None, "l2048-forget.pg19-taught", LONG_FORGET, VIOLET),
+    ("34.81M SNN stack, windows of 2,048 bytes, forgetting slopes", "Stream, chosen reach",
+     "l2048-forget.reach-test", None, "l2048-forget.pg19-reach", LONG_FORGET, VIOLET),
+    ("34.81M SNN stack, windows of 2,048 bytes, forgetting slopes", "Stream, as trained",
+     "l2048-forget.stream-test", None, "l2048-forget.pg19-stream", LONG_FORGET, VIOLET),
+    ("34.81M SNN stack, windows of 2,048 bytes", "Stream, chosen reach, taught output synapses",
+     "l2048-flat.taught-test", None, "l2048-flat.pg19-taught", LONG_FLAT, "#3b2c9c"),
+    ("34.81M SNN stack, windows of 2,048 bytes", "Stream, chosen reach", "l2048-flat.reach-test", None,
+     "l2048-flat.pg19-reach", LONG_FLAT, "#3b2c9c"),
+    ("34.81M SNN stack, windows of 2,048 bytes", "Stream, as trained", "l2048-flat.stream-test", None, None,
+     LONG_FLAT, "#3b2c9c"),
+    ("34.75M full attention, windows of 2,048 bytes", "Windows with 2,032 bytes of history, taught output synapses",
+     "tf2048.taught-test-h2032", 0.07, None, LONG_REFERENCE, ORANGE),
+    ("34.75M full attention, windows of 2,048 bytes", "Windows with 2,032 bytes of history",
+     "tf2048.taught-test-h2032", 0.0, "tf2048.pg19-h2032", LONG_REFERENCE, ORANGE),
+    ("34.75M full attention, windows of 1,024 bytes", "Windows with 1,008 bytes of history",
+     "tf1024.taught-test-h1008", 0.0, "tf1024.pg19-h1008", LONG_REFERENCE_1024, ORANGE),
+)
 TRACE_READ_DRIVE_116326K = (
     ("Original held-charge read", TRACE_READ_DRIVE, "control_s8237",
      f"{TRACE_READ_DRIVE}/native_control_s8237.json", BLUE),
@@ -532,6 +558,45 @@ def read_stream_form():
             "Transformer", "training_targets": 368_640_000, "seeds": [20001], "rows": rows}
 
 
+def read_long_streams():
+    """The long-streams study: the stacks on windows of 2,048 bytes as streams and the Transformers that trained on
+    the same windows, in warmed windows of their training length. Rows whose records are not published are left
+    out."""
+    def scored(name, rate, checkpoint, targets):
+        record = read_result(f"{LONG_STREAMS}/scores/{name}.json")
+        if rate is None:
+            row = next(row for row in record["checkpoints"] if row["checkpoint"] == checkpoint)
+        else:
+            if record["checkpoint"] != checkpoint:
+                raise ValueError(f"{name}: expected {checkpoint}")
+            row = dict(record, **next(row for row in record["fast_output_synapses"] if row["rate"] == rate))
+        if (row["targets"], row["training_targets"]) != (targets, 368_640_000):
+            raise ValueError(f"{name}: {checkpoint} must score {targets:,} targets after 368,640,000 training targets")
+        return row
+
+    rows = []
+    for model, reads, enwik8, rate, pg19, checkpoint, color in LONG_STREAMS_ARMS:
+        if not (RESULTS / f"{LONG_STREAMS}/scores/{enwik8}.json").is_file():
+            continue
+        row = scored(enwik8, rate, checkpoint, CORPORA[0][2])
+        scores = {"enwik8": {"mean": row["bpb"]}}
+        if pg19 and (RESULTS / f"{LONG_STREAMS}/scores/{pg19}.json").is_file():
+            book = read_result(f"{LONG_STREAMS}/scores/{pg19}.json")
+            # A stack's book record holds its checkpoint; a Transformer's names one setting of warmed windows.
+            score = (book["checkpoints"][0]["bpb"] if "checkpoints" in book else book.get("bpb"))
+            if score is not None:
+                scores["pg19_full"] = {"mean": score}
+        rows.append({"model": model, "reads_the_test_as": reads, "parameters": row["parameters"],
+                     "checkpoint": checkpoint, "scores": scores, "color": color})
+    for corpus, _, _ in CORPORA:
+        ordered = sorted((row["scores"][corpus] for row in rows if corpus in row["scores"]),
+                         key=lambda score: score["mean"])
+        for rank, score in enumerate(ordered, start=1):
+            score["rank"] = rank
+    return {"unit": "bits per byte", "protocol": "unbroken_streams for the stacks, causal_warmed_windows for the "
+            "Transformers", "training_targets": 368_640_000, "seeds": [20001], "rows": rows}
+
+
 def stream_table(rows):
     lines = ["| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |",
              "|---|---:|---|---:|---:|---:|---:|"]
@@ -746,7 +811,35 @@ def warmed_table(rows):
     return "\n".join(lines)
 
 
-def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=None, streams=None):
+def long_streams_paragraphs(long_streams):
+    """The section of the long-streams study: the stacks and the Transformers at equal training context."""
+    test = {(row["checkpoint"], row["reads_the_test_as"]): row["scores"]["enwik8"]["mean"]
+            for row in long_streams["rows"]}
+    stack = test[(LONG_FLAT, "Stream, as trained")]
+    reference = test[(LONG_REFERENCE, "Windows with 2,032 bytes of history")]
+    return [
+        "## Long streams at equal training context · 368,640,000 training targets · seed 20001",
+        stream_table(long_streams["rows"]),
+        "![The stack and the Transformer at training windows of 512, 1,024 and 2,048 bytes, test and validation]"
+        "(../results/figures/event_lm_long_streams.png)",
+        "![The gain of the fast synapses against how much of a stream they have read]"
+        "(../results/figures/event_lm_long_streams_reading.png)",
+        "![Validation loss of the stack and the Transformer along their training, at depths 11 and 22]"
+        "(../results/figures/event_lm_long_streams_scaling.png)",
+        "[Measurements, forgetting slopes and limits](LONG_STREAMS.md) · [Trained plasticity](TRAINED_PLASTICITY.md)",
+        "Every model of this comparison trained on windows of 512 bytes for 24,000 updates and on windows of 2,048 "
+        "bytes for the remaining 66,000, from random weights, or on windows of 1,024 bytes where named. A stack reads "
+        "the test as 16 unbroken streams; a chosen reach is the reach that scored best on the first million "
+        "validation bytes. A Transformer reads the same streams in windows of its training length, 16 scored "
+        "bytes after the rest as history. Taught output synapses start at zero in every stream and learn from each "
+        "byte after it was predicted.",
+        f"At equal context the stack is {stack - reference:.4f} bpb behind the Transformer on the enwik8 test. The "
+        "level score of the comparison below came from a stack that trained on longer windows than its "
+        "Transformer read. Every row is one seed.",
+    ]
+
+
+def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=None, streams=None, long_streams=None):
     latest = depth["groups"]["depth"]
     paragraphs = [
         "# Spiking byte model leaderboards",
@@ -827,6 +920,8 @@ def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=Non
             "![Generated pulses with identical output counts within each pair](../results/figures/event_lm_residual_emissions.png)",
         ),
     }
+    if long_streams:
+        paragraphs.extend(long_streams_paragraphs(long_streams))
     if streams:
         test = {(row["checkpoint"], row["reads_the_test_as"]): row["scores"]["enwik8"]["mean"]
                 for row in streams["rows"]}
@@ -859,6 +954,10 @@ def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=Non
             "below the Transformer at its best window. On the validation split it is "
             f"{stack_validation - reference_validation:.4f} above it ({stack_validation:.4f} against "
             f"{reference_validation:.4f}), so the two are level. That stack trained on windows of 1,024 bytes from "
+            "24,000 updates, and the Transformer and the other stack on windows of 512 bytes. The Transformer "
+            "trained on windows of 1,024 bytes, the control, is in the comparison above: against it the stack is "
+            "behind. The three models received identical windows from random weights up to 24,000 updates. Every "
+            "row is one seed." if long_streams else
             "24,000 updates, and the Transformer and the other stack on windows of 512 bytes. A Transformer trained "
             "on windows of 1,024 bytes is the control that this comparison does not have yet. The three models "
             "received identical windows from random weights up to 24,000 updates. Every row is one seed.",
@@ -1564,7 +1663,11 @@ def main():
     if streams:
         summary = RESULTS / STREAM_FORM / "leaderboard.json"
         summary.write_text(json.dumps(streams, indent=2) + "\n", encoding="utf-8")
-    write_leaderboards(data, depth, research, transfers, warmed, clocks, streams)
+    long_streams = read_long_streams() if (RESULTS / LONG_STREAMS_CHECKPOINTS).is_file() else None
+    if long_streams:
+        summary = RESULTS / LONG_STREAMS / "leaderboard.json"
+        summary.write_text(json.dumps(long_streams, indent=2) + "\n", encoding="utf-8")
+    write_leaderboards(data, depth, research, transfers, warmed, clocks, streams, long_streams)
     output = RESULTS / "figures"
     output.mkdir(parents=True, exist_ok=True)
     plot_loss(data, output)
