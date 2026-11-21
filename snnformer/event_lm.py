@@ -268,6 +268,10 @@ class EventLMConfig:
     # They race for the read's budget with the stream's cells, so a read finds what it looks for in the bytes that it
     # reaches or in what training stored there.
     read_knowledge: int = 0
+    # The knowledge cells form one library that the reads of every level reach: the same tags and payloads at every
+    # level, which each level addresses through its own probes and ranks by offsets of its own. A level then reaches
+    # as many knowledge cells as all levels hold, at the synapses of one level's.
+    read_knowledge_shared: bool = False
     read_cap: int | None = None
     read_phases: int = 0
     read_turn: bool = False
@@ -3902,6 +3906,8 @@ class EventLM(nn.Module):
                                             or cfg.read_budget is None))):
             raise ValueError("knowledge cells are a whole number of cells that race beside the stream's own in "
                              "state reads that race for a budget")
+        if not isinstance(cfg.read_knowledge_shared, bool) or (cfg.read_knowledge_shared and not cfg.read_knowledge):
+            raise ValueError("a shared library holds knowledge cells: read_knowledge_shared needs read_knowledge")
         if cfg.read_after is not None:
             below = cfg.depth if cfg.clock_start is None else cfg.clock_start
             if (cfg.carry or cfg.continuous or cfg.read_mode not in _READ_MODES
@@ -3963,6 +3969,12 @@ class EventLM(nn.Module):
                     raise ValueError("the charge that the pacemakers let into a turned probe or tag neuron exceeds "
                                      "the range of exact sums; lower the read cap")
             self.state_reads = self._tied(cfg.read_after, lambda index: _StateRead(cfg))
+            if cfg.read_knowledge_shared:
+                # One library for every level: the reads hold the first read's knowledge tags and payloads, and
+                # keep offsets of their own.
+                first = next(iter(self.state_reads.values()))
+                for read in self.state_reads.values():
+                    read.known_tag, read.known_payload = first.known_tag, first.known_payload
         self.granule_layers = None
         if (cfg.granule_self_gate or cfg.granule_shunt) and cfg.granule_after is None:
             raise ValueError("granule_self_gate and granule_shunt gate the cells of granule layers, and there are none")

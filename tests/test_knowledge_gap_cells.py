@@ -307,3 +307,40 @@ def test_a_saved_run_grows_new_synapses_and_goes_on(monkeypatch, tmp_path, growt
     final = torch.load(tmp_path / "child" / "model.pt", weights_only=True)["state_dict"]
     assert any(not torch.equal(final[key], forked["state_dict"][key]) for key in new if final[key].is_floating_point())
     assert sys.modules["fork_state"] is fork_state
+
+
+_LIBRARY = dict(read_knowledge=8, read_knowledge_shared=True)
+
+
+def test_a_library_of_knowledge_cells_serves_every_level():
+    model = _stack(**_LIBRARY)
+    reads = list(model.state_reads.values())
+    assert reads[0].known_tag is reads[1].known_tag and reads[0].known_payload is reads[1].known_payload
+    assert reads[0].known_offset is not reads[1].known_offset
+    plain = _stack()
+    extra = sum(p.numel() for p in model.parameters()) - sum(p.numel() for p in plain.parameters())
+    # One library of tags and payloads, and offsets for every level.
+    assert extra == 2 * 8 * 32 + 2 * 4 * 8
+    # Both levels' errors reach the shared synapses.
+    tokens = _bytes()
+    model.train()(tokens).float().square().mean().backward()
+    shared = reads[0].known_tag.grad.clone()
+    model.zero_grad()
+    with torch.no_grad():
+        model.state_reads["1"].project.weight.zero_()
+    model(tokens).float().square().mean().backward()
+    assert reads[0].known_tag.grad is not None and not torch.equal(reads[0].known_tag.grad, shared)
+
+
+@pytest.mark.parametrize("cuts", [(160,), (47, 1, 49, 63)])
+def test_a_library_streams_as_one_pass(cuts):
+    model, tokens = _stack(**_LIBRARY).eval(), _bytes()
+    with torch.no_grad():
+        whole = model(tokens)
+        fired, _ = _pieces(model, tokens, cuts)
+    assert torch.equal(fired, whole)
+
+
+def test_a_library_needs_knowledge_cells():
+    with pytest.raises(ValueError, match="library"):
+        EventLM(EventLMConfig(**dict(_STACK, read_knowledge_shared=True)))

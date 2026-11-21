@@ -378,6 +378,8 @@ def build_model(args):
                             granule_experts=getattr(args, "granule_experts", EventLMConfig.granule_experts),
                             granule_active=getattr(args, "granule_active", EventLMConfig.granule_active),
                             read_knowledge=getattr(args, "read_knowledge", EventLMConfig.read_knowledge),
+                            read_knowledge_shared=getattr(args, "read_knowledge_shared",
+                                                          EventLMConfig.read_knowledge_shared),
                             plastic_after=(None if getattr(args, "plastic_levels", None) is None
                                            else tuple(map(int, args.plastic_levels.split(",")))),
                             plastic_rule=getattr(args, "plastic_rule", EventLMConfig.plastic_rule),
@@ -732,6 +734,9 @@ def main():
                         help="every head of a race read with a budget has CELLS knowledge cells beside the stream's "
                              "own: learned tags, payloads and offsets that race for the same budget, so a read finds "
                              "what it looks for in the bytes it reaches or in what training stored")
+    parser.add_argument("--read-knowledge-shared", action="store_true",
+                        help="the knowledge cells form one library that the reads of every level reach, each through "
+                             "its own probes and with offsets of its own")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
