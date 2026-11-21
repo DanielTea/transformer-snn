@@ -1,6 +1,6 @@
 {
  "study": "knowledge_gap",
- "recorded_utc": "2026-11-21T20:27:00Z",
+ "recorded_utc": "2026-11-21T20:20:17Z",
  "why": "The copy probe (results/event_lm/copy_probe/results.json) shows that the full-size stack copies random letters and words better than its Transformer, so the remaining 0.013 is not memory of the context. It is the knowledge and composition that a Transformer keeps in its gated feed-forward units, which were the largest single cost (0.025) in v15's one-change-at-a-time comparison. Four changes aim at that gap, each built so that the stack stays spiking and streaming and each at the bed's parameters.",
  "ideas": {
   "know": "Knowledge cells: every head of every state read has 128 cells that no byte wrote, with learned tags, payloads and offsets held in whole pulses. They race for the read's budget beside the stream's cells, so a read finds what it looks for in the bytes it reaches or in what training stored. The persistent vectors of all-attention layers (Sukhbaatar et al., 2019) are the nearest predecessor; here they are cells in a race of spikes. --read-knowledge 128 --granule-cells 893 (5,248,286).",
