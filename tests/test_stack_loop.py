@@ -141,3 +141,20 @@ def test_the_scorer_sets_a_shared_read_once_for_all_its_passes(monkeypatch):
     # Naming one pass of a looped level would set its other passes too, so it is refused.
     with pytest.raises(ValueError, match="passes"):
         eval_stream.lengthen_reach(_stack(**_LOOP), 4 * window, (0, 2))
+
+
+def test_a_loop_keeps_the_full_stacks_delayed_fibres_and_forgetting_exact_in_a_stream():
+    # The released stack's options: cells and tags that hear every channel again one to three bytes later, and
+    # reads that learn a forgetting slope and reach further in a stream than their window.
+    model = _stack(dtype=torch.float64, **dict(_LOOP, granule_fan=128, granule_delays=4, read_delays=4,
+                                               read_forget=True, read_reach=96))
+    with torch.no_grad():
+        for read in dict.fromkeys(model.state_reads.values()):
+            read.forget.copy_(torch.linspace(-1.0, 0.5, read.heads))
+    tokens = _bytes(length=200)
+    with torch.no_grad():
+        window = model(tokens)
+    whole, _ = _pieces(model, tokens, (200,))
+    assert torch.equal(window, whole)
+    for cuts in ((1,) * 200, (7,) * 28 + (4,), (128, 72)):
+        assert torch.equal(_pieces(model, tokens, cuts)[0], whole)
