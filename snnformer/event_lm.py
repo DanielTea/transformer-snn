@@ -63,6 +63,8 @@ _TEACH_UNITS = 1 << 16
 _TEACH_LIMIT = 1 << 35
 _TEACH_SPIKES = 4096
 _TEACH_FIBRES = 1 << 17
+# Fast synapses consolidate through at most this many stages.
+_CASCADE_STAGES = 6
 # The rules by which training runs fast output synapses in its windows, the largest decay shift of their sizes, and
 # how far back the shuffled control takes the error that teaches a byte.
 _PLASTIC_RULES = ("base-error", "chunked", "normalized")
@@ -282,6 +284,12 @@ class EventLMConfig:
     teach_after: tuple[int, ...] | None = None
     teach_threshold: int = 0
     teach_budget: int = 256
+    # Fast output synapses that consolidate themselves: every synapse holds this many charges, in capacities of 1, 2,
+    # 4, ..., and charge flows between neighbouring stages through a conductance that falls fourfold from each pair to
+    # the next. A byte teaches the first charge, which the output neurons hear. What a byte taught fades from it as a
+    # power of the bytes since, and never wholly: the last stage keeps its share for the rest of the stream. One
+    # stage is the rule of fast synapses that do not consolidate.
+    teach_cascade: int = 1
     # Fast output synapses that training runs in every window as a stream runs them, from the cells after these
     # levels. Each level learns a gain, from zero, that sets the threshold of its fast neurons. Under the
     # "base-error" rule the race of the output neurons' own counts, without the fast spikes, decides what an arriving
@@ -2030,6 +2038,9 @@ class TaughtState:
     errors: torch.Tensor | None = None
     pending: torch.Tensor | None = None
     norm: torch.Tensor | None = None
+    # Fast synapses that consolidate themselves: the charges of their slower stages, as [stages - 1, batch,
+    # vocabulary, fibres].
+    deep: torch.Tensor | None = None
 
 
 @dataclass
@@ -3886,29 +3897,32 @@ class EventLM(nn.Module):
     def _taught_levels(cfg):
         """The levels whose cells the fast output synapses hear, in order, or None for an output without them."""
         if cfg.teach_after is None:
+            if cfg.teach_cascade != 1:
+                raise ValueError("stages of charge belong to fast output synapses given after training")
             return None
         if cfg.plastic_after is not None:
             raise ValueError("a stack trained with fast output synapses keeps its own; give none after training")
         levels = () if cfg.granule_after is None else cfg.granule_after
         whole = all(isinstance(value, int) and not isinstance(value, bool) and value >= 1
-                    for value in (cfg.teach_threshold, cfg.teach_budget))
+                    for value in (cfg.teach_threshold, cfg.teach_budget, cfg.teach_cascade))
         if (not cfg.stack or not cfg.teach_after or len(set(cfg.teach_after)) != len(cfg.teach_after)
+                or cfg.teach_cascade > _CASCADE_STAGES
                 or any(level not in levels for level in cfg.teach_after) or not whole
                 or cfg.teach_budget > _TEACH_SPIKES
                 or len(cfg.teach_after) * cfg.granule_clusters * cfg.granule_cells > _TEACH_FIBRES):
             raise ValueError("the fast output synapses of a stack hear the cells after distinct levels that have a "
-                             "cell layer, up to 131,072 of them, under a whole threshold and up to 4,096 teaching "
-                             "spikes a byte")
+                             "cell layer, up to 131,072 of them, under a whole threshold, with up to 4,096 teaching "
+                             "spikes a byte and one to six stages of charge")
         return tuple(sorted(cfg.teach_after))
 
-    def teach(self, levels, threshold=0, budget=EventLMConfig.teach_budget):
+    def teach(self, levels, threshold=0, budget=EventLMConfig.teach_budget, cascade=1):
         """Give the output its fast synapses from the cells after ``levels``, or take them away with None.
 
         The fast synapses hold nothing that training has set: they start silent in every stream. A stack can
         therefore be given them after its training, and it then learns along every stream that it reads.
         """
         cfg = replace(self.cfg, teach_after=None if levels is None else tuple(levels), teach_threshold=threshold,
-                      teach_budget=budget)
+                      teach_budget=budget, teach_cascade=cascade)
         self.teach_after = self._taught_levels(self._unrolled(cfg))
         self.cfg = cfg
 
@@ -4073,6 +4087,7 @@ class EventLM(nn.Module):
         first = stream.position - steps
         budget, freeze = self.cfg.teach_budget, self.cfg.teach_freeze_after
         trained = self.plastic_after is not None
+        cascade = self.cfg.teach_cascade
         rule = self.cfg.plastic_rule if trained else None
         shift = self.cfg.plastic_decay_shift if trained else 0
         shuffle = trained and self.cfg.plastic_shuffle
@@ -4099,6 +4114,8 @@ class EventLM(nn.Module):
                     taught.pending = torch.zeros_like(taught.fast)
                 if rule == "normalized":
                     taught.norm = heard.new_zeros(heard.shape[0], heard.shape[-1])
+                if cascade > 1:
+                    taught.deep = heard.new_zeros(cascade - 1, *taught.fast.shape)
             elif taught.fast.shape[0] != heard.shape[0]:
                 raise ValueError("the state belongs to another number of streams")
             scale = math.log(2) / (8 * self.cfg.resolution)
@@ -4130,6 +4147,8 @@ class EventLM(nn.Module):
                             if rule == "normalized":
                                 taught.norm -= (taught.norm / (1 << shift)).floor()
                         taught.fast.addcmul_(missed[:, :, None], taught.active[:, None, :])
+                        if cascade > 1:
+                            self._consolidate(taught, first + step)
                         if rule == "normalized":
                             taught.norm += taught.active.abs()
                             if taught.norm.amax() >= _NORM_LIMIT:
@@ -4139,6 +4158,10 @@ class EventLM(nn.Module):
                     taught.unbounded += 1
                     if taught.unbounded >= interval:
                         taught.fast.clamp_(-_TEACH_LIMIT, _TEACH_LIMIT)
+                        if taught.deep is not None:
+                            # A stage of capacity 2 ** k holds up to that many times a synapse's bound.
+                            for stage, charges in enumerate(taught.deep, start=1):
+                                charges.clamp_(-(_TEACH_LIMIT << stage), _TEACH_LIMIT << stage)
                         taught.unbounded = 0
                 centred = heard[:, step] - taught.mean
                 taught.heard += 1
@@ -4176,6 +4199,32 @@ class EventLM(nn.Module):
                 else:
                     taught.said = said[:, step] + fired[:, step]
         return counts + fired.to(counts.dtype)
+
+    @staticmethod
+    def _consolidate(taught, position):
+        """Let charge flow between the stages of self-consolidating fast synapses, after the byte at ``position``
+        has taught the first stage.
+
+        Stage k (from 0) holds a charge q_k in a capacity of 2 ** k, at the level q_k / 2 ** k. Every 2 ** (k + 3)
+        bytes the share 1 / 2 ** (k + 1) of the difference between the levels of stages k and k + 1 flows from the
+        higher to the lower, rounded to the nearest whole charge: (2 q_k - q_(k+1)) / 4 ** (k + 1). The conductance
+        between two stages thus falls fourfold from each pair to the next while the capacity doubles, and each
+        stage takes about eight times as long to fill as the one before it. All flows of a step are found from the
+        charges before it and none overshoots, so no level ever leaves the range of those that teaching set. The
+        first charge, which the output neurons hear, keeps 1/3, 1/7, 1/15, ... of a lesson as it spreads: a share
+        that falls as about the cube root of the lesson's age, down to 1 / (2 ** stages - 1), which the last stage
+        keeps for the rest of the stream. Every quantity is a whole number below 2 ** 53, and the steps follow the
+        bytes of the stream, so a stream cut anywhere consolidates alike."""
+        stages = [taught.fast, *taught.deep]
+        flows = []
+        for index in range(len(stages) - 1):
+            if position % (8 << index) == 0:
+                # q_(k+1) - 2 q_k over -4 ** (k + 1), in steps that are each exact.
+                flow = torch.add(stages[index + 1], stages[index], alpha=-2).div_(-(4 << (2 * index))).round_()
+                flows.append((index, flow))
+        for index, flow in flows:
+            stages[index] -= flow
+            stages[index + 1] += flow
 
     def _race_errors(self, said, successors, first):
         """What the byte after each of some bytes teaches: its budget of spikes less those of the race on the
@@ -4607,7 +4656,8 @@ class EventLM(nn.Module):
                                  total=None if taught.total is None else taught.total.clone(),
                                  errors=None if taught.errors is None else taught.errors.clone(),
                                  pending=None if taught.pending is None else taught.pending.clone(),
-                                 norm=None if taught.norm is None else taught.norm.clone())
+                                 norm=None if taught.norm is None else taught.norm.clone(),
+                                 deep=None if taught.deep is None else taught.deep.clone())
             state = StreamState(state.position, {key: copy.copy(tape) for key, tape in state.reads.items()},
                                 {key: copy.copy(fibres) for key, fibres in state.cells.items()}, taught)
         return self(tokens, memory_pulses=memory_pulses, stream=state), state

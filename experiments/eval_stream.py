@@ -168,6 +168,9 @@ def main():
     parser.add_argument("--teach-threshold", type=int, help="units of fast charge to one spike of an output neuron")
     parser.add_argument("--teach-budget", type=int, default=EventLMConfig.teach_budget,
                         help="teaching spikes of every arriving byte")
+    parser.add_argument("--teach-cascade", type=int, default=EventLMConfig.teach_cascade, metavar="STAGES",
+                        help="stages of charge in every fast output synapse, through which what a byte taught "
+                             "consolidates and fades as a power of its age; one stage does not consolidate")
     parser.add_argument("--plastic-off", action="store_true",
                         help="score a stack trained with fast output synapses without them, to see how much the "
                              "rest of it leans on them")
@@ -193,6 +196,8 @@ def main():
         parser.error("--forget-slope is a finite slope for the cells that --reach adds")
     if (args.teach_levels is None) != (args.teach_threshold is None):
         parser.error("--teach-levels and --teach-threshold go together")
+    if args.teach_cascade != 1 and args.teach_levels is None:
+        parser.error("--teach-cascade gives stages to the fast synapses of --teach-levels")
     if args.teach_freeze_after is not None and args.teach_freeze_after < 0:
         parser.error("--teach-freeze-after counts bytes")
     if args.json.exists():
@@ -251,7 +256,10 @@ def main():
                        "shuffled": model.cfg.plastic_shuffle, "teaching_spikes_per_byte": model.cfg.teach_budget,
                        "gains": model.plastic_gains.tolist()}
         if args.teach_levels is not None:
-            model.teach(args.teach_levels, args.teach_threshold, args.teach_budget)
+            try:
+                model.teach(args.teach_levels, args.teach_threshold, args.teach_budget, args.teach_cascade)
+            except ValueError as error:
+                parser.error(f"{path}: {error}")
         if args.teach_freeze_after is not None:
             model.freeze_teaching_after(args.teach_freeze_after)
         bits, targets = score(model, streams, args.piece, device)
@@ -269,7 +277,8 @@ def main():
             row["forget_slope"] = args.forget_slope
         if args.teach_levels is not None:
             row["taught"] = {"levels": sorted(args.teach_levels), "threshold": args.teach_threshold,
-                             "teaching_spikes_per_byte": args.teach_budget}
+                             "teaching_spikes_per_byte": args.teach_budget,
+                             **({"stages": args.teach_cascade} if args.teach_cascade != 1 else {})}
         if trained:
             row["plastic_silenced" if args.plastic_off else "plastic"] = plastic
         if args.teach_freeze_after is not None:
