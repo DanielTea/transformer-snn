@@ -5,37 +5,41 @@ neurons exchange signed spike counts over fixed axons, and
 local charge holds history. Every release is measured against
 a full-attention Transformer of the same size and training.
 
-The newest model, **v15**, is a spike-only stack that reads a
-**stream**. Each of its eleven levels is a state read of eight
-heads and then a layer of threshold cells, which is the layout
-of a Transformer in spike parts, and it carries its state from
-byte to byte. Read as unbroken streams, the released stack
-scores **1.141 bits per byte** on the full enwik8 test split.
-The Transformer of the same size and training scores 1.144 with
-the window that suits it best.
+The newest release, **v16**, measures the spike-only stack
+against Transformers trained on its own window lengths, and at
+equal training context the stack is **behind**. Read as
+unbroken streams that reach 2,048 cells back, the stack trained
+on windows of 2,048 bytes scores **1.139 bits per byte** on the
+full enwik8 test split. The Transformer of the same size and
+training, reading windows of 2,048 bytes, scores **1.107**.
 
-![Complete enwik8 test and validation of the two stacks as streams and of the Transformer in warmed windows](results/figures/event_lm_stream_form.png)
+![The stack and the Transformer at training windows of 512, 1,024 and 2,048 bytes, test and validation](results/figures/event_lm_long_streams.png)
 
-The two are **level**. On the validation split the order turns,
-1.169 against 1.163, and on 16 PG-19 books they are 0.002 apart.
-The stack is level only as a stream, and only with a Transformer
-that reads 512 bytes: it trained on windows of 1,024 bytes for
-its last 66,000 updates, and its reads reach 4,096 cells back.
-The same stack trained on windows of 512 bytes is 0.027 behind,
-and a Transformer trained on windows of 1,024 bytes is still
-training as the control. The v15 weights are release assets, and
-the model that runs from a clone is v11.
+The gap is 0.041, 0.035 and 0.032 bits per byte on the test
+split at windows of 512, 1,024 and 2,048 bytes, and 0.046, 0.042
+and 0.038 on validation. v15's level score came from a stack
+that trained on longer windows than its Transformer read, and
+this release corrects it. Both models gain about half as much
+from each doubling of the window as from the last, so longer
+windows will not close the gap. What the stack has that the
+Transformer has not is the stream: its fast synapses learn while
+reading, and on books their gain grows as the square root of the
+text read. The v16 weights are release assets, and the model
+that runs from a clone is v11.
 
 | Release | Adds | enwik8 test | Transformer | Scored in |
 |---|---|---:|---:|---|
+| [v16](#v16-long-streams) | Transformers on the stack's window lengths, forgetting slopes, fast synapses trained in the loop | 1.139 | **1.107** | Unbroken streams; windows of 2,048 bytes |
 | [v15](#v15-a-stack-that-reads-a-stream) | A stack of state reads and threshold cells that reads a stream | **1.141** | 1.144 | Unbroken streams |
 | [v14](#v14-read-clocks-and-the-address-rate) | A faster address rate and clock cells for the read heads | 1.244 | 1.182 | 512-byte windows |
 | [v13](#v13-state-reads-and-race-cells) | State reads and race cells on delayed fibres | 1.262 | 1.182 | 512-byte windows |
 | [v12](#v12-coasting-read-heads) | Read heads on a tape of the stream | 1.414 | 1.182 | One continuous stream |
 | [v11](#v11-surprise-clock-and-fast-synapses) | Fast synapses written by error spikes | 1.645 | 1.704 | One continuous stream |
 
-Each Transformer has the size and the training of its row and
-reads 512 bytes. v15 to v12 have about 34.8M parameters and
+Each Transformer has the size and the training of its row. The
+Transformer of v16 trained on windows of 2,048 bytes from 24,000
+updates, as its stack did, and reads 2,048; every other one
+reads 512 bytes. v16 to v12 have about 34.8M parameters and
 368.64M training targets from random weights. The Transformer of
 v15 has the standard shape and trained under the rotated
 optimizer of the spiking models. It reads a stream in windows of
@@ -49,11 +53,72 @@ v11 has 25.79M parameters and 140.90M targets. Its fast synapses
 carry the whole stream, and with the same synapses on its output
 the v11 Transformer scores 1.578. Every arm is one seed.
 
-[Stream-form study](docs/STREAM_FORM.md) ·
-[Model card](models/spiking-byte-lm-v15/README.md) ·
+[Long-streams study](docs/LONG_STREAMS.md) ·
+[Trained plasticity](docs/TRAINED_PLASTICITY.md) ·
+[Model card](models/spiking-byte-lm-v16/README.md) ·
 [Leaderboard](docs/LEADERBOARD.md) ·
-[Research handoff](docs/V15_HANDOFF.md) ·
-[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v15)
+[Research handoff](docs/V16_HANDOFF.md) ·
+[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v16)
+
+## v16: long streams
+
+The v16 study asks what v15's level score was worth. Its
+Transformers train exactly as its stacks do, on windows of 512
+bytes for 24,000 updates and on windows of 1,024 or 2,048 bytes
+for the remaining 66,000, and read the test in windows of their
+training length.
+
+| Trained from scratch, 368.64M targets | Reads the text as | enwik8 test | enwik8 validation |
+|---|---|---:|---:|
+| 34.81M SNN stack, windows of 2,048 bytes | A stream, as trained | 1.13903 | 1.16870 |
+| | A stream reaching 8,192 cells at levels 4 to 7, with taught output synapses | 1.13472 | 1.16660 |
+| 34.75M full attention, windows of 2,048 bytes | Windows, 2,032 bytes of history before 16 scored | **1.10669** | **1.13033** |
+| | With taught output synapses | 1.10321 | 1.12901 |
+| 34.81M SNN stack, windows of 1,024 bytes (v15) | A stream, as trained | 1.15359 | 1.18278 |
+| 34.75M full attention, windows of 1,024 bytes | Windows, 1,008 bytes of history before 16 scored | 1.11820 | 1.14104 |
+
+<!-- l2048-forget rows -->
+
+The stack is 0.0323 behind on the test at 2,048 bytes, with a
+paired 95% interval of 0.0314 to 0.0333, and 0.0384 behind on
+validation (0.0374 to 0.0394). With fast output synapses on both
+models it is 0.0315 and 0.0376 behind. A stream lets the stack
+read further than it trained at no cost, which gave v15 its
+level score at 1,024 bytes; at 2,048 bytes a longer reach no
+longer helps. Every row is one seed.
+
+![On books the gain of the fast synapses grows as the square root of the text read](results/figures/event_lm_long_streams_reading.png)
+
+Every head of a read now has a **forgetting slope**: a cell
+beyond the window loses charge for every doubling of its age, so
+its share of the read falls as a power of its age. Set at
+scoring on v15's released stack, a slope of −1 at a reach of
+16,384 cells gains 0.008 on both splits. On 16 PG-19 books, the
+gain of v15's fast output synapses grows from 0.004 bits per
+byte in the first 8 KB to 0.028 after 128 to 256 KB, as the
+square root of the text read; on enwik8 it stays level. Squared
+and gated cells that multiply charges collapsed in training. A
+study of fast synapses trained in the loop passed its go/no-go:
+cells trained with a decaying rule make better keys for v15's
+rule, by 0.013 bits per byte on the test bed, and the full-size
+run is training.
+
+![The stack learns faster at first, the Transformer for longer](results/figures/event_lm_long_streams_scaling.png)
+
+Along every axis that the weekend's runs measure, the
+Transformer's curve is at least as steep as the stack's. The
+stack leads for the first 7,500 updates and then falls behind;
+doubling the depth gains the Transformer about 0.04 bits per
+byte and the stack 0.02. Scaling this design will not close the
+gap, and the next step has to change the stack.
+[How the two models scale](docs/LONG_STREAMS.md#how-the-two-models-scale)
+
+[Long-streams study](docs/LONG_STREAMS.md) ·
+[Trained plasticity](docs/TRAINED_PLASTICITY.md) ·
+[Leaderboard](docs/LEADERBOARD.md) ·
+[Model card](models/spiking-byte-lm-v16/README.md) ·
+[Research handoff](docs/V16_HANDOFF.md) ·
+[Checkpoint release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v16)
 
 ## v15: a stack that reads a stream
 
