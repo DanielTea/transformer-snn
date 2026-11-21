@@ -1,11 +1,79 @@
 {
-  "study": "test_bed_with_delays",
-  "recorded_utc": "2026-11-21T19:45:05Z",
-  "why": "Copying decides the small test bed: of four seeds of the plain stack only the best (1.9578, the others 1.983 to 1.986) learns to copy, and the 12-level stack that copies most scores best (results/event_lm/copy_probe/results.json). The full-size stack, which copies better than its Transformer, has delayed fibres that let a read match the bytes before a cell in one step (--read-delays 4 --granule-delays 4); the test bed has none. Whether copying forms is a lottery there, and its 0.028 spread across seeds drowns effects of 0.01.",
-  "arms": {
-    "g6d": "the plain test bed with --read-delays 4 --granule-delays 4, as the full-size stack has them, seeds 20001 to 20004"
+ "study": "test_bed_with_delays",
+ "recorded_utc": "2026-11-21T19:45:05Z",
+ "why": "Copying decides the small test bed: of four seeds of the plain stack only the best (1.9578, the others 1.983 to 1.986) learns to copy, and the 12-level stack that copies most scores best (results/event_lm/copy_probe/results.json). The full-size stack, which copies better than its Transformer, has delayed fibres that let a read match the bytes before a cell in one step (--read-delays 4 --granule-delays 4); the test bed has none. Whether copying forms is a lottery there, and its 0.028 spread across seeds drowns effects of 0.01.",
+ "arms": {
+  "g6d": "the plain test bed with --read-delays 4 --granule-delays 4, as the full-size stack has them, seeds 20001 to 20004"
+ },
+ "measure": "Averaged validation in windows at 6,000 updates (64 batches) and the copy probe (experiments/copy_probe.py) on each seed; GPU 1.",
+ "pass_mark": "The delayed test bed replaces the plain one for cell and credit experiments if all four seeds copy (second copy of random words at least 0.5 bits a byte below the first) and its four validation scores span at most half of the plain bed's 0.028.",
+ "seen_before_recording": "The copy probe on the plain test bed and the full-size models; no run of g6d exists.",
+ "results": {
+  "recorded_utc": "2026-11-21T20:24:00Z",
+  "validation": {
+   "20001": 1.8664,
+   "20002": 1.8496,
+   "20003": 1.8706,
+   "20004": 1.8507
   },
-  "measure": "Averaged validation in windows at 6,000 updates (64 batches) and the copy probe (experiments/copy_probe.py) on each seed; GPU 1.",
-  "pass_mark": "The delayed test bed replaces the plain one for cell and credit experiments if all four seeds copy (second copy of random words at least 0.5 bits a byte below the first) and its four validation scores span at most half of the plain bed's 0.028.",
-  "seen_before_recording": "The copy probe on the plain test bed and the full-size models; no run of g6d exists."
+  "plain_bed": {
+   "20001": 1.986,
+   "20002": 1.9855,
+   "20003": 1.9578,
+   "20004": 1.9829
+  },
+  "spread": 0.021,
+  "copy_probe_bits_a_byte": {
+   "20001": {
+    "letters": [
+     8.011,
+     5.313,
+     5.244
+    ],
+    "words": [
+     3.642,
+     2.22,
+     2.128
+    ]
+   },
+   "20002": {
+    "letters": [
+     8.068,
+     4.216,
+     4.099
+    ],
+    "words": [
+     3.641,
+     1.88,
+     1.754
+    ]
+   },
+   "20003": {
+    "letters": [
+     7.814,
+     5.104,
+     5.036
+    ],
+    "words": [
+     3.636,
+     2.267,
+     2.166
+    ]
+   },
+   "20004": {
+    "letters": [
+     8.061,
+     4.175,
+     4.064
+    ],
+    "words": [
+     3.63,
+     1.851,
+     1.737
+    ]
+   },
+   "columns": "first copy, second copy, second copy after its first 8 bytes"
+  },
+  "verdict": "All four seeds copy: the second copy of random words is 1.37 to 1.78 bits a byte below the first, and the delayed bed scores 0.11 below the plain bed at every seed. Its four scores span 0.021, more than half of the plain bed's 0.028, so by its mark it does not replace the plain bed. The spread still follows copying, now its strength rather than whether it forms: seeds 20002 and 20004 copy random letters at 4.2 bits a byte and score 1.850, seeds 20001 and 20003 at 5.1 to 5.3 and score 1.866 to 1.871."
+ }
 }

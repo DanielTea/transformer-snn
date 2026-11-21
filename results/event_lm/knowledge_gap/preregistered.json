@@ -1,0 +1,41 @@
+{
+ "study": "knowledge_gap",
+ "recorded_utc": "2026-11-21T20:27:00Z",
+ "why": "The copy probe (results/event_lm/copy_probe/results.json) shows that the full-size stack copies random letters and words better than its Transformer, so the remaining 0.013 is not memory of the context. It is the knowledge and composition that a Transformer keeps in its gated feed-forward units, which were the largest single cost (0.025) in v15's one-change-at-a-time comparison. Four changes aim at that gap, each built so that the stack stays spiking and streaming and each at the bed's parameters.",
+ "ideas": {
+  "know": "Knowledge cells: every head of every state read has 128 cells that no byte wrote, with learned tags, payloads and offsets held in whole pulses. They race for the read's budget beside the stream's cells, so a read finds what it looks for in the bytes it reaches or in what training stored. The persistent vectors of all-attention layers (Sukhbaatar et al., 2019) are the nearest predecessor; here they are cells in a race of spikes. --read-knowledge 128 --granule-cells 893 (5,248,286).",
+  "branch": "Branching dendrites: every cell's 256 fibres feed four branches of 64, each passing on only the charge above a learned threshold of its own, and the body fires for the sum, the two-layer neuron of Poirazi and Mel (2003). A cell then answers to inputs that arrive together on one branch. --granule-branches 4 --granule-cells 1014 (5,248,772).",
+  "apical": "Apical bursts: every cell has a tuft of 64 synapses on what its level's read brought to the stream; each threshold of the tuft's charge adds one more copy of the spikes the body fires for its own fibres, up to three, and the tuft alone fires nothing, after the bursts of layer-5 pyramidal cells (Larkum, 1999). The cell's answer is a product of the stream and the read's news. The tufts start silent. --granule-apical 64 --granule-cells 909 (5,250,302).",
+  "experts": "Racing experts: the cells form four groups, each with a router cell on the same fibres; the two router cells that would fire first win and the pool silences the others, so half of the groups speak at a byte. A router cell's threshold climbs while it wins more than half of the bytes and sinks while it wins fewer. --granule-experts 4 --granule-active 2 --granule-cells 1020 (5,249,048)."
+ },
+ "bed": "the delayed test bed g6d (--read-delays 4 --granule-delays 4 on the plain test bed), 5,249,060 parameters",
+ "why_this_bed": "By its pre-registered mark the delayed bed does not replace the plain one (its seeds span 0.021, more than half of 0.028; results/event_lm/v17_candidates/test_bed_with_delays.json). The four ideas are tested on it all the same, and this is recorded before any of their runs exists: on the plain bed only one seed of four learns to copy, so a paired gain there mostly says whether copying formed, and these ideas aim at knowledge, not copying. Every seed of the delayed bed copies, and the full-size stack has the same delayed fibres.",
+ "references": {
+  "20001": 1.8664,
+  "20002": 1.8496,
+  "20003": 1.8706,
+  "20004": 1.8507
+ },
+ "arms": {
+  "know-s1": "know at seed 20001",
+  "know-s2": "know at seed 20002",
+  "know-s3": "know at seed 20003",
+  "know-s4": "know at seed 20004",
+  "branch-s1": "branch at seed 20001",
+  "branch-s2": "branch at seed 20002",
+  "branch-s3": "branch at seed 20003",
+  "branch-s4": "branch at seed 20004",
+  "apical-s1": "apical at seed 20001",
+  "apical-s2": "apical at seed 20002",
+  "apical-s3": "apical at seed 20003",
+  "apical-s4": "apical at seed 20004",
+  "experts-s1": "experts at seed 20001",
+  "experts-s2": "experts at seed 20002",
+  "experts-s3": "experts at seed 20003",
+  "experts-s4": "experts at seed 20004"
+ },
+ "measure": "Averaged validation in windows at 6,000 updates (64 batches), trained exactly as g6d was (ctx 256, batch 16, lr 3e-4, rotated Adam, weight average 0.999, pulse budget 113,000), on the server's GPUs, code at the commit that records this file, and the copy probe on every averaged model.",
+ "pass_mark": "An idea passes if it is ahead of g6d at the same seed in at least three of four seeds and its mean paired gain is at least 0.010, the mark of results/event_lm/v17_candidates/four_seeds.json. A pass nominates it for full size; it does not by itself claim a gain at full size.",
+ "full_size": "Knowledge cells and apical tufts can join a saved state: tufts start silent, and knowledge cells start far behind in the race. A passing one of them is forked from p-forget at 24,000 updates onto windows of 2,048 bytes as l2048-forget was and trained to 90,000 updates, its new synapses added to l2048-forget's (the comparison reports the extra parameters). Branching dendrites and racing experts change what every cell fires and wait for a window with time to train from scratch.",
+ "seen_before_recording": "The four seeds of g6d and their copy probe; no run of any idea exists beyond four laptop updates that checked the trainer."
+}

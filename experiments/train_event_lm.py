@@ -373,6 +373,11 @@ def build_model(args):
                             granule_shunt=getattr(args, "granule_shunt", EventLMConfig.granule_shunt),
                             output_tied=getattr(args, "tied_output", EventLMConfig.output_tied),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
+                            granule_branches=getattr(args, "granule_branches", EventLMConfig.granule_branches),
+                            granule_apical=getattr(args, "granule_apical", EventLMConfig.granule_apical),
+                            granule_experts=getattr(args, "granule_experts", EventLMConfig.granule_experts),
+                            granule_active=getattr(args, "granule_active", EventLMConfig.granule_active),
+                            read_knowledge=getattr(args, "read_knowledge", EventLMConfig.read_knowledge),
                             plastic_after=(None if getattr(args, "plastic_levels", None) is None
                                            else tuple(map(int, args.plastic_levels.split(",")))),
                             plastic_rule=getattr(args, "plastic_rule", EventLMConfig.plastic_rule),
@@ -723,6 +728,10 @@ def main():
     parser.add_argument("--read-forget-rate", type=float, default=EventLMConfig.read_forget_rate,
                         help="the forgetting slope counts this many times on top of the address rate; 0 holds "
                              "it at nothing, as the control of a fork")
+    parser.add_argument("--read-knowledge", type=int, default=EventLMConfig.read_knowledge, metavar="CELLS",
+                        help="every head of a race read with a budget has CELLS knowledge cells beside the stream's "
+                             "own: learned tags, payloads and offsets that race for the same budget, so a read finds "
+                             "what it looks for in the bytes it reaches or in what training stored")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
@@ -774,6 +783,19 @@ def main():
                         help="with --granule-gate, the gate is a shunting conductance: k gate spikes let in the share "
                              "k / (k + gate) of the collected charge, so a body never fires more than a plain cell; "
                              "with --granule-self-gate a cell fires about k * k / (k + 1) for k thresholds")
+    parser.add_argument("--granule-branches", type=int, default=EventLMConfig.granule_branches, metavar="BRANCHES",
+                        help="the dendrite of every plain granule cell branches BRANCHES times: each branch sums an "
+                             "equal share of the cell's fibres and passes on only the charge above a threshold of its "
+                             "own, and the body fires for the sum")
+    parser.add_argument("--granule-apical", type=int, default=EventLMConfig.granule_apical, metavar="SYNAPSES",
+                        help="every plain granule cell has an apical tuft of SYNAPSES synapses on what the level's "
+                             "read brought to the stream: each threshold of its charge adds one more copy of the "
+                             "cell's own spikes, up to three, and the tuft alone fires nothing")
+    parser.add_argument("--granule-experts", type=int, default=EventLMConfig.granule_experts, metavar="GROUPS",
+                        help="the plain cells of a granule cluster form GROUPS equal groups, each with a router cell "
+                             "on the cluster's fibres; only the groups whose routers win the race let spikes out")
+    parser.add_argument("--granule-active", type=int, default=EventLMConfig.granule_active, metavar="GROUPS",
+                        help="router cells that win the race of a cluster at every byte")
     parser.add_argument("--granule-veto", type=int, default=EventLMConfig.granule_veto, metavar="STEPS",
                         help="every granule cell has a veto dendrite on the same fibres that does not fire: its "
                              "charge closes the cell in STEPS steps over the charge of one whole spike; no veto "
