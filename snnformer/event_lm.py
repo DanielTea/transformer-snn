@@ -2264,6 +2264,11 @@ class _StateRead(nn.Module):
         cap = _HIDDEN_CAP * cfg.resolution
         # A payload pulse of a single addressed cell arrives as this many read pulses.
         self.read_resolution = cfg.resolution if cfg.read_resolution is None else cfg.read_resolution
+        # A diagnostic of training only, never saved: the paths by which the read passes its error down to the
+        # stream it hears. None: all of them; "probe": through its probes alone, the byte that it reads for;
+        # "memory": through its tags and payloads alone, the cells of earlier bytes that it reads; "residual": through
+        # neither, so that the stream below learns only from what passes the read unchanged.
+        self.credit = None
         self.delays, self.delay_probes = cfg.read_delays, cfg.read_delay_probes
         if self.mode != "age":
             # A neuron that hears the late fibres has a second synapse from every channel.
@@ -2392,14 +2397,20 @@ class _StateRead(nn.Module):
         of a stream before these, for the late fibres."""
         if self.mode == "age":
             return None, None, self._unit(self.payload(spikes)) * self.read_resolution
-        heard = self.heard(spikes, before)
-        probe, tag = self.probe(heard if self.delay_probes else spikes), self.tag(heard)
+        if self.credit is None:
+            for_probe = for_memory = spikes
+        else:
+            for_probe = spikes if self.credit == "probe" else spikes.detach()
+            for_memory = spikes if self.credit == "memory" else spikes.detach()
+        heard = self.heard(for_memory, before)
+        probe = self.probe(self.heard(for_probe, before) if self.delay_probes else for_probe)
+        tag = self.tag(heard)
         if self.phases:
             # The pacemakers charge the probe and tag neurons beside the stream.
             beats = self.phase_counts(spikes.shape[1]).to(spikes.dtype)
             probe, tag = probe + self.probe_phase(beats), tag + self.tag_phase(beats)
         if self.mode == "soft":
-            probe, tag, payload = (self._unit(drive) for drive in (probe, tag, self.payload(spikes)))
+            probe, tag, payload = (self._unit(drive) for drive in (probe, tag, self.payload(for_memory)))
             return probe, tag, payload * self.read_resolution
         # The inhibitory pool raises every firing threshold with the stream's activity, as it does in a block.
         quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
@@ -2410,7 +2421,7 @@ class _StateRead(nn.Module):
             probe, tag = (self._split(self.turned(self.let_in(drive), quanta)) for drive in (probe, tag))
         else:
             probe, tag = self._split(self.fire(probe, quanta)), self._split(self.fire(tag, quanta))
-        return probe, tag, self._split(self.fire(self.payload(spikes), quanta))
+        return probe, tag, self._split(self.fire(self.payload(for_memory), quanta))
 
     def phase_counts(self, steps):
         """The pacemakers' spikes at the first ``steps`` bytes of a window, as [bytes, cells]."""

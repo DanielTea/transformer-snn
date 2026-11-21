@@ -193,3 +193,30 @@ def test_the_trainer_keeps_echoes_to_stacks_in_windows(monkeypatch, tmp_path):
     trainer, _ = _trainer(monkeypatch)
     with pytest.raises(SystemExit):
         _train(trainer, monkeypatch, tmp_path / "streams", "--echo", "all", "--stream", "3")
+
+
+def test_a_reads_credit_paths_add_up_to_its_whole_error():
+    # The error that a read passes down to the stream is the sum of what goes through its probes and what goes through
+    # its tags and payloads, beside what passes it unchanged. The paths change no spike.
+    model, tokens = _stack(), _bytes()
+    read = model.state_reads["1"]
+    stream = model.input_emit(model.input(tokens) * model.cfg.resolution).detach()
+    grads, fired = {}, {}
+    for credit in (None, "probe", "memory", "residual"):
+        read.credit = credit
+        heard = stream.clone().requires_grad_()
+        out = read(heard, None, tokens)
+        out.square().sum().backward()
+        grads[credit], fired[credit] = heard.grad, out.detach()
+    read.credit = None
+    assert all(torch.equal(fired[None], value) for value in fired.values())
+    assert torch.allclose(grads["probe"] + grads["memory"] - grads["residual"], grads[None], atol=1e-4)
+    assert not torch.allclose(grads["probe"], grads[None]) and not torch.allclose(grads["memory"], grads[None])
+
+
+def test_the_trainer_trains_with_a_reads_credit_path(monkeypatch, tmp_path):
+    from test_stream_form import _train, _trainer
+
+    trainer, _ = _trainer(monkeypatch)
+    record = _train(trainer, monkeypatch, tmp_path / "probe", "--read-credit", "probe")
+    assert record["args"]["read_credit"] == "probe"

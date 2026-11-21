@@ -942,6 +942,9 @@ def main():
                         help="'random': each part hears the error at the output through fixed random synapses; "
                              "'mirror': every part hears the error of the stream that the output hears, which comes "
                              "back in one hop through the output's own synapses")
+    parser.add_argument("--read-credit", choices=("probe", "memory", "residual"),
+                        help="a diagnostic: each state read passes its error down to the stream only through its "
+                             "probes, only through its tags and payloads, or through neither")
     parser.add_argument("--rotate-stacks", action="store_true",
                         help="with --rotated-adam, also turn every matrix of a three-dimensional weight, such as "
                              "the synapses of granule cells")
@@ -1206,6 +1209,11 @@ def main():
                                stacks=args.rotate_stacks, scales=args.lr_scale)
     average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
     feedback = None if args.echo is None else EchoFeedback(args.echo_seed)
+    if args.read_credit is not None:
+        if not isinstance(model, EventLM) or model.state_reads is None:
+            raise ValueError("--read-credit sets the paths of state reads")
+        for read in model.state_reads.values():
+            read.credit = args.read_credit
     generator = torch.Generator(device="cpu").manual_seed(args.seed)
 
     def draw(step):
