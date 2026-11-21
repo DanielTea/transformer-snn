@@ -24,5 +24,21 @@
   "amendment": {
     "recorded_utc": "2026-11-21T16:11:32Z",
     "what": "The first second-seed runs (g6-s2, om-s2, sg-s2, sgm-s2) trained at seed 20001, not 20002: their launcher put the seed before the shared flags, which repeat --seed 20001, and the later flag counts. Their curves matched the seed-20001 runs value for value, which shows that GPU training is reproducible, and they were stopped at 750 to 3,750 updates. They are replaced by g6-seed2, om-seed2, sg-seed2 and sgm-seed2, launched with the seed after the shared flags; sgm (seed 20001) stands. The pass marks and the full-size rule are unchanged, read from the new arms."
+  },
+  "second_seeds": {
+    "recorded_utc": "2026-11-21T16:38:48Z",
+    "results": {
+      "g6-seed2": 1.9855,
+      "om-seed2": 1.9965,
+      "sg-seed2": 1.9871,
+      "sgm": 1.9674,
+      "sgm-seed2": 1.9875
+    },
+    "verdict": "Neither change is confirmed: memory-only credit is 0.011 behind the plain stack at seed 20002 and shunting gated cells 0.0016 behind, against 0.015 and 0.010 ahead at seed 20001. The full-size run of memory-only credit did not start (v17-mem.sh decided at 16:35:37 UTC). The combination is ahead of both single changes in seed 20001 and within 0.0004 of the better one in seed 20002, but level with the plain stack there. Two runs of one setting on this test bed differ by up to 0.02, as much as the effects that were sought."
+  },
+  "next": {
+    "recorded_utc": "2026-11-21T16:38:48Z",
+    "loop_verdict": "The loop pilot's fair control moves to GPU 1: stack12b (the test bed at depth 12 with the budget doubled, 226,000 pulses) and loop3-fixed (the loop of loop3 at the plain budget of 113,000), both at seed 20001, and loop3-seed2 (loop3 at seed 20002). The loop pilot's question stands as pre-registered in results/event_lm/stack_loop/preregistered.json; the CPU runs of stack12b and loop3-fixed are the same settings on another device and are kept as they run.",
+    "third_seeds": "g6-seed3 and sgm-seed3 (seed 20003), to measure the combination's mean over three seeds against the plain stack's. It joins a full-size run only if its mean over three seeds is ahead by at least 0.005 and every seed is ahead or within 0.002."
   }
 }
