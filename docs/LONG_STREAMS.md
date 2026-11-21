@@ -200,7 +200,12 @@ more than one axis.
   gains the Transformer 0.043 bits per byte at 24,000 updates
   and the stack 0.020, in windows from an empty state; on
   windows of 2,048 bytes, 0.037 and 0.021 at 31,500. The gap
-  widens with size, from 0.035 to 0.057 at 24,000 updates.
+  widens with size, from 0.035 to 0.057 at 24,000 updates. The
+  deeper stack kept the budget of 310,000 pulses a byte, which
+  counts the spikes of the whole stack, so each of its levels
+  fired about half as much: this is depth at equal energy, and a
+  test-bed arm with the budget doubled measures how much of the
+  shortfall the budget is.
 - **Training.** The stack is ahead for about the first 7,500
   updates (5,800 at depth 22), by up to 0.25 bits per byte, and
   then falls behind. Over 3,000 to 24,000 updates, a power law

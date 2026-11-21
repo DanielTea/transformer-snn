@@ -109,8 +109,10 @@ Along every axis that the weekend's runs measure, the
 Transformer's curve is at least as steep as the stack's. The
 stack leads for the first 7,500 updates and then falls behind;
 doubling the depth gains the Transformer about 0.04 bits per
-byte and the stack 0.02. Scaling this design will not close the
-gap, and the next step has to change the stack.
+byte and the stack 0.02, though the deeper stack kept the same
+budget of pulses per byte, so each level fired half as much.
+Scaling this design will not close the gap, and the next step
+has to change the stack.
 [How the two models scale](docs/LONG_STREAMS.md#how-the-two-models-scale)
 
 [Long-streams study](docs/LONG_STREAMS.md) ·
