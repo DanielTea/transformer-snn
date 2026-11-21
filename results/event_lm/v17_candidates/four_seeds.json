@@ -10,5 +10,65 @@
   },
   "measure": "Averaged validation in windows at 6,000 updates (64 batches), on the server's GPU 1, code v16x.",
   "pass_mark": "A candidate passes if it is ahead of the plain stack at the same seed in at least three of four seeds and its mean paired gain is at least 0.010. A pass nominates it for full size; it does not by itself claim a gain at full size.",
-  "seen_before_recording": "The plain stack's seeds 20001 to 20003 and the shunting cells' seeds 20001 and 20002, as above; no run of dn12 or dn12b exists."
+  "seen_before_recording": "The plain stack's seeds 20001 to 20003 and the shunting cells' seeds 20001 and 20002, as above; no run of dn12 or dn12b exists.",
+  "results": {
+    "recorded_utc": "2026-11-21T19:36:27Z",
+    "plain": {
+      "20001": 1.986,
+      "20002": 1.9855,
+      "20003": 1.9578,
+      "20004": 1.9829
+    },
+    "arms": {
+      "dn12": {
+        "validation": [
+          1.9783,
+          1.9773,
+          1.9748,
+          1.9754
+        ],
+        "minus_plain": [
+          -0.0077,
+          -0.0082,
+          0.017,
+          -0.0075
+        ],
+        "ahead_in": 3,
+        "mean_minus_plain": -0.0016
+      },
+      "dn12b": {
+        "validation": [
+          1.9848,
+          1.9838,
+          1.9872,
+          1.9751
+        ],
+        "minus_plain": [
+          -0.0012,
+          -0.0017,
+          0.0294,
+          -0.0078
+        ],
+        "ahead_in": 3,
+        "mean_minus_plain": 0.0047
+      },
+      "sg": {
+        "validation": [
+          1.9763,
+          1.9871,
+          1.9753,
+          1.9794
+        ],
+        "minus_plain": [
+          -0.0097,
+          0.0016,
+          0.0175,
+          -0.0035
+        ],
+        "ahead_in": 2,
+        "mean_minus_plain": 0.0015
+      }
+    },
+    "verdict": "No candidate passes. Depth at equal parameters is ahead in three seeds but by 0.0016 on average; doubling its pulses makes it worse in three of four seeds; shunting gated cells are ahead in two. The deep stack's four seeds span 0.0035 against the plain stack's 0.028. Its learning curves (means over four seeds) lead by 0.026 at 750 updates and 0.001 at 6,000: a faster start, not a better slope. Beside the 12-level stacks with twice the parameters, a doubled budget helped depth (s12b against s12); at equal parameters it hurts, so what the stack needs is pulses for each cell, not for each level."
+  }
 }
