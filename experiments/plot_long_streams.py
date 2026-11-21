@@ -34,6 +34,14 @@ LONGER = (
      f"{STUDY}/scores/released.forget-validation"),
     (2048, "reach 8,192 at levels 4 to 7", f"{STUDY}/scores/l2048-flat.reach-test",
      f"{STUDY}/scores/l2048-flat.reach-validation"),
+    (2048, "slopes that learn, reach 8,192", f"{STUDY}/scores/l2048-forget.reach-test",
+     f"{STUDY}/scores/l2048-forget.reach-validation"),
+)
+# The stack at its best, read further than it trained with its fast output synapses learning: (window, test,
+# validation). A record not yet published is left out.
+BEST = (
+    (1024, f"{STUDY}/scores/released.forget-taught-test", f"{STUDY}/scores/released.forget-taught-validation"),
+    (2048, f"{STUDY}/scores/l2048-forget.taught-test", f"{STUDY}/scores/l2048-forget.taught-validation"),
 )
 
 
@@ -61,9 +69,9 @@ def bpb(name, rate=0.0):
 def plot_equal(output):
     fig, axes = plt.subplots(1, 2, figsize=(12.6, 6.2), sharey=False)
     fig.subplots_adjust(left=0.07, right=0.86, bottom=0.27, top=0.76, wspace=0.34)
-    tall_heading(fig, "At equal context the stack stays about 0.035 behind",
-                 "enwik8, 4,999,999 targets a split · the stack as 16 unbroken streams reaching as far as it "
-                 "trained, the Transformer in windows of its training length · one seed each")
+    tall_heading(fig, "At equal context the stack is behind, and its stream halves the gap",
+                 "enwik8, 4,999,999 targets a split · the stack as 16 unbroken streams, the Transformer in windows "
+                 "of its training length · one seed each")
     for split, (ax, title) in enumerate(zip(axes, ("Test split", "Validation split"))):
         style(ax)
         ax.set_title(title, loc="left", size=11, color=TEXT, weight="bold", pad=10)
@@ -77,6 +85,13 @@ def plot_equal(output):
                         textcoords="offset points", ha="left", va="center", size=9, color=MUTED)
         for window, label, *names in LONGER:
             ax.scatter(window, bpb(names[split]), s=46, facecolor="white", edgecolor=VIOLET, linewidth=1.4, zorder=4)
+        for window, *names in BEST:
+            if (RESULTS / f"{names[split]}.json").is_file():
+                best = bpb(names[split])
+                ax.scatter(window, best, s=70, marker="D", color=VIOLET, edgecolor="white", linewidth=1.2, zorder=5)
+                if window == windows[-1]:
+                    ax.annotate(f"at its best {best:.4f}", (window, best), xytext=(-10, -2), textcoords="offset points",
+                                ha="right", va="top", size=9, color=VIOLET)
         ax.set_xscale("log", base=2)
         ax.set_xticks(windows, [f"{window:,}" for window in windows])
         ax.minorticks_off()
@@ -88,9 +103,11 @@ def plot_equal(output):
     handles = [Line2D([], [], color=VIOLET, linewidth=2, marker="o", label="Stack, as a stream"),
                Line2D([], [], color=ORANGE, linewidth=2, marker="o", label="Transformer, in windows"),
                Line2D([], [], color=VIOLET, linestyle="none", marker="o", markerfacecolor="white",
-                      label="Stack read further than it trained")]
+                      label="Stack read further than it trained"),
+               Line2D([], [], color=VIOLET, linestyle="none", marker="D", markeredgecolor="white",
+                      label="And with fast synapses learning")]
     axes[0].legend(handles=handles, frameon=False, labelcolor=TEXT, fontsize=9, loc="upper center",
-                   bbox_to_anchor=(1.12, -0.16), ncol=3, handlelength=2.2, columnspacing=1.8)
+                   bbox_to_anchor=(1.12, -0.16), ncol=4, handlelength=2.2, columnspacing=1.6)
     fig.text(0.035, 0.03, "Beside each pair: the stack's distance to the Transformer. Each doubling of the window "
              "gives both models about half the gain of the last one.\nThe runs on windows of 1,024 and 2,048 bytes "
              "trained on windows of 512 bytes for their first 24,000 of 90,000 updates; those on 512 bytes trained "

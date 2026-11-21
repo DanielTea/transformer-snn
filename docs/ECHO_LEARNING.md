@@ -5,7 +5,12 @@ through every level above them. Two echoes were built: one through fixed random 
 the stream that the output hears, sent back to every part in one hop. A ladder of test-bed runs was recorded before
 any of them trained.
 
-<!-- SUMMARY: the ladder's result in two sentences -->
+In short: a null result, and a finding. Neither echo trains the
+stack: the random echo blew the pulses up fourfold, and the mirror
+held a gap of 0.33 bits per byte at every depth. Gradient runs with
+the error cut on one path at a time showed why: the credit a part of
+the stack needs runs back in time along the reads, from the bytes
+that read what it wrote.
 
 ## Limits
 
@@ -65,8 +70,68 @@ within 0.06 of the gradient.
 Recorded at 13:26:59 UTC on 2026-11-21 (`results/event_lm/echo_learning/preregistered.json`): the small test bed
 trained six ways for 6,000 updates on the server's GPU 1.
 
-<!-- results: g6, m6, mc6, r6, gate-g, gate-m; pulses; decision -->
+Averaged validation in windows at 6,000 updates (64 batches), and
+pulses a byte at the last evaluation:
+
+| Arm | Training | Validation | Pulses a byte |
+|---|---|---:|---:|
+| g6 | Gradient | 1.9860 | 114,576 |
+| m6 | Mirror echo, every part | 2.3180 | 115,401 |
+| mc6 | Mirror echo, cells only | 2.0687 | 114,628 |
+| r6 | Random echo, every part | 8.0341 | 435,960 |
+| gate-g | Gated cells, gradient | 1.9897 | 115,807 |
+| gate-m | Gated cells, mirror echo | 2.3389 | 114,457 |
+
+Every echo arm fails its mark. The random echo got worse as it
+trained (5.97 at 750 updates, 8.03 at 6,000). The mirror opened its
+gap within 750 updates and held it: a worse solution, not a slower
+one. The gated cells did not blow up under the gradient on this
+test bed, so the echoes had nothing there to save.
+
+## Why: credit that runs back in time
+
+Diagnostics recorded before their runs
+(`results/event_lm/echo_learning/diagnostics.json`):
+
+| Diagnostic | Gradient | Mirror echo | Gap |
+|---|---:|---:|---:|
+| 2 levels | 2.315 | 2.699 | 0.384 |
+| 4 levels | 2.069 | 2.429 | 0.361 |
+| 6 levels | 1.995 | 2.329 | 0.334 |
+
+(16 batches at 6,000 updates.) The gap does not grow with depth, so
+the missing credit is not the credit between levels. A read passes
+its error down to the stream two ways: through its probe, the byte
+it reads for, and through the tags and payloads of the earlier bytes
+it reads. Gradient runs that keep one path:
+
+| Reads pass their error down through | Validation |
+|---|---:|
+| Every path (g6) | 1.9860 |
+| Probes alone | 2.0650 |
+| Tags and payloads alone | 1.9712 |
+
+A part needs to learn how what it wrote at a byte was read at later
+bytes. **Read receipts** carry exactly that: the error of a reading
+byte returns along the race to the cells it read, and enters the
+stream where they were written (`results/event_lm/echo_learning/receipts.json`).
+In its exact form, the gradient restricted to receipts, it scored
+2.0534, against 2.3379 for the same restriction without receipts:
+four fifths of the mirror's gap recovered, and 0.067 short of the
+gradient, which fails its mark of 0.02. The rest is the credit that
+the cells pass to the stream they hear.
+
+Memory-only credit beat the full gradient at seed 20001 (1.9712
+against 1.9860) but not at seed 20002 (1.9965 against 1.9855); two
+runs of one setting on this test bed differ by up to 0.03, so it is
+not a gain (`results/event_lm/v17_candidates/preregistered.json`).
 
 ## Reproduce
 
-<!-- commands -->
+```bash
+python experiments/train_event_lm.py TEST_BED_FLAGS --echo all --echo-feedback mirror --device cuda
+python experiments/train_event_lm.py TEST_BED_FLAGS --echo all --device cuda
+python experiments/train_event_lm.py TEST_BED_FLAGS --read-credit memory --cell-credit local --device cuda
+```
+
+`TEST_BED_FLAGS` are those of `results/event_lm/stream_form/small_test_bed.json`.

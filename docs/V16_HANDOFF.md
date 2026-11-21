@@ -1,7 +1,11 @@
 # ShuntFormer v16 research handoff
 
 The release restores the checkpoints of the long-streams study:
-<!-- ASSETS: the stacks and Transformers released, as averaged weights -->
+the stack trained on windows of 2,048 bytes with forgetting slopes
+that learn (`l2048-forget`, the model of this release), the same
+stack with its slopes held at zero (`l2048-flat`), and the
+Transformers trained on windows of 2,048 and 1,024 bytes
+(`tf2048`, `tf1024`), each as its running average of weights.
 The repository carries no v16 weights. The bundled model that
 runs from a clone is still
 [v11](../models/spiking-byte-lm-v11/README.md).
@@ -9,14 +13,38 @@ runs from a clone is still
 
 v16 is a measurement release more than a new model. It trains
 Transformers on the stack's own window lengths, and at equal
-context the stack is behind by 0.032 to 0.046 bits per byte. It
-adds a forgetting slope to the reads, measures how learning while
-reading grows on books, pilots two cells that multiply charges
-and studies fast synapses trained in the loop.
+context the stack is behind by 0.032 to 0.046 bits per byte, each
+read as it trained. Read with what only a stream has, a reach
+beyond the window, forgetting slopes that learn and fast synapses,
+the stack trained on 2,048 bytes scores 1.1199 on test, 0.013
+behind its Transformer. The release also pilots cells that
+multiply or divide charges, consolidating fast synapses, a loop of
+tied levels and echo learning, under rules recorded before their
+runs.
 
 ## Restore the checkpoints
 
-<!-- RESTORE: archives, hashes, folders -->
+Each archive unpacks under `checkpoints/`:
+
+| Archive | File | SHA-256 |
+|---|---|---|
+| `spiking-byte-lm-v16-checkpoints-l2048-forget.tar.gz` | `long_streams/l2048-forget/model.pt.averaged` | `9230b212cbdc8c249b9a026126056972e0d1024f267f2edca341ebf96bfce3af` |
+| `spiking-byte-lm-v16-checkpoints-l2048-flat.tar.gz` | `long_streams/l2048-flat/model.pt.averaged` | `5e9c46e16619fa5c3e9273005d52f70c7a0edc2db79be24946a757a85ac1f5b6` |
+| `spiking-byte-lm-v16-checkpoints-tf2048.tar.gz` | `long_streams/tf2048/model.pt.averaged` | `e72a68257996ce66c6d3bfb1145af1d7265b4c4f5a977cf6e82137369ea2da71` |
+| `spiking-byte-lm-v16-checkpoints-tf1024.tar.gz` | `long_streams/tf1024/model.pt.averaged` | `2b0c4fcff07fdf011f29c35c7a5f4e26a8271adf3051d7ba05da88398bd6e1cc` |
+
+```bash
+for name in l2048-forget l2048-flat tf2048 tf1024; do
+  tar -xzf spiking-byte-lm-v16-checkpoints-$name.tar.gz -C checkpoints
+done
+shasum -a 256 -c results/event_lm/long_streams_checkpoints.sha256
+```
+
+`spiking-byte-lm-v16-bits.tar.gz` holds the bits of every piece
+of every published scoring, for paired comparisons without
+rescoring; it unpacks into `results/event_lm/long_streams/bits/`.
+The second seeds of the stack and the Transformer (`l2048-forget-s2`,
+`tf2048-s2`) are scored in the study but not released.
 
 ## Rescore
 
@@ -107,7 +135,24 @@ its first updates.
 
 ## Next pilots
 
-<!-- NEXT: depth diagnosis result, full-size plastic arm, whole books, squared spike unit, 4,096-byte windows -->
+- **The full-size trained-plasticity arm** (`l2048-plastic`, a
+  fork of the same state with Rule A decaying on the last level)
+  is queued on the server; its go/no-go is recorded in
+  `results/event_lm/trained_plasticity/arms.json`.
+- **The scaling pair at depth 22** (`l2048-d22`, 69.4M parameters,
+  and `tf2048-d22`) is training and being scored. The Transformer
+  at depth 22 scores 1.0704 on test.
+- **Whole books as single streams**, with and without fast
+  synapses, for the released stack and `l2048-forget`.
+- **Depth with its energy.** On the test bed twelve levels gain
+  0.130 over six at the same budget and 0.152 with it doubled; more
+  pulses alone make the stack worse. A full-size stack whose budget
+  grows with its levels is the cleanest test of how the stack
+  scales.
+- **Seeds before claims.** Two runs of one setting on the test bed
+  differ by up to 0.03, as much as every cell and credit effect
+  measured this weekend. A pilot needs four seeds, or a larger test
+  bed, before it earns a full-size run.
 
 ## What not to try again
 
@@ -127,6 +172,14 @@ Each was one arm with one seed unless a second is named.
   streams are about 1.5 KB.
 - A reach beyond the window for a stack that trained on 2,048
   bytes with every slope at zero.
+- Fast synapses that consolidate into slower stages
+  (`--teach-cascade`): 0.022 worse than keeping every lesson.
+- Echo learning, random or mirror (`--echo`): the random echo blows
+  the pulses up, the mirror holds a gap of 0.33 at every depth.
+- A doubled pulse budget for the stack of six levels: worse in two
+  seeds.
+- Shunting gated cells and memory-only credit as gains: each won at
+  one seed and was level or behind at the next.
 
 ## Where things are
 
@@ -134,10 +187,11 @@ Each was one arm with one seed unless a second is named.
 |---|---|
 | `snnformer/event_lm.py` | The stack with forgetting slopes (`read_forget`), squared cells (`granule_self_gate`), and trained fast output synapses (`_plastic_window`, `_teach` with `plastic_after`) |
 | `experiments/train_event_lm.py` | The trainer with the flags above |
-| `experiments/eval_stream.py` | The stream scorer, with `--forget-slope`, `--plastic-off` and `--teach-freeze-after` |
+| `experiments/eval_stream.py` | The stream scorer, with `--forget-slope`, `--forget-slope-replaces`, `--teach-cascade`, `--plastic-off` and `--teach-freeze-after` |
 | `experiments/stream_quarters.py` | Gains by quarter of every stream, paired |
 | `experiments/reading_curve.py` | The gain of fast synapses against how much of a stream they have read |
 | `experiments/stack/fork_state.py` | Continue a saved run as a new arm, with trained fast synapses added at zero |
 | `experiments/plot_long_streams.py` | The figures of this release |
 | `results/event_lm/long_streams/` | Score records, paired comparisons, training curves and the reading curve |
 | `results/event_lm/trained_plasticity/arms.json` | The trained-plasticity study: its criteria, thresholds, results and decision |
+| `results/event_lm/echo_learning/`, `cascade_synapses/`, `shunt_tied/`, `stack_loop/`, `v17_candidates/` | The weekend's pilots, each recorded before its runs, with its verdict |

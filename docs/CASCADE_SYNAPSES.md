@@ -4,7 +4,10 @@ Fast output synapses whose charge seeps from the stage that the output hears int
 what a byte taught fades as a power of its age and is never wholly lost. The rule runs while a stream is read, in
 whole numbers, and nothing in it is trained. A pilot on the small test bed was recorded before any of its scorings.
 
-<!-- SUMMARY: the pilot's result in two sentences -->
+In short: a null result. With six stages the stream rule scored
+0.022 bits per byte worse than v15's rule on validation streams and
+0.038 worse on PG-19 validation books: here, keeping every lesson at
+full weight beats a memory that favours the recent.
 
 ![Fast synapses that consolidate themselves](../results/figures/event_lm_cascade_synapses.png)
 
@@ -74,8 +77,37 @@ Recorded at 11:55:06 UTC on 2026-11-21, before any threshold was scanned
 
 ## Results
 
-<!-- results: threshold scans, whole split paired, quarters, PG-19 excerpts, decision -->
+**Threshold.** On the first million validation bytes, six stages
+scored 1.9001, 1.87086, 1.88487 and 1.90731 at 2^19, 2^20, 2^21
+and 2^22, so 2^20 was picked. v15's rule scores 1.84391 there at
+its own 2^22: 0.027 better already.
+
+**Whole validation split**, 16 unbroken streams, paired piece by
+piece over 10,016 pieces of 512 bytes:
+
+| | Bits per byte |
+|---|---:|
+| b, v15's rule at 2^22 | 1.81413 |
+| c6, six stages at 2^20 | 1.83612 |
+| c6 minus b | +0.0220 [+0.0207, +0.0234] |
+
+The scoring of b on the server's GPU gave 1.81413, the same as the
+laptop's CPU to the fifth place: the rule is exact in whole numbers
+on either.
+
+**PG-19 validation excerpts**, 8 books of 131,072 bytes, one stream
+each: b 1.98918, c6 2.02694, so c6 is 0.038 behind.
+
+**Decision.** c6 fails all three marks. The cascade is kept in the
+code as an option (`--teach-cascade`, one stage by default), and
+fast synapses keep every lesson at full weight.
 
 ## Reproduce
 
-<!-- commands -->
+```bash
+python experiments/eval_stream.py --checkpoint STACK/model.pt.averaged --enwik8 data/enwik8 --split validation \
+  --streams 16 --lead 8192 --piece 512 --teach-levels 0 1 2 3 4 5 --teach-threshold 1048576 \
+  --teach-cascade 6 --json c6.json --bits c6.npy
+python experiments/compare_stream_scores.py --first b.json b.npy --second c6.json c6.npy --json c6-vs-b.json
+python experiments/plot_cascade_synapses.py
+```

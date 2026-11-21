@@ -7,29 +7,32 @@ a full-attention Transformer of the same size and training.
 
 The newest release, **v16**, measures the spike-only stack
 against Transformers trained on its own window lengths, and at
-equal training context the stack is **behind**. Read as
-unbroken streams that reach 2,048 cells back, the stack trained
-on windows of 2,048 bytes scores **1.139 bits per byte** on the
-full enwik8 test split. The Transformer of the same size and
-training, reading windows of 2,048 bytes, scores **1.107**.
+equal training context the stack is **behind**. The stack trained
+on windows of 2,048 bytes, with forgetting slopes of its own, read
+as one unbroken stream that reaches 8,192 cells back while its
+fast synapses learn, scores **1.120 bits per byte** on the full
+enwik8 test split. The Transformer of the same size and training,
+reading windows of 2,048 bytes, scores **1.107**.
 
 ![The stack and the Transformer at training windows of 512, 1,024 and 2,048 bytes, test and validation](results/figures/event_lm_long_streams.png)
 
-The gap is 0.041, 0.035 and 0.032 bits per byte on the test
-split at windows of 512, 1,024 and 2,048 bytes, and 0.046, 0.042
-and 0.038 on validation. v15's level score came from a stack
-that trained on longer windows than its Transformer read, and
-this release corrects it. Both models gain about half as much
-from each doubling of the window as from the last, so longer
-windows will not close the gap. What the stack has that the
-Transformer has not is the stream: its fast synapses learn while
-reading, and on books their gain grows as the square root of the
-text read. The v16 weights are release assets, and the model
-that runs from a clone is v11.
+Each read as it trained, the gap is 0.041, 0.035 and 0.032 bits
+per byte on the test split at windows of 512, 1,024 and 2,048
+bytes, and 0.046, 0.042 and 0.038 on validation. v15's level
+score came from a stack that trained on longer windows than its
+Transformer read, and this release corrects it. Both models gain
+about half as much from each doubling of the window as from the
+last, so longer windows will not close the gap. What the stack
+has that the Transformer has not is the stream: it reads further
+than it trained at no cost, it forgets by a power of age, and its
+fast synapses learn while reading. With them the gap at 2,048
+bytes is 0.013 on test, half of what it was, and the stack is
+0.021 better than v15's release. The v16 weights are release
+assets, and the model that runs from a clone is v11.
 
 | Release | Adds | enwik8 test | Transformer | Scored in |
 |---|---|---:|---:|---|
-| [v16](#v16-long-streams) | Transformers on the stack's window lengths, forgetting slopes, fast synapses trained in the loop | 1.139 | **1.107** | Unbroken streams; windows of 2,048 bytes |
+| [v16](#v16-long-streams) | Transformers on the stack's window lengths, forgetting slopes, fast synapses trained in the loop | 1.120 | **1.107** | Unbroken streams; windows of 2,048 bytes |
 | [v15](#v15-a-stack-that-reads-a-stream) | A stack of state reads and threshold cells that reads a stream | **1.141** | 1.144 | Unbroken streams |
 | [v14](#v14-read-clocks-and-the-address-rate) | A faster address rate and clock cells for the read heads | 1.244 | 1.182 | 512-byte windows |
 | [v13](#v13-state-reads-and-race-cells) | State reads and race cells on delayed fibres | 1.262 | 1.182 | 512-byte windows |
@@ -76,16 +79,22 @@ training length.
 | | With taught output synapses | 1.10321 | 1.12901 |
 | 34.81M SNN stack, windows of 1,024 bytes (v15) | A stream, as trained | 1.15359 | 1.18278 |
 | 34.75M full attention, windows of 1,024 bytes | Windows, 1,008 bytes of history before 16 scored | 1.11820 | 1.14104 |
+| 34.81M SNN stack, windows of 2,048 bytes, slopes that learn | A stream, as trained | 1.13667 | 1.16624 |
+| | A stream reaching 8,192 cells | 1.12349 | 1.15368 |
+| | The same, with taught output synapses | **1.11994** | **1.15138** |
+| | Second seed, reaching 8,192 cells | 1.12048 | 1.15193 |
+| 34.75M full attention, windows of 2,048 bytes, second seed | Windows, 2,032 bytes of history before 16 scored | 1.10366 | 1.12873 |
 
-<!-- l2048-forget rows -->
-
-The stack is 0.0323 behind on the test at 2,048 bytes, with a
-paired 95% interval of 0.0314 to 0.0333, and 0.0384 behind on
-validation (0.0374 to 0.0394). With fast output synapses on both
-models it is 0.0315 and 0.0376 behind. A stream lets the stack
-read further than it trained at no cost, which gave v15 its
-level score at 1,024 bytes; at 2,048 bytes a longer reach no
-longer helps. Every row is one seed.
+Each read as it trained, the stack is 0.0323 behind on the test
+at 2,048 bytes, with a paired 95% interval of 0.0314 to 0.0333,
+and 0.0384 behind on validation (0.0374 to 0.0394). A stream lets
+the stack read further than it trained at no cost. The stack whose
+slopes stayed at zero gains nothing from it at 2,048 bytes; the one
+whose slopes learned does: reaching 8,192 cells back with its fast
+synapses learning, it is 0.0133 behind the Transformer on test, and
+0.0167 when the Transformer has fast synapses too. Second seeds of
+both models are each about 0.003 better and keep the gap; every
+other row is one seed.
 
 ![On books the gain of the fast synapses grows as the square root of the text read](results/figures/event_lm_long_streams_reading.png)
 
@@ -93,7 +102,9 @@ Every head of a read now has a **forgetting slope**: a cell
 beyond the window loses charge for every doubling of its age, so
 its share of the read falls as a power of its age. Set at
 scoring on v15's released stack, a slope of −1 at a reach of
-16,384 cells gains 0.008 on both splits. On 16 PG-19 books, the
+16,384 cells gains 0.008 on both splits; learned in training,
+79 of the 88 heads settle below −0.69, which bounds the far past,
+at a median of −1.3. On 16 PG-19 books, the
 gain of v15's fast output synapses grows from 0.004 bits per
 byte in the first 8 KB to 0.028 after 128 to 256 KB, as the
 square root of the text read; on enwik8 it stays level. Squared
@@ -101,7 +112,7 @@ and gated cells that multiply charges collapsed in training. A
 study of fast synapses trained in the loop passed its go/no-go:
 cells trained with a decaying rule make better keys for v15's
 rule, by 0.013 bits per byte on the test bed, and the full-size
-run is training.
+run is queued for the next release.
 
 ![The stack learns faster at first, the Transformer for longer](results/figures/event_lm_long_streams_scaling.png)
 
@@ -110,10 +121,24 @@ Transformer's curve is at least as steep as the stack's. The
 stack leads for the first 7,500 updates and then falls behind;
 doubling the depth gains the Transformer about 0.04 bits per
 byte and the stack 0.02, though the deeper stack kept the same
-budget of pulses per byte, so each level fired half as much.
-Scaling this design will not close the gap, and the next step
-has to change the stack.
+budget of pulses per byte, so each level fired half as much. On
+the small test bed that costs little: twelve levels gain 0.130
+over six at the same budget and 0.152 with it doubled, while more
+pulses alone make the stack worse, and a loop of tied levels is
+worth about a third of a level of its own. Scaling this design
+will not close the gap, and the next step has to change the
+stack.
 [How the two models scale](docs/LONG_STREAMS.md#how-the-two-models-scale)
+
+Three ideas were tested this weekend under rules recorded before
+their runs, and none holds. Fast synapses that consolidate into
+slower stages forget the far past and did worse than v15's rule
+([consolidating synapses](docs/CASCADE_SYNAPSES.md)). Shunting
+gates that divide charges were stable but their gain did not
+survive a second seed. Echoes of the output's error in place of
+the backward pass failed, and on the way showed that the stack's
+credit runs back in time along its reads
+([echo learning](docs/ECHO_LEARNING.md)).
 
 [Long-streams study](docs/LONG_STREAMS.md) ·
 [Trained plasticity](docs/TRAINED_PLASTICITY.md) ·

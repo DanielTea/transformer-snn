@@ -817,6 +817,7 @@ def long_streams_paragraphs(long_streams):
             for row in long_streams["rows"]}
     stack = test[(LONG_FLAT, "Stream, as trained")]
     reference = test[(LONG_REFERENCE, "Windows with 2,032 bytes of history")]
+    best = test.get((LONG_FORGET, "Stream, chosen reach, taught output synapses"))
     return [
         "## Long streams at equal training context · 368,640,000 training targets · seed 20001",
         stream_table(long_streams["rows"]),
@@ -833,9 +834,11 @@ def long_streams_paragraphs(long_streams):
         "validation bytes. A Transformer reads the same streams in windows of its training length, 16 scored "
         "bytes after the rest as history. Taught output synapses start at zero in every stream and learn from each "
         "byte after it was predicted.",
-        f"At equal context the stack is {stack - reference:.4f} bpb behind the Transformer on the enwik8 test. The "
-        "level score of the comparison below came from a stack that trained on longer windows than its "
-        "Transformer read. Every row is one seed.",
+        f"At equal context, each read as it trained, the stack is {stack - reference:.4f} bpb behind the Transformer "
+        "on the enwik8 test." + (
+            f" Read at its best, with slopes that learn, a chosen reach and taught output synapses, it is "
+            f"{best - reference:.4f} behind." if best is not None else "") + " The level score of the comparison "
+        "below came from a stack that trained on longer windows than its Transformer read. Every row is one seed.",
     ]
 
 
