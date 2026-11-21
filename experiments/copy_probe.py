@@ -3,7 +3,10 @@ one window: the first copy cannot be predicted beyond the statistics of letters 
 the same bytes earlier and reading what followed them (the induction circuit of Transformers). Prints, for each
 checkpoint and probe, the bits a byte on the first copy, on the second, and on the second after its first 8 bytes.
 
-usage: copy_probe.py CHECKPOINT [CHECKPOINT...]   (from the repository root)
+usage: copy_probe.py [--silence-knowledge] CHECKPOINT [CHECKPOINT...]   (from the repository root)
+
+With --silence-knowledge the knowledge cells of every read are put so far behind in every race that they never fire,
+which shows what a stack trained with them owes them on each copy.
 """
 import math
 from pathlib import Path
@@ -40,10 +43,16 @@ def probes():
 
 def main():
     torch.set_num_threads(4)
+    silence = "--silence-knowledge" in sys.argv[1:]
     shown = probes()
-    for path in sys.argv[1:]:
+    for path in [arg for arg in sys.argv[1:] if not arg.startswith("--")]:
         model, checkpoint = load_checkpoint(Path(path), torch.device("cpu"))
         model.eval()
+        if silence:
+            with torch.no_grad():
+                for read in model.state_reads.values():
+                    if read.knowledge:
+                        read.known_offset.fill_(-1e4)
         event = isinstance(model, EventLM)
         for probe, sequences in shown.items():
             tokens = torch.cat([sequences, sequences], 1)
@@ -54,7 +63,7 @@ def main():
             bits = bits.view(64, -1) / math.log(2)
             first, second = bits[:, :HALF - 1].mean().item(), bits[:, HALF - 1:].mean().item()
             settled = bits[:, HALF - 1 + 8:].mean().item()
-            print(f"{checkpoint.get('run_name', path)} [{probe}]: first copy {first:.3f}, second copy {second:.3f}, "
+            print(f"{checkpoint.get('run_name', path)}{' silenced' if silence else ''} [{probe}]: first copy {first:.3f}, second copy {second:.3f}, "
                   f"second after 8 bytes {settled:.3f} bits a byte", flush=True)
 
 
