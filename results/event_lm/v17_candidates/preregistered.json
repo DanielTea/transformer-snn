@@ -1,0 +1,24 @@
+{
+  "study": "v17_candidates",
+  "recorded_utc": "2026-11-21T15:56:54Z",
+  "why": "Two changes beat the plain stack on the test bed today, each with one seed: shunting gated cells (--granule-gate 4 --granule-shunt --granule-cells 681: 0.0105 ahead of arm a on validation streams, 0.0097 in windows) and memory-only credit (--read-credit memory: reads pass their error down only through their tags and payloads; 1.9712 against 1.9860 in windows). Memory-only credit was behind early (2.6899 against 2.6560 at 750 updates) and ahead late (1.9735 against 1.9952 at 6,000), a steeper late curve, where the stack trails the Transformer most.",
+  "test_bed": {
+    "arms": {
+      "g6-s2": "the plain test bed by the gradient, seed 20002",
+      "om-s2": "memory-only credit, seed 20002",
+      "sg-s2": "shunting gated cells, seed 20002",
+      "sgm": "shunting gated cells with memory-only credit, seed 20001",
+      "sgm-s2": "the same, seed 20002"
+    },
+    "measure": "Averaged validation in windows at 6,000 updates (64 batches), on the server's GPU 1, code at the commit that records this file; seed 20001 references g6 1.9860, o-memory 1.9712 and the shunt-gate arm 1.9763 (laptop pilot moved to the GPU).",
+    "confirmed": "A change is confirmed if its seed-20002 arm is ahead of g6-s2 by at least 0.005, as its seed-20001 arm was ahead of g6.",
+    "combination": "The two changes are combined if sgm and sgm-s2 are each ahead of both single changes of their seed, or within 0.003 of the better one."
+  },
+  "full_size": {
+    "arm": "l2048-mem: the state of p-forget at 24,000 updates forked onto windows of 2,048 bytes with l2048-forget's settings and --read-credit memory, trained to 90,000 updates on GPU 1 after l2048-d22 and its scoring are done, and started only if memory-only credit is confirmed on the test bed (om-s2 ahead of g6-s2 by at least 0.005). Shunting cells change the parameters, so they cannot fork from a saved state and wait for a window with time to train from scratch.",
+    "reference": "l2048-forget, the same fork without the change: same state, same data order.",
+    "measure": "Both splits of enwik8 as 16 unbroken streams at the trained reach, and with the reading recipe of the released stack (reach 16,384, slope -1, v15's fast synapses at a re-picked threshold), paired piece by piece.",
+    "pass_mark": "Ahead of l2048-forget by at least 0.005 on both splits with the paired intervals above zero: memory-only credit joins the v17 recipe. A null result is reported as one."
+  },
+  "recipe_on_2048_stacks": "Before the v16 release, l2048-forget and l2048-flat are scored with the released stack's winning reading (reach 16,384 at every level, slope -1, piece 128, v15's fast synapses on all 11 levels at a threshold picked from 2^23 to 2^25 on the first validation million, extended at an edge), and paired against the Transformers trained on 1,024 and 2,048 bytes. The recipe was chosen on the released stack and is carried over unchanged, and the write-up says so."
+}
