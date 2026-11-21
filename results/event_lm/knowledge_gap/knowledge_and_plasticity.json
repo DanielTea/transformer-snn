@@ -1,0 +1,25 @@
+{
+ "study": "knowledge_and_plasticity",
+ "recorded_utc": "2026-11-21T22:41:45Z",
+ "why": "Knowledge cells pass on the delayed test bed, and silencing them in the trained stacks wrecks both their knowledge of words and their copying. Fast output synapses learn while reading. Two questions follow: what makes knowledge cells copy better, and how do knowledge cells and plasticity behave together? Every run trains on streams and is scored as a stream.",
+ "one_cell": {
+  "question": "Is the copying gain of knowledge cells the option to answer 'nothing here', or what the cells hold?",
+  "arm": "one1-st-mps: one knowledge cell a head (--read-knowledge 1 --granule-cells 1021, 5,249,078 parameters), trained on streams exactly as the second laptop screen, seed 20001, on the laptop's GPU after that screen",
+  "compared_with": "g6d-st-mps (no knowledge cells) and know128-st-mps (128 a head) of the second laptop screen",
+  "measure": "Averaged validation on streams, and the copy probe: the second showing of random letters (copying) and the first showing of random words (knowledge of words).",
+  "reading": "If one cell a head brings at least two thirds of the 128 cells' gain over the bed on the second showing of random letters, the copying gain is mostly the option to answer nothing; below one third, it is mostly what the cells hold. One seed: a screen."
+ },
+ "combination": {
+  "question": "Do knowledge cells and fast synapses trained in the loop add up, get in each other's way, or strengthen each other? And does the decaying rule trained on streams, never tried before (the only stream-trained rule had no decay and ran away), beat v15's rule given after training?",
+  "arms": {
+   "combo-bed": "the delayed test bed",
+   "combo-plastic": "with Rule A on the last level and a decay of 2^-10 a byte (--plastic-levels 5 --plastic-decay-shift 10)",
+   "combo-know": "with 128 knowledge cells a head (--read-knowledge 128 --granule-cells 893)",
+   "combo-both": "with both"
+  },
+  "training": "Every arm trains on streams (--stream 10 --stream-groups 3: stretches of ten windows of 256 bytes, the state of reads, cells and fast synapses handed on), 6,000 updates, seed 20001, on the server's CPU: the fast synapses count in 64-bit whole numbers, which the laptop's GPU does not have.",
+  "measure": "The first 2,000,000 bytes of the enwik8 validation split as 16 unbroken streams (lead 8,192, pieces of 512): every arm as trained, the plastic arms with their own rule; and every arm with v15's rule on all six levels at 2^22, the threshold re-picked for the test bed's b, the plastic arms with their own rule off.",
+  "reading": "As trained, the interaction is (both - know) - (plastic - bed). Within 0.005 of zero the two add; below -0.005 they get in each other's way; above +0.005 each strengthens the other. The decaying rule on streams beats v15's rule if combo-plastic as trained is ahead of combo-bed with v15's rule. One seed per arm: a screen that nominates a combined full-size run and decides none."
+ },
+ "seen_before_recording": "The knowledge-gap verdict, the copy probe with and without silenced knowledge cells, and the knowledge share along streams; no run of these arms exists."
+}
