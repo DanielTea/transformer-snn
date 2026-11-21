@@ -206,6 +206,14 @@ more than one axis.
   fired about half as much: this is depth at equal energy, and a
   test-bed arm with the budget doubled measures how much of the
   shortfall the budget is.
+- **Spikes or layout.** On the small test bed at depth 6 (4.86M
+  parameters, 6,000 updates on windows of 256 bytes), the
+  stack's float stand-in, with LayerNorm and no pulse budget,
+  scores 1.9798 bits per byte in windows on validation, against
+  1.9835 for the spiking stack and 1.8431 for a Transformer of
+  the same size. Spikes cost 0.004 there; the 0.14 between the
+  stack and the Transformer at that size is the layout of the
+  stack. The same three at depth 12 are training.
 - **Training.** The stack is ahead for about the first 7,500
   updates (5,800 at depth 22), by up to 0.25 bits per byte, and
   then falls behind. Over 3,000 to 24,000 updates, a power law
