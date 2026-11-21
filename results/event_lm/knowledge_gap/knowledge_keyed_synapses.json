@@ -1,0 +1,13 @@
+{
+ "study": "knowledge_keyed_synapses",
+ "recorded_utc": "2026-11-21T22:51:40Z",
+ "why": "Knowledge cells hold the stack's knowledge of words, and which of them win a race is a sparse code of what the stack recalls. Fast output synapses learn while reading and work best on stable, sparse keys. Do they learn more when they also hear which knowledge cells won (--teach-knowledge)?",
+ "models": "the four trained knowledge-cell stacks of the knowledge-gap test (know-s1 to know-s4), unchanged",
+ "arms": {
+  "cells": "v15's rule on all six levels, hearing the threshold cells as before",
+  "keyed": "the same, also hearing which knowledge cells won every head's race at those levels"
+ },
+ "measure": "The first 2,000,000 bytes of the enwik8 validation split as 16 unbroken streams (lead 8,192, pieces of 512), on a CPU. Every arm's threshold is picked for every seed from 2^21, 2^22 and 2^23 on the pieces of the first million bytes; the comparison is on the pieces of the second million, which picked nothing.",
+ "pass_mark": "Knowledge keys pass if 'keyed' is ahead of 'cells' at all four seeds on the second million and by at least 0.003 on average. They then key the fast synapses of v17's full-size scoring as well.",
+ "seen_before_recording": "No scoring with knowledge keys exists."
+}

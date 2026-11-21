@@ -179,6 +179,9 @@ def main():
     parser.add_argument("--teach-cascade", type=int, default=EventLMConfig.teach_cascade, metavar="STAGES",
                         help="stages of charge in every fast output synapse, through which what a byte taught "
                              "consolidates and fades as a power of its age; one stage does not consolidate")
+    parser.add_argument("--teach-knowledge", action="store_true",
+                        help="the fast output synapses also hear which knowledge cells won the reads' races at the "
+                             "taught levels")
     parser.add_argument("--plastic-off", action="store_true",
                         help="score a stack trained with fast output synapses without them, to see how much the "
                              "rest of it leans on them")
@@ -265,7 +268,8 @@ def main():
                        "gains": model.plastic_gains.tolist()}
         if args.teach_levels is not None:
             try:
-                model.teach(args.teach_levels, args.teach_threshold, args.teach_budget, args.teach_cascade)
+                model.teach(args.teach_levels, args.teach_threshold, args.teach_budget, args.teach_cascade,
+                            knowledge=args.teach_knowledge)
             except ValueError as error:
                 parser.error(f"{path}: {error}")
         if args.teach_freeze_after is not None:
@@ -288,7 +292,8 @@ def main():
         if args.teach_levels is not None:
             row["taught"] = {"levels": sorted(args.teach_levels), "threshold": args.teach_threshold,
                              "teaching_spikes_per_byte": args.teach_budget,
-                             **({"stages": args.teach_cascade} if args.teach_cascade != 1 else {})}
+                             **({"stages": args.teach_cascade} if args.teach_cascade != 1 else {}),
+                             **({"knowledge": True} if args.teach_knowledge else {})}
         if trained:
             row["plastic_silenced" if args.plastic_off else "plastic"] = plastic
         if args.teach_freeze_after is not None:

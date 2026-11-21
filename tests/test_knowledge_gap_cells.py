@@ -344,3 +344,36 @@ def test_a_library_streams_as_one_pass(cuts):
 def test_a_library_needs_knowledge_cells():
     with pytest.raises(ValueError, match="library"):
         EventLM(EventLMConfig(**dict(_STACK, read_knowledge_shared=True)))
+
+
+@pytest.mark.parametrize("cuts", [(160,), (47, 1, 49, 63), (1, 2, 3, 154)])
+def test_fast_synapses_keyed_by_knowledge_learn_the_same_however_a_stream_is_cut(cuts):
+    model, tokens = _stack(**_KNOWING).eval(), _bytes()
+    model.teach((0, 1), 1 << 22, knowledge=True)
+    with torch.no_grad():
+        fired, state = _pieces(model, tokens, (160,))
+        cut, cut_state = _pieces(model, tokens, cuts)
+    assert torch.equal(fired, cut) and torch.equal(state.taught.fast, cut_state.taught.fast)
+    # Every taught level adds its cells and the knowledge cells of its read's heads to what the fast synapses hear.
+    assert state.taught.fast.shape[-1] == 2 * (96 + 4 * 8)
+
+
+def test_knowledge_fibres_change_what_the_fast_synapses_learn():
+    model, tokens = _stack(**_KNOWING).eval(), _bytes()
+    with torch.no_grad():
+        model.teach((0, 1), 1 << 22)
+        plain, plain_state = _pieces(model, tokens, (160,))
+        model.teach((0, 1), 1 << 22, knowledge=True)
+        keyed, keyed_state = _pieces(model, tokens, (160,))
+        model.teach(None)
+        untaught, _ = _pieces(model, tokens, (160,))
+    assert plain_state.taught.fast.shape[-1] < keyed_state.taught.fast.shape[-1]
+    assert not torch.equal(plain, keyed) and not torch.equal(keyed, untaught)
+    assert torch.equal(keyed, keyed.round())
+
+
+@pytest.mark.parametrize("settings", [dict(teach_knowledge=True), dict(teach_after=(0,), teach_threshold=1 << 22,
+                                                                         teach_knowledge=True)])
+def test_knowledge_fibres_need_taught_levels_with_knowledge_cells(settings):
+    with pytest.raises(ValueError):
+        EventLM(EventLMConfig(**dict(_STACK, **settings)))

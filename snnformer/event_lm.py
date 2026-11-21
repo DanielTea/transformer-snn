@@ -315,6 +315,10 @@ class EventLMConfig:
     teach_after: tuple[int, ...] | None = None
     teach_threshold: int = 0
     teach_budget: int = 256
+    # The fast output synapses also hear which knowledge cells won the race of every head of the reads at the taught
+    # levels: a sparse code of what the stack recalls from training, to which every arriving byte binds what follows
+    # in this stream.
+    teach_knowledge: bool = False
     # Fast output synapses that consolidate themselves: every synapse holds this many charges, in capacities of 1, 2,
     # 4, ..., and charge flows between neighbouring stages through a conductance that falls fourfold from each pair to
     # the next. A byte teaches the first charge, which the output neurons hear. What a byte taught fades from it as a
@@ -2660,8 +2664,11 @@ class _StateRead(nn.Module):
                 payload = torch.cat((payload, known_payload.expand(payload.shape[0], -1, -1, -1)), 2)
         return fired, fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum() + beats
 
-    def forward(self, spikes, pulse_counts=None, tokens=None, tape=None, position=0):
+    def forward(self, spikes, pulse_counts=None, tokens=None, tape=None, position=0, fibres=None):
         fired, total, payload, cell_spikes = self._address(spikes, tokens, tape, position)
+        if fibres is not None:
+            # The fast output synapses hear which knowledge cells won, as [batch, bytes, heads, cells].
+            fibres.append(fired[..., -self.knowledge:].detach().transpose(1, 2))
         # Whole cell spikes pass whole payload pulses on, and their sum is the same in any order.
         packet = fired @ payload
         if total is not None:
@@ -4169,8 +4176,9 @@ class EventLM(nn.Module):
     def _taught_levels(cfg):
         """The levels whose cells the fast output synapses hear, in order, or None for an output without them."""
         if cfg.teach_after is None:
-            if cfg.teach_cascade != 1:
-                raise ValueError("stages of charge belong to fast output synapses given after training")
+            if cfg.teach_cascade != 1 or cfg.teach_knowledge:
+                raise ValueError("stages of charge and knowledge fibres belong to fast output synapses given after "
+                                 "training")
             return None
         if cfg.plastic_after is not None:
             raise ValueError("a stack trained with fast output synapses keeps its own; give none after training")
@@ -4185,16 +4193,23 @@ class EventLM(nn.Module):
             raise ValueError("the fast output synapses of a stack hear the cells after distinct levels that have a "
                              "cell layer, up to 131,072 of them, under a whole threshold, with up to 4,096 teaching "
                              "spikes a byte and one to six stages of charge")
+        if cfg.teach_knowledge and (not cfg.read_knowledge or cfg.read_after is None
+                                    or any(level not in cfg.read_after for level in cfg.teach_after)
+                                    or len(cfg.teach_after) * (cfg.granule_clusters * cfg.granule_cells
+                                                               + cfg.read_heads * cfg.read_knowledge) > _TEACH_FIBRES):
+            raise ValueError("fast output synapses hear the knowledge cells of reads at their taught levels, up to "
+                             "131,072 fibres in all")
         return tuple(sorted(cfg.teach_after))
 
-    def teach(self, levels, threshold=0, budget=EventLMConfig.teach_budget, cascade=1):
-        """Give the output its fast synapses from the cells after ``levels``, or take them away with None.
+    def teach(self, levels, threshold=0, budget=EventLMConfig.teach_budget, cascade=1, knowledge=False):
+        """Give the output its fast synapses from the cells after ``levels``, or take them away with None. With
+        ``knowledge`` they also hear which knowledge cells won the reads' races at those levels.
 
         The fast synapses hold nothing that training has set: they start silent in every stream. A stack can
         therefore be given them after its training, and it then learns along every stream that it reads.
         """
         cfg = replace(self.cfg, teach_after=None if levels is None else tuple(levels), teach_threshold=threshold,
-                      teach_budget=budget, teach_cascade=cascade)
+                      teach_budget=budget, teach_cascade=cascade, teach_knowledge=bool(knowledge and levels))
         self.teach_after = self._taught_levels(self._unrolled(cfg))
         self.cfg = cfg
 
@@ -4861,9 +4876,11 @@ class EventLM(nn.Module):
                 elif stream is None:
                     spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens)
                 else:
+                    known = (fibres if self.cfg.teach_knowledge and fibres is not None and index in heard_levels
+                             else None)
                     spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens,
                                                           stream.reads.setdefault(str(index), ReadTape()),
-                                                          stream.position)
+                                                          stream.position, known)
             if self.granule_layers is not None and str(index) in self.granule_layers:
                 if local_layers is not None:
                     raise ValueError("granule layers are not wired into the carried stream yet outside a stack")
