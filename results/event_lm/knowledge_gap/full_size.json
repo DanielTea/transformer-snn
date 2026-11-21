@@ -1,0 +1,16 @@
+{
+ "study": "knowledge_gap_full_size",
+ "recorded_utc": "2026-11-21T22:07:31Z",
+ "why": "Knowledge cells pass the four-seed test on the delayed test bed (results/event_lm/knowledge_gap/preregistered.json): ahead of the bed at every finished seed by 0.019 to 0.034, mean 0.026, with 13% fewer threshold cells to hold the parameters. Branching dendrites, apical bursts and racing experts fail.",
+ "arm": "l2048-know: the saved state of p-forget at 24,000 updates, forked onto windows of 2,048 bytes exactly as l2048-forget was (ctx 2048, batch 2, reads reaching 2,048 cells), with 128 knowledge cells a head grown at the fork (experiments/stack/fork_state.py): their offsets start 8 below a stream cell's charge (e^-8 of its rate), their tags and payloads at the spread of the stream cells' pulses, with no moments of the optimizer; every threshold cell is kept. Trained to 90,000 updates on GPU 1, code at the commit that records this file; l2048-d22 pauses at 75,000 updates for it and resumes after.",
+ "reference": "l2048-forget, the same fork without knowledge cells: same parent state, seed and data order. Streams at the trained reach: test 1.13667, validation 1.16624; reaching 8,192 cells: 1.12349 / 1.15368; with v15's fast synapses: 1.11994 / 1.15138. tf2048: 1.10669 / 1.13033.",
+ "parameters": {
+  "l2048-know": 36263956,
+  "l2048-forget": 34810900,
+  "extra": "1,453,056 (4.17%)",
+  "worth_by_depth_scaling": "doubling the stack (depth 11 to 22, 2.0x parameters) gained 0.028 to 0.030 at 72,000 updates; 4.17% more parameters would be worth about 0.002 at that rate"
+ },
+ "measure": "As l2048-forget was scored: both splits of enwik8 as 16 unbroken streams at the trained reach; the reach chosen on the first validation million (trained or 8,192); then with v15's fast synapses on all 11 levels at 2^24; every scoring paired piece by piece against l2048-forget's and tf2048's.",
+ "pass_mark": "Ahead of l2048-forget by at least 0.005 on both splits at the trained reach, with the paired 95% intervals above zero. Knowledge cells then join the v17 model. The gain is reported beside the 0.002 that 4.17% more parameters would be worth by the depth-scaling slope.",
+ "seen_before_recording": "Three of the four knowledge seeds finished, the fourth at 6,000 updates 0.012 ahead in the shorter averaged evaluation; no full-size run with knowledge cells exists."
+}
