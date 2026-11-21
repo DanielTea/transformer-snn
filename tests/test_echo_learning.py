@@ -220,3 +220,23 @@ def test_the_trainer_trains_with_a_reads_credit_path(monkeypatch, tmp_path):
     trainer, _ = _trainer(monkeypatch)
     record = _train(trainer, monkeypatch, tmp_path / "probe", "--read-credit", "probe")
     assert record["args"]["read_credit"] == "probe"
+
+
+def test_local_cells_learn_from_the_stream_they_write_and_pass_nothing_back():
+    model, tokens = _stack(), _bytes()
+    layer = model.granule_layers["1"]
+    stream = model.input_emit(model.input(tokens) * model.cfg.resolution).detach()
+    grads, fired, learned = {}, {}, {}
+    for credit in (None, "local"):
+        layer.credit = credit
+        model.zero_grad(set_to_none=True)
+        heard = stream.clone().requires_grad_()
+        out = layer(heard, tokens)
+        out.square().sum().backward()
+        grads[credit], fired[credit] = heard.grad, out.detach()
+        learned[credit] = layer.receive.grad.clone()
+    layer.credit = None
+    # The spikes and what the cells learn are as before; only the error that the cells passed back is gone, and what
+    # passes the layer unchanged still carries the error below.
+    assert torch.equal(fired[None], fired["local"]) and torch.allclose(learned[None], learned["local"])
+    assert not torch.allclose(grads[None], grads["local"]) and grads["local"].abs().sum() > 0

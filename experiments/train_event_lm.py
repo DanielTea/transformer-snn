@@ -945,6 +945,9 @@ def main():
     parser.add_argument("--read-credit", choices=("probe", "memory", "residual"),
                         help="a diagnostic: each state read passes its error down to the stream only through its "
                              "probes, only through its tags and payloads, or through neither")
+    parser.add_argument("--cell-credit", choices=("local",),
+                        help="a diagnostic: the cell layers learn from the error of the stream they write into and "
+                             "pass none of it back to the stream they hear")
     parser.add_argument("--rotate-stacks", action="store_true",
                         help="with --rotated-adam, also turn every matrix of a three-dimensional weight, such as "
                              "the synapses of granule cells")
@@ -1214,6 +1217,11 @@ def main():
             raise ValueError("--read-credit sets the paths of state reads")
         for read in model.state_reads.values():
             read.credit = args.read_credit
+    if args.cell_credit is not None:
+        if not isinstance(model, EventLM) or model.granule_layers is None:
+            raise ValueError("--cell-credit sets the paths of cell layers")
+        for layer in dict.fromkeys(model.granule_layers.values()):
+            layer.credit = args.cell_credit
     generator = torch.Generator(device="cpu").manual_seed(args.seed)
 
     def draw(step):

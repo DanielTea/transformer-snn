@@ -3101,6 +3101,9 @@ class _GranuleLayer(nn.Module):
         clusters, cells, fan = cfg.granule_clusters, cfg.granule_cells, cfg.granule_fan
         # A cell sums many small synapses, so its weights may sit on a finer grid than the blocks' weights.
         self.bits = cfg.router_charge_bits if cfg.granule_bits is None else cfg.granule_bits
+        # A diagnostic of training only, never saved: with "local" the cells learn from the error at the stream
+        # that they write into, and pass none of it back to the stream that they hear.
+        self.credit = None
         self.channels = cfg.dim
         cap = _HIDDEN_CAP * cfg.resolution
         # The wiring is fixed and belongs to the layer's place in the stack.
@@ -3329,7 +3332,7 @@ class _GranuleLayer(nn.Module):
         return self.fire(charge, quanta, sharpness=self.sharpness.exp())
 
     def forward(self, spikes, tokens=None, carried=None, fired=None):
-        cells = self.cells(spikes, tokens, carried)
+        cells = self.cells(spikes.detach() if self.credit == "local" else spikes, tokens, carried)
         if fired is not None:
             # The fast output synapses hear the cells as fibres of their own. Trained ones pass their gradient on.
             fired.append(cells)
