@@ -315,8 +315,13 @@ _LIBRARY = dict(read_knowledge=8, read_knowledge_shared=True)
 def test_a_library_of_knowledge_cells_serves_every_level():
     model = _stack(**_LIBRARY)
     reads = list(model.state_reads.values())
-    assert reads[0].known_tag is reads[1].known_tag and reads[0].known_payload is reads[1].known_payload
+    # The library is one component of the stack: the reads reach it and keep only their own offsets.
+    assert reads[0].library is reads[1].library is model.library
     assert reads[0].known_offset is not reads[1].known_offset
+    keys = list(model.state_dict())
+    assert {"library.tag", "library.payload"} <= set(keys) and not any("known_tag" in key or "known_payload" in key
+                                                                       for key in keys)
+    assert sum(key.startswith("library.") for key in keys) == 2
     plain = _stack()
     extra = sum(p.numel() for p in model.parameters()) - sum(p.numel() for p in plain.parameters())
     # One library of tags and payloads, and offsets for every level.
@@ -324,12 +329,12 @@ def test_a_library_of_knowledge_cells_serves_every_level():
     # Both levels' errors reach the shared synapses.
     tokens = _bytes()
     model.train()(tokens).float().square().mean().backward()
-    shared = reads[0].known_tag.grad.clone()
+    shared = model.library.tag.grad.clone()
     model.zero_grad()
     with torch.no_grad():
         model.state_reads["1"].project.weight.zero_()
     model(tokens).float().square().mean().backward()
-    assert reads[0].known_tag.grad is not None and not torch.equal(reads[0].known_tag.grad, shared)
+    assert model.library.tag.grad is not None and not torch.equal(model.library.tag.grad, shared)
 
 
 @pytest.mark.parametrize("cuts", [(160,), (47, 1, 49, 63)])

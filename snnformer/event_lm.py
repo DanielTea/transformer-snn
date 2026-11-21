@@ -2222,6 +2222,30 @@ def _word_ends(inside):
     return ~inside & F.pad(inside, (1, 0))[:, :inside.shape[1]]
 
 
+class _KnowledgeLibrary(nn.Module):
+    """One library of knowledge cells that the state reads of every level reach.
+
+    Every head of a read has ``read_knowledge`` library cells in its channels. A cell is a spiking neuron with two
+    sets of synapses: its tag, which weighs the pulses of the probe that asks, and its payload, the pulses that it
+    sends to the asking read's neurons when it wins spikes in the read's race. Both are held in whole pulses when a
+    read uses them, stored at the read address rate so that a step of training moves them by pulses, and they start
+    with the spread of the stream cells' pulses. The levels ask the library in turn within every byte: each through
+    its own probe neurons, with offsets of its own for the cells and its own read neurons for what comes back. The
+    library itself holds no state of a stream.
+    """
+
+    def __init__(self, cfg: EventLMConfig):
+        super().__init__()
+        self.heads, self.cells = cfg.read_heads, cfg.read_knowledge
+        self.channels = cfg.read_width // cfg.read_heads
+        spread = _KNOWN_SPREAD / cfg.read_address_rate
+        self.tag = nn.Parameter(torch.randn(self.heads, self.cells, self.channels) * spread)
+        self.payload = nn.Parameter(torch.randn(self.heads, self.cells, self.channels) * spread)
+
+    def extra_repr(self):
+        return f"heads={self.heads}, cells={self.cells}, channels={self.channels}"
+
+
 class _StateRead(nn.Module):
     """A read of the stream's own earlier cells, addressed by what they hold.
 
@@ -2408,15 +2432,19 @@ class _StateRead(nn.Module):
             # Each head has its own factor on the read resolution.
             self.grain = nn.Parameter(torch.zeros(self.heads, 1, 1))
         self.knowledge = cfg.read_knowledge
+        # The stack's knowledge library, where the knowledge cells form one: a component of the stack that this read
+        # reaches and does not own.
+        self.library = None
         if self.knowledge:
-            # Every head's knowledge cells, each with a tag and a payload in the head's channels and an offset where
-            # a stream cell has the offset of its age. The synapses are stored at the address rate, as the offsets
-            # are, so that a step of training moves them by pulses as it moves a tag neuron's count, and they start
-            # with the spread of the stream cells' pulses.
-            width = cfg.read_width // cfg.read_heads
-            spread = _KNOWN_SPREAD / self.rate
-            self.known_tag = nn.Parameter(torch.randn(self.heads, self.knowledge, width) * spread)
-            self.known_payload = nn.Parameter(torch.randn(self.heads, self.knowledge, width) * spread)
+            if not cfg.read_knowledge_shared:
+                # Every head's knowledge cells, each with a tag and a payload in the head's channels. The synapses are
+                # stored at the address rate, as the offsets are, so that a step of training moves them by pulses as
+                # it moves a tag neuron's count, and they start with the spread of the stream cells' pulses.
+                width = cfg.read_width // cfg.read_heads
+                spread = _KNOWN_SPREAD / self.rate
+                self.known_tag = nn.Parameter(torch.randn(self.heads, self.knowledge, width) * spread)
+                self.known_payload = nn.Parameter(torch.randn(self.heads, self.knowledge, width) * spread)
+            # Every knowledge cell has an offset where a stream cell has the offset of its age.
             self.known_offset = nn.Parameter(torch.zeros(self.heads, self.knowledge))
         self.kept = cfg.read_kept
         if self.kept:
@@ -2427,7 +2455,9 @@ class _StateRead(nn.Module):
         """The knowledge cells' tags and payloads in whole pulses as [heads, cells, channels], within the pulses that
         a tag or payload neuron fires, and their offsets as [heads, cells]."""
         limit = self.fire.capped
-        tags, payloads = (value * self.rate for value in (self.known_tag, self.known_payload))
+        stored = ((self.known_tag, self.known_payload) if self.library is None
+                  else (self.library.tag, self.library.payload))
+        tags, payloads = (value * self.rate for value in stored)
         tags = tags.clamp(-limit if self.signed else 0, limit)
         payloads = payloads.clamp(-limit, limit)
         tags, payloads = (value.detach().round() + (value - value.detach()) for value in (tags, payloads))
@@ -4047,6 +4077,7 @@ class EventLM(nn.Module):
             self.recall_emit = _IntegrateFire(cap, _CHARGE_BITS, False)
         # The reads are created last, so the other weights start as they do without them.
         self.state_reads = None
+        self.library = None
         if (not isinstance(cfg.read_knowledge, int) or isinstance(cfg.read_knowledge, bool) or cfg.read_knowledge < 0
                 or (cfg.read_knowledge and (cfg.read_after is None or cfg.read_mode != "race"
                                             or cfg.read_budget is None))):
@@ -4121,11 +4152,11 @@ class EventLM(nn.Module):
                                      "the range of exact sums; lower the read cap")
             self.state_reads = self._tied(cfg.read_after, lambda index: _StateRead(cfg))
             if cfg.read_knowledge_shared:
-                # One library for every level: the reads hold the first read's knowledge tags and payloads, and
-                # keep offsets of their own.
-                first = next(iter(self.state_reads.values()))
+                # The knowledge library: one component of the stack that the reads of every level reach. A read keeps
+                # a reference to it, not a copy, so its synapses are held once.
+                self.library = _KnowledgeLibrary(cfg)
                 for read in self.state_reads.values():
-                    read.known_tag, read.known_payload = first.known_tag, first.known_payload
+                    object.__setattr__(read, "library", self.library)
         self.granule_layers = None
         if (cfg.granule_self_gate or cfg.granule_shunt) and cfg.granule_after is None:
             raise ValueError("granule_self_gate and granule_shunt gate the cells of granule layers, and there are none")
