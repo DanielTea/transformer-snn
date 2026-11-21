@@ -1,0 +1,20 @@
+{
+  "study": "stack_loop",
+  "recorded_utc": "2026-11-21T09:05:00Z",
+  "question": "Does a loop of the stack's middle levels, which every byte passes several times with the same reads and cell layers (tied weights, a state of its own for every pass in a stream), recover the gain that more levels give, at the parameters of the plain stack? The loop is the spiking form of a looped Transformer's core (prelude, loop core run several passes, coda).",
+  "test_bed": "The stack of results/event_lm/stream_form/small_test_bed.json: 6 levels, 256 channels, 4.86M parameters, windows of 256 bytes, batch 16, 6,000 updates at 3e-4, rotated optimizer, averaged weights, seed 20001, on a CPU.",
+  "arms": {
+    "loop3": "--stack-loop 1,4,3 --pulse-budget 264000: level 0 once, levels 1 to 4 three times, level 5 once (14 level passes); the budget of 113,000 pulses a byte scaled by 14/6",
+    "loop2": "--stack-loop 1,4,2 --pulse-budget 188000: 10 level passes, the budget scaled by 10/6",
+    "loop3-fixed": "--stack-loop 1,4,3 with the budget of 113,000: the loop on the plain stack's energy"
+  },
+  "references": {
+    "depth 6": "arm a of the trained-plasticity test bed (the same stack, 113,000 pulses a byte)",
+    "depth 12, scaled budget": "stack12b of jobs/depth (12 levels, 9.58M parameters, 226,000 pulses a byte)",
+    "depth 12, fixed budget": "stack12 of jobs/depth (12 levels, 113,000 pulses a byte)"
+  },
+  "scoring": "experiments/eval_stream.py on the enwik8 validation split as 16 unbroken streams, lead 8,192, pieces of 512; paired with experiments/compare_stream_scores.py; the trainer's in-window scores reported beside.",
+  "pass_mark": "loop3 passes if its gain over depth 6 is at least half of the gain of depth 12 with the scaled budget over depth 6, and the lower end of its paired 95% interval over depth 6 is above zero. If depth 12 with the scaled budget gains less than 0.010 over depth 6, depth does not help the stack at this scale, and the pilot gives no verdict on loops.",
+  "then": "If loop3 passes: feedback fibres from the loop's last cells into its first level on the next pass (the cross-pass message), and then a read across the levels of the present byte (attention over depth), one at a time as arms of their own; a full-size loop after the weekend's GPU runs. Every loop arm reports pulses per byte.",
+  "seen_before_recording": "No loop arm has trained. The depth-6 references exist (a: 1.9835 in windows, 1.95134 on validation streams); the depth-12 arms are training and unseen."
+}

@@ -314,6 +314,8 @@ def build_model(args):
                             granule_hold=getattr(args, "granule_hold", EventLMConfig.granule_hold),
                             granule_clock_rate=getattr(args, "granule_clock_rate", EventLMConfig.granule_clock_rate),
                             stack=getattr(args, "stack", EventLMConfig.stack),
+                            stack_loop=(None if getattr(args, "stack_loop", None) is None
+                                        else tuple(map(int, args.stack_loop.split(",")))),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
@@ -637,6 +639,9 @@ def main():
     parser.add_argument("--stack", action="store_true",
                         help="a decoder without blocks: every level is the state read and the cell layer that "
                              "--read-after and --granule-after name for it, and --depth counts the levels")
+    parser.add_argument("--stack-loop", metavar="FIRST,LAST,PASSES",
+                        help="a stack whose levels FIRST to LAST every byte passes PASSES times with the same reads "
+                             "and cell layers; every pass keeps its own state in a stream")
     parser.add_argument("--read-after", help="comma-separated byte-rate blocks that a state read follows")
     parser.add_argument("--read-width", type=int, default=EventLMConfig.read_width, help="channels of a state read")
     parser.add_argument("--read-heads", type=int, default=EventLMConfig.read_heads)

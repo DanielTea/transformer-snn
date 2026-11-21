@@ -224,6 +224,11 @@ class EventLMConfig:
     granule_hold: str = "sum"
     granule_clock_rate: float = 0.25
     stack: bool = False
+    # A loop of a stack's levels FIRST to LAST, which every byte passes PASSES times with the same reads and cell
+    # layers: the levels before the loop run once, then the loop, then the levels after it. Every pass of a level
+    # keeps a state of its own in a stream, as a level of its own would. depth, read_after and granule_after count
+    # the stack's own levels; the levels of fast output synapses count the passes, in the order the stream takes them.
+    stack_loop: tuple[int, int, int] | None = None
     granule_cap: int | None = None
     granule_gate: int = 0
     # A gated cell whose gate dendrite hears its fibres through the cell's own synapses: it fires about the square
@@ -3330,6 +3335,10 @@ class EventLM(nn.Module):
         super().__init__()
         if min(cfg.dim, cfg.depth) < 1 or cfg.hidden < len(_DELAYS[0]):
             raise ValueError("invalid decoder dimensions")
+        # A stack with a loop is built as the stack of the levels that a byte passes, whose passes of one level share
+        # its reads and cells. The configuration that is kept names the loop, so a saved stack rebuilds as it was.
+        stored, self.visits = cfg, self._visits(cfg)
+        cfg = self._unrolled(cfg)
         if cfg.delay_group_widths is not None:
             groups = cfg.group_widths
             if (len(groups) != len(_STEERED_DELAYS[0]) or any(not isinstance(width, int) or width < 1 for width in groups)
@@ -3552,7 +3561,7 @@ class EventLM(nn.Module):
         if max_drive > torch.iinfo(torch.int32).max:
             raise ValueError("synaptic accumulator would exceed the int32 integer range")
         self._check_weights = not cfg.continuous and max_drive >= _FP32_EXACT
-        self.cfg = cfg
+        self.cfg = stored
         # Probes can mute the clocked correction or displace its ticks at fixed weights.
         self.clock_intervention = None
         self.clock_trace = None
@@ -3664,7 +3673,7 @@ class EventLM(nn.Module):
                 if 2 * _PHASE_SPIKES * held > _FP32_EXACT:
                     raise ValueError("the charge that the pacemakers let into a turned probe or tag neuron exceeds "
                                      "the range of exact sums; lower the read cap")
-            self.state_reads = nn.ModuleDict({str(index): _StateRead(cfg) for index in sorted(cfg.read_after)})
+            self.state_reads = self._tied(cfg.read_after, lambda index: _StateRead(cfg))
         self.granule_layers = None
         if cfg.granule_self_gate and cfg.granule_after is None:
             raise ValueError("granule_self_gate gates the cells of granule layers, and there are none")
@@ -3759,14 +3768,49 @@ class EventLM(nn.Module):
             if not isinstance(cfg.granule_relays, int) or (cfg.granule_relays != 0
                                                            and cfg.granule_relays < cfg.granule_fan):
                 raise ValueError("granule relays are none or at least one for every fibre of a cluster")
-            self.granule_layers = nn.ModuleDict({str(index): _GranuleLayer(cfg, index)
-                                                 for index in sorted(cfg.granule_after)})
+            self.granule_layers = self._tied(cfg.granule_after, lambda index: _GranuleLayer(cfg, index))
         self.teach_after = self._taught_levels(cfg)
         self.plastic_after = self._plastic_levels(cfg)
         # One gain for the fast neurons of every taught level. At zero they are silent, and the stack is the one
         # without them.
         self.plastic_gains = (None if self.plastic_after is None
                               else nn.Parameter(torch.zeros(len(self.plastic_after))))
+
+    @staticmethod
+    def _visits(cfg):
+        """The stack's own level at every level that a byte passes, in order: all of them once without a loop."""
+        if cfg.stack_loop is None:
+            return list(range(cfg.depth))
+        loop = tuple(cfg.stack_loop)
+        if (not cfg.stack or len(loop) != 3
+                or not all(isinstance(value, int) and not isinstance(value, bool) for value in loop)):
+            raise ValueError("a loop runs levels FIRST to LAST of a stack PASSES times")
+        first, last, passes = loop
+        if not 0 <= first <= last < cfg.depth or passes < 1:
+            raise ValueError("a loop runs levels FIRST to LAST of a stack PASSES times")
+        return list(range(first)) + list(range(first, last + 1)) * passes + list(range(last + 1, cfg.depth))
+
+    @classmethod
+    def _unrolled(cls, cfg):
+        """The configuration of the levels that a byte passes: a loop's passes as levels of their own."""
+        if cfg.stack_loop is None:
+            return cfg
+        visits = cls._visits(cfg)
+
+        def passes(levels):
+            return None if levels is None else tuple(at for at, level in enumerate(visits) if level in levels)
+
+        return replace(cfg, depth=len(visits), read_after=passes(cfg.read_after),
+                       granule_after=passes(cfg.granule_after), stack_loop=None)
+
+    def _tied(self, indices, make):
+        """The modules of the levels at ``indices``, made by ``make`` for the first pass of each level of the stack;
+        a later pass of a level in a loop has the module of its first pass."""
+        modules = {}
+        for index in sorted(indices):
+            first = self.visits.index(self.visits[index])
+            modules[str(index)] = make(index) if first == index else modules[str(first)]
+        return nn.ModuleDict(modules)
 
     @staticmethod
     def _plastic_levels(cfg):
@@ -3825,7 +3869,7 @@ class EventLM(nn.Module):
         """
         cfg = replace(self.cfg, teach_after=None if levels is None else tuple(levels), teach_threshold=threshold,
                       teach_budget=budget)
-        self.teach_after = self._taught_levels(cfg)
+        self.teach_after = self._taught_levels(self._unrolled(cfg))
         self.cfg = cfg
 
     def silence_plasticity(self):
@@ -3840,7 +3884,7 @@ class EventLM(nn.Module):
         """Let the fast output synapses of a stream stop changing after ``steps`` bytes, or never with None. They
         keep firing with what they hold."""
         cfg = replace(self.cfg, teach_freeze_after=steps)
-        self._plastic_levels(cfg)
+        self._plastic_levels(self._unrolled(cfg))
         self.cfg = cfg
 
     def _plastic_thresholds(self):
