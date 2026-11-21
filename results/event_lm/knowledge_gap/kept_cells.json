@@ -10,5 +10,9 @@
  "references": "g6d-st-mps and know128-st-mps of the second laptop screen",
  "measure": "The trainer's averaged validation on streams, and the first 2,000,000 bytes of the enwik8 validation split as 16 unbroken streams (lead 8,192, pieces of 512) for all four arms, on the same GPU.",
  "reading": "Kept cells earn four seeds if kept32 beats g6d-st by at least 0.010 on the long streams, or knowkept beats know128-st by at least 0.010. One seed: a screen. The bed's reach is 256 cells, so the effect is what a read gains from cells beyond 256 bytes.",
- "seen_before_recording": "Tests and a 12-update smoke run on the laptop CPU; no run of these arms exists."
+ "seen_before_recording": "Tests and a 12-update smoke run on the laptop CPU; no run of these arms exists.",
+ "amendment": {
+  "recorded_utc": "2026-11-21T23:12:00Z",
+  "what": "The first launch (23:01 UTC) failed at the stream's first change of kept cells, before any update ended: the slot keys were counted in 64-bit floats, which MPS lacks. They are now counted on the CPU (466ebe8; the spikes on MPS equal those on the CPU), and the arms were relaunched unchanged."
+ }
 }
