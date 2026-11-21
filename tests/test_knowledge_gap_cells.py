@@ -472,3 +472,13 @@ def test_kept_cells_learn_when_trained_on_streams():
 def test_kept_cells_need_a_race_with_a_budget(settings):
     with pytest.raises(ValueError):
         EventLM(EventLMConfig(**dict(_STACK, **settings)))
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs MPS")
+def test_kept_cells_run_on_mps_as_on_the_cpu():
+    model, tokens = _stack(**_KEEPING).eval(), _bytes(length=200)
+    with torch.no_grad():
+        on_cpu, _ = _pieces(model, tokens, (200,))
+        model, tokens = model.to("mps"), tokens.to("mps")
+        on_mps, _ = _pieces(model, tokens, (47, 1, 49, 103))
+    assert torch.equal(on_mps.cpu(), on_cpu)

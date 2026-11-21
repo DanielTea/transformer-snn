@@ -2617,8 +2617,9 @@ class _StateRead(nn.Module):
         # At equal importance the kept cells come first, the first slot before the next, then the newcomers, the
         # latest first: every key is a different whole number.
         priority = torch.cat((torch.arange(newcomers + slots, newcomers, -1), torch.arange(1, newcomers + 1)))
-        key = scores.to(torch.float64) * (slots + newcomers + 2) + priority.to(scores.device, torch.float64)
-        chosen = key.topk(slots, dim=-1).indices
+        # The keys are counted in 64-bit floats, on the CPU where a device has none.
+        key = scores.detach().cpu().double() * (slots + newcomers + 2) + priority.double()
+        chosen = key.topk(slots, dim=-1).indices.to(scores.device)
         pick = chosen[..., None].expand(*chosen.shape, tag.shape[-1])
         new_score = scores.gather(-1, chosen)
         return (torch.cat((kept_tag, tag), 2).gather(2, pick), torch.cat((kept_payload, payload), 2).gather(2, pick),
