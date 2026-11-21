@@ -20,5 +20,9 @@
     "measure": "Both splits of enwik8 as 16 unbroken streams at the trained reach, and with the reading recipe of the released stack (reach 16,384, slope -1, v15's fast synapses at a re-picked threshold), paired piece by piece.",
     "pass_mark": "Ahead of l2048-forget by at least 0.005 on both splits with the paired intervals above zero: memory-only credit joins the v17 recipe. A null result is reported as one."
   },
-  "recipe_on_2048_stacks": "Before the v16 release, l2048-forget and l2048-flat are scored with the released stack's winning reading (reach 16,384 at every level, slope -1, piece 128, v15's fast synapses on all 11 levels at a threshold picked from 2^23 to 2^25 on the first validation million, extended at an edge), and paired against the Transformers trained on 1,024 and 2,048 bytes. The recipe was chosen on the released stack and is carried over unchanged, and the write-up says so."
+  "recipe_on_2048_stacks": "Before the v16 release, l2048-forget and l2048-flat are scored with the released stack's winning reading (reach 16,384 at every level, slope -1, piece 128, v15's fast synapses on all 11 levels at a threshold picked from 2^23 to 2^25 on the first validation million, extended at an edge), and paired against the Transformers trained on 1,024 and 2,048 bytes. The recipe was chosen on the released stack and is carried over unchanged, and the write-up says so.",
+  "amendment": {
+    "recorded_utc": "2026-11-21T16:11:32Z",
+    "what": "The first second-seed runs (g6-s2, om-s2, sg-s2, sgm-s2) trained at seed 20001, not 20002: their launcher put the seed before the shared flags, which repeat --seed 20001, and the later flag counts. Their curves matched the seed-20001 runs value for value, which shows that GPU training is reproducible, and they were stopped at 750 to 3,750 updates. They are replaced by g6-seed2, om-seed2, sg-seed2 and sgm-seed2, launched with the seed after the shared flags; sgm (seed 20001) stands. The pass marks and the full-size rule are unchanged, read from the new arms."
+  }
 }
