@@ -84,15 +84,27 @@ def book_rows(books, part, lead):
                  for kind in range(3))
 
 
-def lengthen_reach(model, cells, levels=None):
-    """Let every read of a stack reach ``cells`` back, or only the reads after ``levels``. The cells beyond a
-    read's window take the age offset of the window's oldest cell, as under the setting ``read_reach``."""
+def chosen_reads(model, levels=None):
+    """The reads after ``levels``, or all of them, each once. The passes of a level in a loop share its read, and a
+    setting of that read holds for all of them, so ``levels`` names all its passes or none."""
     reads = model.state_reads
     if levels is not None and not {str(level) for level in levels} <= set(reads):
         raise ValueError("the stack has no read after one of these levels")
-    for level, read in reads.items():
-        if levels is not None and int(level) not in levels:
-            continue
+    named = set(reads) if levels is None else {str(level) for level in levels}
+    chosen = []
+    for read in dict.fromkeys(reads.values()):
+        passes = {level for level, other in reads.items() if other is read}
+        if passes & named and not passes <= named:
+            raise ValueError("the passes of a level in a loop share its read: name all of them or none")
+        if passes <= named:
+            chosen.append(read)
+    return chosen
+
+
+def lengthen_reach(model, cells, levels=None):
+    """Let every read of a stack reach ``cells`` back, or only the reads after ``levels``. The cells beyond a
+    read's window take the age offset of the window's oldest cell, as under the setting ``read_reach``."""
+    for read in chosen_reads(model, levels):
         if cells < read.window:
             raise ValueError("a read reaches at least its window of cells back")
         read.reach = cells
@@ -102,12 +114,7 @@ def forget_by_power(model, slope, levels=None):
     """Give every read of a stack, or the reads after ``levels``, a fixed forgetting slope: ``slope`` units of charge
     for every doubling of the age of a cell beyond the read's window, as a learned slope of ``read_forget`` would
     give. It adds no parameter, and a read whose slope was learned keeps it."""
-    reads = model.state_reads
-    if levels is not None and not {str(level) for level in levels} <= set(reads):
-        raise ValueError("the stack has no read after one of these levels")
-    for level, read in reads.items():
-        if levels is not None and int(level) not in levels:
-            continue
+    for read in chosen_reads(model, levels):
         if read.forget is not None:
             raise ValueError("a read that learned its slope keeps it")
         # The slope counts on top of the address rate, as a learned one does.

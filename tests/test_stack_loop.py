@@ -122,3 +122,22 @@ def test_the_trainer_trains_a_looped_stack(monkeypatch, tmp_path):
     rebuilt = EventLM(EventLMConfig(**saved["cfg"]))
     rebuilt.load_state_dict(saved["state_dict"])
     assert rebuilt.visits == [0, 1, 0, 1]
+
+
+def test_the_scorer_sets_a_shared_read_once_for_all_its_passes(monkeypatch):
+    import sys
+    from pathlib import Path
+
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "experiments"))
+    sys.modules.pop("eval_stream", None)
+    import eval_stream
+
+    model = _stack(**_LOOP)
+    window = model.state_reads["0"].window
+    eval_stream.lengthen_reach(model, 4 * window, (0, 2, 4))
+    assert model.state_reads["2"].reach == 4 * window and model.state_reads["1"].reach == window
+    eval_stream.forget_by_power(model, -1.0)
+    assert all(read.forget is not None for read in model.state_reads.values())
+    # Naming one pass of a looped level would set its other passes too, so it is refused.
+    with pytest.raises(ValueError, match="passes"):
+        eval_stream.lengthen_reach(_stack(**_LOOP), 4 * window, (0, 2))
