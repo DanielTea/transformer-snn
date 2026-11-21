@@ -35,7 +35,7 @@ import torch
 
 # Settings of trainers newer than a saved run, which a fork may give it all the same.
 LATER_SETTINGS = {"plastic_levels", "plastic_rule", "plastic_chunk", "plastic_decay_shift", "plastic_threshold",
-                  "plastic_shuffle"}
+                  "plastic_shuffle", "read_credit", "cell_credit"}
 
 
 def add_plastic_gains(state, count):
