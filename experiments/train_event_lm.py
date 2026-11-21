@@ -31,7 +31,7 @@ from common import (
 )
 from snnformer import SNNConfig, count_params
 from snnformer.event_lm import (
-    EventLM, EventLMConfig, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES,
+    EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES, echo_feedback,
 )
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
@@ -62,6 +62,43 @@ EVENT_ROUTES = {
 def scoring_logits(output: torch.Tensor, event: bool, resolution: int = 1) -> torch.Tensor:
     """Score the signed spike evidence outside the event decoder."""
     return output.float() * (math.log(2) / (8 * resolution)) if event else output
+
+
+class EchoFeedback:
+    """The fixed synapses of echo learning for every part of a stack, drawn once on the device of the error."""
+
+    def __init__(self, seed):
+        self.seed, self.drawn = seed, {}
+
+    def __call__(self, name, width, device):
+        if (name, width) not in self.drawn:
+            self.drawn[name, width] = echo_feedback(self.seed, name, width).to(device)
+        return self.drawn[name, width]
+
+
+def echo_backward(loss, logits, targets, tape, feedback, mirror=False):
+    """The update of echo learning. The loss teaches what its error reaches directly: the output neurons, and also
+    the reads and input synapses when only the cells learn from echoes; the pulse budget teaches each part its own
+    pulses. Every part on the tape learns from an echo of the error at the output: through fixed random synapses,
+    the error of each byte (its softmax less the byte that came) through the part's feedback synapses; as a mirror,
+    the error of the stream that the output hears, the same for every part, which comes back through the output's
+    own synapses and goes no further."""
+    parts = [added for _, added in tape.parts if added.requires_grad]
+    if mirror:
+        loss.backward(retain_graph=True)
+        top = tape.top.grad
+        torch.autograd.backward(parts, [top.to(added.dtype) for added in parts])
+        return
+    with torch.no_grad():
+        error = F.softmax(logits.detach().float(), -1)
+        error -= F.one_hot(targets, error.shape[-1]).to(error.dtype)
+        error /= targets.numel()
+    tensors, grads = [loss], [torch.ones_like(loss)]
+    for name, added in tape.parts:
+        if added.requires_grad:
+            tensors.append(added)
+            grads.append((error @ feedback(name, added.shape[-1], error.device)).to(added.dtype))
+    torch.autograd.backward(tensors, grads)
 
 
 def load_checkpoint(path: Path, device: torch.device):
@@ -896,6 +933,15 @@ def main():
     parser.add_argument("--rotated-adam", type=int, metavar="STEPS",
                         help="run Adam in the eigenbasis of each weight matrix's gradient statistics and "
                              "update the bases every this many steps")
+    parser.add_argument("--echo", choices=("all", "cells"),
+                        help="echo learning: train the parts of a stack from fixed random echoes of the error at the "
+                             "output instead of from the error passed back through the parts above them; 'all' "
+                             "for the input synapses, reads and cells, 'cells' for the cell layers alone")
+    parser.add_argument("--echo-seed", type=int, default=0, help="seed of the fixed synapses that carry the echoes")
+    parser.add_argument("--echo-feedback", choices=("random", "mirror"), default="random",
+                        help="'random': each part hears the error at the output through fixed random synapses; "
+                             "'mirror': every part hears the error of the stream that the output hears, which comes "
+                             "back in one hop through the output's own synapses")
     parser.add_argument("--rotate-stacks", action="store_true",
                         help="with --rotated-adam, also turn every matrix of a three-dimensional weight, such as "
                              "the synapses of granule cells")
@@ -1019,6 +1065,10 @@ def main():
             or args.code_loss_weight or args.early_readout_weight or args.bank_read_rank_weight):
         parser.error("--stream takes two or more windows to a stretch, a number that divides --save-every, and "
                      "trains on the next byte alone")
+    if args.echo is not None and (
+            not args.stack or args.stream is not None or args.code_loss_weight or args.early_readout_weight
+            or args.bank_read_rank_weight or args.teacher_checkpoint is not None or args.plastic_levels is not None):
+        parser.error("--echo trains a stack in windows on the next byte alone")
     if args.stream_groups != 1 and (args.stream is None or args.stream_groups < 1):
         parser.error("--stream-groups needs --stream and one group at least")
     # All groups start a stretch together every this many updates, and a run saves and turns at such updates.
@@ -1155,6 +1205,7 @@ def main():
     optimizer = make_optimizer(model, args.lr, args.wd, betas=(0.9, args.adam_beta2), rotated=args.rotated_adam,
                                stacks=args.rotate_stacks, scales=args.lr_scale)
     average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
+    feedback = None if args.echo is None else EchoFeedback(args.echo_seed)
     generator = torch.Generator(device="cpu").manual_seed(args.seed)
 
     def draw(step):
@@ -1224,6 +1275,9 @@ def main():
         if pulse_counts is not None:
             pulse_counts.clear()
         forward_options = {} if pulse_counts is None else {"memory_pulses": pulse_counts}
+        tape = None
+        if args.echo is not None:
+            tape = forward_options["echo"] = EchoTape(everywhere=args.echo == "all")
         if args.bank_read_rank_weight:
             bank_read_losses = []
             forward_options["bank_read_losses"] = bank_read_losses
@@ -1269,7 +1323,10 @@ def main():
             loss = loss + spike_price * gap + 0.5 * gap.relu().square()
             spike_price = (spike_price + 0.04 * gap.detach()).clamp_min(0)
         optimizer.zero_grad(set_to_none=True)
-        loss.backward()
+        if tape is None:
+            loss.backward()
+        else:
+            echo_backward(loss, logits, targets, tape, feedback, mirror=args.echo_feedback == "mirror")
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         if event:

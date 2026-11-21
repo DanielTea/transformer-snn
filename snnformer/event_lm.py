@@ -2044,6 +2044,36 @@ class TaughtState:
 
 
 @dataclass
+class EchoTape:
+    """What the parts of a stack added to the stream in one training window, for an echo of the output's error to
+    teach them.
+
+    Echo learning trains a part from a fixed random echo of the error at the output instead of from the error passed
+    back through the parts above it. A part then hears the stream without passing any error back into it, and what
+    it adds to the stream is kept here, so that the trainer can give it its echo. With ``everywhere`` the input
+    synapses, every state read and every cell layer learn from echoes and the output neurons from their own error
+    alone. Without it only the cell layers learn from echoes, and the rest from the gradient as before."""
+
+    everywhere: bool = True
+    parts: list = field(default_factory=list)
+    # The stream that the output neurons hear. A mirror echo is the error of the output on it: what every part that
+    # wrote into the stream is then told, in one hop through the output's own synapses.
+    top: torch.Tensor | None = None
+
+
+def echo_feedback(seed, name, width):
+    """The fixed synapses that carry the error at the output to the part ``name`` of a stack in echo learning: random
+    signs, one row for every byte value and one column for every channel that the part adds to the stream, scaled by
+    one over the root of the vocabulary. They are drawn from the seed and the part's name, so that a resumed run has
+    the same ones, and they are never trained."""
+    import zlib
+
+    generator = torch.Generator().manual_seed(seed * 1_000_003 + zlib.crc32(name.encode()))
+    signs = torch.randint(0, 2, (_VOCAB, width), generator=generator, dtype=torch.int64) * 2 - 1
+    return signs.to(torch.float32) / math.sqrt(_VOCAB)
+
+
+@dataclass
 class StreamState:
     """The state of a stack after some bytes of a stream: how many have gone by, what every read and every cell
     layer keeps of them, and what the fast output synapses have learned from them."""
@@ -4518,9 +4548,13 @@ class EventLM(nn.Module):
 
     def forward(self, tokens, *, delay_limit=None, shuffle_phase=False, correction_access=None,
                 return_prediction=False, corrected_prediction=False, memory_pulses=None, bank_read_losses=None,
-                early_readout=None, stream=None):
+                early_readout=None, stream=None, echo=None):
         if tokens.ndim != 2 or tokens.shape[1] == 0:
             raise ValueError("expected a nonempty [batch, bytes] tensor")
+        if echo is not None and (not self.cfg.stack or stream is not None or correction_access is not None
+                                 or return_prediction or early_readout is not None or bank_read_losses is not None
+                                 or self.plastic_after is not None):
+            raise ValueError("echo learning trains the reads and cells of a stack in windows")
         if stream is not None and (not self.cfg.stack or correction_access is not None or return_prediction
                                    or early_readout is not None):
             raise ValueError("a stack of reads and cells carries its state through a stream; other decoders "
@@ -4546,6 +4580,10 @@ class EventLM(nn.Module):
             drive = drive + F.pad(delayed, (0, 0, padding, 0))
         observed = self.input_emit(drive * self.cfg.resolution)
         spikes = observed
+        if echo is not None and echo.everywhere:
+            # The input synapses learn from an echo of their own: no error comes back to them through the stream.
+            echo.parts.append(("input", observed))
+            spikes = observed.detach()
         local_layers = None if correction_access is None else correction_access.local_layers
         clock_start = self.cfg.clock_start
         # The forecast neurons read the stream under the clock, or the top stream of an unclocked decoder.
@@ -4573,7 +4611,11 @@ class EventLM(nn.Module):
             if self.state_reads is not None and str(index) in self.state_reads:
                 if local_layers is not None:
                     raise ValueError("state reads have no carried stream state yet outside a stack")
-                if stream is None:
+                if stream is None and echo is not None and echo.everywhere:
+                    spikes = self._echoed(echo, f"read{index}", spikes,
+                                          lambda heard, read=self.state_reads[str(index)]: read(heard, memory_pulses,
+                                                                                                tokens))
+                elif stream is None:
                     spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens)
                 else:
                     spikes = self.state_reads[str(index)](spikes, memory_pulses, tokens,
@@ -4582,9 +4624,13 @@ class EventLM(nn.Module):
             if self.granule_layers is not None and str(index) in self.granule_layers:
                 if local_layers is not None:
                     raise ValueError("granule layers are not wired into the carried stream yet outside a stack")
-                spikes = self.granule_layers[str(index)](
-                    spikes, tokens, None if stream is None else stream.cells.setdefault(str(index), FibreState()),
-                    fibres if fibres is not None and index in heard_levels else None)
+                if echo is not None:
+                    spikes = self._echoed(echo, f"cells{index}", spikes,
+                                          lambda heard, cells=self.granule_layers[str(index)]: cells(heard, tokens))
+                else:
+                    spikes = self.granule_layers[str(index)](
+                        spikes, tokens, None if stream is None else stream.cells.setdefault(str(index), FibreState()),
+                        fibres if fibres is not None and index in heard_levels else None)
         if tap == len(self.blocks):
             early = self._forecast_counts(spikes)
             surprise = self._surprise(early, tokens, correction_access)
@@ -4604,6 +4650,13 @@ class EventLM(nn.Module):
                 read_losses=bank_read_losses,
             )
             spikes = self._apply_recall(spikes, recall)
+        if echo is not None and echo.everywhere:
+            # The output neurons learn from their own error, which goes no further down than the stream they hear.
+            spikes = spikes.detach().requires_grad_()
+            echo.top = spikes
+        elif echo is not None:
+            spikes.retain_grad()
+            echo.top = spikes
         current = self.output(spikes)
         if self.output_pool is not None:
             # One quantum of threshold at rest and one more for every spike of the pool.
@@ -4632,6 +4685,15 @@ class EventLM(nn.Module):
             outputs = (counts, prediction, self.prediction_memory.observation_code(observed))
             return outputs if early_readout is None else (*outputs, early)
         return counts if early_readout is None else (counts, early)
+
+    @staticmethod
+    def _echoed(echo, name, spikes, part):
+        """The stream after a part that learns from an echo: the part hears the stream without passing an error back
+        into it, and what it adds is kept on the tape for its echo. The stream itself is as without echoes."""
+        heard = spikes.detach()
+        added = part(heard) - heard
+        echo.parts.append((name, added))
+        return spikes + added.detach()
 
     def stream(self, tokens, state=None, *, memory_pulses=None):
         """The counts for the next bytes of a stream, and the state after them.

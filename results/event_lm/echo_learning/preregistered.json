@@ -1,0 +1,25 @@
+{
+  "study": "echo_learning",
+  "recorded_utc": "2026-11-21T13:26:59Z",
+  "question": "Can the parts of the spiking stack learn without the error being passed back through the levels above them? Gradient training passes the error of every byte back through all levels and their surrogate spikes; cells that multiply charges blew up under it. Echo learning gives each part an echo of the error at the output instead: through fixed random synapses (direct feedback alignment in spikes), or as a mirror, the error of the stream that the output hears, which comes back in one hop through the output's own synapses.",
+  "mechanism": "--echo all|cells and --echo-feedback random|mirror in experiments/train_event_lm.py (EventLM.forward(echo=EchoTape)). A part that learns from an echo hears the stream without passing any error back into it, and what it adds to the stream is kept. Random: its echo is the error of every byte (softmax less the byte that came) through fixed random sign synapses, one set per part, drawn from a seed. Mirror: its echo is the error of the stream at the top of the stack, the same for every part. 'all': the input synapses, reads and cells learn from echoes and the output from its own error; 'cells': only the cell layers, the rest from the gradient. Within a part, its response to its echo is computed by the part's own surrogate. Optimizer, schedule, pulse budget and averaging are those of the gradient runs (tests/test_echo_learning.py).",
+  "claims": "A random echo carries no error through any part. A mirror echo is not gradient-free: it is the error at the output passed back one hop through the output's synapses, a truncated gradient on the stream's identity path, and it passes through no other part or level. Neither passes an error back through time beyond what a part does within its own window.",
+  "test_bed": "The small test bed (results/event_lm/stream_form/small_test_bed.json, as jobs/depth/bed.sh trains it): 6 levels, 256 channels, reads and cells after every level, windows of 256 bytes, batch 16, 6,000 updates at 3e-4, rotated optimizer, weights averaged at 0.999, pulse budget 113,000, seed 20001; on the server's GPU 1 beside l2048-d22, each run with a capped share of memory.",
+  "arms": {
+    "g6": "gradient, the reference on the same device",
+    "m6": "mirror echo for every part (--echo all --echo-feedback mirror)",
+    "mc6": "mirror echo for the cells only (--echo cells --echo-feedback mirror)",
+    "r6": "random echo for every part (--echo all)",
+    "gate-g": "gated cells (--granule-gate 4 --granule-cells 681), gradient",
+    "gate-m": "gated cells, mirror echo for every part"
+  },
+  "measure": "Averaged weights on the enwik8 validation split in windows at 6,000 updates (64 batches), as the depth diagnostic reports, and the pulses a byte at the last evaluation. Validation streams may follow and are secondary.",
+  "pass_marks": {
+    "mirror": "m6 within 0.02 bits per byte of g6, or ahead: mirror echo trains the stack like the gradient, and a full-size run joins the next GPU window. Within 0.05: it works but falls behind, and the test bed goes on. Beyond 0.05: it falls behind with depth.",
+    "mirror_cells": "mc6 within 0.02 of g6, or ahead.",
+    "random": "r6 is expected to fail, as it did in a tiny run; it is reported as it ends.",
+    "gated": "The echo keeps gated cells stable if gate-m ends within 10% of the pulse budget and not behind gate-g. If gate-g blows up (pulses more than 10% over the budget, or validation above 3.0 at 6,000) and gate-m does not, the echo prevented the blow-up."
+  },
+  "caveats": "One seed per arm. The arms train on a GPU, while the test bed's earlier arms trained on CPUs, so g6 and gate-g are the references. A null result is reported as one; no arm is added after the results.",
+  "seen_before_recording": "Tiny runs on enwik8 (2 levels, 64 channels, windows of 64, 400 updates at 3e-3, budget 20,000), validation in windows at 400: gradient 3.7808 (pulses 19,770), mirror every part 3.8362 (19,851), mirror cells only 3.8094 (19,783), random every part 8.3420 (82,757), random cells only 7.7826 (54,405)."
+}
