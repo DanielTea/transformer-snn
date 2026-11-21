@@ -1,0 +1,11 @@
+{
+  "study": "test_bed_with_delays",
+  "recorded_utc": "2026-11-21T19:45:05Z",
+  "why": "Copying decides the small test bed: of four seeds of the plain stack only the best (1.9578, the others 1.983 to 1.986) learns to copy, and the 12-level stack that copies most scores best (results/event_lm/copy_probe/results.json). The full-size stack, which copies better than its Transformer, has delayed fibres that let a read match the bytes before a cell in one step (--read-delays 4 --granule-delays 4); the test bed has none. Whether copying forms is a lottery there, and its 0.028 spread across seeds drowns effects of 0.01.",
+  "arms": {
+    "g6d": "the plain test bed with --read-delays 4 --granule-delays 4, as the full-size stack has them, seeds 20001 to 20004"
+  },
+  "measure": "Averaged validation in windows at 6,000 updates (64 batches) and the copy probe (experiments/copy_probe.py) on each seed; GPU 1.",
+  "pass_mark": "The delayed test bed replaces the plain one for cell and credit experiments if all four seeds copy (second copy of random words at least 0.5 bits a byte below the first) and its four validation scores span at most half of the plain bed's 0.028.",
+  "seen_before_recording": "The copy probe on the plain test bed and the full-size models; no run of g6d exists."
+}
