@@ -1,0 +1,13 @@
+{
+  "study": "data_scaling",
+  "recorded_utc": "2026-11-21T19:29:45Z",
+  "question": "Does a change to the stack scale better with data, or only start faster? A better architecture should show a learning curve that keeps falling where the old one flattens. At 6,000 updates, 12 levels at half the width (same parameters) led the 6-level stack by 0.026 at 750 updates, 0.009 at 3,000 and 0.001 at 6,000 (means over four seeds): a faster start that closes. At full size the stack's curves flatten earlier than the Transformer's (exponents 0.23 to 0.31 against 0.74 to 0.85).",
+  "arms": {
+    "g6-24k": "the plain test bed, 24,000 updates (four times the data), cosine schedule over 24,000, seeds 20001 and 20002",
+    "dn12-24k": "12 levels with read width 128 and 511 cells (same parameters), 24,000 updates, seeds 20001 and 20002",
+    "tf6-24k": "the test bed's Transformer at depth 6, 24,000 updates, seeds 20001 and 20002"
+  },
+  "measure": "Averaged validation in windows at every 1,500 updates and at 24,000 (64 batches); power laws loss = E + A t^-alpha fitted from 3,000 updates on, per arm; GPU 0 beside l2048-plastic, started once it runs.",
+  "predictions": "From the 6,000-update curves: dn12 ends level with or behind g6 at 24,000, and the Transformer's exponent is larger than both stacks'. If dn12 ends ahead by more than its seed spread, depth at equal parameters scales better than the 6,000-update runs show.",
+  "no_pass_mark": "A diagnostic of scaling: it chooses what the next architecture change must improve."
+}
