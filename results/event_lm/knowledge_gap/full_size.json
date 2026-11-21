@@ -12,5 +12,10 @@
  },
  "measure": "As l2048-forget was scored: both splits of enwik8 as 16 unbroken streams at the trained reach; the reach chosen on the first validation million (trained or 8,192); then with v15's fast synapses on all 11 levels at 2^24; every scoring paired piece by piece against l2048-forget's and tf2048's.",
  "pass_mark": "Ahead of l2048-forget by at least 0.005 on both splits at the trained reach, with the paired 95% intervals above zero. Knowledge cells then join the v17 model. The gain is reported beside the 0.002 that 4.17% more parameters would be worth by the depth-scaling slope.",
- "seen_before_recording": "Three of the four knowledge seeds finished, the fourth at 6,000 updates 0.012 ahead in the shorter averaged evaluation; no full-size run with knowledge cells exists."
+ "seen_before_recording": "Three of the four knowledge seeds finished, the fourth at 6,000 updates 0.012 ahead in the shorter averaged evaluation; no full-size run with knowledge cells exists.",
+ "amendment": {
+  "recorded_utc": "2026-11-21T22:22:22Z",
+  "what": "Before any evaluation of l2048-know, and by the standing rule that the spiking model is built, trained and scored as a stream only, the arm is restarted as l2048-know-st: the same fork with training on streams (--stream 10 --stream-groups 15: stretches of ten windows of 2,048 bytes, the state of every read and cell layer handed on from window to window, fifteen groups of streams taking turns). The window-trained l2048-know was stopped after about 25 minutes, before its first evaluation.",
+  "consequence": "Against l2048-forget, which trained in windows, the arm now changes two things: knowledge cells and training on streams. The pass mark stays as recorded; the test bed's second laptop screen, also trained on streams, separates the two (a stream-trained bed beside stream-trained knowledge cells). The comparison with tf2048, the Transformer of the same size and training context, is unaffected: the reference may read in windows."
+ }
 }
