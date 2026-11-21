@@ -1,0 +1,20 @@
+{
+  "study": "shunt_tied",
+  "recorded_utc": "SET_AT_COMMIT",
+  "question": "v15's walk from the Transformer to the stack priced its steps: plain units in place of gated ones +0.0253 (a smooth plain unit recovers 0.016 of it, a hard gate 0.013), output weights of its own +0.0065. This weekend's squared and gated cells, which multiply charges, collapsed, and v15's veto dendrite, a closing gate, ended 0.015 behind plain cells. Do cells whose gate is a shunting conductance, which can never let in more than all of the collected charge, recover part of the unit's step? Does an output that hears the stream through the input's synapses recover the output's step?",
+  "test_bed": "The stack of results/event_lm/stream_form/small_test_bed.json: 6 levels, 256 channels, windows of 256 bytes, batch 16, 6,000 updates at 3e-4, rotated optimizer, averaged weights, seed 20001, on the laptop CPU, one at a time, after the loop pilot's arm on the laptop.",
+  "arms": {
+    "shunt-self": "--granule-gate 4 --granule-self-gate --granule-shunt: a cell fires about k*k/(k+1) spikes for k thresholds of charge, a square near silence and a line above; 4,855,844 parameters, as the plain stack",
+    "shunt-gate": "--granule-gate 4 --granule-shunt --granule-cells 681: a signed value dendrite times a saturating gate, the spike form of a gated unit; 681 cells a level so that its 4,852,262 parameters do not exceed the plain stack's",
+    "tied": "--tied-output: the output neurons hear the stream through the input synapses, with their threshold raised by 2^4 at 256 channels; 4,790,308 parameters"
+  },
+  "reference": "depth 6: arm a of the trained-plasticity test bed, the plain stack (in windows 1.9835, on validation streams 1.95134)",
+  "scoring": "experiments/eval_stream.py on the enwik8 validation split as 16 unbroken streams, lead 8,192, pieces of 512, paired against a with experiments/compare_stream_scores.py and by quarter with experiments/stream_quarters.py; the trainer's in-window scores and pulses a byte reported beside.",
+  "pass_marks": {
+    "cells": "An arm of shunted cells passes if it is ahead of a by at least 0.010 on validation streams with the lower end of its paired interval above zero, and its pulses a byte stay within 5% of the budget of 113,000 at 6,000 updates. If both pass, the one further ahead is the candidate.",
+    "tied": "The tied output passes if it is ahead of a by at least 0.005 on validation streams with the lower end of its paired interval above zero.",
+    "caveat": "One seed per arm: two runs of this test bed differ by up to about 0.01 in their bases, so an arm that passes needs a second seed before a full-size run, as the weekend's cell pilots required."
+  },
+  "then": "Every arm that passes and holds with a second seed joins the full-size combination after the weekend's GPU runs, with the loop if its pilot passes and with trained plasticity if its full-size run passes.",
+  "seen_before_recording": "None of these arms has trained. The loop pilot's arm loop3 is at 750 updates on the laptop (validation 2.5262 in windows); the other loop and depth arms are training on the server and unseen."
+}

@@ -333,6 +333,8 @@ def build_model(args):
                             output_pool=getattr(args, "output_pool", EventLMConfig.output_pool),
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
                             granule_self_gate=getattr(args, "granule_self_gate", EventLMConfig.granule_self_gate),
+                            granule_shunt=getattr(args, "granule_shunt", EventLMConfig.granule_shunt),
+                            output_tied=getattr(args, "tied_output", EventLMConfig.output_tied),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
                             plastic_after=(None if getattr(args, "plastic_levels", None) is None
                                            else tuple(map(int, args.plastic_levels.split(",")))),
@@ -731,6 +733,10 @@ def main():
                         help="with --granule-gate, the gate dendrite hears through the cell's own synapses, so a "
                              "cell fires about the square of its charge above the rest: the spike form of a "
                              "squared rectifier, with no synapses beyond a plain cell's")
+    parser.add_argument("--granule-shunt", action="store_true",
+                        help="with --granule-gate, the gate is a shunting conductance: k gate spikes let in the share "
+                             "k / (k + gate) of the collected charge, so a body never fires more than a plain cell; "
+                             "with --granule-self-gate a cell fires about k * k / (k + 1) for k thresholds")
     parser.add_argument("--granule-veto", type=int, default=EventLMConfig.granule_veto, metavar="STEPS",
                         help="every granule cell has a veto dendrite on the same fibres that does not fire: its "
                              "charge closes the cell in STEPS steps over the charge of one whole spike; no veto "
@@ -836,6 +842,9 @@ def main():
     parser.add_argument("--output-pool", type=int, default=EventLMConfig.output_pool, metavar="QUANTA",
                         help="give a stack's output neurons a pool of their own and this many quanta to a "
                              "threshold, of which one stands while the pool is silent")
+    parser.add_argument("--tied-output", action="store_true",
+                        help="a stack's output neurons hear the stream through the synapses by which the bytes enter "
+                             "it, with a threshold raised by the power of two that keeps their charge's size")
     parser.add_argument("--plastic-levels",
                         help="comma-separated levels whose cells fast output synapses hear in every training window "
                              "as in a stream: every byte of a window teaches them after it is predicted, and each "

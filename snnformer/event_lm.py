@@ -234,6 +234,10 @@ class EventLMConfig:
     # A gated cell whose gate dendrite hears its fibres through the cell's own synapses: it fires about the square
     # of its charge above the rest, with no synapses beyond a plain cell's.
     granule_self_gate: bool = False
+    # A gated cell whose gate is a shunting conductance: with k gate spikes it lets in the share k / (k + gate) of
+    # the collected charge, so the body never fires more than a plain cell would for that charge. A cell that gates
+    # itself then fires about k * k / (k + 1) spikes for k thresholds: a square near silence and a line above.
+    granule_shunt: bool = False
     granule_veto: int = 0
     read_cap: int | None = None
     read_phases: int = 0
@@ -267,6 +271,11 @@ class EventLMConfig:
     # The quanta to a threshold of a stack's output neurons, which then have a pool like a level's and one
     # quantum while it is silent. At zero they have no pool and their threshold does not move.
     output_pool: int = 0
+    # The output neurons hear the stream through the synapses by which the bytes enter it: the row of synapses of
+    # a byte serves as its input and as its output neuron's. The output neurons count their threshold in as many
+    # more bits as keep their charge, summed over the stream's channels, at the size it had with synapses of their
+    # own (a stack only).
+    output_tied: bool = False
     # The levels whose cells the fast output synapses hear in a stream, the units of their charge to one spike of
     # an output neuron, and the spikes with which every arriving byte teaches them. Without levels the output has
     # no fast synapses.
@@ -2684,22 +2693,31 @@ class _GatedFire(_IntegrateFire):
     count within the range of exact sums.
     """
 
-    def __init__(self, cap: int, charge_bits: int, unit: int, quanta_per_threshold: int = _PACKET_UNITS):
+    def __init__(self, cap: int, charge_bits: int, unit: int, quanta_per_threshold: int = _PACKET_UNITS,
+                 shunt: bool = False):
         super().__init__(cap, charge_bits, False, quanta_per_threshold=quanta_per_threshold, capped=True)
         self.unit = unit
+        self.shunt = shunt
 
     def forward(self, current, quanta=None, *, reference=None, opened=None):
         bounded = current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
         passed = bounded * opened
         units = quanta.to(torch.int32)
-        threshold = units * (self.threshold // self.quanta_per_threshold * self.unit)
+        quantum = self.threshold // self.quanta_per_threshold
+        if self.shunt:
+            # A shunting gate is a conductance: with k spikes it lets in the share k / (k + unit) of the collected
+            # charge, half of it at one threshold of the gate's charge and never more than all of it.
+            threshold = units * quantum * (opened.detach().to(torch.int32) + self.unit)
+        else:
+            threshold = units * (quantum * self.unit)
         charge = passed.to(torch.int32)
         magnitude = (charge.abs() + threshold // 2) // threshold
         limit = ((self.cap * self.quanta_per_threshold) // units).clamp(max=self.capped)
         counts = magnitude.minimum(limit) * charge.sign()
         if not current.is_floating_point():
             return counts
-        surrogate = passed / (quanta * (self.threshold // self.quanta_per_threshold * self.unit))
+        share = (opened + self.unit) if self.shunt else self.unit
+        surrogate = passed / (quanta * quantum * share)
         return counts.to(current.dtype) + (surrogate - surrogate.detach())
 
 
@@ -2977,6 +2995,17 @@ class _GranuleLayer(nn.Module):
     counted once more and stay inside the cell, so only the body's spikes count
     as pulses.
 
+    With ``granule_shunt`` as well, the gate is a shunting conductance rather
+    than a multiplier. A membrane under a conductance g settles at g / (1 + g)
+    of its drive, so k gate spikes let in the share k / (k + ``granule_gate``)
+    of the collected charge: half of it at one threshold of the gate's charge,
+    and never more than all of it. The body of a gated cell then fires at most
+    what a plain cell would fire for the charge its value dendrite collects,
+    where a multiplying gate let in up to sixteen times as much and took the
+    cell out of the range in which it learns. A cell that gates itself fires
+    about k * k / (k + 1) spikes for k thresholds of charge: a square near
+    silence, as a squared rectifier, and a line above, as a plain cell.
+
     With ``granule_veto`` every cell has a second dendrite on the same fibres
     that does not fire. Its charge closes the cell, in ``granule_veto`` steps
     over the charge of one whole spike: a quarter of the cell's own charge is
@@ -3098,7 +3127,7 @@ class _GranuleLayer(nn.Module):
             # threshold.
             self.open = _ExcitatoryFire(_GATE_CAP, self.bits, False, quanta_per_threshold=cfg.pool_quanta * self.gated,
                                         capped=_GATE_CAP * self.gated)
-            self.fire = _GatedFire(cell_cap, self.bits, self.gated, cfg.pool_quanta)
+            self.fire = _GatedFire(cell_cap, self.bits, self.gated, cfg.pool_quanta, shunt=cfg.granule_shunt)
             self.open.price_share = self.fire.price_share = cfg.granule_price
             # The gate of a cell that gates itself counts the cell's own charge and sends no spike.
             self.open.dendrite = cfg.granule_self_gate
@@ -3489,6 +3518,12 @@ class EventLM(nn.Module):
             if cfg.output_reference:
                 raise ValueError("the clock's forecast population has no shared output reference")
         output_bits = 3
+        if not isinstance(cfg.output_tied, bool) or cfg.output_tied and (not cfg.stack or cfg.continuous):
+            raise ValueError("a stack's output may share the synapses of its input")
+        if cfg.output_tied:
+            # An input synapse starts at 0.9 and an output synapse at 0.8 / sqrt(dim): the threshold of an output
+            # neuron that hears through input synapses is that many times higher, to the nearest power of two.
+            output_bits += round(math.log2(0.9 * math.sqrt(cfg.dim) / 0.8))
         if not isinstance(cfg.output_cap, int) or not 1 <= (cfg.output_cap * cfg.resolution) << output_bits <= _FP32_EXACT:
             raise ValueError("the output cap is a whole number of eighths of a bit, and an output neuron's largest "
                              "charge stays within the range of exact sums")
@@ -3572,6 +3607,9 @@ class EventLM(nn.Module):
         self.blocks = nn.ModuleList(_Level() if cfg.stack else _DelayBlock(cfg, i) for i in range(cfg.depth))
         self.local_history = len(self.delayed_input) + sum(block.history_size for block in self.blocks)
         self.output = _Synapse(cfg.dim, _VOCAB, gain=0.8, continuous=cfg.continuous)
+        if cfg.output_tied:
+            # One row of synapses for every byte: its way into the stream and its output neuron's way out of it.
+            self.output.weight = self.input.weight
         self.output_emit = _IntegrateFire(output_cap, output_bits, cfg.carry, continuous=cfg.continuous)
         self.output_pool = None
         if cfg.output_pool:
@@ -3675,8 +3713,8 @@ class EventLM(nn.Module):
                                      "the range of exact sums; lower the read cap")
             self.state_reads = self._tied(cfg.read_after, lambda index: _StateRead(cfg))
         self.granule_layers = None
-        if cfg.granule_self_gate and cfg.granule_after is None:
-            raise ValueError("granule_self_gate gates the cells of granule layers, and there are none")
+        if (cfg.granule_self_gate or cfg.granule_shunt) and cfg.granule_after is None:
+            raise ValueError("granule_self_gate and granule_shunt gate the cells of granule layers, and there are none")
         if cfg.granule_after is not None:
             below = cfg.depth if cfg.clock_start is None else cfg.clock_start
             if (cfg.carry or cfg.continuous or not cfg.granule_after
@@ -3719,6 +3757,8 @@ class EventLM(nn.Module):
                                  "not race")
             if not isinstance(cfg.granule_self_gate, bool) or cfg.granule_self_gate and not cfg.granule_gate:
                 raise ValueError("a cell that gates itself is a gated cell: granule_self_gate needs granule_gate")
+            if not isinstance(cfg.granule_shunt, bool) or cfg.granule_shunt and not cfg.granule_gate:
+                raise ValueError("a shunting gate is the gate of a gated cell: granule_shunt needs granule_gate")
             if cfg.granule_gate:
                 # The largest charge a body collects, times the most spikes of its gate.
                 collected = (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution) << (
@@ -3995,7 +4035,8 @@ class EventLM(nn.Module):
         allowed = limit - weight.shape[-1] / 2 - 1
         scaled = _shrink_synapses(weight, allowed / _unrounded_sums(weight, bits).clamp_min(1), bits)
         for layers in (self.state_reads, self.granule_layers):
-            for layer in () if layers is None else layers.values():
+            # The passes of a level in a loop share its read and its cells: each shrinks once.
+            for layer in () if layers is None else dict.fromkeys(layers.values()):
                 scaled += layer.scale_synapses(limit)
         return scaled
 
