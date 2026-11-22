@@ -1,0 +1,14 @@
+{
+ "study": "randomness_at_best_rate",
+ "recorded_utc": "2026-11-22T17:44:26Z",
+ "why": "At the better peak rate the stack's knowledge improves almost twice as much as the Transformer's (learning_rate_by_context.json: on new contexts 0.073 against 0.039 from 3e-4 to 1.2e-3, seed 20001), as it would if updates smaller than a tick of the stack's charge grid, or than a whole spike of its cells, were lost. Quantal release and stochastic firing make such updates count in expectation; weight_precision_with_data and cell_dither_with_data test them at 3e-4, where updates are smallest. If they help only there, they stand in for a bigger rate. If they help at each model's best rate too, they are a fix for the stack's knowledge.",
+ "arms": {
+  "rd-release": "quantal release while training (--weight-dither), peak rate 1.2e-3",
+  "rd-both": "quantal release and stochastic firing of the threshold cells (--weight-dither --cell-dither), peak rate 1.2e-3"
+ },
+ "base": "the delayed test bed trained on streams at 1.2e-3: bed24-lr12-s1 and -s2 (learning_rate_with_data) at 24,000 updates, and rd-base-6k-s1 and -s2 (new) at 6,000",
+ "training": "the base's recipe at peak rate 1.2e-3 (warmup 300, cosine over the run), 6,000 and 24,000 updates, seeds 20001 and 20002, code v17l (072eb90), server GPUs; every arm has the base's 5,249,060 parameters",
+ "measure": "the first 2,000,000 validation bytes as 16 unbroken streams (averaged weights), each arm paired with the base of the same seed and length; bits kept, split by context (near 256, far 8,192)",
+ "reading": "An arm is a fix for late learning at the best rate if (a) it leads the base at 24,000 updates by at least 0.010 on the mean of the two seeds and at both, and (b) its lead at 24,000 updates is at least 0.005 larger than at 6,000. Recorded either way: every lead and the leads on new contexts. If 1.2e-3 is not the stack's best rate by learning_rate_with_data's two seeds, the result is still read at 1.2e-3 and says so.",
+ "seen_before_recording": "bed24-lr12-s1 1.48638; the learning-rate study's other seed-20001 arms and learning_rate_by_context.json. No run of either arm at any rate has finished; weight_precision_with_data and cell_dither_with_data have no result yet."
+}
