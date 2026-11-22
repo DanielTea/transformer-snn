@@ -34,7 +34,7 @@ from common import (
 from snnformer import SNNConfig, count_params
 from snnformer.event_lm import (
     EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES, echo_feedback,
-    weight_dither, cell_dither,
+    weight_dither, cell_dither, cell_noise,
 )
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
@@ -983,6 +983,10 @@ def main():
     parser.add_argument("--cell-dither", action="store_true",
                         help="stochastic firing while training: a threshold cell fires its last spike with the chance "
                              "of its charge's distance past its last whole threshold; scoring rounds as always")
+    parser.add_argument("--cell-noise", type=float, metavar="THRESHOLDS",
+                        help="noisy thresholds while training: threshold cells add logistic membrane noise of this "
+                             "many whole thresholds at the peak learning rate, falling with the rate, and learn from "
+                             "the slope of the count they fire on average; scoring fires whole counts as always")
     parser.add_argument("--rotated-adam", type=int, metavar="STEPS",
                         help="run Adam in the eigenbasis of each weight matrix's gradient statistics and "
                              "update the bases every this many steps")
@@ -1114,6 +1118,10 @@ def main():
         parser.error("packet thresholds, pulse budgets and delay or output options need a steered spike router")
     if args.pulse_budget is not None and (not math.isfinite(args.pulse_budget) or args.pulse_budget <= 0):
         parser.error("pulse budget must be positive and finite")
+    if args.cell_noise is not None and (not math.isfinite(args.cell_noise) or not 0 < args.cell_noise <= 4):
+        parser.error("--cell-noise takes a width of more than 0 and at most 4 thresholds")
+    if args.cell_noise is not None and args.cell_dither:
+        parser.error("--cell-noise and --cell-dither are two kinds of random firing; choose one")
     if args.resume and (args.checkpoint is None or args.save_every < 1):
         parser.error("--resume needs --checkpoint and --save-every")
     if args.stop_at is not None and (not args.resume or not 0 < args.stop_at < args.steps
@@ -1362,7 +1370,9 @@ def main():
             forward_options["bank_read_losses"] = bank_read_losses
         if args.early_readout_weight:
             forward_options["early_readout"] = args.clock_start if args.early_readout is None else args.early_readout
-        with weight_dither(args.weight_dither), cell_dither(args.cell_dither):
+        # The cells' membrane noise falls with the learning rate, so that training ends on whole counts.
+        share = cosine_lr(step - 1, args.steps, args.warmup, args.lr) / args.lr
+        with weight_dither(args.weight_dither), cell_dither(args.cell_dither), cell_noise(args.cell_noise or 0.0, share):
             if args.code_loss_weight:
                 counts, predicted, observed, *early = model(
                     inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,

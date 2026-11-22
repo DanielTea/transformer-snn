@@ -436,6 +436,35 @@ def cell_dither(enabled=True):
         _CELL_DITHER[0] = previous
 
 
+# Noisy thresholds: while it is on (``cell_noise``) and a gradient is taken, a population that allows it (the threshold
+# cells) adds logistic membrane noise to its charge before it counts its spikes. The first number is the noise at the
+# peak of the learning rate in whole thresholds, which sets the slope that the cells learn from; the second is the
+# noise now.
+_CELL_NOISE = [0.0, 0.0]
+
+
+@contextlib.contextmanager
+def cell_noise(peak, share=1.0):
+    """Let the threshold cells' membranes carry noise while training, so that a cell learns from the slope of the
+    count it fires on average.
+
+    A real neuron's membrane fluctuates, so near its threshold it fires with a chance that rises smoothly with its
+    charge, and its average rate is a smooth curve of its input. Under logistic noise of ``peak`` whole thresholds a
+    cell's average count is close to ``peak * softplus(charge / (peak * threshold))``: silent far below the
+    threshold, a smooth bend near it and a line above. The cells learn from that curve's slope, the true slope of
+    their average firing, where the slope of a plain cell is a stand-in for a count that did not move; and a cell a
+    little below its threshold fires now and then, so a silent cell learns from spikes of its own. The noise is
+    ``peak * share`` thresholds wide: the trainer lets it fall with the learning rate, so that training ends on the
+    whole counts that scoring fires. Every count stays a whole number of spikes; without a gradient (scoring,
+    streams) a cell rounds as always."""
+    previous = list(_CELL_NOISE)
+    _CELL_NOISE[0], _CELL_NOISE[1] = float(peak), float(peak) * float(share)
+    try:
+        yield
+    finally:
+        _CELL_NOISE[0], _CELL_NOISE[1] = previous
+
+
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
     if not weight.is_floating_point():
         return weight
@@ -3082,14 +3111,31 @@ class _ExcitatoryFire(_IntegrateFire):
     Where a population fires several fine spikes for a threshold of charge,
     ``smooth`` is that number, and the smooth threshold is as wide as it is
     for whole spikes.
+
+    Under ``cell_noise`` a population that may fire at random (the threshold
+    cells) adds logistic noise to its charge while training, and a smooth cell
+    learns from the slope of the count it fires on average under the noise at
+    its peak, a softplus as wide as the noise, in place of the plain slope.
     """
 
     def forward(self, current, quanta=None, *, reference=None, smooth=False):
-        counts = super().forward(current.clamp_min(0), quanta, reference=reference)
+        noisy = (self.dither and _CELL_NOISE[0] > 0 and reference is None and torch.is_grad_enabled()
+                 and current.is_floating_point())
+        threshold = self.threshold if quanta is None else quanta * (self.threshold // self.quanta_per_threshold)
+        charge = current
+        if noisy and _CELL_NOISE[1] > 0:
+            # Logistic membrane noise, as wide as its share of a whole threshold, before the cell counts its spikes.
+            uniform = torch.rand_like(current).clamp_(1e-7, 1 - 1e-7)
+            charge = current + (_CELL_NOISE[1] * threshold * (smooth or 1)) * torch.log(uniform / (1 - uniform))
+        counts = super().forward(charge.clamp_min(0), quanta, reference=reference)
         if not smooth or not current.is_floating_point():
             return counts
-        threshold = self.threshold if quanta is None else quanta * (self.threshold // self.quanta_per_threshold)
-        learned = smooth * F.gelu(current / (threshold * smooth))
+        if noisy:
+            # The slope of the count that the cell fires on average under the noise at its peak.
+            peak = _CELL_NOISE[0]
+            learned = smooth * peak * F.softplus(current / (threshold * smooth * peak))
+        else:
+            learned = smooth * F.gelu(current / (threshold * smooth))
         return counts.detach() + (learned - learned.detach())
 
 
