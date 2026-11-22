@@ -24,11 +24,12 @@ from plot_state_reads import GREEN, VIOLET
 
 BYTES_PER_UPDATE = 16 * 256
 # Runs of other studies that are this study's points: name pattern -> (model at a rate, thousands of updates).
-REUSED = {r"tf24-s(\d)": ("tf3", 24), r"tf24-lr6-s(\d)": ("tf6", 24), r"bed24-s(\d)": ("st3", 24),
-          r"bed24-lr6-s(\d)": ("st6", 24), r"pl24-s(\d)": ("pl3", 24), r"bed6-s(\d)": ("st3", 6)}
+REUSED = {r"tf24-s(\d)": ("tf3", 24), r"tf24-lr6-s(\d)": ("tf6", 24), r"tf24-lr12-s(\d)": ("tf12", 24),
+          r"bed24-s(\d)": ("st3", 24), r"bed24-lr6-s(\d)": ("st6", 24), r"bed24-lr12-s(\d)": ("st12", 24),
+          r"pl24-s(\d)": ("pl3", 24), r"pl24-lr12-s(\d)": ("pl12", 24), r"bed6-s(\d)": ("st3", 6)}
 MODELS = {"tf": ("Transformer", ORANGE), "st": ("Spiking stack, delayed fibres, trained on streams", VIOLET),
           "pl": ("Spiking stack, plain, trained in windows", GREEN)}
-RATES = {"3": 3e-4, "6": 6e-4}
+RATES = {"3": 3e-4, "6": 6e-4, "12": 1.2e-3}
 # Two-sided 90% points of Student's t for 1 to 12 degrees of freedom.
 T90 = (6.314, 2.920, 2.353, 2.132, 2.015, 1.943, 1.895, 1.860, 1.833, 1.812, 1.796, 1.782)
 
@@ -44,9 +45,9 @@ def collect(folder):
     points = {}
     for path in sorted(Path(folder).glob("*.json")):
         name = path.stem
-        match = re.fullmatch(r"ds-(tf[36]|st[36]|pl3)-(\d+)k-s(\d)", name)
+        match = re.fullmatch(r"ds-(tf|st|pl)(3|6|12)-(\d+)k-s(\d)", name)
         if match:
-            tag, size, seed = match.group(1), int(match.group(2)), int(match.group(3))
+            tag, size, seed = match.group(1) + match.group(2), int(match.group(3)), int(match.group(4))
         else:
             for pattern, (tag, size) in REUSED.items():
                 reused = re.fullmatch(pattern, name)
@@ -65,12 +66,14 @@ def means(curve):
 
 
 def best_rate(points, family):
-    """The family's rate with the lower mean at 24,000 updates over the seeds both rates have, 3e-4 if none."""
-    low, high = points.get(f"{family}3", {}).get(24, {}), points.get(f"{family}6", {}).get(24, {})
-    seeds = sorted(set(low) & set(high))
-    if not seeds:
+    """The family's rate with the lowest mean at 24,000 updates, over the seeds that every measured rate has.
+
+    3e-4 when fewer than two rates have a 24,000-update point with a seed in common."""
+    measured = {rate: points[f"{family}{rate}"][24] for rate in RATES if 24 in points.get(f"{family}{rate}", {})}
+    seeds = set.intersection(*(set(by_seed) for by_seed in measured.values())) if measured else set()
+    if len(measured) < 2 or not seeds:
         return "3"
-    return "6" if np.mean([high[s] for s in seeds]) < np.mean([low[s] for s in seeds]) else "3"
+    return min(measured, key=lambda rate: np.mean([measured[rate][s] for s in seeds]))
 
 
 def fit_power(updates, losses):
@@ -104,13 +107,13 @@ def gap_slope(updates, gaps):
 
 
 def summarize(points):
-    rates = {family: best_rate(points, family) for family in ("tf", "st")} | {"pl": "3"}
+    rates = {family: best_rate(points, family) for family in ("tf", "st", "pl")}
     reference = points.get(f"tf{rates['tf']}", {})
     summary = {"best_rates": {family: RATES[rate] for family, rate in rates.items()}, "models": {}, "gaps": {}}
     for tag, curve in sorted(points.items()):
         updates, losses = means(curve)
         summary["models"][tag] = {
-            "rate": RATES[tag[-1]],
+            "rate": RATES[tag[2:]],
             "points": {f"{int(u)}k": {"bpb": round(float(l), 5), "seeds": len(curve[int(u)])}
                        for u, l in zip(updates, losses)},
             "power_law": fit_power(updates, losses)}
@@ -145,10 +148,10 @@ def figure(points, rates, summary, output):
     for tag, curve in sorted(points.items()):
         family = tag[:2]
         label, color = MODELS[family]
-        best = tag[-1] == rates[family]
+        best = tag[2:] == rates[family]
         updates, losses = means(curve)
         curves.plot(updates, losses, "o-", color=color, alpha=1.0 if best else 0.35, linewidth=2 if best else 1.2,
-                    markersize=6 if best else 4, label=f"{label}, rate {RATES[tag[-1]]:g}")
+                    markersize=6 if best else 4, label=f"{label}, rate {RATES[tag[2:]]:g}")
         fit = summary["models"][tag]["power_law"]
         if fit and best:
             grid = np.geomspace(updates.min(), updates.max(), 50)
