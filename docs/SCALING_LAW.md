@@ -61,7 +61,10 @@ Below its best rate the stack's knowledge starves; above it, its knowledge is wh
 words most of all. Three other readings of the flattening were ruled out on the way:
 
 - **The pulse budget.** Its price falls to 0.00–0.02 by the end of every 24,000-update run, while the stack spends
-  its budget to within 2%. A looser budget would buy almost nothing.
+  its budget to within 2%. A looser budget would buy almost nothing. Where a budget binds, its price shows it: a
+  12-level test bed held to the 6-level budget ran at a price of 0.10 to 0.24, and gained 0.067 when its budget
+  doubled. At full size the price stays at 0.00–0.02 at depth 11 and at depth 22 alike, so the wider gap at depth
+  22 is not the budget's either.
 - **Noisy late weights.** Averaging the weights helps the stack about as much as it helps the Transformer, and by
   the end of a run it helps neither.
 - **A dense code that grows denser.** 35% to 56% of a level's cells fire at every byte, at 6,000 and at 24,000 updates

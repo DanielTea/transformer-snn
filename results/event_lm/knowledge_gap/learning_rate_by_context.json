@@ -325,6 +325,10 @@
    "the pulse budget": "Its price (the trainer's spike_price, a Lagrange multiplier on pulses above 113,000 a byte) falls from about 0.1 after 750 updates to 0.00-0.02 by the end of every 24,000-update bed run at every rate (bed24-s1, bed24-lr12-s1, bed24-lr24-s1, fan2-24-s1), while the training pulses stay within 2% of the budget: relaxing the budget would be worth almost nothing to the loss.",
    "weight noise": "The averaged weights gain over the raw ones as much in the stack as in the Transformer, a little more at mid-run (0.069 against 0.054 at 12,000 updates at 1.2e-3) and nothing at the end for either, so the stack's late weights are not noisier in a way averaging could fix.",
    "a dense code that grows denser": "experiments/cell_activity.py on the finished laptop beds: 35% to 56% of the cells of a level fire at a byte, with a median of 3 to 10 spikes, at 6,000 and at 24,000 updates alike (the delayed bed 0.41-0.52 and 0.39-0.49; the plain bed, which learns late better, 0.35-0.51 and 0.35-0.49; the full size's cell shape 0.43-0.56 and 0.40-0.51). The code is dense, as dense in the plain bed as in the delayed one, and does not grow denser with data."
+  },
+  "calibration_of_the_price": {
+   "recorded_utc": "2026-11-22T21:28:35Z",
+   "text": "Where a budget binds, its price shows it. The 12-level test bed held to the 6-level budget of 113,000 (stack12, server CPU, 6,000 updates, d22b.json's question) ran at a price of 0.24 falling to 0.10, and with the budget doubled (stack12b) at 0.02 and 0.067 better in windows (1.9209 against 1.8543). The 6-level bed ends at 0.00-0.02, and at full size depth 11 and depth 22 run alike (l2048-forget, l2048-flat, l2048-know-st and l2048-d22: at most 0.024 during training, 0.000-0.007 at the end). So at depth 22 the shared budget of 310,000 did not bind harder than at depth 11, and the gap that widens with size (0.022 on test at depth 22 against 0.013 for the 11-level stack it doubles, docs/KNOWLEDGE_GAP.md) is not the budget's. The doubled-budget run that d22b.json pre-registered never ran."
   }
  }
 }
