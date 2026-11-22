@@ -127,9 +127,39 @@ def test_the_stream_keeps_the_longest_delay_and_no_more():
     assert found and all(late.shape[1] == 11 for late in found)
 
 
+# A fan of two streams, as the full-size stack has: every channel has a fibre for the present and a delayed one.
+_DOUBLE = dict(granule_fan=128)
+
+
+@pytest.mark.parametrize("cuts", [(120,), (47, 1, 9, 63)])
+def test_a_fan_of_two_streams_streams_exactly(cuts):
+    model = _shifted(_stack(granule_myelin=16, **_DOUBLE)).eval()
+    tokens = _bytes()
+    with torch.no_grad():
+        whole, _ = model.stream(tokens, None)
+        state, parts, start = None, [], 0
+        for length in cuts:
+            out, state = model.stream(tokens[:, start:start + length], state)
+            parts.append(out)
+            start += length
+    assert torch.equal(whole, torch.cat(parts, 1))
+
+
+def test_a_fan_of_two_streams_starts_as_its_fixed_fibres():
+    myelinated = _stack(granule_myelin=16, **_DOUBLE).eval()
+    fixed = EventLM(EventLMConfig(**dict(_STACK, **_DOUBLE))).eval()
+    fixed.load_state_dict(myelinated.state_dict(), strict=False)
+    layer = next(iter(myelinated.granule_layers.values()))
+    # The first copy of every channel starts at the present, the second at its fixed delay.
+    assert torch.equal(layer.myelin_start[:, :64], torch.zeros(1, 64))
+    assert bool((layer.myelin_start[:, 64:] >= 1).all())
+    tokens = _bytes()
+    with torch.no_grad():
+        assert torch.equal(myelinated.stream(tokens, None)[0], fixed.stream(tokens, None)[0])
+
+
 @pytest.mark.parametrize("changes", [dict(granule_myelin=1), dict(granule_myelin=65),
                                      dict(granule_myelin=16, granule_traces=1),
-                                     dict(granule_myelin=16, granule_fan=128),
                                      dict(granule_myelin=3, granule_delays=4)])
 def test_refuses_what_it_cannot_wire(changes):
     with pytest.raises(ValueError):

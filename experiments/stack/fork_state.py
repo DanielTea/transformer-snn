@@ -23,8 +23,9 @@ also gives it their gains, at zero: the arm goes on as the same stack, and the
 gains learn from the fork on, with no moments of the optimizer yet. Those
 settings may be given to a run whose trainer did not have them yet.
 
-A fork that gives a stack knowledge cells (``read_knowledge``) or apical tufts
-(``granule_apical``) grows their synapses beside all that the run has learned:
+A fork that gives a stack knowledge cells (``read_knowledge``), apical tufts
+(``granule_apical``) or myelinated fibres (``granule_myelin``, which start at the
+fixed delays) grows their synapses beside all that the run has learned:
 tufts start silent, and knowledge cells start so far behind in every race that
 they rarely fire, so the arm starts as about the same stack. The new synapses
 have no moments of the optimizer yet, and the running average starts them at
@@ -43,9 +44,10 @@ import torch
 
 # Settings of trainers newer than a saved run, which a fork may give it all the same.
 LATER_SETTINGS = {"plastic_levels", "plastic_rule", "plastic_chunk", "plastic_decay_shift", "plastic_threshold",
-                  "plastic_shuffle", "read_credit", "cell_credit", "read_knowledge", "granule_apical"}
+                  "plastic_shuffle", "read_credit", "cell_credit", "read_knowledge", "granule_apical",
+                  "granule_myelin"}
 # Settings that add synapses to a stack, which a fork grows.
-GROWN_SETTINGS = {"read_knowledge", "granule_apical"}
+GROWN_SETTINGS = {"read_knowledge", "granule_apical", "granule_myelin"}
 # The charge at which a grown knowledge cell starts, below a stream cell's: e ** -8 of its rate.
 KNOWN_START = -8.0
 
@@ -98,10 +100,16 @@ def grow(state, settings):
     for index, name in enumerate(order):
         if name in old_index and old_index[name] in saved["state"]:
             moments[index] = saved["state"][old_index[name]]
+    # Groups are paired by their decay and step scale. A group the run did not have yet, as for the first synapses
+    # of a kind that takes no weight decay, takes the run's settings of its first group with its own decay and scale.
+    old_groups = {(group["weight_decay"] == 0.0, group.get("lr_scale", 1.0)): group for group in saved["param_groups"]}
     groups, start = [], 0
-    for group, old_group in zip(optimizer.state_dict()["param_groups"], saved["param_groups"], strict=True):
+    for group in optimizer.state_dict()["param_groups"]:
         count = len(group["params"])
-        groups.append(old_group | {"params": list(range(start, start + count))})
+        key = (group["weight_decay"] == 0.0, group.get("lr_scale", 1.0))
+        base = old_groups.get(key, saved["param_groups"][0] | {"weight_decay": group["weight_decay"],
+                                                                "lr_scale": group.get("lr_scale", 1.0)})
+        groups.append(base | {"params": list(range(start, start + count))})
         start += count
     forked = state | {"args": model_args, "state_dict": state_dict,
                       "optimizer": saved | {"state": moments, "param_groups": groups}}

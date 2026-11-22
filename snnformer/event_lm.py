@@ -4303,10 +4303,10 @@ class EventLM(nn.Module):
                                  "and each delay")
             if (not isinstance(cfg.granule_myelin, int) or cfg.granule_myelin == 1
                     or not 0 <= cfg.granule_myelin <= _GRANULE_MYELIN
-                    or cfg.granule_myelin and (cfg.granule_traces or cfg.granule_beats or cfg.granule_fan > cfg.dim
+                    or cfg.granule_myelin and (cfg.granule_traces or cfg.granule_beats
                                                or cfg.granule_delays > cfg.granule_myelin)):
                 raise ValueError("myelinated fibres learn delays of up to 2 to 64 bytes, start from delays within "
-                                 "that range, and leave no room for slow or beat fibres or a fan beyond the stream")
+                                 "that range, and leave no room for slow or beat fibres")
             if (not isinstance(cfg.granule_beats, int) or not 0 <= cfg.granule_beats <= _GRANULE_BEATS
                     or cfg.granule_clock not in _GRANULE_CLOCKS or cfg.granule_hold not in _GRANULE_HOLDS
                     or not 0 < cfg.granule_clock_rate < 1):
