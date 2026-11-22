@@ -27,6 +27,17 @@ to 6e-4 it gains the stack 0.045 (seed 20001: 0.044).
 
 ![Both models wanted a higher learning rate](../results/figures/event_lm_learning_rate.png)
 
+Split by what each byte's context offers, the better rate helps the stack's knowledge almost twice as much as the
+Transformer's (seed 20001, `learning_rate_by_context.json`, a diagnostic made after the runs):
+
+| From 3e-4 to 1.2e-3, bits per byte | New contexts (76% of bytes) | Copyable from the last 240 bytes (7%) |
+|---|---:|---:|
+| Spiking stack | **−0.073** | −0.034 |
+| Transformer | −0.039 | **−0.177** |
+
+At 3e-4 the stack's knowledge was starved, and the Transformer's copying. At each model's best rate the gap on new
+contexts falls from 0.087 to 0.061, and it is still the whole gap.
+
 The stack gaining more from bigger steps fits a reading of where its curve flattens. Every synapse sends whole ticks
 of charge, and every cell whole spikes, so an update smaller than a tick changes nothing the stack fires. Two
 spike-only remedies are under test: quantal release (synapses that round at random while training, so that their
