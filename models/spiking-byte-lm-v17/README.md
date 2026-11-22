@@ -17,6 +17,8 @@ The model that runs from a clone is still
 [v11](../spiking-byte-lm-v11/README.md).
 [Study, measurements and limits](../../docs/KNOWLEDGE_GAP.md) · [Checkpoint and archive hashes](manifest.json) · [Restore and rescore](../../docs/V17_HANDOFF.md)
 
+**License:** Apache-2.0, copyright 2026 control-f and Daniel Tremer ([LICENSE](../../LICENSE), [NOTICE](../../NOTICE)).
+
 **Behind by 0.010.** A Transformer of about the same size
 (34,752,000 parameters), trained on the same data and windows,
 reads the test in windows of 2,048 bytes. It is ahead of this

@@ -674,3 +674,15 @@ python experiments/make_report.py docs/report.html
 
 [v10 research handoff](docs/V10_HANDOFF.md) ·
 [Historical ShuntFormer and Dendrite experiments](docs/SHUNTFORMER_HISTORY.md)
+
+## License
+
+Copyright 2026 control-f and Daniel Tremer. The code, documentation, figures,
+results and released model weights are licensed under the
+[Apache License, Version 2.0](LICENSE). That means you may use, change and build
+on them, including commercially, as long as you keep the copyright and the
+[NOTICE](NOTICE), state your changes, and do not use the names or trademarks of
+control-f. The license includes a grant of the contributors' patents, which ends
+for anyone who brings a patent claim over the work. The datasets used to train
+and evaluate the models (enwik8, PG-19 and C4) are not part of this work and keep
+their own terms.
