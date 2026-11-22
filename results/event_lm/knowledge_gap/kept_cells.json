@@ -14,5 +14,68 @@
  "amendment": {
   "recorded_utc": "2026-11-21T23:12:00Z",
   "what": "The first launch (23:01 UTC) failed at the stream's first change of kept cells, before any update ended: the slot keys were counted in 64-bit floats, which MPS lacks. They are now counted on the CPU (466ebe8; the spikes on MPS equal those on the CPU), and the arms were relaunched unchanged."
+ },
+ "results": {
+  "recorded_utc": "2026-11-22T02:40:00Z",
+  "trainer_averaged_stream_validation": {
+   "what": "6,000 updates; streams of two unscored and four scored windows of 256 bytes (the first 1,536 bytes of a stream)",
+   "g6d-st-mps": 1.7584,
+   "kept32-st-mps": 1.7554,
+   "know128-st-mps": 1.75,
+   "knowkept-st-mps": 1.7372
+  },
+  "long_streams": {
+   "what": "the first 2,000,000 validation bytes as 16 unbroken streams of about 125,000 bytes (lead 8,192, pieces of 512), on the laptop's GPU",
+   "g6d-st-mps": 1.77237,
+   "kept32-st-mps": 1.78438,
+   "know128-st-mps": 1.76253,
+   "knowkept-st-mps": 1.77671
+  },
+  "gains": {
+   "kept32 over g6d-st": {
+    "short_streams": 0.003,
+    "long_streams": -0.012
+   },
+   "knowkept over know128-st": {
+    "short_streams": 0.0128,
+    "long_streams": -0.0142
+   },
+   "know128-st over g6d-st (for reference)": {
+    "short_streams": 0.0084,
+    "long_streams": 0.0098
+   }
+  },
+  "verdict": "Neither arm earns four seeds. On the long streams, which decide, kept32 is 0.012 behind the bed and knowkept 0.014 behind know128-st. Kept cells help where the stacks trained: over the first 1,536 bytes of the trainer's streams (0.003 and 0.013 ahead) and over the first 8 KB of an unbroken stream (0.005 and 0.024 ahead), and they cost more the longer a stream runs, 0.014 and 0.020 beyond 64 KB. The stacks trained on stretches of 2,560 bytes, 40 changes of kept cells; a stream of 125,000 bytes makes almost 2,000, and a slot holds a cell for as long as it keeps winning, with no age. Knowledge cells, which hold no state, help evenly along the stream. Kept cells as built do not join v17; trained on streams as long as they are read, or with an age that keeps counting, they might.",
+  "by_stream_position": {
+   "what": "The paired difference (arm minus reference, bits per byte) on the long streams by the bytes a stream had read before each piece, from a second scoring with the bits of every piece kept (scores equal to the first to six digits); the first bin is the first stream's start, which has no lead",
+   "bins": [
+    "0-8 KB",
+    "8-16 KB",
+    "16-32 KB",
+    "32-64 KB",
+    "64-130 KB"
+   ],
+   "kept32 minus g6d-st": [
+    -0.0045,
+    0.0016,
+    0.0067,
+    0.0138,
+    0.0138
+   ],
+   "knowkept minus know128-st": [
+    -0.0244,
+    0.0074,
+    0.0044,
+    0.0096,
+    0.02
+   ],
+   "know128-st minus g6d-st (for reference)": [
+    0.004,
+    -0.0084,
+    -0.0101,
+    -0.007,
+    -0.0115
+   ]
+  }
  }
 }
