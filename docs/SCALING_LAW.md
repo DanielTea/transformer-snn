@@ -80,6 +80,22 @@ within 0.025 spikes of 0.5 · softplus(2 · charge / threshold). The cell learns
 cell learns from a stand-in. The noise falls with the learning rate, so training ends on the whole counts that scoring
 fires.
 
+## At full size the membranes cap the rate
+
+In the full-size pilot (`full_size_rate_pilot.json`, 24,000 updates) the stack is better at 6e-4 than at 1.2e-3
+(1.3199 against 1.3475), and the Transformer the other way round (1.2837 against 1.2762). The stack's membranes
+saturate at the higher rate:
+
+![At higher rates the full-size stack's membranes saturate](../results/figures/event_lm_membrane_saturation.png)
+
+At 1.2e-3, 2.7% of the reads' entries and 2.0% of the cells' sit at the membrane's bound, up to 9.7% and 11.8% at the
+top level. A neuron there fires its largest count whatever more it hears, and learns nothing through its charge. The
+test bed barely saturates even at 2.4e-3, which is why it never showed this (`membrane_saturation.json`,
+`experiments/membrane_saturation.py`). v15's pool that lifts the ceiling divides the charge before the bound. In a
+continued run at 1e-3 it was 0.019 ahead, and no release used it, because all of them trained at 3e-4, where nothing
+saturates. A full-size pilot of the lifted stack at 6e-4 and 1.2e-3 decides the form of the pair's stack arm
+(`full_size_lifted_ceiling_pilot.json`).
+
 ## Still running
 
 | Record | Question |
@@ -92,5 +108,6 @@ fires.
 | `gated_cells_with_data.json` | Gated and self-gated cells at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `noisy_thresholds_with_data.json` | Noisy thresholds at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `full_size_rate_pilot.json` | Which rate is best at full size, before the next full-size pair |
+| `full_size_lifted_ceiling_pilot.json` | The full-size stack with the pool that lifts the ceiling, at 6e-4 and 1.2e-3; it decides the pair's stack arm |
 | `full_size_best_rate_pair.json` | The best stack and its Transformer at full size, each at its best full-size rate; queued by the pilot's rule the night the pilot ends |
 | `full_size_word_heads.json` | Word heads at full size |
