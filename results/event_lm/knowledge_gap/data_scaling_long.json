@@ -1,0 +1,15 @@
+{
+ "study": "data_scaling_long",
+ "recorded_utc": "2026-11-22T15:05:05Z",
+ "why": "The aim is a stack whose gap to the Transformer shrinks as both see more data: a scaling law the other way around. Two points per design are not a law. The delayed test bed trained on streams led its Transformer by 0.047 after 6,000 updates and trailed it by 0.054 after 24,000, while the plain test bed trained in windows trailed by 0.148 and 0.077, its gap halving (gap_with_data.json). This study measures each design's whole data-scaling curve, five sizes over a factor of sixteen in data, so that every later change to the stack is judged by the slope of its gap, not by its loss at one size.",
+ "models": {
+  "tf": "the test bed's Transformer (4,792,320 parameters), trained in windows of 256, at peak rates 3e-4 and 6e-4",
+  "stack": "the delayed test bed trained on streams (5,249,060 parameters), at peak rates 3e-4 and 6e-4",
+  "plain": "the plain test bed trained in windows (4,855,844 parameters: no delayed fibres, no streams), at 3e-4"
+ },
+ "sizes": "6,000, 12,000, 24,000, 48,000 and 96,000 updates of 16 windows of 256 bytes (24.6M to 393.2M training bytes), each its own run with 300 warmup updates and cosine over its length; seed 20001 first, then seed 20002",
+ "reused": "the 24,000-update points are runs of learning_rate_with_data (tf6-24k-s1 and -s2 rescored as tf24-s1 and -s2, tf24-lr6, bed24, bed24-lr6) and the earlier g6-24k runs (data_scaling.json), rescored the same way",
+ "measure": "the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes: stacks as streams (experiments/eval_stream.py), the Transformer in windows holding 240 bytes of history with 16 scored (experiments/eval_taught_reference.py --context 16 --history 240); averaged weights; the bits of every piece kept",
+ "reading": "Each model is read at its best peak rate by learning_rate_with_data (both seeds at 24,000 updates), at 3e-4 if that study cannot tell. For each stack design: its gap to the Transformer at each size, and the least-squares slope of the gap against the base-2 logarithm of the training bytes, that is the change of the gap for each doubling of the data, with an interval from the fit's residuals and, once both are in, from the seeds. A design scales the other way around if its slope is below zero and the interval's upper end too. Also fitted for each model: loss = E + B * bytes^-beta over the five sizes. No pass mark: the measurement chooses the base for the work on late learning, and from then on a change to the stack is judged by how it moves the slope.",
+ "seen_before_recording": "At 24,000 updates on these streams: the Transformer at 3e-4, seed 20001, 1.49270; at 6e-4, seed 20001, 1.45690 (learning_rate_with_data, seen today); the plain bed g6-24k, seed 20001, 1.56969; the stack at 3e-4 trained on the laptop's GPU 1.54687; the stack at 6e-4, seed 20001, 1.5287 on the trainer's streams at update 13,500 of 24,000 (mid-run, seen today). 6,000-update scores of these designs from earlier studies (gap_with_data.json). No run at 12,000, 48,000 or 96,000 updates of any of them."
+}

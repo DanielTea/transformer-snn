@@ -1,0 +1,15 @@
+{
+ "study": "weight_precision_with_data",
+ "recorded_utc": "2026-11-22T15:05:05Z",
+ "why": "Every synapse of the stack sends a whole number of ticks of charge: its stored size rounded to a grid (1/256 of a threshold for the reads' and cells' synapses of the test bed). The gradient passes the rounding straight through, so a step changes a charge only when the stored size crosses half a tick. Late in training the cosine schedule makes the steps smaller than a tick, and most updates change nothing the stack fires, while the Transformer's float weights take every step. Earlier runs fit this: at 6,000 updates of 24,000-update runs the spiking test bed and its float stand-in (the same layout without spikes, a diagnostic of data_scaling.json) were level on the trainer's windows (1.896 and 1.898, means of two seeds); at 24,000 the stand-in was 0.022 ahead (1.638 against 1.660). If the grid limits late learning, a finer grid or quantal release gains more at 24,000 updates than at 6,000.",
+ "arms": {
+  "gbits10": "the cells' synapses on a grid four times finer (--granule-bits 10); every limit stays",
+  "rbits10": "every synapse on the router's grid (blocks, reads and cells) four times finer (--router-charge-bits 10)",
+  "dither": "quantal release while training (--weight-dither, 517ecde): each synapse rounds to one of its two neighbouring ticks at random, so its expected charge is its stored size; scoring rounds to the nearest tick, so the scored stack fires as any other"
+ },
+ "base": "the delayed test bed trained on streams: bed24-s1 and bed24-s2 of learning_rate_with_data at 24,000 updates, bed6-s1 and bed6-s2 at 6,000",
+ "training": "the base's recipe (peak rate 3e-4, warmup 300, cosine over the run), 6,000 and 24,000 updates, seeds 20001 and 20002, server GPUs. Every arm has the base's 5,249,060 parameters.",
+ "measure": "the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes (experiments/eval_stream.py, averaged weights), each arm paired with the base of the same seed and length; the bits of every piece kept for the split by context",
+ "reading": "An arm shows that the charge grid limits late learning if (a) it leads the base at 24,000 updates by at least 0.010 on the mean of the two seeds and leads at both, and (b) its lead at 24,000 updates is at least 0.005 larger than its lead at 6,000. A lead by (a) without (b) is a constant gain, not a fix for late learning. Recorded either way: every lead, and the leads on new contexts at 24,000.",
+ "seen_before_recording": "No run of any arm. The base's 24,000-update runs are in progress; nothing of them is compared here."
+}
