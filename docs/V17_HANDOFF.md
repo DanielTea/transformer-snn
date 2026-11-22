@@ -23,9 +23,9 @@ Each archive unpacks under `checkpoints/`:
 
 | Archive | File | SHA-256 |
 |---|---|---|
-| `spiking-byte-lm-v17-checkpoints-l2048-know-st.tar.gz` | `knowledge_gap/l2048-know-st/model.pt.averaged` | `4f02c9a13054aeb02bb01fc1cba84469a633d982bf9fed35f06bfaf92bbbbe05` |
-| `spiking-byte-lm-v17-checkpoints-l2048-d22.tar.gz` | `long_streams/l2048-d22/model.pt.averaged` | `7b240ef1f1e695b2fde692a86980a8cddc1f989a92e05171ea0f1cf497ab1b4a` |
-| `spiking-byte-lm-v17-checkpoints-tf2048-d22.tar.gz` | `long_streams/tf2048-d22/model.pt.averaged` | `b30db58a741766f116d58e1d643b92c5f2acb1cf12045a6e5e713919b71dd07a` |
+| `spiking-byte-lm-v17-checkpoints-l2048-know-st.tar.gz` | `knowledge_gap/l2048-know-st/model.pt.averaged` | `f8f3886e9c9501accf4820e7f114a0db12373339265181b6a662ff891aa5ea16` |
+| `spiking-byte-lm-v17-checkpoints-l2048-d22.tar.gz` | `long_streams/l2048-d22/model.pt.averaged` | `99e8d4b181039b399c5653d3983b590f2c98596175ecf1552a5dafdde325d67e` |
+| `spiking-byte-lm-v17-checkpoints-tf2048-d22.tar.gz` | `long_streams/tf2048-d22/model.pt.averaged` | `e10c9548d98524d706cd6e94814f8bd3ab4a4e3c63454c85ad51dd32c0bac106` |
 
 ```bash
 for name in l2048-know-st l2048-d22 tf2048-d22; do
@@ -34,6 +34,8 @@ done
 shasum -a 256 -c results/event_lm/knowledge_gap/v17_checkpoints.sha256
 ```
 
+Each v17 file is the scored file with two training arguments, `results_dir` and `checkpoint`, rewritten to
+repository paths; the weights are identical (`models/spiking-byte-lm-v17/manifest.json` keeps both hashes).
 The v16 checkpoints (`l2048-forget`, `l2048-flat`, `tf2048`, `tf1024`) are assets of the v16 release.
 
 ## Rescore
