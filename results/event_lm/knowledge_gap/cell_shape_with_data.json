@@ -1,0 +1,13 @@
+{
+ "study": "cell_shape_with_data",
+ "recorded_utc": "2026-11-22T14:31:27Z",
+ "why": "The full size's cell shape (every channel's present byte and one delayed copy: --granule-fan 512, 681 cells) beat the test bed's own (a fan of 256 over the delayed stream, 1,022 cells) by 0.020 at 6,000 updates over long streams, on one seed, 0.009 of it on new contexts (word_rhythm.json). Parts that helped knowledge so far helped early and faded with data (gap_with_data.json, knowledge_data_scaling.json). Does the shape's lead hold at 24,000 updates, over four seeds? If it does, it becomes the test bed's cell shape for all later work.",
+ "arms": {
+  "bed24-s1 to -s4": "the delayed test bed trained on streams, as in learning_rate_with_data (bed24 and bed24-s2 are that study's arms at 3e-4)",
+  "fan2-24-s1 to -s4": "the same with the full size's cell shape: --granule-fan 512 --granule-cells 681 (5,249,060 parameters within a few hundred)"
+ },
+ "training": "24,000 updates, peak rate 3e-4, as in learning_rate_with_data, seeds 20001 to 20004, on the server's GPUs.",
+ "measure": "The first 2,000,000 validation bytes as 16 unbroken streams (experiments/eval_stream.py, averaged weights), the bits of every piece kept; fan2 against the bed of the same seed split by what the context offers (experiments/gap_by_piece.py, near 256, far 8,192).",
+ "reading": "Pass if fan2 leads the bed by at least 0.010 on average over the four seeds and leads at three or more of them. Recorded either way: the mean lead on new contexts and its interval.",
+ "seen_before_recording": "fan2 at 6,000 updates (word_rhythm.json, laptop; server CPU arm fan2-cpu trained, its trainer's streams 1.6818 at 6,000). A 24,000-update fan2 run on the laptop (word_heads_with_data.json, seed 20001) had reached 10,500 updates with 1.5767 on the trainer's streams, where the bed run on the laptop had 1.5860 at the same update."
+}
