@@ -1,0 +1,13 @@
+{
+ "study": "full_size_best_rate_pair",
+ "recorded_utc": "2026-11-22T17:50:33Z",
+ "why": "Every full-size run so far trained at a peak rate of 3e-4, and the best stack is 0.0103 behind the Transformer on test (v17). On the test bed both models are best at a higher rate. Going from 3e-4 to the best rate, the stack gains 0.013 more than the Transformer (learning_rate_with_data, seed 20001), and on new contexts, where the gap is, its gain is almost twice the Transformer's (learning_rate_by_context.json). full_size_rate_pilot measures each model's best rate at full size; this pair trains the best stack and its Transformer at those rates, to decide whether the stack beats the Transformer at full size.",
+ "arms": {
+  "stack": "v17's recipe (l2048-know-st): v16's stack with forgetting slopes, 24,000 updates on windows of 512 bytes, then forked onto unbroken streams of windows of 2,048 bytes with 128 knowledge cells a head and a reach of 2,048 for the remaining 66,000 (36,263,956 parameters), at the stack's best full-size rate by full_size_rate_pilot",
+  "transformer": "v17's reference (tf2048): 24,000 updates on windows of 512 bytes, then windows of 2,048 bytes for the remaining 66,000 (34,752,000 parameters), at the Transformer's best full-size rate by full_size_rate_pilot"
+ },
+ "rate_rule": "Each model trains at its best rate in full_size_rate_pilot if that rate beats the model's own 3e-4 there by at least 0.010; otherwise its v17 run at 3e-4 stands in (l2048-know-st or tf2048) and is not retrained. Both stages of a run use the same peak rate, with 1,000 warmup updates and one cosine over 90,000 updates.",
+ "measure": "As v17. The stack is read as a stream over the full enwik8 test and validation splits, at the reach chosen on the first 1,000,000 validation bytes (its trained 2,048 or 8,192), with fast output synapses on all levels at 2^24 (taught) and without. The Transformer reads windows of 2,048 bytes, 2,032 of history before 16 scored, frozen. Pairs are compared piece by piece (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py).",
+ "reading": "The stack beats the Transformer at full size if its taught test score is below the Transformer's with the paired 95% interval of the gap below zero, and the same holds on validation. Otherwise recorded: the gap on test and validation against v17's 0.0103 and 0.0193. The better rates close part of the gap if the test gap shrinks by at least 0.003.",
+ "seen_before_recording": "v17's full-size scores (l2048-know-st 1.11702 / 1.14963, tf2048 1.10669 / 1.13033). The test bed's learning_rate_with_data seed-20001 arms and learning_rate_by_context.json. full_size_rate_pilot has no finished run."
+}
