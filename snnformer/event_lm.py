@@ -2794,8 +2794,10 @@ class _StateRead(nn.Module):
         place = cells[None, None, :] - last[:, :, None]
         own = cells[None, None, :] == here[None, :, None]
         reach = ((place >= 0) & (place < self.word_span)) | own
-        offset = self.word_age[:, place.clamp(0, self.word_span - 1)] * self.rate
-        return offset.transpose(0, 1), reach[:, None]
+        # An embedding takes the offset of every place: its backward sums the many cells of one place without the
+        # contention of an indexed sum into a few places.
+        offset = F.embedding(place.clamp(0, self.word_span - 1), self.word_age.t()) * self.rate
+        return offset.permute(0, 3, 1, 2), reach[:, None]
 
     def _address(self, spikes, tokens=None, tape=None, position=0):
         """The spikes of every cell at every read as [batch, heads, bytes, cells], their sum at each read (none
