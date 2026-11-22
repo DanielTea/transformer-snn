@@ -82,9 +82,18 @@ fires.
 
 ## At full size the membranes cap the rate
 
-In the full-size pilot (`full_size_rate_pilot.json`, 24,000 updates) the stack is better at 6e-4 than at 1.2e-3
-(1.3199 against 1.3475), and the Transformer the other way round (1.2837 against 1.2762). The stack's membranes
-saturate at the higher rate:
+The full-size pilot (`full_size_rate_pilot.json`, 24,000 updates on windows of 512, one seed) did not repeat the test
+bed's finding:
+
+| 2M validation bytes as streams | 3e-4 | 6e-4 | 1.2e-3 |
+|---|---:|---:|---:|
+| Spiking stack | 1.3416 | **1.3199** | 1.3475 |
+| Transformer | 1.3057 | 1.2837 | **1.2762** |
+| Gap | 0.036 | 0.036 | 0.071 |
+
+At each model's best rate the gap is 0.044, wider than at 3e-4. The Transformer gains more from its best rate than the
+stack does (0.029 against 0.022). On new contexts the two gain alike (the stack 0.029, the Transformer 0.028); the
+Transformer's extra gain is on near copies. The stack is best at a lower rate, and at the higher one its membranes saturate:
 
 ![At higher rates the full-size stack's membranes saturate](../results/figures/event_lm_membrane_saturation.png)
 
@@ -107,7 +116,6 @@ saturates. A full-size pilot of the lifted stack at 6e-4 and 1.2e-3 decides the 
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `gated_cells_with_data.json` | Gated and self-gated cells at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `noisy_thresholds_with_data.json` | Noisy thresholds at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
-| `full_size_rate_pilot.json` | Which rate is best at full size, before the next full-size pair |
 | `full_size_lifted_ceiling_pilot.json` | The full-size stack with the pool that lifts the ceiling, at 6e-4 and 1.2e-3; it decides the pair's stack arm |
 | `full_size_best_rate_pair.json` | The best stack and its Transformer at full size, each at its best full-size rate; queued by the pilot's rule the night the pilot ends |
 | `full_size_word_heads.json` | Word heads at full size |

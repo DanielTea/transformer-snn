@@ -132,9 +132,9 @@ The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4
 
 1. **Each model at its best learning rate at full size** (`full_size_rate_pilot.json`, running, then
    `full_size_best_rate_pair.json`): on the test bed the stack gains 0.013 more than the Transformer from its best rate,
-   most of it on new contexts; v17's full-size gap is 0.010. The pilot's first rates show the stack's band of good
-   rates is narrow and lower at full size: after 24,000 updates it is better at 6e-4 than at 1.2e-3 (1.3199 against
-   1.3475), the Transformer the other way round (1.2837 against 1.2762). Its membranes saturate at the higher rate:
+   most of it on new contexts; v17's full-size gap is 0.010. The pilot did not repeat that: after 24,000 updates the
+   stack is best at 6e-4 (1.3199), the Transformer at 1.2e-3 (1.2762), and the gap at the best rates is 0.044 against
+   0.036 at 3e-4. Both gain alike on new contexts. Its membranes saturate at the higher rate:
    at 1.2e-3, 2.7% of the reads' entries and 2.0% of the cells' sit at their bound, up to 11.8% at the top level,
    where a neuron learns nothing through its charge (`experiments/membrane_saturation.py`). v15's pool that lifts the
    ceiling removes that bound and was never used in a release. A full-size pilot of it at 6e-4 and 1.2e-3 decides
