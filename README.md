@@ -639,6 +639,26 @@ stream generator and the next pilots.
 [Restore and rescore](docs/V15_HANDOFF.md#restore-the-checkpoints) ·
 [Exact manifest](models/spiking-byte-lm-v15/manifest.json)
 
+The v16 archives hold the four checkpoints of the long-streams
+study: the stack trained on windows of 2,048 bytes with
+forgetting slopes that learn, the same stack with its slopes
+held at zero, and the Transformers trained on windows of 2,048
+and 1,024 bytes. A fifth asset holds the bits of every scored
+piece. Its handoff has the restore commands, the scoring with a
+longer reach, fixed slopes and fast synapses, and the forks that
+trained the long windows.
+[Restore and rescore](docs/V16_HANDOFF.md#restore-the-checkpoints) ·
+[Exact manifest](models/spiking-byte-lm-v16/manifest.json)
+
+The v17 archives hold the best spike-only stack so far, v16's with
+128 knowledge cells a head and trained on streams, and the depth-22
+pair. A fourth asset holds the bits of every scored piece. Its
+handoff has the restore commands, the split of a gap by what each
+byte's context offers, the test bed's recipe with every new flag,
+and what not to try again.
+[Restore and rescore](docs/V17_HANDOFF.md#restore-the-checkpoints) ·
+[Exact manifest](models/spiking-byte-lm-v17/manifest.json)
+
 Regenerate the leaderboards, scientific figures and browser report
 from the checked-in records.
 
