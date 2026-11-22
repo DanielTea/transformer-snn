@@ -16,14 +16,19 @@ claims are made, and what to try next. Every number links to a record in
 
 | Scale | Stack | Transformer | Gap (bits per byte) |
 |---|---|---|---|
-| Full size, v16: 34.8M parameters, 368.6M training bytes, enwik8 test | 1.1199 | 1.1067 | **0.013 behind** |
-| Test bed: 5.2M parameters, 24.6M training bytes, 2M validation bytes as long streams | 1.7724 | 1.8190 | **0.047 ahead** |
+| Full size, best so far (l2048-know-st, 36.3M parameters, 368.6M training bytes), enwik8 test | 1.1170 | 1.1067 (34.75M) | **0.010 behind** |
+| Full size, v16 (34.8M), enwik8 test | 1.1199 | 1.1067 | 0.013 behind |
+| Test bed (5.2M), 24.6M training bytes, 2M validation bytes as long streams | 1.7724 | 1.8190 | 0.047 ahead |
+| Test bed (5.2M), 98.3M training bytes, the same bytes | 1.5468 | 1.4927 | **0.054 behind** |
 
-The full-size stack reads up to 8,192 cells back and has fast synapses that
-learn while it reads. The full-size Transformer reads windows of 2,048 bytes.
-The test-bed stack has delayed fibres and was trained on streams. Sources:
-`results/event_lm/long_streams/leaderboard.json` and
-`results/event_lm/knowledge_gap/gap_with_data.json`.
+The full-size stacks read up to 8,192 cells back and have fast synapses that
+learn while they read; the best one has 128 knowledge cells a head and trained
+on streams. The full-size Transformer reads windows of 2,048 bytes. The
+test-bed stack has delayed fibres and trained on streams. Sources:
+`results/event_lm/long_streams/leaderboard.json`,
+`results/event_lm/knowledge_gap/full_size.json` and
+`results/event_lm/knowledge_gap/gap_with_data.json`; figure
+`results/figures/event_lm_best_model.png`.
 
 ## The diagnosis: memory is solved, knowledge is not
 
@@ -44,10 +49,21 @@ rather than from what it can copy. Spikes suit memory, because copying is
 exact matching. Knowledge is many fine-grained patterns held in synapses on
 top of each other, and that is where the work has to go.
 
-On the test bed the gap halves with four times the data (0.148 to 0.077 for
-the plain stack). The stack overtakes the Transformer on copying first, and
-its knowledge gap shrinks as the data to the power -0.44
-(`gap_with_data.json`, figure `results/figures/event_lm_gap_with_data.png`).
+How the gap moves with data depends on the stack. For the plain test bed,
+trained in windows, it halves with four times the data (0.148 to 0.077). The
+delayed test bed trained on streams learns much faster at first: at 6,000
+updates it is level with its Transformer on new contexts and 0.047 ahead in
+all. With four times the data it falls 0.054 behind, 0.083 on new contexts,
+while its copying stays far better. Its learning curve flattens where the
+Transformer's keeps falling (`gap_with_data.json`, figure
+`results/figures/event_lm_gap_with_data.png`).
+
+**What this says about the next step.** Every part that helped knowledge so
+far helped early: delayed fibres, training on streams, knowledge cells (whose
+lead shrinks within a run from 0.022 to 0.011, `knowledge_data_scaling.json`).
+None changed the slope. What closes the gap must keep the stack learning
+knowledge late in training: how its synapses learn through spikes, not one
+more part beside them.
 
 ## Rules for claims
 
