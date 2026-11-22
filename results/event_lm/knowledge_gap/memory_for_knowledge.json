@@ -11,5 +11,52 @@
  "training": "On streams (--stream 10 --stream-groups 3), 6,000 updates, on the server's CPU, as combo-bed",
  "measure": "The first 2,000,000 bytes of the enwik8 validation split as 16 unbroken streams (lead 8,192, pieces of 512), as trained and with v15's rule on all six levels at 2^22, with the bits of every piece kept, combo-bed scored again with its bits. Each arm against combo-bed is split by what the context offers (experiments/gap_by_piece.py, near 256 bytes, the bed's reach, and far 8,192): the gain on new contexts and on copyable bytes.",
  "reading": "The trade buys knowledge if r128 gains on new contexts with the 95% interval above zero, and r384 is expected to lose there. It is worth making if r128 is also ahead of combo-bed overall, as trained and with v15's rule, by at least 0.010: then four seeds, and a full-size stack with narrower reads and more cells. One seed per arm: a screen.",
- "seen_before_recording": "The gap split of the v16 pair and of the test bed's knowledge and kept cells; no stack with another read width at equal parameters has been trained."
+ "seen_before_recording": "The gap split of the v16 pair and of the test bed's knowledge and kept cells; no stack with another read width at equal parameters has been trained.",
+ "results": {
+  "recorded_utc": "2026-11-22T06:16:04Z",
+  "trainer_averaged_stream_validation": {
+   "combo-bed": 1.7471,
+   "trade-r128": 1.8213,
+   "trade-r384": 1.7512
+  },
+  "long_streams": {
+   "as_trained": {
+    "combo-bed": 1.76286,
+    "trade-r128": 1.83261,
+    "trade-r384": 1.76452
+   },
+   "with_v15_rule_at_2^22": {
+    "combo-bed": 1.71111,
+    "trade-r128": 1.75047,
+    "trade-r384": 1.72943
+   }
+  },
+  "split_against_combo_bed": {
+   "r128 as trained (gap_by_piece_r128_trained_vs_bed.json)": {
+    "new": 0.0628,
+    "copyable near": 0.4166,
+    "copyable far only": 0.2376,
+    "seen, other follower": -0.6492
+   },
+   "r384 as trained (gap_by_piece_r384_trained_vs_bed.json)": {
+    "new": 0.0182,
+    "copyable near": -0.1034,
+    "copyable far only": -0.0286,
+    "seen, other follower": -0.0233
+   },
+   "r128 with v15's rule": {
+    "new": 0.0514,
+    "copyable near": 0.1998,
+    "copyable far only": 0.128,
+    "seen, other follower": -0.5278
+   },
+   "r384 with v15's rule": {
+    "new": 0.037,
+    "copyable near": -0.0557,
+    "copyable far only": -0.0834,
+    "seen, other follower": 0.0625
+   }
+  },
+  "verdict": "The trade does not buy knowledge. Reads of 128 with 1,342 cells are 0.070 behind the bed over long streams and lose on new contexts as well (0.063 bits a byte, interval 0.055 to 0.070), not only on copies (0.42): the cells cannot use what narrow reads no longer bring them. Reads of 384 with 702 cells copy better (0.103 on copyable bytes) and lose 0.018 on new contexts, the expected direction, ending 0.002 behind. Knowledge on new contexts needs the reads as much as the cells; at the bed's size the present share of reads and cells (256 and 1,022) is the best of the three. The full-size stack keeps its shares."
+ }
 }
