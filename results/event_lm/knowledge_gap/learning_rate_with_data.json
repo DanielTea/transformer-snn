@@ -9,5 +9,13 @@
  "training": "24,000 updates of 16 windows of 256 bytes (98.3M training bytes), 300 warmup updates, cosine over 24,000, weight decay 0.05, rotated Adam, weights averaged at 0.999, seeds 20001 and 20002, each run alone or two to a GPU on the server.",
  "measure": "The averaged weights on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes: the stack as a stream (experiments/eval_stream.py), the Transformer in windows holding 240 bytes of history with 16 scored (experiments/eval_taught_reference.py --context 16 --history 240), the bits of every piece kept.",
  "reading": "For each model, the mean of its two seeds at each rate, and its best rate. The flattening is partly a learning-rate artefact if the stack's best rate improves on its own mean at 3e-4 by at least 0.020 more than the Transformer's best rate improves on its own mean at 3e-4. Then every later comparison on the test bed uses each model's best rate, and the full size gets a learning-rate check before its next pair. Otherwise the flattening is not a learning-rate artefact at these rates. Either way the gap at each model's best rate is recorded, split by what the context offers.",
- "seen_before_recording": "The Transformer at 3e-4, seed 20001, on these streams: 1.49270 (gap_with_data.json); seed 20002 trained, not yet scored on them. The stack at 3e-4 trained on the laptop's GPU, seed 20001: 1.54687 (not one of this study's arms; its arms at 3e-4 are trained on the server like the rest). No run of either model at another peak rate for 24,000 updates."
+ "seen_before_recording": "The Transformer at 3e-4, seed 20001, on these streams: 1.49270 (gap_with_data.json); seed 20002 trained, not yet scored on them. The stack at 3e-4 trained on the laptop's GPU, seed 20001: 1.54687 (not one of this study's arms; its arms at 3e-4 are trained on the server like the rest). No run of either model at another peak rate for 24,000 updates.",
+ "amendment": {
+  "recorded_utc": "2026-11-22T15:21:20Z",
+  "arms": {
+   "bed24-lr12, tf24-lr12": "both models at peak rate 1.2e-3, seeds 20001 and 20002, as the other arms"
+  },
+  "why": "Both models gained from doubling the rate on seed 20001 (the stack 1.50363 against 1.54749, the Transformer 1.45690 against 1.49270), so each model's best rate may lie above the three recorded. The reading takes each model's best of the four rates; it is otherwise unchanged.",
+  "seen_before_amendment": "bed24-s1 1.54749, bed24-lr6-s1 1.50363, tf24-lr6-s1 1.45690 on the 2M streams; tf24-s1 1.49270 from gap_with_data.json. No other arm of this study has finished."
+ }
 }
