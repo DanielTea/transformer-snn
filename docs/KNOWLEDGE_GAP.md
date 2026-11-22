@@ -14,7 +14,10 @@ finds where that gap lies, tries fifteen ways to close it, and finds what moves 
   contexts and 0.047 ahead in all; with four times the data it is 0.054 behind. Every part that helped knowledge,
   delayed fibres, training on streams, knowledge cells, helped early and did not change the slope of the learning
   curve.
-- PENDING_WORD_HEADS
+- **The learning rate matters, for both models.** On the test bed both models score better at higher peak rates than
+  the 3e-4 every run used so far, and the stack gains more (one seed, still running). Every comparison after this
+  release takes each model at its best rate, and the full size is next (`learning_rate_with_data.json`,
+  `full_size_rate_pilot.json`).
 
 Every test with a pass mark was recorded before its first result, in `results/event_lm/knowledge_gap/`, and every
 verdict below is that record's; the diagnostics made after the fact say so in their records.
@@ -129,7 +132,7 @@ stream (`tests/test_myelin.py`, `tests/test_word_heads.py`).
 | v16 stack | 1.1199 | 1.1514 | 34.81M |
 | **Knowledge cells, trained on streams** | **1.1170** | **1.1496** | 36.26M |
 | Trained plasticity (fast synapses trained in the loop) | within 0.001 of its reference | | 34.81M |
-| Word heads | PENDING | PENDING | 36.26M |
+| Word heads with knowledge cells, trained on streams | still training | | 36.26M |
 | Depth 22 (twice the levels, the same pulse budget) | 1.0926 | 1.1230 | 69.36M |
 | Transformer at depth 22 | 1.0704 | 1.0930 | 69.37M |
 
@@ -141,6 +144,9 @@ stack gains 0.027 over depth 11 and the Transformer 0.036: the gap widens with s
 (0.022 on test, 0.030 on validation).
 
 ![The best spiking stack so far](../results/figures/event_lm_best_model.png)
+
+The full-size word-head run was still training at the release; its verdict, by the rule recorded before it started
+(`full_size_word_heads.json`), comes with the next release.
 
 Records: `full_size.json`, `full_size_word_heads.json`, `results/event_lm/trained_plasticity/arms.json`.
 
