@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "experiments"))
-from gap_by_piece import CONTEXT, GRAM, WHAT, byte_kinds, context_kinds, fit, piece_bits  # noqa: E402
+from gap_by_piece import CONTEXT, GRAM, PLACES, WHAT, byte_kinds, context_kinds, fit, piece_bits, word_places  # noqa: E402
 
 
 def test_byte_kinds():
@@ -49,3 +49,11 @@ def test_fit_recovers_the_gap_of_every_kind():
     solution, low, high = fit(counts, gaps, rng.integers(400, size=(50, 400)))
     assert np.allclose(solution, truth, atol=0.01)
     assert np.all(low <= solution) and np.all(solution <= high)
+
+
+def test_word_places():
+    data = np.frombuffer(b" the cat, a word.", np.uint8)
+    places = [PLACES[k] for k in word_places(data)]
+    assert places[1:5] == ["word start", "second letter", "third letter", "space after a word"]
+    assert places[5:9] == ["word start", "second letter", "third letter", "other"]
+    assert places[12:17] == ["word start", "second letter", "third letter", "fourth letter on", "other"]

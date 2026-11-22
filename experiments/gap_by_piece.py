@@ -6,6 +6,8 @@ scorings are summed to common pieces, and every target is given a kind twice ove
 
 * what it is: a letter, a digit, a space, a line break, wiki or XML markup, other punctuation, or a byte of a
   multi-byte character;
+* where it stands in its word: a word's first letter, its second, its third, a later one, the space after
+  a word, or anything else;
 * what its context offers: the eight bytes before it ran earlier in its stream, at most ``--near`` bytes back,
   and the byte that followed them then is the target (copyable near); the same, but only from ``--near`` to
   ``--far`` bytes back (copyable far only); they ran earlier and something else followed (seen, other follower);
@@ -13,7 +15,9 @@ scorings are summed to common pieces, and every target is given a kind twice ove
 
 A piece holds a mix of kinds, so the gap of each kind is fitted as the least-squares solution of
 ``gap(piece) = sum over kinds of bytes(piece, kind) * gap(kind)`` over all pieces, with a 95% interval from
-resampled pieces. The gaps of the kinds, weighted by their bytes, add up to the whole gap.
+resampled pieces. The gaps of the kinds, weighted by their bytes, add up to the whole gap. Where the shares of
+some kinds rise and fall together from piece to piece, as the first, second and third letters of words do, their
+fit is unstable and their intervals are wide: read only the kinds whose intervals are narrow.
 
 usage: gap_by_piece.py --enwik8 data/enwik8 --split test --first tf.json tf.npy --first-row 0 \\
     --second stack.json stack.npy --json gap.json
@@ -38,6 +42,7 @@ DIGITS = set(range(ord("0"), ord("9") + 1))
 MARKUP = set(b"[]{}|<>=&#*")
 WHAT = ("letter", "digit", "space", "line break", "markup", "punctuation", "multi-byte")
 CONTEXT = ("copyable near", "copyable far only", "seen, other follower", "new")
+PLACES = ("word start", "second letter", "third letter", "fourth letter on", "space after a word", "other")
 GRAM = 8
 
 
@@ -54,6 +59,25 @@ def byte_kinds(data):
     table[ord("\n")] = WHAT.index("line break")
     table[128:] = WHAT.index("multi-byte")
     return table[data]
+
+
+def word_places(data):
+    """Where every byte of ``data`` (uint8) stands in its word, as an index into PLACES: a letter after no letter, after
+    one, two, or three or more letters; a space after a letter; or anything else."""
+    letter = np.zeros(256, bool)
+    letter[list(LETTERS)] = True
+    letter = letter[data]
+    positions = np.arange(len(data))
+    last_other = np.maximum.accumulate(np.where(~letter, positions, -1))
+    run = np.zeros(len(data), np.int64)
+    run[1:] = positions[:-1] - last_other[:-1]
+    places = np.full(len(data), PLACES.index("other"), np.int8)
+    places[letter & (run == 0)] = PLACES.index("word start")
+    places[letter & (run == 1)] = PLACES.index("second letter")
+    places[letter & (run == 2)] = PLACES.index("third letter")
+    places[letter & (run >= 3)] = PLACES.index("fourth letter on")
+    places[(data == ord(" ")) & (run > 0)] = PLACES.index("space after a word")
+    return places
 
 
 def context_kinds(data, near, far):
@@ -156,6 +180,7 @@ def main():
     raw = data.numpy().astype(np.uint8)
     what = byte_kinds(raw)
     offered = context_kinds(raw, args.near, args.far)
+    placed = word_places(raw)
     # The kinds of every target: the target at place p of a stream is byte p + 1 of the split (as stream_rows cuts).
     part = -(-(len(raw) - 1 - lead) // streams)
     places = np.arange(streams)[:, None] * part + np.arange(lead + part)
@@ -170,11 +195,12 @@ def main():
     target_index = padded_targets.reshape(streams, -1, common)
     counts_what = np.stack([(keep & (what[target_index] == k)).sum(2) for k in range(len(WHAT))], -1)
     counts_context = np.stack([(keep & (offered[target_index] == k)).sum(2) for k in range(len(CONTEXT))], -1)
+    counts_place = np.stack([(keep & (placed[target_index] == k)).sum(2) for k in range(len(PLACES))], -1)
     # Only pieces where every target is scored and has its stream's lead behind it are fitted.
     whole = keep.all(2)
     whole[0, :lead // common] = False
     gaps = (summed[1] - summed[0])[whole]
-    counts_what, counts_context = counts_what[whole], counts_context[whole]
+    counts_what, counts_context, counts_place = counts_what[whole], counts_context[whole], counts_place[whole]
     bytes_fitted = int(counts_what.sum())
     resamples = np.random.default_rng(5261).integers(len(gaps), size=(args.resamples, len(gaps)))
     first_bpb = float(summed[0][whole].sum() / bytes_fitted)
@@ -186,14 +212,16 @@ def main():
               "gap": round(second_bpb - first_bpb, 5), "gram_bytes": GRAM, "near_bytes": args.near,
               "far_bytes": args.far,
               "by_kind_of_byte": table(WHAT, counts_what, gaps, summed[0], summed[1], resamples),
-              "by_what_the_context_offers": table(CONTEXT, counts_context, gaps, summed[0], summed[1], resamples)}
+              "by_what_the_context_offers": table(CONTEXT, counts_context, gaps, summed[0], summed[1], resamples),
+              "by_place_in_the_word": table(PLACES, counts_place, gaps, summed[0], summed[1], resamples)}
     with _atomic_output(args.json, "w", False) as stream:
         json.dump(record, stream, indent=1)
         stream.write("\n")
     print(f"{bytes_fitted:,} bytes in {int(whole.sum()):,} pieces: first {first_bpb:.4f}, second {second_bpb:.4f}, "
           f"gap {second_bpb - first_bpb:+.4f}")
     for title, rows in (("kind of byte", record["by_kind_of_byte"]),
-                        ("what the context offers", record["by_what_the_context_offers"])):
+                        ("what the context offers", record["by_what_the_context_offers"]),
+                        ("place in the word", record["by_place_in_the_word"])):
         print(f"by {title}:")
         for name, row in rows.items():
             print(f"  {name:22s} {row['share_of_bytes']:7.2%} of bytes  gap {row['gap_bits_per_byte']:+.4f} "
