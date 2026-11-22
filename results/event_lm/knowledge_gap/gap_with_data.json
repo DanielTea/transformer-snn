@@ -56,5 +56,36 @@
    0.0231
   ],
   "reading": "At the test bed's size and 6,000 updates, the stack with delayed fibres, trained on streams, is ahead of the Transformer of its size by 0.047 bits a byte over long streams: far ahead on copyable bytes and level on new contexts (+0.009, interval -0.006 to +0.023). The plain bed's knowledge gap of 0.178 at the same point closes with delays and training on streams together (the devices differ: GPU windows for the plain bed, the laptop's GPU for the delayed one). Whether it stays closed with four times the data is what the 24,000-update stream-trained run of the delayed bed (knowledge_data_scaling.json) will show against this Transformer at 24,000 updates (1.49270)."
+ },
+ "delayed_stream_trained_bed_at_24000": {
+  "recorded_utc": "2026-11-22T13:11:32Z",
+  "what": "The delayed test bed trained on streams for 24,000 updates on the laptop's GPU (g6d-24k-st-mps, and with 128 knowledge cells a head, know128-24k-st-mps) against the test bed's Transformer at 24,000 updates (tf6-24k-s1, trained in windows on the server's GPU), on the same 2,000,000 validation bytes as streams (gap_by_piece_g6d-24k_vs_tf6-24k.json, gap_by_piece_know128-24k_vs_tf6-24k.json, near 240, far 8,192)",
+  "g6d-24k-st": {
+   "stack_bpb": 1.54687,
+   "transformer_bpb": 1.49292,
+   "gap": 0.05395,
+   "by_context": {
+    "copyable near": -0.1748,
+    "copyable far only": 0.0034,
+    "seen, other follower": 0.0716,
+    "new": 0.0825
+   },
+   "new_context_interval": [
+    0.0755,
+    0.0899
+   ],
+   "fourth_letter_on": 0.1434
+  },
+  "know128-24k-st": {
+   "stack_bpb": 1.53258,
+   "gap": 0.03966,
+   "by_context": {
+    "copyable near": -0.2209,
+    "copyable far only": -0.0038,
+    "seen, other follower": -0.0102,
+    "new": 0.0751
+   }
+  },
+  "reading": "With four times the data the delayed, stream-trained bed goes from 0.047 ahead of its Transformer to 0.054 behind. Its copying stays far better (0.17 bits a byte), and the knowledge gap that it had closed at 6,000 updates opens again: 0.083 on new contexts, 0.14 on the fourth letter of a word on. Its learning curve flattens where the Transformer's keeps falling: from 6,000 to 24,000 updates the Transformer gains 0.326, the plain bed 0.396 and the delayed bed trained on streams 0.225. What made the bed learn fast early, delayed fibres and training on streams, does not keep it learning; knowledge cells keep a lead of about 0.014 and do not change the slope. The knowledge gap is less a part the stack lacks than how it goes on learning."
  }
 }

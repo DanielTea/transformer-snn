@@ -10,5 +10,51 @@
  "training": "24,000 updates (four times the usual data, cosine schedule over 24,000), trained on streams (--stream 10 --stream-groups 3), seed 20001, on the laptop's GPU once the current screens end; averaged weights evaluated every 750 updates.",
  "measure": "The averaged validation on streams over training; loss = E + A t^-alpha fitted from 3,000 updates on for every arm (experiments/plot_data_scaling.py's fit); the lead of each knowledge arm over the bed at 6,000, 12,000 and 24,000 updates; and the first 2,000,000 validation bytes as 16 unbroken streams at the end.",
  "reading": "Knowledge is a lever for data if a knowledge arm's lead over the bed at 24,000 updates is at least its lead at 6,000 and its fitted exponent is larger than the bed's. If its lead shrinks with data, knowledge cells help early and not with scale. One seed: a screen, which earns a second seed and a full-size library run if it reads as a lever.",
- "seen_before_recording": "The 6,000-update stream-trained screens of the bed and of knowledge cells (1.7584 and 1.7500); no 24,000-update run with knowledge cells exists."
+ "seen_before_recording": "The 6,000-update stream-trained screens of the bed and of knowledge cells (1.7584 and 1.7500); no 24,000-update run with knowledge cells exists.",
+ "results": {
+  "recorded_utc": "2026-11-22T13:11:32Z",
+  "trainer_averaged_stream_validation_at_24000": {
+   "g6d-24k-st-mps": 1.5329,
+   "know128-24k-st-mps": 1.52,
+   "lib768-24k-st-mps": 1.5226
+  },
+  "long_streams_at_24000": {
+   "g6d-24k-st-mps": 1.54681,
+   "know128-24k-st-mps": 1.53255,
+   "lib768-24k-st-mps": 1.53369
+  },
+  "lead_over_the_bed_on_the_trainer_streams": {
+   "know128": {
+    "6000": 0.0218,
+    "12000": 0.0145,
+    "18000": 0.01,
+    "24000": 0.0107
+   },
+   "lib768": {
+    "6000": 0.018,
+    "12000": 0.0121,
+    "18000": 0.0098,
+    "24000": 0.0105
+   }
+  },
+  "power_law_fits_from_3000": {
+   "g6d-24k-st-mps": {
+    "alpha": 0.806,
+    "floor": 1.4152,
+    "scale": 253.34
+   },
+   "know128-24k-st-mps": {
+    "alpha": 0.64,
+    "floor": 1.3764,
+    "scale": 64.64
+   },
+   "lib768-24k-st-mps": {
+    "alpha": 0.738,
+    "floor": 1.3997,
+    "scale": 138.28
+   }
+  },
+  "beside_the_6000_update_runs": "the stream-trained 6,000-update runs, each at the end of its own schedule, had knowledge cells 0.0098 ahead over long streams; at the end of the 24,000-update schedule they are 0.0143 ahead",
+  "verdict": "Knowledge cells are not a lever for data by the recorded reading: within the same runs their lead over the bed falls from 0.022 at 6,000 updates to 0.011 at 24,000, for the library from 0.018 to 0.011, and both fitted exponents are smaller than the bed's (0.64 and 0.74 against 0.81). They help early and keep a lead of about 0.01 to 0.014; they do not make the curve keep falling. No second seed and no full-size library run is earned."
+ }
 }
