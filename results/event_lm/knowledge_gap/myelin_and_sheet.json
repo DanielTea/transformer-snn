@@ -1,0 +1,17 @@
+{
+ "study": "myelin_and_sheet",
+ "recorded_utc": "2026-11-22T07:35:13Z",
+ "why": "The gap to the Transformer is knowledge, not memory: the stack copies better and loses on new contexts (gap_by_piece_*.json). Every idea that left the cells as they are failed to touch new contexts. Two ways the brain holds knowledge have not been tried in the stack. (1) Conduction delays that learn: activity-dependent myelination tunes how late each axon delivers its spikes, and with delays spiking networks form time-locked groups whose number exceeds that of their neurons (polychronization). Four fixed delays were the largest step yet on new contexts (the delayed bed closed the test bed's knowledge gap at 6,000 updates, gap_with_data.json); eight fixed delays failed because each delay got a thinner fixed share of the fibres (more_delays.json). Delays that learn let every fibre choose the byte it listens to, up to 31 back, at one number a fibre. (2) The cerebellum's granule layer: an enormous number of cells, each on a few inputs, firing sparsely, so that the patterns it must tell apart become separable. The stack's cell layers are the other way round, 1,022 cells each hearing the whole stream. At the same number of synapses, four times the cells on a quarter of the stream each.",
+ "arms": {
+  "myelin": "the delayed test bed with --granule-myelin 32: every cell layer's 256 fibres start at their fixed delays (0 to 3 bytes) and learn their own, 0 to 31 (experiments/train_event_lm.py, snnformer/event_lm.py myelinated fibres): 5,250,596 parameters (+1,536, one delay a fibre)",
+  "sheet": "the delayed test bed with 127 clusters of 32 cells, each cluster hearing 64 of the 256 channels and writing to 64 (--granule-clusters 127 --granule-cells 32 --granule-fan 64 --granule-reach 64): 4,064 cells a level instead of 1,022, 5,248,880 parameters (-180)"
+ },
+ "devices": {
+  "laptop": "the laptop's GPU against g6d-st-mps (the delayed bed trained on streams there, long streams 1.77237)",
+  "server": "the server's CPU against combo-bed (the delayed bed trained on streams there, long streams 1.76286, code v17d for the bed; the arms run on the code that has myelinated fibres)"
+ },
+ "training": "On streams (--stream 10 --stream-groups 3), 6,000 updates, seed 20001, every flag but the arm's as its device's reference",
+ "measure": "The first 2,000,000 validation bytes as 16 unbroken streams (lead 8,192, pieces of 512) with the bits of every piece kept, split against the device's reference by what the context offers (experiments/gap_by_piece.py, near 256, far 8,192); the trainer's averaged validation on streams; for myelin, where the learned delays went.",
+ "pass_mark": "An arm earns four seeds if, on both devices, it gains on new contexts with the 95% interval above zero, and is ahead of the reference over the long streams by at least 0.010 on the mean of the two devices. Each device is one seed: a screen.",
+ "seen_before_recording": "Tests of myelinated fibres (tests/test_myelin.py) and a 20-update smoke run on the laptop's GPU in which the delays moved up to 0.13 bytes; parameter counts of the sheet; no training run of either arm."
+}

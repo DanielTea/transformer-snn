@@ -75,6 +75,10 @@ _NORM_LIMIT = 1 << 31
 _GOLDEN_STEP = round(_GOLDEN * _PHASE_STEPS)
 # The kinds of slow synapses a granule cluster can have. The slowest then passes a 256th of its charge on per byte.
 _GRANULE_TRACES = 4
+# The longest conduction delay, in bytes, that a cell layer's fibres can learn, and how far a step of the optimizer
+# moves a delay: delays are stored divided by this, so that one step of size lr moves a delay by lr times it.
+_GRANULE_MYELIN = 64
+_MYELIN_SCALE = 64.0
 # Bytes over which a slow synapse's held charge is summed in one piece.
 _TRACE_STRETCH = 512
 # The most spikes of resting charge a granule cell can hold below its threshold.
@@ -231,6 +235,7 @@ class EventLMConfig:
     granule_delays: int = 1
     granule_relays: int = 0
     granule_traces: int = 0
+    granule_myelin: int = 0
     granule_beats: int = 0
     granule_clock: str = "word"
     granule_hold: str = "sum"
@@ -3423,6 +3428,13 @@ class _GranuleLayer(nn.Module):
             # number of its fibres.
             self.register_buffer("taps", torch.stack([torch.randperm(fan, generator=generator)
                                                       % (plain + self.orders) for _ in range(clusters)]))
+        self.myelin = cfg.granule_myelin
+        if self.myelin:
+            # Myelinated fibres learn how late they conduct, as activity-dependent myelination tunes an axon's delay.
+            # Every fibre starts at the delay a fixed fibre would have, and learns a shift from it.
+            start = self.taps.float() if plain > 1 else torch.zeros(clusters, fan)
+            self.register_buffer("myelin_start", start)
+            self.myelin_shift = nn.Parameter(torch.zeros(clusters * fan))
         self.clock = None
         if self.orders:
             self.clock_kind, self.hold = cfg.granule_clock, cfg.granule_hold
@@ -3576,11 +3588,40 @@ class _GranuleLayer(nn.Module):
         fired = self.tick(charge, quanta)
         return fired.detach(), self.tick.rates(charge, quanta) if fired.requires_grad else None
 
+    def delay_bytes(self):
+        """The conduction delay of every myelinated fibre in bytes, as [clusters, fan]: real-valued, as it learns."""
+        delay = self.myelin_start + _MYELIN_SCALE * self.myelin_shift.view_as(self.myelin_start)
+        return delay.clamp(0, self.myelin - 1)
+
+    def myelinated(self, spikes, carried=None):
+        """What myelinated fibres bring as [batch, bytes, clusters, fan]: every fibre its channel as it stood a whole
+        number of bytes ago, its delay rounded, and silence before the stream's first byte. The spikes are exact.
+        A delay learns through the difference between the byte its fibre brings and the byte before that one, a
+        straight-through slope that never looks past the present byte. In a stream ``carried`` brings the last
+        bytes before these and takes up the last of these."""
+        lead, length = self.myelin - 1, spikes.shape[1]
+        before = None if carried is None else carried.late
+        joined = spikes if before is None else torch.cat((before, spikes), 1)
+        if carried is not None:
+            carried.late = joined[:, max(0, joined.shape[1] - lead):].detach()
+        padded = F.pad(joined, (0, 0, max(0, lead + length - joined.shape[1]), 0))[:, -(lead + length):]
+        channels = padded[..., self.inputs]
+        delay = self.delay_bytes()
+        times = torch.arange(length, device=spikes.device)[:, None, None] + lead - delay.detach().round().long()
+        index = times.expand(spikes.shape[0], -1, -1, -1)
+        heard = channels.gather(1, index)
+        if delay.requires_grad and torch.is_grad_enabled():
+            earlier = channels.gather(1, (index - 1).clamp_min(0))
+            heard = heard + (delay - delay.detach()) * (earlier - heard).detach()
+        return heard
+
     def heard(self, spikes, beats=None, rates=None, carried=None):
         """What every cluster's fibres bring as [batch, bytes, clusters, fan]: their channels, each after its delay,
         through its slow synapse or as a stretch between beats of the cluster's clock. In a stream ``carried``
         brings what the fibres and the slow synapses keep of the bytes before and takes up what they keep of
         these."""
+        if self.myelin:
+            return self.myelinated(spikes, carried)
         plain = self.delays + self.traces
         if plain + self.orders == 1:
             return spikes[..., self.inputs]
@@ -4260,6 +4301,12 @@ class EventLM(nn.Module):
                     or cfg.granule_delays + cfg.granule_traces > cfg.granule_fan):
                 raise ValueError("granule clusters have up to four kinds of slow fibres, and a fibre for each kind "
                                  "and each delay")
+            if (not isinstance(cfg.granule_myelin, int) or cfg.granule_myelin == 1
+                    or not 0 <= cfg.granule_myelin <= _GRANULE_MYELIN
+                    or cfg.granule_myelin and (cfg.granule_traces or cfg.granule_beats or cfg.granule_fan > cfg.dim
+                                               or cfg.granule_delays > cfg.granule_myelin)):
+                raise ValueError("myelinated fibres learn delays of up to 2 to 64 bytes, start from delays within "
+                                 "that range, and leave no room for slow or beat fibres or a fan beyond the stream")
             if (not isinstance(cfg.granule_beats, int) or not 0 <= cfg.granule_beats <= _GRANULE_BEATS
                     or cfg.granule_clock not in _GRANULE_CLOCKS or cfg.granule_hold not in _GRANULE_HOLDS
                     or not 0 < cfg.granule_clock_rate < 1):

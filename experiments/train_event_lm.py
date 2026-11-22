@@ -346,6 +346,7 @@ def build_model(args):
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
+                            granule_myelin=getattr(args, "granule_myelin", EventLMConfig.granule_myelin),
                             granule_beats=getattr(args, "granule_beats", EventLMConfig.granule_beats),
                             granule_clock=getattr(args, "granule_clock", EventLMConfig.granule_clock),
                             granule_hold=getattr(args, "granule_hold", EventLMConfig.granule_hold),
@@ -828,6 +829,9 @@ def main():
     parser.add_argument("--granule-delays", type=int, default=EventLMConfig.granule_delays,
                         help="conduction delays among a granule cluster's fibres: each brings its channel as it was "
                              "zero to one less than this many bytes ago")
+    parser.add_argument("--granule-myelin", type=int, default=EventLMConfig.granule_myelin, metavar="BYTES",
+                        help="every fibre of a cell layer learns its own conduction delay, up to this many bytes "
+                             "less one, starting from the delay a fixed fibre would have (myelinated fibres)")
     parser.add_argument("--granule-traces", type=int, default=EventLMConfig.granule_traces,
                         help="kinds of slow fibres in a granule cluster: the first passes a quarter of the charge it "
                              "holds on per byte, the second a sixteenth, and so on")
