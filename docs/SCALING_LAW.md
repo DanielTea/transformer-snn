@@ -20,10 +20,13 @@ stack gains more (`learning_rate_with_data.json`; seed 20001 complete, seed 2000
 | Spiking stack, seed 20001 | 1.6329 | 1.5475 | 1.5036 | **1.4864** | 1.4924 |
 | Transformer, seed 20001 | 1.5917 | 1.4927 | 1.4569 | **1.4442** | 1.4455 |
 | Gap | 0.041 | 0.055 | 0.047 | **0.042** | 0.047 |
+| Spiking stack, seed 20002 | 1.6379 | 1.5580 | 1.5130 | running | 1.4950 |
+| Transformer, seed 20002 | running | 1.4955 | 1.4575 | running | **1.4368** |
 
-From 3e-4 to its best rate the stack gains 0.061 and the Transformer 0.048. The difference is 0.013, under the 0.020
-that the record set for calling the flattening an artefact of the learning rate. Seed 20002 agrees so far: from 3e-4
-to 6e-4 it gains the stack 0.045 (seed 20001: 0.044).
+On seed 20001, from 3e-4 to its best rate the stack gains 0.061 and the Transformer 0.048. The difference is 0.013,
+under the 0.020 that the record set for calling the flattening an artefact of the learning rate. Seed 20002 agrees so
+far: from 3e-4 to 6e-4 it gains the stack 0.045 (seed 20001: 0.044) and the Transformer 0.038 (0.036). Its
+Transformer is best at 2.4e-3 of the rates it has finished, so the verdict waits for both seeds at 1.2e-3.
 
 ![Both models wanted a higher learning rate](../results/figures/event_lm_learning_rate.png)
 
@@ -52,5 +55,7 @@ fire their last spike at random, `cell_dither_with_data.json`). Both are exact a
 | `weight_precision_with_data.json` | Finer charge grids and quantal release, at 6,000 and 24,000 updates |
 | `cell_dither_with_data.json` | Stochastic firing of the threshold cells, alone and with quantal release |
 | `cell_shape_with_data.json` | The full size's cell shape at 24,000 updates, four seeds |
+| `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3 |
 | `full_size_rate_pilot.json` | Which rate is best at full size, before the next full-size pair |
+| `full_size_best_rate_pair.json` | The best stack and its Transformer at full size, each at its best full-size rate; queued by the pilot's rule the night the pilot ends |
 | `full_size_word_heads.json` | Word heads at full size |

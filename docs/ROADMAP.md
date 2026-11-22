@@ -127,21 +127,24 @@ The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4
 
 ## Open bets, in order
 
-1. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`, running): does the charge grid
-   limit late learning?
-2. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
+1. **Each model at its best learning rate at full size** (`full_size_rate_pilot.json`, running, then
+   `full_size_best_rate_pair.json`): on the test bed the stack gains 0.013 more than the Transformer from its best rate,
+   most of it on new contexts; v17's full-size gap is 0.010.
+2. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
+   `randomness_at_best_rate.json`): does the charge grid limit late learning?
+3. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
    the base for the rest.
-3. **Homeostatic synaptic scaling and intrinsic plasticity**: neurons keep their synapses and thresholds in the range
+4. **Homeostatic synaptic scaling and intrinsic plasticity**: neurons keep their synapses and thresholds in the range
    where they still learn, as cortical neurons do.
-4. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
+5. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
    in the dentate gyrus, to take up what the old ones cannot.
-5. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,
+6. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,
    more cells, narrower reads), tested by their slope.
-6. **Surprise-gated fast synapses**, learning while reading only when the prediction was wrong.
-7. **More data at full size**, once a design's slope is negative on the test bed.
+7. **Surprise-gated fast synapses**, learning while reading only when the prediction was wrong.
+8. **More data at full size**, once a design's slope is negative on the test bed.
 
 Myelinated fibres and the cerebellar sheet failed at 6,000 updates (`myelin_and_sheet.json`); the sheet is re-tested
-by slope under 5.
+by slope under 6.
 
 ## How to continue
 
