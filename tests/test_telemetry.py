@@ -160,3 +160,14 @@ def test_frozen_fast_synapses_keep_what_calibration_taught():
     learning, holding = StreamReader(live, 3).read(samples), StreamReader(frozen, 3).read(samples)
     # The same until the freeze; after it the frozen synapses no longer learn from what arrives.
     assert np.array_equal(learning[:, :30], holding[:, :30]) and not np.array_equal(learning, holding)
+
+
+def test_the_delta_encoding_writes_changes_and_repeats_a_byte_while_steady():
+    levels = np.array([[50, 50, 50, 53, 40, 99, 99, 0]])
+    written = encode(levels, "delta", 100)
+    assert written.shape == (1, 8, 1) and sample_width("delta", 100) == 1
+    changes = decode(written, "delta")
+    assert changes.tolist() == [[0, 0, 0, 3, -13, 47, 0, -46]]
+    # A steady stretch writes one byte again and again; the clipped jumps are the ends of the range.
+    assert len(set(written[0, :3, 0].tolist())) == 1 and chr(written[0, 0, 0]) == "O"
+    assert ((written >= 33) & (written <= 126)).all()

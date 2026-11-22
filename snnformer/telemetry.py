@@ -2,8 +2,10 @@
 
 A sensor's samples become bytes in two steps. A ``Quantizer`` fitted on a stretch of normal operation maps every
 value to one of a fixed number of levels, and an encoding writes every level as a fixed number of bytes: ``digits``
-as a zero-padded decimal number and a newline, ``printable`` as one printable ASCII character. A stack trained on
-text has seen digits, newlines and printable characters, so neither encoding hands it a byte it never heard.
+as a zero-padded decimal number and a newline, ``printable`` as one printable ASCII character, and ``delta`` the
+change of level since the sample before as one printable character, so that a steady sensor writes the same byte
+again and again and a jump writes a rare one. A stack trained on text has seen digits, newlines and printable
+characters, so no encoding hands it a byte it never heard.
 
 A ``StreamReader`` reads many such streams side by side, one per sensor, and keeps the state that the stack carries
 for each of them: the tags and payloads of its reads, the fibres of its cell layers and, when the stack has fast
@@ -24,9 +26,11 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-ENCODINGS = ("digits", "printable")
+ENCODINGS = ("digits", "printable", "delta")
 # One printable character per level: '!' (33) to '~' (126). The space is left out, a word separator in text.
 _PRINTABLE_FIRST, _PRINTABLE_LEVELS = 33, 94
+# The delta encoding writes changes from -46 to +47 levels; no change is the character 'O'.
+_DELTA_REACH = 46
 
 
 @dataclass(frozen=True)
@@ -69,6 +73,8 @@ def sample_width(encoding, levels):
         if levels > _PRINTABLE_LEVELS:
             raise ValueError(f"the printable encoding has {_PRINTABLE_LEVELS} levels")
         return 1
+    if encoding == "delta":
+        return 1
     raise ValueError(f"unknown encoding {encoding!r}")
 
 
@@ -80,6 +86,11 @@ def encode(levels, encoding, count):
     width = sample_width(encoding, count)
     if encoding == "printable":
         return (levels + _PRINTABLE_FIRST)[..., None]
+    if encoding == "delta":
+        # The change along the last axis, the first sample's from nothing; changes beyond the 94 characters clip.
+        change = np.diff(levels, axis=-1, prepend=levels[..., :1])
+        return (np.clip(change, -_DELTA_REACH, _PRINTABLE_LEVELS - 1 - _DELTA_REACH) + _DELTA_REACH
+                + _PRINTABLE_FIRST)[..., None]
     digits = width - 1
     out = np.empty(levels.shape + (width,), dtype=np.int64)
     rest = levels.copy()
@@ -91,10 +102,13 @@ def encode(levels, encoding, count):
 
 
 def decode(samples, encoding):
-    """The levels of bytes that ``encode`` wrote, as [...]."""
+    """The levels of bytes that ``encode`` wrote, as [...]. For ``delta`` they are the changes, which add up to the
+    levels after the first sample as long as no change was clipped."""
     samples = np.asarray(samples, dtype=np.int64)
     if encoding == "printable":
         return samples[..., 0] - _PRINTABLE_FIRST
+    if encoding == "delta":
+        return samples[..., 0] - _PRINTABLE_FIRST - _DELTA_REACH
     digits = samples[..., :-1] - ord("0")
     return (digits * 10 ** np.arange(digits.shape[-1] - 1, -1, -1)).sum(-1)
 
