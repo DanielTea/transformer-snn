@@ -91,7 +91,10 @@ The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4
    a stream. The Transformer reference may read windows, as it was trained.
 2. **Equal parameters and equal training data** for every comparison with
    the Transformer. Pulses per byte, the stack's energy, are reported beside
-   it.
+   it. The budget may be raised where the evidence says that is what closes
+   the gap (Daniel, 2026-11-22), but only as an arm of its own against the
+   old budget, never hidden inside another change, and every claim states
+   what the extra pulses cost.
 3. **Pre-register every test.** Write the question, the arms, the measure and
    the pass mark, and commit them before the first result. Take the
    record's time from the commit. Record every verdict, failures included.
@@ -129,22 +132,35 @@ The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4
 
 1. **Each model at its best learning rate at full size** (`full_size_rate_pilot.json`, running, then
    `full_size_best_rate_pair.json`): on the test bed the stack gains 0.013 more than the Transformer from its best rate,
-   most of it on new contexts; v17's full-size gap is 0.010.
-2. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
+   most of it on new contexts; v17's full-size gap is 0.010. The pilot's first rates show the stack's band of good
+   rates is narrow and lower at full size: after 24,000 updates it is better at 6e-4 than at 1.2e-3 (1.3199 against
+   1.3475), the Transformer the other way round (1.2837 against 1.2762).
+2. **The unit, in spikes** (`gated_cells_with_data.json`, `noisy_thresholds_with_data.json`, laptop screens running).
+   v15's priced walk put plain units in place of gated ones as the largest step from the Transformer to the stack
+   (0.025, against 0.001 for whole spikes). Two spike-native halves of a gated unit are screened by their slope at the
+   best rate:
+   - dendritic gating: a gate dendrite lets in a share of what a value dendrite collects;
+   - noisy thresholds: membrane noise makes a cell smooth on average, and it learns from that true slope. The noise
+     falls with the learning rate, so scoring stays exact.
+3. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
    `randomness_at_best_rate.json`): does the charge grid limit late learning?
-3. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
+4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
    the base for the rest.
-4. **Homeostatic synaptic scaling and intrinsic plasticity**: neurons keep their synapses and thresholds in the range
+5. **A learned normalization pool**: divisive normalization with learned weights per channel, as cortical
+   normalization weighs its pool, in place of one global sum. The pool in place of LayerNorm was v15's second
+   largest step (0.012).
+6. **Homeostatic synaptic scaling and intrinsic plasticity**: neurons keep their synapses and thresholds in the range
    where they still learn, as cortical neurons do.
-5. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
+7. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
    in the dentate gyrus, to take up what the old ones cannot.
-6. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,
+8. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,
    more cells, narrower reads), tested by their slope.
-7. **Surprise-gated fast synapses**, learning while reading only when the prediction was wrong.
-8. **More data at full size**, once a design's slope is negative on the test bed.
+9. **Surprise-gated fast synapses**, learning while reading only when the prediction was wrong.
+10. **More data at full size**, once a design's slope is negative on the test bed.
 
 Myelinated fibres and the cerebellar sheet failed at 6,000 updates (`myelin_and_sheet.json`); the sheet is re-tested
-by slope under 6.
+by slope under 8. Ruled out as causes of the flattening (`learning_rate_by_context.json`): the pulse budget, noisy
+late weights, and a code that grows denser with data.
 
 ## How to continue
 

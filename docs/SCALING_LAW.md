@@ -70,7 +70,12 @@ words most of all. Three other readings of the flattening were ruled out on the 
 The largest step that v15's walk from the Transformer to the stack priced was the unit: plain rectifying units in place
 of gated ones cost 0.025, against 0.001 for whole spikes (`docs/STREAM_FORM.md`). The stack's cells are plain units.
 Gated cells were only judged at 6,000 updates. A screen on the laptop now measures them by their slope
-(`gated_cells_with_data.json`).
+(`gated_cells_with_data.json`). A second screen measures the other half of a smooth unit, in spikes: noisy thresholds
+(`noisy_thresholds_with_data.json`). A real neuron's membrane is noisy, so near its threshold it fires by chance, and
+its average rate is a smooth curve of its input. Under logistic noise of half a threshold, a cell's average count is
+within 0.025 spikes of 0.5 · softplus(2 · charge / threshold). The cell learns from that curve's slope, where a plain
+cell learns from a stand-in. The noise falls with the learning rate, so training ends on the whole counts that scoring
+fires.
 
 ## Still running
 
@@ -82,6 +87,7 @@ Gated cells were only judged at 6,000 updates. A screen on the laptop now measur
 | `cell_shape_with_data.json` | The full size's cell shape at 24,000 updates, four seeds |
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `gated_cells_with_data.json` | Gated and self-gated cells at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
+| `noisy_thresholds_with_data.json` | Noisy thresholds at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `full_size_rate_pilot.json` | Which rate is best at full size, before the next full-size pair |
 | `full_size_best_rate_pair.json` | The best stack and its Transformer at full size, each at its best full-size rate; queued by the pilot's rule the night the pilot ends |
 | `full_size_word_heads.json` | Word heads at full size |
