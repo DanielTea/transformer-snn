@@ -1,0 +1,132 @@
+{
+  "unit": "bits per byte",
+  "protocol": "unbroken_streams for the stacks, causal_warmed_windows for the Transformers",
+  "training_targets": 368640000,
+  "seeds": [
+    20001
+  ],
+  "rows": [
+    {
+      "model": "36.26M SNN stack, knowledge cells, trained on streams",
+      "reads_the_test_as": "Stream, reach 8,192, taught output synapses",
+      "parameters": 36263956,
+      "checkpoint": "checkpoints/knowledge_gap/l2048-know-st/model.pt.averaged",
+      "scores": {
+        "enwik8": {
+          "mean": 1.117018,
+          "rank": 3
+        }
+      },
+      "color": "#0f8f6c"
+    },
+    {
+      "model": "36.26M SNN stack, knowledge cells, trained on streams",
+      "reads_the_test_as": "Stream, reach 8,192",
+      "parameters": 36263956,
+      "checkpoint": "checkpoints/knowledge_gap/l2048-know-st/model.pt.averaged",
+      "scores": {
+        "enwik8": {
+          "mean": 1.12097,
+          "rank": 5
+        }
+      },
+      "color": "#0f8f6c"
+    },
+    {
+      "model": "36.26M SNN stack, knowledge cells, trained on streams",
+      "reads_the_test_as": "Stream, as trained",
+      "parameters": 36263956,
+      "checkpoint": "checkpoints/knowledge_gap/l2048-know-st/model.pt.averaged",
+      "scores": {
+        "enwik8": {
+          "mean": 1.13571,
+          "rank": 6
+        }
+      },
+      "color": "#0f8f6c"
+    },
+    {
+      "model": "34.81M SNN stack, windows of 2,048 bytes, forgetting slopes (v16)",
+      "reads_the_test_as": "Stream, chosen reach, taught output synapses",
+      "parameters": 34810900,
+      "checkpoint": "checkpoints/long_streams/l2048-forget/model.pt.averaged",
+      "scores": {
+        "enwik8": {
+          "mean": 1.1199387,
+          "rank": 4
+        }
+      },
+      "color": "#77519d"
+    },
+    {
+      "model": "34.75M full attention, windows of 2,048 bytes",
+      "reads_the_test_as": "Windows with 2,032 bytes of history, taught output synapses",
+      "parameters": 34752000,
+      "checkpoint": "checkpoints/long_streams/tf2048/model.pt.averaged",
+      "scores": {
+        "enwik8": {
+          "mean": 1.10321,
+          "rank": 1
+        }
+      },
+      "color": "#b64d00"
+    },
+    {
+      "model": "34.75M full attention, windows of 2,048 bytes",
+      "reads_the_test_as": "Windows with 2,032 bytes of history",
+      "parameters": 34752000,
+      "checkpoint": "checkpoints/long_streams/tf2048/model.pt.averaged",
+      "scores": {
+        "enwik8": {
+          "mean": 1.106693,
+          "rank": 2
+        }
+      },
+      "color": "#b64d00"
+    }
+  ],
+  "depth_22_rows": [
+    {
+      "model": "69.36M SNN stack, 22 levels, the same pulse budget",
+      "reads_the_test_as": "Stream, reach 8,192, taught output synapses",
+      "parameters": 69359656,
+      "checkpoint": "checkpoints/long_streams/l2048-d22/model.pt.averaged",
+      "scores": {
+        "enwik8": {
+          "mean": 1.09257,
+          "rank": 2
+        }
+      },
+      "color": "#77519d"
+    },
+    {
+      "model": "69.37M full attention, 22 layers, windows of 2,048 bytes",
+      "reads_the_test_as": "Windows with 2,032 bytes of history",
+      "parameters": 69371904,
+      "checkpoint": "checkpoints/long_streams/tf2048-d22/model.pt.averaged",
+      "scores": {
+        "enwik8": {
+          "mean": 1.0704163,
+          "rank": 1
+        }
+      },
+      "color": "#b64d00"
+    }
+  ],
+  "paired": {
+    "knowledge cells against tf2048, test": [
+      0.0103,
+      [
+        0.0092,
+        0.0114
+      ]
+    ],
+    "validation": [
+      0.0193,
+      [
+        0.0182,
+        0.0205
+      ]
+    ]
+  }
+}

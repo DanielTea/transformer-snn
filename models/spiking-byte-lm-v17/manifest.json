@@ -1,0 +1,68 @@
+{
+ "release": "spiking-byte-lm-v17",
+ "model": {
+  "file": null,
+  "note": "The weights are not in the repository. They are in the l2048-know-st archive of the release.",
+  "source_checkpoint": "knowledge_gap/l2048-know-st/model.pt.averaged",
+  "sha256": "4f02c9a13054aeb02bb01fc1cba84469a633d982bf9fed35f06bfaf92bbbbe05",
+  "bytes": 145345093,
+  "archive": "spiking-byte-lm-v17-checkpoints-l2048-know-st.tar.gz",
+  "parameters": 36263956,
+  "training_targets": 368640000,
+  "seed": 20001,
+  "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates, the matrices of three-dimensional weights turned as well",
+  "weights": "running average with decay 0.999",
+  "training_windows": "512 bytes in batches of 8 up to 24,000 updates, then unbroken streams: 15 groups of 10 windows of 2,048 bytes that continue each other, in batches of 2, with a read reach of 2,048 cells; 4,096 targets an update throughout",
+  "forked_at": {
+   "updates": 24000,
+   "from": "p-forget, v15's recipe with --read-forget on windows of 512 bytes"
+  },
+  "architecture": {
+   "stack": "eleven levels, each a state read of 8 heads and then a layer of 1,188 threshold cells, both writing their spikes back into one stream of 512 channels",
+   "forgetting": "every read head learns a slope: a cell beyond the window takes the oldest age's offset plus the slope times the doublings of its age beyond the window",
+   "knowledge_cells": "128 learned cells a head that race beside the stream's own cells and never age",
+   "pulse_budget_per_byte": 310000
+  },
+  "stream_scores": {
+   "enwik8_test": {
+    "as_trained": 1.13571,
+    "reach_8192": 1.12097,
+    "reach_8192_taught": 1.11702,
+    "taught_over_tf2048": [
+     0.0103,
+     [
+      0.0092,
+      0.0114
+     ]
+    ]
+   },
+   "enwik8_validation": {
+    "as_trained": 1.16518,
+    "reach_8192": 1.15148,
+    "reach_8192_taught": 1.14963,
+    "taught_over_tf2048": [
+     0.0193,
+     [
+      0.0182,
+      0.0205
+     ]
+    ]
+   }
+  },
+  "flags": "--variant event_steered --no-carry --stack --dim 512 --hidden 4 --depth 11 --spike-resolution 16 --router-charge-bits 8 --pulse-budget 310000 --read-after 0,1,2,3,4,5,6,7,8,9,10 --read-width 512 --read-heads 8 --read-window 512 --read-mode race --read-budget 256 --read-resolution 4 --read-address-rate 64 --read-delays 4 --read-cap 128 --granule-after 0,1,2,3,4,5,6,7,8,9,10 --granule-clusters 1 --granule-fan 1024 --granule-delays 4 --granule-cells 1188 --granule-slope --granule-cap 128 --pool-fine 16 --pool-rest 4 --pool-rate 32 --output-pool 128 --rotated-adam 50 --rotate-stacks --weight-average 0.999 --read-forget --ctx 2048 --bs 2 --read-reach 2048 --read-knowledge 128 --stream 10 --stream-groups 15"
+ },
+ "also_released": {
+  "spiking-byte-lm-v17-checkpoints-l2048-d22.tar.gz": {
+   "file": "long_streams/l2048-d22/model.pt.averaged",
+   "sha256": "7b240ef1f1e695b2fde692a86980a8cddc1f989a92e05171ea0f1cf497ab1b4a",
+   "bytes": 277987667,
+   "parameters": 69359656
+  },
+  "spiking-byte-lm-v17-checkpoints-tf2048-d22.tar.gz": {
+   "file": "long_streams/tf2048-d22/model.pt.averaged",
+   "sha256": "b30db58a741766f116d58e1d643b92c5f2acb1cf12045a6e5e713919b71dd07a",
+   "bytes": 278072215,
+   "parameters": 69371904
+  }
+ }
+}

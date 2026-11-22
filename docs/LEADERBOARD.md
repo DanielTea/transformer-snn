@@ -4,6 +4,32 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## Knowledge cells trained on streams · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
+|---|---:|---|---:|---:|---:|---:|
+| 36.26M SNN stack, knowledge cells, trained on streams | 36,263,956 | Stream, reach 8,192, taught output synapses | 1.11702 | 3 | — | — |
+| 36.26M SNN stack, knowledge cells, trained on streams | 36,263,956 | Stream, reach 8,192 | 1.12097 | 5 | — | — |
+| 36.26M SNN stack, knowledge cells, trained on streams | 36,263,956 | Stream, as trained | 1.13571 | 6 | — | — |
+| 34.81M SNN stack, windows of 2,048 bytes, forgetting slopes (v16) | 34,810,900 | Stream, chosen reach, taught output synapses | 1.11994 | 4 | — | — |
+| 34.75M full attention, windows of 2,048 bytes | 34,752,000 | Windows with 2,032 bytes of history, taught output synapses | **1.10321** | 1 | — | — |
+| 34.75M full attention, windows of 2,048 bytes | 34,752,000 | Windows with 2,032 bytes of history | 1.10669 | 2 | — | — |
+
+![Where the gap is: the stack minus the Transformer by what each byte's context offers](../results/figures/event_lm_gap_by_context.png)
+
+[Where the gap is, what was tried, and what moves it](KNOWLEDGE_GAP.md) · [Roadmap](ROADMAP.md)
+
+The knowledge-cell stack is v16's stack with 128 learned, ageless cells in every read head's race. It trained on windows of 512 bytes for 24,000 updates and then on unbroken streams of windows of 2,048 bytes, the state handed on from window to window. Read at its best, with a reach of 8,192 cells and taught output synapses, it is 0.0103 bpb behind the Transformer on the enwik8 test (paired 95% interval 0.0092 to 0.0114) and 0.0193 on validation. Every row is one seed.
+
+### Depth 22 at the same pulse budget
+
+| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
+|---|---:|---|---:|---:|---:|---:|
+| 69.36M SNN stack, 22 levels, the same pulse budget | 69,359,656 | Stream, reach 8,192, taught output synapses | 1.09257 | 2 | — | — |
+| 69.37M full attention, 22 layers, windows of 2,048 bytes | 69,371,904 | Windows with 2,032 bytes of history | **1.07042** | 1 | — | — |
+
+Twice the levels at the same pulse budget gain the stack 0.027 bpb on test and the Transformer 0.036: the gap widens with size, at equal energy for the stack.
+
 ## Long streams at equal training context · 368,640,000 training targets · seed 20001
 
 | Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
