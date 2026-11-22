@@ -34,7 +34,7 @@ from common import (
 from snnformer import SNNConfig, count_params
 from snnformer.event_lm import (
     EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES, echo_feedback,
-    weight_dither,
+    weight_dither, cell_dither,
 )
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
@@ -980,6 +980,9 @@ def main():
                         help="quantal release while training: every synapse rounds to a neighbouring tick of its "
                              "charge grid at random, so that its expected charge is its stored size; scoring rounds "
                              "to the nearest tick as always")
+    parser.add_argument("--cell-dither", action="store_true",
+                        help="stochastic firing while training: a threshold cell fires its last spike with the chance "
+                             "of its charge's distance past its last whole threshold; scoring rounds as always")
     parser.add_argument("--rotated-adam", type=int, metavar="STEPS",
                         help="run Adam in the eigenbasis of each weight matrix's gradient statistics and "
                              "update the bases every this many steps")
@@ -1359,7 +1362,7 @@ def main():
             forward_options["bank_read_losses"] = bank_read_losses
         if args.early_readout_weight:
             forward_options["early_readout"] = args.clock_start if args.early_readout is None else args.early_readout
-        with weight_dither(args.weight_dither):
+        with weight_dither(args.weight_dither), cell_dither(args.cell_dither):
             if args.code_loss_weight:
                 counts, predicted, observed, *early = model(
                     inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,

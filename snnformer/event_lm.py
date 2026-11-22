@@ -414,6 +414,28 @@ def weight_dither(enabled=True):
         _DITHER[0] = previous
 
 
+# Stochastic firing: while it is on (``cell_dither``) and a gradient is taken, a population that allows it (the
+# threshold cells) fires the next whole spike with the chance of its charge's distance past its last whole threshold.
+_CELL_DITHER = [False]
+
+
+@contextlib.contextmanager
+def cell_dither(enabled=True):
+    """Let the threshold cells fire at random while training, so that their expected count is their charge.
+
+    A cell counts its charge in whole thresholds, so a small change of its synapses changes its count only where the
+    charge crosses half a threshold, and the slope that its smooth threshold reports is for a count that did not
+    move. A cell that fires its last spike at random, with the chance of the charge's distance past its last whole
+    threshold, passes every change of its charge on in expectation, as the variable firing of real neurons does.
+    Every count stays a whole number of spikes; without a gradient (scoring, streams) a cell rounds as always."""
+    previous = _CELL_DITHER[0]
+    _CELL_DITHER[0] = bool(enabled)
+    try:
+        yield
+    finally:
+        _CELL_DITHER[0] = previous
+
+
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
     if not weight.is_floating_point():
         return weight
@@ -508,6 +530,8 @@ class _IntegrateFire(nn.Module):
     dendrite = False
     # The pool of a lifted population divides the charge before the membrane bounds it.
     lifted = False
+    # A population that may fire at random while training (``cell_dither``): the threshold cells.
+    dither = False
 
     def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False,
                  quanta_per_threshold: int = _PACKET_UNITS, capped: bool | int = False):
@@ -555,7 +579,12 @@ class _IntegrateFire(nn.Module):
                     return counts.to(current.dtype) + (surrogate - surrogate.detach())
                 return counts
             charge = bounded.to(torch.int32)
-            magnitude = (charge.abs() + threshold // 2) // threshold
+            if self.dither and _CELL_DITHER[0] and torch.is_grad_enabled():
+                # The last spike fires with the chance of the charge's distance past the last whole threshold.
+                lift = (torch.rand(charge.shape, device=charge.device) * threshold).to(torch.int32)
+                magnitude = (charge.abs() + lift) // threshold
+            else:
+                magnitude = (charge.abs() + threshold // 2) // threshold
             limit = (self.cap * self.quanta_per_threshold) // units
             if self.capped:
                 limit = limit.clamp(max=self.capped)
@@ -3601,6 +3630,8 @@ class _GranuleLayer(nn.Module):
             self.fire = (_ShapedFire if shaped else _ExcitatoryFire)(cell_cap, self.bits, False,
                                                                      quanta_per_threshold=cfg.pool_quanta, capped=True)
             self.fire.lifted = cfg.pool_lifts_ceiling
+            # Only plain cells under a pool may fire at random while training (``cell_dither``).
+            self.fire.dither = not cfg.pool_lifts_ceiling
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
             # that they cause.
             self.fire.price_share = cfg.granule_price
