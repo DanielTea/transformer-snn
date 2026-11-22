@@ -10,5 +10,53 @@
  "measure": "The averaged validation on streams every 750 updates, and the first 2,000,000 validation bytes as 16 unbroken streams at the end, with the bits of every piece kept and split by what the context offers (near 256, far 8,192).",
  "reading": "The word heads' gain holds with data if their lead over fan2-24k on the long streams at 24,000 updates is at least 0.010 and their lead on the trainer's streams at 24,000 updates is at least two thirds of their lead at 6,000 updates in the same runs; it fades if it falls below that. One seed: a screen.",
  "seen_before_recording": "The 6,000-update runs of both arms on the laptop; no 24,000-update run of either exists.",
- "correction": "The 'why' first said fifteen times; the full size's 368.6M training bytes are 3.75 times the test bed's 98.3M at 24,000 updates. Corrected before any run started."
+ "correction": "The 'why' first said fifteen times; the full size's 368.6M training bytes are 3.75 times the test bed's 98.3M at 24,000 updates. Corrected before any run started.",
+ "results": {
+  "recorded_utc": "2026-11-22T16:08:42Z",
+  "long_streams_at_24000": {
+   "fan2-24k": 1.53135,
+   "fan2-word-24k": 1.52631,
+   "lead": 0.00503,
+   "what": "the first 2,000,000 validation bytes as 16 unbroken streams, averaged weights, the laptop's GPU"
+  },
+  "trainer_streams_averaged": {
+   "6000": {
+    "fan2-24k": 1.6212,
+    "fan2-word-24k": 1.6143,
+    "lead": 0.0069
+   },
+   "24000": {
+    "fan2-24k": 1.48,
+    "fan2-word-24k": 1.4734,
+    "lead": 0.0066
+   }
+  },
+  "verdict": "Fades, by the reading: the lead over long streams at 24,000 updates is 0.005, below 0.010. On the trainer's streams the lead held (0.0066 against 0.0069 at 6,000 updates, above two thirds). Over long streams the word heads led this cell shape by 0.017 after 6,000 updates in separate runs (full_size_shape_bed.json); after 24,000 the lead is a third of that.",
+  "by_context": {
+   "new (76% of bytes)": {
+    "lead": 0.0046,
+    "interval": [
+     0.001,
+     0.0076
+    ]
+   },
+   "copyable near (8%)": {
+    "lead": 0.0126,
+    "interval": [
+     0.0019,
+     0.0219
+    ]
+   },
+   "copyable far only (11%)": {
+    "lead": -0.0142,
+    "interval": [
+     -0.027,
+     -0.0003
+    ]
+   },
+   "record": "gap_by_piece_fan2-word-24k_vs_fan2-24k.json (near 256, far 8,192)"
+  },
+  "reading_of_the_split": "At 6,000 updates the word heads' gain was memory (word_rhythm.json); at 24,000 most of what is left is on new contexts, 0.0046 with its interval above zero.",
+  "context_not_read": "fan2-24k against the bed's own cell shape on the same GPU (g6d-24k-st, 1.54687): 0.0155 ahead after 24,000 updates, 0.020 after 6,000. Not part of this record's reading; cell_shape_with_data's four server seeds decide."
+ }
 }

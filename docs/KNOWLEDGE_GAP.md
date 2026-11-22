@@ -61,7 +61,7 @@ said otherwise, and are scored over the first 2,000,000 validation bytes as 16 u
 | Narrower reads, more cells | reads of 128 with 1,342 cells | Fail (0.070), worse on new contexts too | Knowledge needs the reads as much as the cells | `memory_for_knowledge.json` |
 | Myelinated fibres | every fibre learns its delay, up to 31 bytes | Fail on both cell shapes (0.0045, 0.013) | The delays move toward the present: better copies, less knowledge | `myelin_and_sheet.json`, `full_size_shape_bed.json` |
 | A cerebellar sheet | four times the cells, each on a quarter of the stream | Fail (0.050) | A cell must hear the whole present | `myelin_and_sheet.json` |
-| Word heads | a head reads the present word by its places | 0.023 and 0.017 ahead, all of it memory | See below | `word_rhythm.json`, `full_size_shape_bed.json` |
+| Word heads | a head reads the present word by its places | 0.023 and 0.017 ahead, all of it memory; with four times the data 0.005 (fades) | See below | `word_rhythm.json`, `full_size_shape_bed.json`, `word_heads_with_data.json` |
 | The full size's cell shape | every channel's present byte and one delayed, 681 cells | **0.020 ahead**, and on new contexts (0.009) | The test bed's own shape was the weaker one | `word_rhythm.json` |
 
 ## Knowledge cells are an attention sink
@@ -115,7 +115,8 @@ stream (`tests/test_myelin.py`, `tests/test_word_heads.py`).
   head reaches only the present word's cells, weighing each by its place in the word, so a prefix is one pattern
   however far into its word the reading stands. On the test bed word heads gain 0.023 (the bed's cell shape) and
   0.017 (the full size's), all of it memory: they help the stack recognise and copy a word it has seen, not complete
-  one it has not.
+  one it has not. With four times the data the gain falls to 0.005, and what is left is on new contexts
+  (`word_heads_with_data.json`).
 
 ## Full size
 
