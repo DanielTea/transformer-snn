@@ -59,10 +59,10 @@ said otherwise, and are scored over the first 2,000,000 validation bytes as 16 u
 | Trained plasticity with knowledge cells | both in one stack | They get in each other's way (0.011) | Parts that help the same bytes compete | `knowledge_and_plasticity.json` |
 | Eight fixed delays | cells hear eight bytes side by side | Fail (0.032, 0.097) | A thinner share of the same fibres | `more_delays.json` |
 | Narrower reads, more cells | reads of 128 with 1,342 cells | Fail (0.070), worse on new contexts too | Knowledge needs the reads as much as the cells | `memory_for_knowledge.json` |
-| Myelinated fibres | every fibre learns its delay, up to 31 bytes | Fail on both cell shapes (0.0045, 0.013) | The delays move toward the present: better copies, less knowledge | `myelin_and_sheet.json`, `full_size_shape_bed.json` |
+| Myelinated fibres | every fibre learns its delay, up to 31 bytes | Fail on both cell shapes and both devices (0.0045, 0.013; 0.020 on the server) | The delays move toward the present: better copies, less knowledge | `myelin_and_sheet.json`, `full_size_shape_bed.json` |
 | A cerebellar sheet | four times the cells, each on a quarter of the stream | Fail (0.050) | A cell must hear the whole present | `myelin_and_sheet.json` |
 | Word heads | a head reads the present word by its places | 0.023 and 0.017 ahead, all of it memory; with four times the data 0.005 (fades) | See below | `word_rhythm.json`, `full_size_shape_bed.json`, `word_heads_with_data.json` |
-| The full size's cell shape | every channel's present byte and one delayed, 681 cells | **0.020 ahead**, and on new contexts (0.009) | The test bed's own shape was the weaker one | `word_rhythm.json` |
+| The full size's cell shape | every channel's present byte and one delayed, 681 cells | **0.020 and 0.016 ahead** on two devices, and on new contexts (0.009, 0.017); 0.016 at 24,000 updates | The test bed's own shape was the weaker one | `word_rhythm.json` |
 
 ## Knowledge cells are an attention sink
 
@@ -77,7 +77,10 @@ a place to put them.
 | **One knowledge cell a head** | **2.485** |
 
 One cell gives 140% of the copying gain of 128, as attention sinks and registers do in Transformers. Over long streams
-it gains 0.005 on the bed, all of it on copyable bytes. Four seeds on the server's CPU: PENDING_SINK. Records:
+it gains 0.005 on the bed, all of it on copyable bytes. Four seeds on the server's CPU confirm it: at every seed
+the sink copies random letters better on their second showing, by 1.37 bits a byte on average (0.15 to 2.28), and over
+long streams it is 0.017 better on average, at three of four seeds. It takes away the seed lottery of copying: the
+bed's seeds copy at 2.60 to 4.04 bits a byte on the second showing, the sink's at 1.61 to 2.44. Records:
 `knowledge_and_plasticity.json`, `attention_sink.json`.
 
 ## The gap with data
@@ -127,14 +130,15 @@ stream (`tests/test_myelin.py`, `tests/test_word_heads.py`).
 | **Knowledge cells, trained on streams** | **1.1170** | **1.1496** | 36.26M |
 | Trained plasticity (fast synapses trained in the loop) | within 0.001 of its reference | | 34.81M |
 | Word heads | PENDING | PENDING | 36.26M |
-| Depth 22 (twice the levels, the same pulse budget) | 1.0926 | PENDING_D22 | 69.36M |
-| Transformer at depth 22 | 1.0704 | | 69.37M |
+| Depth 22 (twice the levels, the same pulse budget) | 1.0926 | 1.1230 | 69.36M |
+| Transformer at depth 22 | 1.0704 | 1.0930 | 69.37M |
 
 The stacks read 8,192 cells back with v15's fast synapses on all levels at 2^24; the Transformers read windows of
 their training length with 16 bytes scored after the rest. Knowledge cells missed their own mark (0.005 at the trained
 reach; they gained 0.001 there), and they add 4.2% of parameters, worth about 0.002 by the stack's depth scaling; the
 arm also trained on streams where v16 trained in windows. Trained plasticity missed its mark (0.005). At depth 22 the
-stack gains 0.027 over depth 11 and the Transformer 0.036: the gap widens with size, at equal energy for the stack.
+stack gains 0.027 over depth 11 and the Transformer 0.036: the gap widens with size, at equal energy for the stack
+(0.022 on test, 0.030 on validation).
 
 ![The best spiking stack so far](../results/figures/event_lm_best_model.png)
 
