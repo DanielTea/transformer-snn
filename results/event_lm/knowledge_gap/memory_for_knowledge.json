@@ -1,0 +1,15 @@
+{
+ "study": "memory_for_knowledge",
+ "recorded_utc": "2026-11-22T02:49:09Z",
+ "why": "Split by what each byte's context offers (gap_by_piece_test.json, gap_by_piece_validation.json), the v16 stack is ahead of the Transformer of its size and training wherever the eight bytes before a target can be copied (0.09 bits a byte from the last 2 KB, 0.32 from 2 to 8 KB back) and behind on new contexts by 0.057 to 0.066, on three quarters of the bytes: the whole gap is knowledge, not memory. The stack spends 41% of its parameters on its reads (tags, probes, payloads and projections) against the Transformer's 33% on attention, and 58% on its cells against 66% on the MLPs. On the test bed, knowledge cells gain on copyable bytes (0.036) and nothing on new ones, which is why they do not help at full size.",
+ "question": "Does moving parameters from the reads to the cells, at equal parameters, buy knowledge (bits on new contexts) for memory (bits on copyable bytes), and is the trade worth making?",
+ "arms": {
+  "r128": "reads 128 wide (four heads of 32 channels) and 1,342 cells a level: 5,250,980 parameters",
+  "r384": "reads 384 wide (four heads of 96 channels) and 702 cells a level: 5,247,140 parameters, the other way"
+ },
+ "reference": "combo-bed of knowledge_and_plasticity.json: the delayed test bed (reads 256 wide, 1,022 cells, 5,249,060 parameters) trained the same way: the same code, flags, seed 20001, data order and device; every arm differs only in --read-width and --granule-cells",
+ "training": "On streams (--stream 10 --stream-groups 3), 6,000 updates, on the server's CPU, as combo-bed",
+ "measure": "The first 2,000,000 bytes of the enwik8 validation split as 16 unbroken streams (lead 8,192, pieces of 512), as trained and with v15's rule on all six levels at 2^22, with the bits of every piece kept, combo-bed scored again with its bits. Each arm against combo-bed is split by what the context offers (experiments/gap_by_piece.py, near 256 bytes, the bed's reach, and far 8,192): the gain on new contexts and on copyable bytes.",
+ "reading": "The trade buys knowledge if r128 gains on new contexts with the 95% interval above zero, and r384 is expected to lose there. It is worth making if r128 is also ahead of combo-bed overall, as trained and with v15's rule, by at least 0.010: then four seeds, and a full-size stack with narrower reads and more cells. One seed per arm: a screen.",
+ "seen_before_recording": "The gap split of the v16 pair and of the test bed's knowledge and kept cells; no stack with another read width at equal parameters has been trained."
+}

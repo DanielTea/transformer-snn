@@ -139,8 +139,14 @@ def main():
         parser.error("the scorings cut the split into different streams")
     pieces = [record.get("piece_bytes", record.get("context_bytes")) for record in records]
     common = max(pieces)
+    shortened = {record.get("first_bytes_of_split") for record in records}
+    if len(shortened) != 1:
+        parser.error("the scorings cover different parts of the split")
     _, validation, test = load_splits(args.enwik8)
     data = torch.from_numpy(np.array(test if args.split == "test" else validation))
+    first_bytes = shortened.pop()
+    if first_bytes is not None:
+        data = data[:first_bytes]
     inputs, targets, scored = stream_rows(data, streams, lead)
     if lead % common:
         parser.error("the lead must be a whole number of common pieces")
