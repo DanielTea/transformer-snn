@@ -45,9 +45,9 @@ import torch
 # Settings of trainers newer than a saved run, which a fork may give it all the same.
 LATER_SETTINGS = {"plastic_levels", "plastic_rule", "plastic_chunk", "plastic_decay_shift", "plastic_threshold",
                   "plastic_shuffle", "read_credit", "cell_credit", "read_knowledge", "granule_apical",
-                  "granule_myelin"}
+                  "granule_myelin", "read_word_heads", "read_word_span"}
 # Settings that add synapses to a stack, which a fork grows.
-GROWN_SETTINGS = {"read_knowledge", "granule_apical", "granule_myelin"}
+GROWN_SETTINGS = {"read_knowledge", "granule_apical", "granule_myelin", "read_word_heads", "read_word_span"}
 # The charge at which a grown knowledge cell starts, below a stream cell's: e ** -8 of its rate.
 KNOWN_START = -8.0
 

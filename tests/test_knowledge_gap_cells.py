@@ -264,7 +264,8 @@ def test_settings_that_do_not_fit_are_refused(settings):
 
 @pytest.mark.parametrize("growth, flags", [(dict(read_knowledge=4), ["--read-knowledge", "4"]),
                                            (dict(granule_apical=8), ["--granule-apical", "8"]),
-                                           (dict(granule_myelin=16), ["--granule-myelin", "16"])])
+                                           (dict(granule_myelin=16), ["--granule-myelin", "16"]),
+                                           (dict(read_word_heads=1), ["--read-word-heads", "1"])])
 @pytest.mark.parametrize("recipe", [[], ["--rotated-adam", "3", "--rotate-stacks"]])
 def test_a_saved_run_grows_new_synapses_and_goes_on(monkeypatch, tmp_path, growth, flags, recipe):
     import sys
@@ -282,7 +283,8 @@ def test_a_saved_run_grows_new_synapses_and_goes_on(monkeypatch, tmp_path, growt
     # All that the run learned is kept: its synapses, their running averages and the optimizer's moments.
     assert all(torch.equal(forked["state_dict"][key], value) for key, value in parent["state_dict"].items())
     new = sorted(set(forked["state_dict"]) - set(parent["state_dict"]))
-    assert new and all(("known_" in key) or ("apical" in key) or ("myelin" in key) for key in new)
+    assert new and all(("known_" in key) or ("apical" in key) or ("myelin" in key) or ("word_age" in key)
+                       for key in new)
     assert len(forked["average"]) > len(parent["average"])
     old_model, _, old_order = fork_state._models(parent["args"])
     model, _, order = fork_state._models(forked["args"])
@@ -301,7 +303,9 @@ def test_a_saved_run_grows_new_synapses_and_goes_on(monkeypatch, tmp_path, growt
         before, after = old_model.eval()(tokens), model.eval()(tokens)
     changed = (before != after).any(-1).float().mean().item()
     # Silent tufts and myelinated fibres at their fixed delays change nothing; knowledge cells far behind next to nothing.
-    assert changed == 0 if {"granule_apical", "granule_myelin"} & set(growth) else changed < 0.1
+    # A word head reads its word from the fork on, so the grown stack differs from its parent there.
+    if "read_word_heads" not in growth:
+        assert changed == 0 if {"granule_apical", "granule_myelin"} & set(growth) else changed < 0.1
     (tmp_path / "child").mkdir()
     torch.save(forked, tmp_path / "child" / "model.pt.resume")
     record = _train(trainer, monkeypatch, tmp_path / "child", *recipe, *flags, "--tag", "grown")
