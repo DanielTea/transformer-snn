@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import math
 from dataclasses import dataclass, field, replace
@@ -391,12 +392,38 @@ class EventLMConfig:
         return self.pool_quanta if self.pool_rest is None else self.pool_rest
 
 
+# Quantal release: while it is on (``weight_dither``) and a gradient is taken, every synapse rounds its stored size to
+# a neighbouring tick of its charge grid at random, upward with the chance of its distance past the lower tick.
+_DITHER = [False]
+
+
+@contextlib.contextmanager
+def weight_dither(enabled=True):
+    """Round synapses to their charge grid at random while training, so that the expected weight is the stored one.
+
+    A synapse on a grid of whole ticks moves only when its stored size crosses half a tick, so late in training,
+    when the steps are smaller than a tick, most updates change no charge at all. A synapse that releases at random
+    between its two neighbouring ticks passes every step on in expectation, as quantal release does. Every charge
+    stays a whole number of ticks; without a gradient (scoring, streams) a synapse rounds to the nearest tick as
+    always."""
+    previous = _DITHER[0]
+    _DITHER[0] = bool(enabled)
+    try:
+        yield
+    finally:
+        _DITHER[0] = previous
+
+
 def _weight_ticks(weight, quantized=True, *, charge_bits=_CHARGE_BITS):
     if not weight.is_floating_point():
         return weight
     limit = _WEIGHT_LIMIT << (charge_bits - _CHARGE_BITS)
     ticks = (weight * (1 << charge_bits)).clamp(-limit, limit)
-    return ticks.detach().round() + (ticks - ticks.detach()) if quantized else ticks
+    if not quantized:
+        return ticks
+    held = ticks.detach()
+    rounded = (held + torch.rand_like(held)).floor() if _DITHER[0] and torch.is_grad_enabled() else held.round()
+    return rounded + (ticks - held)
 
 
 def _unrounded_sums(weight, charge_bits):

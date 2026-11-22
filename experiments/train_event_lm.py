@@ -34,6 +34,7 @@ from common import (
 from snnformer import SNNConfig, count_params
 from snnformer.event_lm import (
     EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES, echo_feedback,
+    weight_dither,
 )
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
@@ -975,6 +976,10 @@ def main():
     parser.add_argument("--wd", type=float, default=0.05)
     parser.add_argument("--adam-beta2", type=float, default=0.99,
                         help="memory of the optimizer's squared-gradient average")
+    parser.add_argument("--weight-dither", action="store_true",
+                        help="quantal release while training: every synapse rounds to a neighbouring tick of its "
+                             "charge grid at random, so that its expected charge is its stored size; scoring rounds "
+                             "to the nearest tick as always")
     parser.add_argument("--rotated-adam", type=int, metavar="STEPS",
                         help="run Adam in the eigenbasis of each weight matrix's gradient statistics and "
                              "update the bases every this many steps")
@@ -1354,22 +1359,23 @@ def main():
             forward_options["bank_read_losses"] = bank_read_losses
         if args.early_readout_weight:
             forward_options["early_readout"] = args.clock_start if args.early_readout is None else args.early_readout
-        if args.code_loss_weight:
-            counts, predicted, observed, *early = model(
-                inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
-            )
-            if args.learn_context_keys:
-                predicted = predicted[..., args.forecast_key_channels:]
-                observed = observed[..., args.forecast_key_channels:]
-            resolution = args.spike_resolution
-            code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
-        elif args.early_readout_weight:
-            counts, *early = model(inputs, **forward_options)
-        elif on_streams:
-            # The state carries no gradient: a window learns from what it fires itself.
-            counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
-        else:
-            counts = model(inputs, **forward_options)
+        with weight_dither(args.weight_dither):
+            if args.code_loss_weight:
+                counts, predicted, observed, *early = model(
+                    inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
+                )
+                if args.learn_context_keys:
+                    predicted = predicted[..., args.forecast_key_channels:]
+                    observed = observed[..., args.forecast_key_channels:]
+                resolution = args.spike_resolution
+                code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
+            elif args.early_readout_weight:
+                counts, *early = model(inputs, **forward_options)
+            elif on_streams:
+                # The state carries no gradient: a window learns from what it fires itself.
+                counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
+            else:
+                counts = model(inputs, **forward_options)
         logits = scoring_logits(counts, event, args.spike_resolution)
         targets = labels.to(device)
         if teacher is None:
