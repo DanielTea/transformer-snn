@@ -16,5 +16,10 @@
   "recorded_utc": "2026-11-22T15:21:20Z",
   "change": "learning_rate_with_data now also tries 1.2e-3. If it is a model's best rate there, that model's curve at 1.2e-3 (all five sizes, both seeds) is added and read in place of its curve at 6e-4.",
   "seen_before_amendment": "No run of this study at 6,000, 12,000, 48,000 or 96,000 updates has finished. Of its 24,000-update points: bed24-s1 1.54749, bed24-lr6-s1 1.50363, tf24-lr6-s1 1.45690."
+ },
+ "amendment_2": {
+  "recorded_utc": "2026-11-22T16:36:59Z",
+  "change": "Curves at 1.2e-3 (both models and the plain bed, all five sizes, both seeds) are queued now, before learning_rate_with_data is read, because on seed 20001 1.2e-3 beats 3e-4 and 6e-4 for both models. Each model is still read at its best rate by that study; if that is 2.4e-3, curves at 2.4e-3 are added and read in place. The plain bed is read at its own best rate among those it has curves for.",
+  "seen_before_amendment": "The 24,000-update points listed in learning_rate_with_data's amendment_2; no run of this study at another size has finished."
  }
 }
