@@ -13,5 +13,44 @@
  "training": "On streams (--stream 10 --stream-groups 3), 6,000 updates, seed 20001, every flag but the arm's as its device's reference",
  "measure": "The first 2,000,000 validation bytes as 16 unbroken streams (lead 8,192, pieces of 512) with the bits of every piece kept, split against the device's reference by what the context offers (experiments/gap_by_piece.py, near 256, far 8,192); the trainer's averaged validation on streams; for myelin, where the learned delays went.",
  "pass_mark": "An arm earns four seeds if, on both devices, it gains on new contexts with the 95% interval above zero, and is ahead of the reference over the long streams by at least 0.010 on the mean of the two devices. Each device is one seed: a screen.",
- "seen_before_recording": "Tests of myelinated fibres (tests/test_myelin.py) and a 20-update smoke run on the laptop's GPU in which the delays moved up to 0.13 bytes; parameter counts of the sheet; no training run of either arm."
+ "seen_before_recording": "Tests of myelinated fibres (tests/test_myelin.py) and a 20-update smoke run on the laptop's GPU in which the delays moved up to 0.13 bytes; parameter counts of the sheet; no training run of either arm.",
+ "results_laptop": {
+  "recorded_utc": "2026-11-22T10:47:21Z",
+  "trainer_averaged_stream_validation": {
+   "g6d-st-mps": 1.7584,
+   "myelin-st-mps": 1.7652,
+   "sheet-st-mps": 1.812
+  },
+  "long_streams": {
+   "g6d-st-mps": 1.77237,
+   "myelin-st-mps": 1.77697,
+   "sheet-st-mps": 1.82226
+  },
+  "split_against_g6d_st": {
+   "myelin (gap_by_piece_myelin_laptop_vs_bed.json)": {
+    "new": 0.027,
+    "new_95": [
+     0.0227,
+     0.0314
+    ],
+    "copyable near": -0.1439,
+    "copyable far only": 0.0296,
+    "seen, other follower": -0.1504,
+    "fourth letter on": 0.0615
+   },
+   "sheet (gap_by_piece_sheet_laptop_vs_bed.json)": {
+    "new": 0.082,
+    "new_95": [
+     0.0777,
+     0.0873
+    ],
+    "copyable near": -0.0637,
+    "copyable far only": 0.1532,
+    "seen, other follower": -0.4449,
+    "fourth letter on": 0.0868
+   }
+  },
+  "where_the_delays_went": "at 4,500 updates the learned delays had moved toward the present byte: the fibres at a delay of 0 rose from 64 to 72 to 130 of 256 a level, more in higher levels, the mean delay fell from 1.50 to 1.0 to 1.33, and about a dozen fibres a level went past 7 bytes",
+  "verdict": "Neither arm can pass: on the laptop both lose on new contexts, myelin by 0.027 and the sheet by 0.082, with intervals above zero, where the mark asks for a gain on both devices. Myelinated fibres copy much better (0.144 on copyable bytes) and know less: their delays move toward the present byte, which serves matching, and away from the delays that serve knowledge. The sheet loses everywhere but on copies, 0.050 over long streams: cells that each hear a quarter of the stream cannot take in a context. The server's runs are recorded when they end."
+ }
 }
