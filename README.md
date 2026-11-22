@@ -687,10 +687,16 @@ python experiments/make_report.py docs/report.html
 
 Copyright 2026 control-f and Daniel Tremer. The code, documentation, figures,
 results and released model weights are licensed under the
-[Apache License, Version 2.0](LICENSE). That means you may use, change and build
-on them, including commercially, as long as you keep the copyright and the
-[NOTICE](NOTICE), state your changes, and do not use the names or trademarks of
-control-f. The license includes a grant of the contributors' patents, which ends
-for anyone who brings a patent claim over the work. The datasets used to train
-and evaluate the models (enwik8, PG-19 and C4) are not part of this work and keep
-their own terms.
+[GNU Affero General Public License, version 3 only](LICENSE) (AGPL-3.0-only).
+You may use, study, change and share them, also commercially. Anyone who
+distributes a changed version, or offers it to others over a network, must make
+the full source of that version available under the same license and keep the
+[NOTICE](NOTICE).
+
+**Commercial licenses** that allow use without the AGPL's conditions, for
+example inside closed-source products or services, are available from control-f.
+
+Outside contributions are welcome under a contributor license agreement with
+control-f, so that the work can still be licensed both ways. The datasets used to
+train and evaluate the models (enwik8, PG-19 and C4) are not part of this work and
+keep their own terms.

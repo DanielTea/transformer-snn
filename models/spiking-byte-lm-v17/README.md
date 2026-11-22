@@ -17,7 +17,7 @@ The model that runs from a clone is still
 [v11](../spiking-byte-lm-v11/README.md).
 [Study, measurements and limits](../../docs/KNOWLEDGE_GAP.md) · [Checkpoint and archive hashes](manifest.json) · [Restore and rescore](../../docs/V17_HANDOFF.md)
 
-**License:** Apache-2.0, copyright 2026 control-f and Daniel Tremer ([LICENSE](../../LICENSE), [NOTICE](../../NOTICE)).
+**License:** AGPL-3.0-only, copyright 2026 control-f and Daniel Tremer; commercial licenses from control-f ([LICENSE](../../LICENSE), [NOTICE](../../NOTICE)).
 
 **Behind by 0.010.** A Transformer of about the same size
 (34,752,000 parameters), trained on the same data and windows,
