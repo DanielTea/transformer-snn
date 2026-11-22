@@ -16,5 +16,24 @@
  "amendment": {
   "recorded_utc": "2026-11-21T22:22:22Z",
   "what": "Restarted before any evaluation, by the standing rule that the spiking model trains and is scored as a stream: every arm trains on streams (--stream 10 --stream-groups 3) and is judged on the averaged validation on streams. A stream-trained bed (g6d-st-mps) is added; the reference stays know128."
+ },
+ "results": {
+  "recorded_utc": "2026-11-22T04:42:34Z",
+  "trainer_averaged_stream_validation": {
+   "what": "6,000 updates, seed 20001, trained on streams on the laptop's GPU, as the amendment set it",
+   "g6d-st-mps (the bed, 1,022 threshold cells)": 1.7584,
+   "know128-st-mps (128 knowledge cells a head, 893 threshold cells: the reference)": 1.75,
+   "lib768-st-mps (one library of 768 a head, 888 threshold cells)": 1.7489,
+   "know256-st-mps (256 a head, 765 threshold cells)": 1.7811,
+   "lib1536-st-mps (a library of 1,536 a head, 755 threshold cells)": 1.776,
+   "alone-st-mps (1,016 knowledge cells a head, no threshold cells)": 1.878
+  },
+  "against_know128": {
+   "lib768": 0.0011,
+   "know256": -0.0311,
+   "lib1536": -0.026,
+   "alone": -0.128
+  },
+  "verdict": "No setting earns four seeds: the library of 768 is level with 128 knowledge cells a head (0.001 ahead), and every setting that pays for more knowledge cells with fewer threshold cells is behind, by 0.026 to 0.031 at 755 to 765 threshold cells and by 0.128 with none. With the gap split (gap_by_piece_*.json) this reads one way: knowledge cells help a read copy, the stack's knowledge lives in its threshold cells, and taking threshold cells away for more knowledge cells costs knowledge. The shared library stays a tidy equal of per-level cells, not a gain."
  }
 }
