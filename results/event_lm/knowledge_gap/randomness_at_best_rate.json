@@ -10,5 +10,11 @@
  "training": "the base's recipe at peak rate 1.2e-3 (warmup 300, cosine over the run), 6,000 and 24,000 updates, seeds 20001 and 20002, code v17l (072eb90), server GPUs; every arm has the base's 5,249,060 parameters",
  "measure": "the first 2,000,000 validation bytes as 16 unbroken streams (averaged weights), each arm paired with the base of the same seed and length; bits kept, split by context (near 256, far 8,192)",
  "reading": "An arm is a fix for late learning at the best rate if (a) it leads the base at 24,000 updates by at least 0.010 on the mean of the two seeds and at both, and (b) its lead at 24,000 updates is at least 0.005 larger than at 6,000. Recorded either way: every lead and the leads on new contexts. If 1.2e-3 is not the stack's best rate by learning_rate_with_data's two seeds, the result is still read at 1.2e-3 and says so.",
- "seen_before_recording": "bed24-lr12-s1 1.48638; the learning-rate study's other seed-20001 arms and learning_rate_by_context.json. No run of either arm at any rate has finished; weight_precision_with_data and cell_dither_with_data have no result yet."
+ "seen_before_recording": "bed24-lr12-s1 1.48638; the learning-rate study's other seed-20001 arms and learning_rate_by_context.json. No run of either arm at any rate has finished; weight_precision_with_data and cell_dither_with_data have no result yet.",
+ "amendment": {
+  "recorded_utc": "2026-11-22T20:13:39Z",
+  "change": "A third seed (20003) runs on the laptop's GPU: the base (the delayed test bed at 1.2e-3), rd-release and rd-both, at 6,000 and 24,000 updates. All are paired on the laptop and scored the same way on the laptop's GPU. The reading (a) and (b) stays defined on the two server seeds. The laptop seed is reported beside it as supporting evidence and never mixed into a server pair.",
+  "why": "Daniel asked to use every resource when it is free; the laptop's GPU is idle while the server's queue runs.",
+  "seen_before_amendment": "A 1,500-update smoke test of rd-both on the laptop (stable; not part of this study). No run of this study has finished on either device."
+ }
 }
