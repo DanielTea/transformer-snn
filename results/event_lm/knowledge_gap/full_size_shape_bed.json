@@ -1,0 +1,14 @@
+{
+ "study": "full_size_shape_bed",
+ "recorded_utc": "2026-11-22T12:08:41Z",
+ "why": "The full size's cell shape, a fibre for every channel's present byte and one delayed, is 0.020 better on the test bed than the bed's own and gains on new contexts (word_rhythm.json, fan2). The test bed's earlier screens of myelinated fibres and word heads ran on the weaker shape: on it, three quarters of the channels had no fibre for the present byte, and the learned delays ran back to it (myelin_and_sheet.json). On the full size's shape every channel keeps its present fibre, so a learned delay can only move the second fibre of a channel, and word heads add to cells that already hear the present. The test bed with the full size's shape is the better stand-in for the full-size stack.",
+ "reference": "fan2-st-mps: the delayed test bed with --granule-fan 512 --granule-cells 681, trained on streams on the laptop's GPU (long streams 1.75243)",
+ "arms": {
+  "fan2-myelin": "fan2 with myelinated fibres (--granule-myelin 32): every fibre learns its delay from where it starts, the present fibres from 0 and the delayed ones from 1 to 3: 5,248,550 parameters (+3,072)",
+  "fan2-word": "fan2 with one word head a read (--read-word-heads 1 --read-word-span 32): 5,245,670 parameters (+192)"
+ },
+ "training": "On streams (--stream 10 --stream-groups 3), 6,000 updates, seed 20001, on the laptop's GPU, every flag but the arm's as fan2-st-mps",
+ "measure": "The first 2,000,000 validation bytes as 16 unbroken streams (lead 8,192, pieces of 512) with the bits of every piece kept, split against fan2-st-mps by what the context offers (experiments/gap_by_piece.py, near 256, far 8,192); for fan2-myelin, where the learned delays went.",
+ "reading": "One device and one seed: a screen. An arm that gains on new contexts with the 95% interval above zero and is ahead over the long streams by at least 0.010 earns a second device and four seeds; an arm ahead by at least 0.010 through memory alone is reported as a memory gain.",
+ "seen_before_recording": "fan2-st-mps and the earlier screens of both arms on the bed's own shape; no run of these arms exists."
+}
