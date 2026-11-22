@@ -382,6 +382,8 @@ def build_model(args):
                             read_knowledge_shared=getattr(args, "read_knowledge_shared",
                                                           EventLMConfig.read_knowledge_shared),
                             read_kept=getattr(args, "read_kept", EventLMConfig.read_kept),
+                            read_word_heads=getattr(args, "read_word_heads", EventLMConfig.read_word_heads),
+                            read_word_span=getattr(args, "read_word_span", EventLMConfig.read_word_span),
                             plastic_after=(None if getattr(args, "plastic_levels", None) is None
                                            else tuple(map(int, args.plastic_levels.split(",")))),
                             plastic_rule=getattr(args, "plastic_rule", EventLMConfig.plastic_rule),
@@ -736,6 +738,12 @@ def main():
                         help="every head of a race read with a budget has CELLS knowledge cells beside the stream's "
                              "own: learned tags, payloads and offsets that race for the same budget, so a read finds "
                              "what it looks for in the bytes it reaches or in what training stored")
+    parser.add_argument("--read-word-heads", type=int, default=EventLMConfig.read_word_heads, metavar="HEADS",
+                        help="the first heads of every race read reach only the cells of the present word, from its "
+                             "first letter on, and weigh each by its place in that word (a letter neuron and an onset "
+                             "neuron with fixed synapses mark where words begin)")
+    parser.add_argument("--read-word-span", type=int, default=EventLMConfig.read_word_span, metavar="PLACES",
+                        help="places of a word that a word head weighs, each with an offset of its own")
     parser.add_argument("--read-kept", type=int, default=EventLMConfig.read_kept, metavar="SLOTS",
                         help="in a stream every head of a race read keeps SLOTS cells that have left its reach, chosen "
                              "by the spikes they won while it could reach them; kept cells race beside the stream's")

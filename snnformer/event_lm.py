@@ -286,6 +286,12 @@ class EventLMConfig:
     # fades slowly and grows with every spike they win. Kept cells race beside the stream's cells with an offset of
     # their head's own, so what mattered stays within reach long after its bytes.
     read_kept: int = 0
+    # Word heads: the first read_word_heads heads of every race read reach only the cells of the word that the byte
+    # stands in or follows, from its first letter on, and weigh every cell by its place in that word, up to
+    # read_word_span places, where the other heads weigh cells by their age. A letter neuron and an onset neuron with
+    # fixed synapses mark where a word begins, as a rhythm that every word resets.
+    read_word_heads: int = 0
+    read_word_span: int = 32
     read_cap: int | None = None
     read_phases: int = 0
     read_turn: bool = False
@@ -2057,7 +2063,8 @@ class ReadTape:
     as [batch, heads, cells, channels], and the last bytes of the stream for its late fibres. A read with kept cells
     also keeps the spikes that every cell on the tape has won (its importance, [batch, heads, cells]) and its kept
     cells: their tags and payloads, [batch, heads, slots, channels], and their importance, below zero in an empty
-    slot."""
+    slot. A read with word heads keeps where the last word began, as a position in the stream, and whether the last
+    byte was a letter, for every stream."""
     tag: torch.Tensor | None = None
     payload: torch.Tensor | None = None
     late: torch.Tensor | None = None
@@ -2065,6 +2072,8 @@ class ReadTape:
     kept_tag: torch.Tensor | None = None
     kept_payload: torch.Tensor | None = None
     kept_score: torch.Tensor | None = None
+    onset: torch.Tensor | None = None
+    letter: torch.Tensor | None = None
 
 
 @dataclass
@@ -2455,6 +2464,15 @@ class _StateRead(nn.Module):
         if self.kept:
             # The charge that a head's kept cells take beside their match, stored at the address rate.
             self.kept_offset = nn.Parameter(torch.zeros(self.heads))
+        self.word_heads, self.word_span = cfg.read_word_heads, cfg.read_word_span
+        if self.word_heads:
+            # The letter neuron's synapses from the 256 byte lines: one from every letter, and from every byte of a
+            # character of more than one byte, so that a word of any script is one word.
+            letters = torch.zeros(256, dtype=torch.bool)
+            letters[ord("A"):ord("Z") + 1] = letters[ord("a"):ord("z") + 1] = letters[128:] = True
+            self.register_buffer("letters", letters, persistent=False)
+            # A word head's offset for every place in a word, stored at the address rate as the ages are.
+            self.word_age = nn.Parameter(torch.zeros(self.word_heads, self.word_span))
 
     def known(self):
         """The knowledge cells' tags and payloads in whole pulses as [heads, cells, channels], within the pulses that
@@ -2753,6 +2771,32 @@ class _StateRead(nn.Module):
         tape.kept_tag, tape.kept_payload, tape.kept_score = kept_tag, kept_payload, kept_score
         return fired, fired.sum(-1, keepdim=True).clamp_min(1), payload_all, fired.sum()
 
+    def _word_offsets(self, tokens, kept, steps, tape=None, position=0):
+        """The word heads' offsets as [batch, word heads, bytes, cells] and the cells they reach as [batch, 1, bytes,
+        cells]. The letter neuron fires at every letter, and the onset neuron at a letter after a byte that is none:
+        a word begins there, and a stream's first byte counts as a beginning. A word head at a byte reaches the cells
+        from the last beginning on, the byte's own always among them, and weighs each by its place in that word. In a
+        stream ``tape`` brings where the last word began and whether the last byte was a letter, and takes them up."""
+        if tokens is None:
+            raise ValueError("word heads hear the bytes, to know where a word begins")
+        letter = self.letters[tokens]
+        before = None if tape is None else tape.letter
+        previous = torch.zeros_like(letter[:, :1]) if before is None else before[:, None]
+        onset = letter & ~torch.cat((previous, letter[:, :-1]), 1)
+        here = position + torch.arange(steps, device=tokens.device)
+        start = (torch.zeros(tokens.shape[0], dtype=torch.long, device=tokens.device)
+                 if tape is None or tape.onset is None else tape.onset)
+        marks = torch.where(onset, here, torch.full_like(here, -1))
+        last = torch.maximum(marks.cummax(1).values, start[:, None])
+        if tape is not None:
+            tape.onset, tape.letter = last[:, -1].detach(), letter[:, -1].detach()
+        cells = position - kept + torch.arange(kept + steps, device=tokens.device)
+        place = cells[None, None, :] - last[:, :, None]
+        own = cells[None, None, :] == here[None, :, None]
+        reach = ((place >= 0) & (place < self.word_span)) | own
+        offset = self.word_age[:, place.clamp(0, self.word_span - 1)] * self.rate
+        return offset.transpose(0, 1), reach[:, None]
+
     def _address(self, spikes, tokens=None, tape=None, position=0):
         """The spikes of every cell at every read as [batch, heads, bytes, cells], their sum at each read (none
         where the shares are a softmax's), the payloads and the number of cell spikes.
@@ -2789,6 +2833,13 @@ class _StateRead(nn.Module):
         if self.beats:
             by_beat, beats = self.beat_offsets(spikes, tokens, tag)
             offset = offset + by_beat
+        if self.word_heads:
+            # The word heads weigh the cells of the present word by their place in it and reach no others.
+            by_word, in_word = self._word_offsets(tokens, kept, steps, tape, position)
+            batch = spikes.shape[0]
+            offset = torch.cat((by_word, offset[None, self.word_heads:].expand(batch, -1, -1, -1)), 1)
+            visible = torch.cat((visible & in_word.expand(-1, self.word_heads, -1, -1),
+                                 visible.expand(batch, self.heads - self.word_heads, -1, -1)), 1)
         if self.mode == "age":
             shares = offset.masked_fill(~visible, -torch.inf).softmax(-1)
             return (shares if shares.ndim == 4 else shares[None]), None, payload, None
@@ -4131,6 +4182,13 @@ class EventLM(nn.Module):
                                        or cfg.read_beats or cfg.read_phases or cfg.read_turn))):
             raise ValueError("kept cells are a whole number of slots of a race read with a budget, without clocks or "
                              "pacemakers")
+        if (not isinstance(cfg.read_word_heads, int) or isinstance(cfg.read_word_heads, bool) or cfg.read_word_heads < 0
+                or not isinstance(cfg.read_word_span, int) or not 2 <= cfg.read_word_span <= 256
+                or (cfg.read_word_heads and (cfg.read_after is None or cfg.read_word_heads > cfg.read_heads
+                                             or cfg.read_mode != "race" or cfg.read_budget is None or cfg.read_kept
+                                             or cfg.read_beats or cfg.read_phases or cfg.read_turn))):
+            raise ValueError("word heads are some of the heads of a race read with a budget, without kept cells, clocks "
+                             "or pacemakers, and weigh 2 to 256 places of a word")
         if cfg.read_after is not None:
             below = cfg.depth if cfg.clock_start is None else cfg.clock_start
             if (cfg.carry or cfg.continuous or cfg.read_mode not in _READ_MODES

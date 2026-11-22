@@ -1,0 +1,17 @@
+{
+ "study": "word_rhythm",
+ "recorded_utc": "2026-11-22T09:40:39Z",
+ "why": "The full-size gap is knowledge (gap_by_piece_*.json), and its one steady part split by place in the word is the fourth letter of a word on: 0.05 bits a byte on test and 0.10 on validation, completing words that did not run in the last 8 KB, from what the stack learned. A read's heads weigh a cell by its age, counted back from the present byte, so a prefix such as 'phenom' is a different pattern at every place it can stand: four letters into the word it is one pattern of ages, eight letters in another. Myelinated fibres, counting back from the present as well, moved toward the present byte (myelin_and_sheet.json). In the brain a word is one cycle of a slow rhythm that every word onset resets, and its letters fall into the cycle's successive slots (theta-gamma coding of sequences), so a word is laid out the same way however far into it the reading stands. Word heads do that in a race read: a letter neuron and an onset neuron with fixed synapses from the byte mark where a word begins, and a word head reaches only the cells of the present word and weighs each by its place in the word, counted from its first letter, with one learned offset a place.",
+ "arms": {
+  "word": "the delayed test bed with one word head in every read (--read-word-heads 1 --read-word-span 32): of each read's four heads, the first reads the present word by places 0 to 31: 5,249,252 parameters (+192)",
+  "fan2": "a check of the cell shape, not of word heads: the delayed test bed with the full-size stack's cells, a fan of two streams so that every channel has a fibre for the present byte and one for a delay of 1 to 3, and 681 cells instead of 1,022 (--granule-fan 512 --granule-cells 681): 5,245,478 parameters (-3,582)"
+ },
+ "devices": {
+  "laptop": "the laptop's GPU against g6d-st-mps (long streams 1.77237)",
+  "server": "the server's CPU against combo-bed (long streams 1.76286), on the code with word heads"
+ },
+ "training": "On streams (--stream 10 --stream-groups 3), 6,000 updates, seed 20001, every flag but the arm's as its device's reference. word starts on both devices at once; fan2 starts on each device when its running screens end.",
+ "measure": "The first 2,000,000 validation bytes as 16 unbroken streams (lead 8,192, pieces of 512) with the bits of every piece kept, split against the device's reference by what the context offers and by place in the word (experiments/gap_by_piece.py, near 256, far 8,192; of the places only those with narrow intervals are read); the trainer's averaged validation on streams; for word, the learned offsets of the places.",
+ "pass_mark": "word earns four seeds if, on both devices, it gains on new contexts with the 95% interval above zero, and is ahead of the reference over the long streams by at least 0.010 on the mean of the two devices. fan2 is a diagnostic: if the bed's own cells beat the full size's shape by at least 0.010 on new contexts on both devices, the full size's cell shape is a suspect for the gap that opens with scale, and a full-size stack with a fan of one stream and about 1,780 cells a level (equal parameters) is proposed for the next GPU window.",
+ "seen_before_recording": "Tests of word heads (tests/test_word_heads.py: exact under any cut, a word head reaching only the present word, causal, learning) and their parameter counts; no training run of either arm."
+}
