@@ -1,9 +1,17 @@
-# ShuntFormer
+# Volley
 
-ShuntFormer is an integer spiking byte language model. Its
-neurons exchange signed spike counts over fixed axons, and
-local charge holds history. Every release is measured against
+Volley (formerly ShuntFormer) is an integer spiking byte
+language model. Its neurons exchange signed spike counts over
+fixed axons, and local charge holds history. It reads text as
+one unbroken stream, byte by byte, and its memory is a race of
+spikes over what it has read. Every release is measured against
 a full-attention Transformer of the same size and training.
+
+The name comes from the volley principle of neuroscience: groups
+of neurons that fire in turn carry together what no single neuron
+can. In the game, a volley answers the ball before it bounces, as
+the model answers each byte when it comes. Releases up to v17 were
+published as ShuntFormer; their tags and files keep that name.
 
 The newest release, **v17**, finds where the spike-only stack's
 gap to the Transformer lies. Split byte by byte by what each

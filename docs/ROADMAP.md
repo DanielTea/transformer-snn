@@ -1,7 +1,7 @@
 # Roadmap: a spiking, streaming language model that beats the Transformer
 
-The aim of this project is a language model that is **spiking and streaming
-from end to end** and that predicts text **better than a Transformer of the
+The aim of this project, Volley (formerly ShuntFormer), is a language model
+that is **spiking and streaming from end to end** and that predicts text **better than a Transformer of the
 same size trained on the same data**. Spiking means integer spike counts
 between every pair of neuron populations. Streaming means no windows: the
 model reads a stream byte by byte and carries its state for as long as the

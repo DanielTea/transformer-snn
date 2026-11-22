@@ -1,6 +1,6 @@
 # A scaling law the other way around
 
-*A study in progress for the next release. Every number here is from a finished run. The verdicts are those of the
+*A study in progress for Volley's next release, v18. Every number here is from a finished run. The verdicts are those of the
 records in `results/event_lm/knowledge_gap/`, which were committed before their runs.*
 
 v17 found that the stack's gap to the Transformer is knowledge, and that on the test bed it reopens with more data:
