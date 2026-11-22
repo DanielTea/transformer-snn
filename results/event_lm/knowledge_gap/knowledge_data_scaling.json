@@ -1,0 +1,14 @@
+{
+ "study": "knowledge_data_scaling",
+ "recorded_utc": "2026-11-22T00:19:32Z",
+ "question": "Is the stack's flattening learning curve a shortage of room for knowledge? At full size its curve flattens sooner than the Transformer's (exponents 0.23 to 0.31 against 0.74 to 0.85), and the remaining gap is knowledge. If knowledge cells relieve that shortage, a stack with them should keep falling where the plain stack flattens, and more so with a library that every level shares.",
+ "arms": {
+  "g6d-24k-st-mps": "the delayed test bed",
+  "know128-24k-st-mps": "128 knowledge cells a head, 893 threshold cells",
+  "lib768-24k-st-mps": "a library of 768 knowledge cells a head shared by every level, 888 threshold cells"
+ },
+ "training": "24,000 updates (four times the usual data, cosine schedule over 24,000), trained on streams (--stream 10 --stream-groups 3), seed 20001, on the laptop's GPU once the current screens end; averaged weights evaluated every 750 updates.",
+ "measure": "The averaged validation on streams over training; loss = E + A t^-alpha fitted from 3,000 updates on for every arm (experiments/plot_data_scaling.py's fit); the lead of each knowledge arm over the bed at 6,000, 12,000 and 24,000 updates; and the first 2,000,000 validation bytes as 16 unbroken streams at the end.",
+ "reading": "Knowledge is a lever for data if a knowledge arm's lead over the bed at 24,000 updates is at least its lead at 6,000 and its fitted exponent is larger than the bed's. If its lead shrinks with data, knowledge cells help early and not with scale. One seed: a screen, which earns a second seed and a full-size library run if it reads as a lever.",
+ "seen_before_recording": "The 6,000-update stream-trained screens of the bed and of knowledge cells (1.7584 and 1.7500); no 24,000-update run with knowledge cells exists."
+}
