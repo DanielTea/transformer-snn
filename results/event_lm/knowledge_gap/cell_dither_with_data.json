@@ -1,0 +1,14 @@
+{
+ "study": "cell_dither_with_data",
+ "recorded_utc": "2026-11-22T16:40:49Z",
+ "why": "Spikes are whole counts: a threshold cell counts its charge in whole thresholds, so a small change of its synapses moves its count only where the charge crosses half a threshold, and its smooth slope reports a change that did not happen. The spike side of the gap grows with data: at 6,000 updates of 24,000-update runs the spiking test bed and its float stand-in were level on the trainer's windows, at 24,000 the stand-in was 0.022 ahead (data_scaling.json). The stack also gains more than the Transformer from larger steps (learning_rate_with_data, seed 20001: 0.061 against 0.048 from 3e-4 to 1.2e-3). weight_precision_with_data tests the synapses' grid; this tests the cells' counts, where knowledge is held: cells that fire their last spike at random, with the chance of the charge's distance past the last whole threshold, so that every change of their charge moves their expected count, as the variable firing of real neurons does.",
+ "arms": {
+  "cdither": "stochastic firing of the threshold cells while training (--cell-dither, db96592); scoring rounds as always, so the scored stack fires as any other",
+  "both": "stochastic firing and quantal release together (--cell-dither --weight-dither)"
+ },
+ "base": "the delayed test bed trained on streams at peak rate 3e-4: bed24-s1 and bed24-s2 (learning_rate_with_data), bed6-s1 and bed6-s2 (weight_precision_with_data)",
+ "training": "the base's recipe, 6,000 and 24,000 updates, seeds 20001 and 20002, server GPUs. Every arm has the base's 5,249,060 parameters.",
+ "measure": "the first 2,000,000 validation bytes as 16 unbroken streams (experiments/eval_stream.py, averaged weights), each arm paired with the base of the same seed and length; bits of every piece kept",
+ "reading": "An arm shows that whole counts limit late learning if (a) it leads the base at 24,000 updates by at least 0.010 on the mean of the two seeds and at both, and (b) its lead at 24,000 updates is at least 0.005 larger than at 6,000. A lead by (a) without (b) is a constant gain. Recorded either way: every lead and the leads on new contexts at 24,000. If an arm passes, it is tested next at each model's best rate and by its slope over data_scaling_long's sizes.",
+ "seen_before_recording": "No run of either arm. The base: bed24-s1 1.54749 and bed24-s2 1.55804 on these streams; the bed6 runs and every arm of weight_precision_with_data are queued, none finished."
+}
