@@ -47,6 +47,31 @@ spike-only remedies are under test: quantal release (synapses that round at rand
 expected charge is their stored size, `weight_precision_with_data.json`) and stochastic firing (threshold cells that
 fire their last spike at random, `cell_dither_with_data.json`). Both are exact at scoring.
 
+The neighbouring rates show that the band of good rates is narrow for the stack's knowledge and wide for the
+Transformer's (seed 20001, the extension of `learning_rate_by_context.json`):
+
+| Bits per byte | New contexts | Fourth letter of a word on | Copyable from the last 240 bytes |
+|---|---:|---:|---:|
+| Stack, 6e-4 to 1.2e-3 | −0.017 | level | **+0.048** |
+| Transformer, 6e-4 to 1.2e-3 | −0.010 | −0.013 | −0.033 |
+| Stack, 1.2e-3 to 2.4e-3 | **+0.012** | **+0.031** | level |
+| Transformer, 1.2e-3 to 2.4e-3 | +0.004 | level | −0.021 |
+
+Below its best rate the stack's knowledge starves; above it, its knowledge is what breaks first, the completion of
+words most of all. Three other readings of the flattening were ruled out on the way:
+
+- **The pulse budget.** Its price falls to 0.00–0.02 by the end of every 24,000-update run, while the stack spends
+  its budget to within 2%. A looser budget would buy almost nothing.
+- **Noisy late weights.** Averaging the weights helps the stack about as much as it helps the Transformer, and by
+  the end of a run it helps neither.
+- **A dense code that grows denser.** 35% to 56% of a level's cells fire at every byte, at 6,000 and at 24,000 updates
+  alike, in the plain bed, which learns late better, as in the delayed one (`experiments/cell_activity.py`).
+
+The largest step that v15's walk from the Transformer to the stack priced was the unit: plain rectifying units in place
+of gated ones cost 0.025, against 0.001 for whole spikes (`docs/STREAM_FORM.md`). The stack's cells are plain units.
+Gated cells were only judged at 6,000 updates. A screen on the laptop now measures them by their slope
+(`gated_cells_with_data.json`).
+
 ## Still running
 
 | Record | Question |
@@ -55,7 +80,8 @@ fire their last spike at random, `cell_dither_with_data.json`). Both are exact a
 | `weight_precision_with_data.json` | Finer charge grids and quantal release, at 6,000 and 24,000 updates |
 | `cell_dither_with_data.json` | Stochastic firing of the threshold cells, alone and with quantal release |
 | `cell_shape_with_data.json` | The full size's cell shape at 24,000 updates, four seeds |
-| `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3 |
+| `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
+| `gated_cells_with_data.json` | Gated and self-gated cells at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `full_size_rate_pilot.json` | Which rate is best at full size, before the next full-size pair |
 | `full_size_best_rate_pair.json` | The best stack and its Transformer at full size, each at its best full-size rate; queued by the pilot's rule the night the pilot ends |
 | `full_size_word_heads.json` | Word heads at full size |
