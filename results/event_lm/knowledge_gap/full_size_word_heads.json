@@ -1,0 +1,11 @@
+{
+ "study": "full_size_word_heads",
+ "recorded_utc": "2026-11-22T12:03:02Z",
+ "why": "On the test bed one word head a read made the stack 0.023 better over long streams on the laptop, all of it memory: 0.24 bits a byte on copyable bytes, new contexts level (word_rhythm.json); on the server's CPU the same arm stood 0.016 ahead at 4,500 updates on the trainer's streams. At full size memory is where the stack beats the Transformer (0.096 on copyable bytes, 0.397 on bytes copyable only from 2 to 8 KB back, for the best stack, l2048-know-st), and parts that help different kinds of bytes add up. GPU 1 is free for the rest of the window, which closes on Monday at 06:45 UTC.",
+ "arm": "l2048-word-st: the saved state of p-forget at 24,000 updates, forked exactly as l2048-know-st was (ctx 2048, batch 2, reads reaching 2,048 cells, 128 knowledge cells a head grown at the fork, trained on streams with --stream 10 --stream-groups 15), with one word head in every read (--read-word-heads 1 --read-word-span 32: of each read's eight heads, the first reads the present word by places 0 to 31), to 90,000 updates on GPU 1, code with word heads",
+ "reference": "l2048-know-st, the same fork without word heads: test 1.13571 / validation 1.16518 as streams at the trained reach, 1.12097 / 1.15148 reaching 8,192 cells, 1.11702 / 1.14963 with v15's fast synapses at 2^24",
+ "parameters": "l2048-know-st plus 32 offsets a read: 352 more",
+ "measure": "As l2048-know-st was scored (know-st-after.sh): both splits of enwik8 as 16 unbroken streams at the trained reach, the reach chosen on the first validation million (trained or 8,192), and with v15's fast synapses on all 11 levels at 2^24; every scoring paired piece by piece against l2048-know-st's; the gap split by context against tf2048.",
+ "pass_mark": "Word heads join v17 if l2048-word-st is ahead of l2048-know-st on both splits with v15's fast synapses at the chosen reach, by at least 0.003 on test, with the paired 95% intervals above zero. If the window closes before the run ends, the last saved state is scored the same way against l2048-know-st's curve at the same update, and the verdict says so.",
+ "seen_before_recording": "The test bed's word-head run on the laptop (word_rhythm.json) and the server's run to 4,500 updates; no full-size run with word heads exists."
+}
