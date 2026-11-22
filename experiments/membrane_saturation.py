@@ -5,8 +5,9 @@ so the neuron fires its largest count whatever more it hears, and through a plai
 part that was cut. v15 found that at a learning rate of 0.001 the fine-pool stack's reads sat at their bound for 5%
 of their entries after 12,000 updates (18% at the top level) and almost never at 0.0003 (docs/STREAM_FORM.md). This
 reports, for every population of neurons that fires through a membrane with a bound, the share of its entries whose
-charge reached the bound (for excitatory cells, from above only). Populations whose pool lifts the ceiling divide the
-charge before bounding it and are left out. Streams run as eval_stream.py runs them.
+charge reached the bound (for excitatory cells, from above only). A population whose pool lifts the ceiling divides
+the charge before bounding it, so it has no such bound; its count still stops at its cap, and for it the share is that
+of entries whose count reached the cap. Streams run as eval_stream.py runs them.
 
 usage: membrane_saturation.py --checkpoint run/model.pt.averaged [more ...] --enwik8 data/enwik8 \\
     --split validation --bytes 65536 --json saturation.json
@@ -50,17 +51,27 @@ def saturation(model, inputs, piece, device, skip=0):
     position = [0]
     handles = []
     for name, module in model.named_modules():
-        if not isinstance(module, _IntegrateFire) or module.lifted or module.dendrite:
+        if not isinstance(module, _IntegrateFire) or module.dendrite:
             continue
-        bound = module.threshold * module.cap
 
-        def record(_module, args, _kwargs, name=name, bound=bound, excitatory=isinstance(module, _ExcitatoryFire)):
+        def record(_module, args, kwargs, name=name, module=module, excitatory=isinstance(module, _ExcitatoryFire)):
             current = args[0].detach()
             if current.ndim < 2:
                 return
-            current = current[:, max(0, skip - position[0]):]
+            start = max(0, skip - position[0])
+            current = current[:, start:]
             if current.numel() == 0:
                 return
+            if module.lifted:
+                # The count of a lifted neuron stops at its cap, which it reaches from (cap - 1/2) thresholds on.
+                quanta = args[1] if len(args) > 1 else kwargs.get("quanta")
+                if quanta is None:
+                    return
+                if quanta.ndim >= 2 and quanta.shape[1] > 1:
+                    quanta = quanta[:, start:]
+                bound = (module.capped - 0.5) * quanta * (module.threshold // module.quanta_per_threshold)
+            else:
+                bound = module.threshold * module.cap
             cut = current >= bound if excitatory else current.abs() >= bound
             tally = tallies[name]
             tally[0] += current.numel()
@@ -115,7 +126,8 @@ def main():
         found = saturation(model, inputs, args.piece, device, skip=args.lead)
         record["runs"][path.parent.name] = {"run_name": checkpoint.get("run_name"),
                                             "peak_rate": checkpoint["args"].get("lr"),
-                                            "updates": checkpoint["args"].get("steps"), **found}
+                                            "updates": checkpoint["args"].get("steps"),
+                                            "lifted": bool(model.cfg.pool_lifts_ceiling), **found}
         print(path.parent.name, checkpoint["args"].get("lr"),
               " ".join(f"{kind} {value:.4f}" for kind, value in found["by_kind"].items()), flush=True)
     with _atomic_output(args.json, "w", True) as handle:
