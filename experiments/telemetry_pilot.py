@@ -120,6 +120,9 @@ def main():
     parser.add_argument("--teach-levels", type=int, nargs="+",
                         help="levels whose cells the fast output synapses hear; every arriving byte teaches them")
     parser.add_argument("--teach-threshold", type=int, help="units of fast charge to one spike of an output neuron")
+    parser.add_argument("--freeze-after-calibration", action="store_true",
+                        help="the fast synapses learn along the calibration samples only and then keep firing with "
+                             "what they hold, so that they keep the normal while the rest of the run is read")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--out", type=Path, required=True, help="path without suffix for the .npz and .json")
     args = parser.parse_args()
@@ -142,6 +145,10 @@ def main():
         lengthen_reach(model, args.reach, args.reach_levels)
     if args.teach_levels is not None:
         model.teach(args.teach_levels, args.teach_threshold)
+    if args.freeze_after_calibration:
+        if args.teach_levels is None:
+            parser.error("--freeze-after-calibration freezes the fast synapses of --teach-levels")
+        model.freeze_teaching_after(args.calibration * sample_width(args.encoding, args.levels))
 
     runs = load_nab(args.data_dir) if args.dataset == "nab" else load_skab(args.data_dir)
     if args.runs:
@@ -172,7 +179,9 @@ def main():
               "piece_samples": args.piece,
               "reach": {int(level): read.reach for level, read in model.state_reads.items()},
               "taught": None if args.teach_levels is None else {"levels": sorted(args.teach_levels),
-                                                                 "threshold": args.teach_threshold},
+                                                                 "threshold": args.teach_threshold,
+                                                                 "frozen_after_calibration":
+                                                                     args.freeze_after_calibration},
               "threads": args.threads, "seconds": round(time.time() - started, 1), "runs": records}
     args.out.with_suffix(".json").write_text(json.dumps(record, indent=2) + "\n")
 

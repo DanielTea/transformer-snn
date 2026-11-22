@@ -151,3 +151,12 @@ def test_a_monitor_snapshot_goes_on_where_it_stopped():
     events = first.update(later[:, :40])
     resumed = SurpriseMonitor.restore(first.snapshot())
     assert events + resumed.update(later[:, 40:]) == expected
+
+
+def test_frozen_fast_synapses_keep_what_calibration_taught():
+    samples = _samples(count=80)
+    live, frozen = _stack(**_TAUGHT), _stack(**_TAUGHT)
+    frozen.freeze_teaching_after(30 * samples.shape[-1])
+    learning, holding = StreamReader(live, 3).read(samples), StreamReader(frozen, 3).read(samples)
+    # The same until the freeze; after it the frozen synapses no longer learn from what arrives.
+    assert np.array_equal(learning[:, :30], holding[:, :30]) and not np.array_equal(learning, holding)
