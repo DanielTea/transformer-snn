@@ -561,6 +561,9 @@ class _IntegrateFire(nn.Module):
     lifted = False
     # A population that may fire at random while training (``cell_dither``): the threshold cells.
     dither = False
+    # A population whose membranes may carry noise while training (``cell_noise``): the plain threshold cells, lifted
+    # or not.
+    noisy = False
 
     def __init__(self, cap: int, charge_bits: int, carry: bool, *, continuous: bool = False,
                  quanta_per_threshold: int = _PACKET_UNITS, capped: bool | int = False):
@@ -3112,14 +3115,14 @@ class _ExcitatoryFire(_IntegrateFire):
     ``smooth`` is that number, and the smooth threshold is as wide as it is
     for whole spikes.
 
-    Under ``cell_noise`` a population that may fire at random (the threshold
-    cells) adds logistic noise to its charge while training, and a smooth cell
+    Under ``cell_noise`` a population whose membranes may carry noise (the plain
+    threshold cells) adds logistic noise to its charge while training, and a smooth cell
     learns from the slope of the count it fires on average under the noise at
     its peak, a softplus as wide as the noise, in place of the plain slope.
     """
 
     def forward(self, current, quanta=None, *, reference=None, smooth=False):
-        noisy = (self.dither and _CELL_NOISE[0] > 0 and reference is None and torch.is_grad_enabled()
+        noisy = (self.noisy and _CELL_NOISE[0] > 0 and reference is None and torch.is_grad_enabled()
                  and current.is_floating_point())
         threshold = self.threshold if quanta is None else quanta * (self.threshold // self.quanta_per_threshold)
         charge = current
@@ -3676,8 +3679,11 @@ class _GranuleLayer(nn.Module):
             self.fire = (_ShapedFire if shaped else _ExcitatoryFire)(cell_cap, self.bits, False,
                                                                      quanta_per_threshold=cfg.pool_quanta, capped=True)
             self.fire.lifted = cfg.pool_lifts_ceiling
-            # Only plain cells under a pool may fire at random while training (``cell_dither``).
+            # Only plain cells under a pool may fire at random while training (``cell_dither``). Their membranes may
+            # carry noise (``cell_noise``) whether or not the pool lifts their ceiling: the noise joins the charge
+            # before either way of counting it.
             self.fire.dither = not cfg.pool_lifts_ceiling
+            self.fire.noisy = True
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
             # that they cause.
             self.fire.price_share = cfg.granule_price

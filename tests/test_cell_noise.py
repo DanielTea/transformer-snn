@@ -32,9 +32,9 @@ def _bytes(seed=2, length=96, streams=2):
     return torch.randint(0, 256, (streams, length), generator=torch.Generator().manual_seed(seed))
 
 
-def _cells():
+def _cells(lifted=False):
     fire = _ExcitatoryFire(128, 8, False, quanta_per_threshold=64, capped=True)
-    fire.dither = True
+    fire.dither, fire.noisy, fire.lifted = not lifted, True, lifted
     return fire
 
 
@@ -55,6 +55,34 @@ def test_counts_are_whole_spikes_whose_mean_passes_each_half_threshold_by_chance
     assert (draws.double().mean(0) - _expected(charges, 0.5)).abs().max() < 0.015
     # The mean is close to the softplus that the cells learn from.
     assert (_expected(charges, 0.5) - 0.5 * F.softplus(charges.double() / (0.5 * _WHOLE))).abs().max() < 0.025
+
+
+def test_cells_under_a_lifting_pool_carry_the_same_noise():
+    torch.manual_seed(3)
+    fire = _cells(lifted=True)
+    charges = torch.tensor([-1.0, 0.0, 0.5, 1.0, 3.0]) * _WHOLE
+    current = charges.repeat(40000, 1).requires_grad_()
+    nearest = fire(current, _QUANTA).detach()[0]
+    with cell_noise(0.5):
+        draws = fire(current, _QUANTA).detach()
+    assert torch.equal(draws, draws.round()) and bool((draws >= 0).all())
+    assert (draws.double().mean(0) - _expected(charges, 0.5)).abs().max() < 0.015
+    with cell_noise(0.5), torch.no_grad():
+        assert torch.equal(fire(current.detach(), _QUANTA)[0], nearest)
+
+
+def test_a_lifted_stack_marks_its_plain_cells_noisy_and_scores_as_before():
+    torch.manual_seed(0)
+    model = EventLM(EventLMConfig(**_STACK, pool_lifts_ceiling=True))
+    assert all(layer.fire.noisy and layer.fire.lifted and not layer.fire.dither
+               for layer in model.granule_layers.values())
+    model.eval()
+    tokens = _bytes()
+    with torch.no_grad():
+        reference, _ = model.stream(tokens, None)
+        with cell_noise(0.5):
+            scored, _ = model.stream(tokens, None)
+    assert torch.equal(scored, reference)
 
 
 def test_a_cell_near_its_threshold_fires_by_chance_on_either_side():
