@@ -117,3 +117,7 @@ minutes for the test split.
 [Evaluator](../../experiments/eval_warmed_windows.py) ·
 [Test record](../../results/event_lm/state_reads/scores/test_spike_reads_and_cells.json) ·
 [Training record](../../results/event_lm/state_reads/runs/pilot-race64-d8-c350-dl4.json)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

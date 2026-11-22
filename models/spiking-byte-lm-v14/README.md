@@ -165,3 +165,7 @@ computed in floating point.
 [Evaluator](../../experiments/eval_warmed_windows.py) ·
 [Test record](../../results/event_lm/read_clocks/scores/test_clock_cells.json) ·
 [Training record](../../results/event_lm/read_clocks/runs/tag8-a8.json)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

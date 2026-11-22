@@ -138,3 +138,7 @@ applying the optional PG-19 temperature.
 Greedy generation selects the winning count directly.
 [Training and scoring commands](../../docs/HANDOFF.md) ·
 [Matched results and raw PG-19 scores](../../docs/LEADERBOARD.md)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

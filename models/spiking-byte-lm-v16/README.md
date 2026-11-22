@@ -126,3 +126,7 @@ python experiments/generate_stream.py checkpoints/long_streams/l2048-forget/mode
 ```
 
 [Stack](../../snnformer/event_lm.py) · [Stream scorer](../../experiments/eval_stream.py) · [Scores](../../results/event_lm/long_streams/scores) · [Long-streams study](../../docs/LONG_STREAMS.md)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).
