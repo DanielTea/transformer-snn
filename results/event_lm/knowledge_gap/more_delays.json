@@ -1,0 +1,13 @@
+{
+ "study": "more_delays",
+ "recorded_utc": "2026-11-22T03:14:02Z",
+ "why": "The gap to the Transformer is on new contexts (gap_by_piece_*.json), where a byte has to be predicted from what the stack knows of the bytes just before it rather than from a copy. Delayed fibres, which let a cell or a read hear the last four bytes side by side, made the test bed 0.11 better at every seed (test_bed_with_delays.json), the largest step of the v17 candidates. Hearing eight bytes side by side may give the cells longer patterns at no cost in parameters: the fibres of a cluster are only shared out among more delays.",
+ "arms": {
+  "gd8-st-mps": "the delayed test bed with --granule-delays 8 (each cluster's 256 fibres shared among the present and seven delays), reads as before (--read-delays 4): 5,249,060 parameters",
+  "gd8rd8-st-mps": "the same with --read-delays 8 as well"
+ },
+ "reference": "g6d-st-mps of the second laptop screen: the same flags with --granule-delays 4 --read-delays 4, seed 20001, trained on streams (--stream 10 --stream-groups 3) on the laptop's GPU",
+ "measure": "The trainer's averaged validation on streams at 6,000 updates, and the first 2,000,000 validation bytes as 16 unbroken streams (lead 8,192, pieces of 512) with the bits of every piece kept, split against g6d-st-mps by what the context offers (experiments/gap_by_piece.py, near 256, far 8,192).",
+ "reading": "An arm earns four seeds if it is at least 0.015 better than g6d-st-mps on the long streams; the split shows whether its gain is on new contexts. One seed: a screen.",
+ "seen_before_recording": "The delayed bed at four delays, and the gap split; no stack with eight delays has been trained."
+}
