@@ -1,0 +1,14 @@
+{
+ "study": "window_and_stream_training",
+ "recorded_utc": "2026-11-22T03:00:00Z",
+ "kind": "A diagnostic made after the fact from finished runs, not pre-registered.",
+ "question": "Over unbroken streams, how much does a stack gain from having trained on streams rather than windows that start empty?",
+ "measure": "The first 2,000,000 bytes of the enwik8 validation split as 16 unbroken streams (lead 8,192, pieces of 512) on the laptop's GPU, with the bits of every piece kept, for runs of the two laptop screens (seed 20001, 6,000 updates each)",
+ "long_streams_bpb": {
+  "g6d-mps (the delayed bed, trained in windows)": 1.80119,
+  "g6d-st-mps (the same, trained on streams of ten windows)": 1.77237,
+  "know64-mps (64 knowledge cells a head, trained in windows)": 1.75864,
+  "know128-st-mps (128 knowledge cells a head, trained on streams)": 1.76253
+ },
+ "reading": "Trained on streams, the bed is 0.029 better over unbroken streams than trained in windows. With knowledge cells the window-trained stack holds up when it is streamed: know64 trained in windows is 0.043 ahead of the bed trained in windows, and level with know128 trained on streams (that pair differs in the number of knowledge cells as well). One seed each."
+}
