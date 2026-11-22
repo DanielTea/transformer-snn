@@ -10,6 +10,8 @@ import json
 import math
 import os
 from pathlib import Path
+import signal
+import sys
 
 import numpy as np
 import torch
@@ -1316,6 +1318,16 @@ def main():
     scaled_neurons = 0
     # The stretch that each group of streams hears and the state that its stack carries through it.
     stretches, carried = {}, {}
+    # A run that can resume and is asked to stop (SIGTERM or SIGUSR1) trains on to the next update after which every
+    # group of streams has ended its stretch, saves its state there and exits with 75, so that a scheduler can carry
+    # it on in a later window from where it stopped.
+    pause = {"asked": False}
+    if resume_path is not None:
+        def ask(signum, frame):
+            pause["asked"] = True
+        for number in (signal.SIGTERM, signal.SIGUSR1):
+            signal.signal(number, ask)
+    cycle = 1 if args.stream is None else args.stream * args.stream_groups
     for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
@@ -1435,7 +1447,9 @@ def main():
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
                   f"accuracy={metrics['argmax_accuracy']:.4f} ({earlier_seconds + timer():.1f}s){activity}", flush=True)
 
-        if args.save_every and checkpoint is not None and step % args.save_every == 0 and step < args.steps:
+        boundary = args.stream is None or step <= args.stream_from or (step - args.stream_from) % cycle == 0
+        pausing = pause["asked"] and boundary and resume_path is not None and step < args.steps
+        if checkpoint is not None and step < args.steps and (args.save_every and step % args.save_every == 0 or pausing):
             # A long run that is stopped early keeps its last weights under another name.
             partial = Path(f"{checkpoint}.partial")
             partial.parent.mkdir(parents=True, exist_ok=True)
@@ -1460,6 +1474,9 @@ def main():
         if step == args.stop_at:
             print(f"{name} stopped after {step} of {args.steps} updates", flush=True)
             return
+        if pausing:
+            print(f"{name} paused after {step} of {args.steps} updates, its state saved", flush=True)
+            sys.exit(75)
 
     val_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,
