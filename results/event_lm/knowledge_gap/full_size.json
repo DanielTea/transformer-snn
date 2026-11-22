@@ -41,5 +41,35 @@
   "test_bed_for_comparison": "about 0.58 on the delayed test bed, whose heads race 256 stream cells beside their 128 knowledge cells",
   "reading": "The grown cells are recruited, so their start far behind the stream cells did not keep them silent. Per candidate they win about as often as on the test bed: 128 knowledge cells are 5.9% of what a head races at a reach of 2,048 cells and take 10.8% of its spikes, against 33% and about 58% on the bed. A reach eight times longer leaves them a smaller part to play.",
   "standing_at_37500_updates": "averaged weights on the trainer's streams (about 1.5 KB each): 1.2043 against l2048-forget's 1.2013 at the same update (0.0049 behind at 34,500, 0.0008 at 36,000)"
+ },
+ "results": {
+  "recorded_utc": "2026-11-22T08:32:55Z",
+  "training": "l2048-know-st trained to 90,000 updates on streams; averaged weights on the trainer's streams at 90,000: 1.1167 against l2048-forget's 1.1188",
+  "streams_at_the_trained_reach": {
+   "test": {
+    "l2048-know-st": 1.13571,
+    "l2048-forget": 1.13667,
+    "paired": -0.00096,
+    "paired_95": [
+     -0.00156,
+     -0.00036
+    ]
+   },
+   "validation": {
+    "l2048-know-st": 1.16518,
+    "l2048-forget": 1.16624,
+    "paired": -0.00106,
+    "paired_95": [
+     -0.00166,
+     -0.00046
+    ]
+   }
+  },
+  "reach_scan_on_the_first_validation_million": {
+   "trained (2,048)": 1.19373,
+   "8,192": 1.17833,
+   "chosen": 8192
+  },
+  "verdict": "Fails its mark: at the trained reach the knowledge-cell stack is ahead of l2048-forget on both splits, by 0.0010 and 0.0011 with both paired intervals above zero, a fifth of the 0.005 it had to reach. Knowledge cells, a copying aid (an attention sink, knowledge_and_plasticity.json), have little to add where a read already reaches 2,048 cells; and the arm also trained on streams, which l2048-forget did not, so even this 0.001 is not theirs alone. Knowledge cells do not join v17 as 128 a head; one sink cell a head is tested on its own (attention_sink.json). The scores reaching 8,192 cells and with v15's fast synapses follow."
  }
 }
