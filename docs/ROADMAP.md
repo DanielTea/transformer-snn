@@ -65,6 +65,26 @@ None changed the slope. What closes the gap must keep the stack learning
 knowledge late in training: how its synapses learn through spikes, not one
 more part beside them.
 
+## The target: a scaling law the other way around
+
+A stack that beats the Transformer must learn more from each added byte, not less: its gap must shrink as both see
+more data. From 2026-11-22 every design is judged by the **slope of its gap per doubling of the training data**, over
+separate runs at 6,000 to 96,000 updates of the test bed (24.6M to 393M bytes), each model at its best learning rate
+(`results/event_lm/knowledge_gap/data_scaling_long.json`, analysis `experiments/data_scaling_long.py`, figure
+`results/figures/event_lm_data_scaling_long.png`). Screens at 6,000 updates chose early learners: delayed fibres,
+training on streams and knowledge cells all helped most early and faded with data. Two facts point the way:
+
+- The plain test bed's gap on long streams halves from 6,000 to 24,000 updates (0.148 to 0.077); the delayed bed
+  trained on streams goes from 0.047 ahead to 0.054 behind (`gap_with_data.json`).
+- At 24,000 updates the stack's layout without spikes, a diagnostic stand-in, is 0.022 ahead of the spiking stack on
+  the trainer's windows, where at 6,000 updates of the same runs the two were level (`data_scaling.json`): part of the
+  flattening comes from the spikes' grid. Every synapse sends whole ticks of charge, and late in training most
+  updates are smaller than a tick. Finer grids and quantal release, synapses that round at random while training so
+  that each step moves their expected charge (`--weight-dither`), are tested in `weight_precision_with_data.json`.
+
+The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4 on one seed,
+`learning_rate_with_data.json`), so every comparison now takes each model at its best rate.
+
 ## Rules for claims
 
 1. **Spiking and streaming only.** The stack is built, trained and scored as
@@ -107,28 +127,21 @@ more part beside them.
 
 ## Open bets, in order
 
-1. **Myelinated fibres** (`--granule-myelin`, built and running). In the
-   brain, activity-dependent myelination tunes how late each axon delivers
-   its spikes. Here every fibre learns which earlier byte it brings, up to 31
-   back, at one number a fibre. The spikes stay exact. Record:
-   `myelin_and_sheet.json`.
-2. **The cerebellar sheet** (running). Four times the cells on a quarter of
-   the stream each, at equal parameters, as the granule layer of the
-   cerebellum is built.
-3. **Both together**, if either passes.
-4. **Myelinated reads**, and myelinated fibres at full size. At full size
-   every channel's delayed copy can learn its delay at no cost in
-   parameters (built, `tests/test_myelin.py`).
-5. **Dendritic plateaus on sparse random inputs.** Segments that fire only
-   when enough of their few inputs coincide, as NMDA spikes do. These differ
-   from the branches that failed, which split one dense fan.
-6. **Surprise-gated fast synapses**, learning only when the prediction was
-   wrong, as dopamine gates plasticity.
-7. **Scaling at a fixed energy.** Grow the sheet's cells and keep the pulses
-   per byte. Neurons that do not fire cost no energy, so a spiking network
-   can hold far more parameters per joule than a Transformer can.
-8. **More data at full size.** A pair trained twice as long. By the
-   test-bed trend the gap would fall to about 0.0095.
+1. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`, running): does the charge grid
+   limit late learning?
+2. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
+   the base for the rest.
+3. **Homeostatic synaptic scaling and intrinsic plasticity**: neurons keep their synapses and thresholds in the range
+   where they still learn, as cortical neurons do.
+4. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
+   in the dentate gyrus, to take up what the old ones cannot.
+5. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,
+   more cells, narrower reads), tested by their slope.
+6. **Surprise-gated fast synapses**, learning while reading only when the prediction was wrong.
+7. **More data at full size**, once a design's slope is negative on the test bed.
+
+Myelinated fibres and the cerebellar sheet failed at 6,000 updates (`myelin_and_sheet.json`); the sheet is re-tested
+by slope under 5.
 
 ## How to continue
 
