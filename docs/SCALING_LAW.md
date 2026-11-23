@@ -110,6 +110,8 @@ saturates. A full-size pilot of the lifted stack (`full_size_lifted_ceiling_pilo
 | Lifted stack | 1.3134 | **1.3126** |
 | Transformer | 1.2837 | 1.2762 |
 
+![At full size, lifting the ceiling stops the stack breaking at a high rate](../results/figures/event_lm_full_size_rate.png)
+
 Lifting removes the saturation entirely, at the same energy (about 308,000 pulses a byte in training): no read and
 almost no cell reaches its cap. At 1.2e-3 it is worth 0.035, and the stack is level across 6e-4 and 1.2e-3 instead of
 breaking at the higher rate. At each model's best rate the lifted stack is 0.036 behind the Transformer, as the plain
