@@ -76,9 +76,15 @@ cell itself.
 - The cell's shape is the first change whose gain on knowledge did not fade.
   The full size's shape is 0.020 better on new contexts after 24,000 updates,
   at each of four seeds (`cell_shape_with_data.json`).
-- The Transformer's code is no sparser than the stack's. 40 to 57% of its
-  units are open at a byte, against 35 to 49% of the stack's cells firing
-  (`unit_density.json`, a diagnostic). Sparse codes are not the lever.
+- The Transformer's code is no sparser than the stack's. At 3e-4, 40 to 57%
+  of its units are open at a byte, against 35 to 49% of the stack's cells
+  firing (`unit_density.json`, a diagnostic). Sparse codes are not the lever.
+  At the rates where the models train best the stack's code is the thinner
+  one: 16% of a level's cells fire at full size at 6e-4 and 7% at 1.2e-3,
+  where 30% and 26% of the Transformer's units are open, and half of its
+  units carry nine tenths of what a block passes on at every rate
+  (`unit_density_by_rate.json`). A closed unit still passes a share. A
+  silent cell passes nothing.
 - The largest priced difference between the two models is still the unit.
   The Transformer's multiplies a gate by a value; the stack's cells add and
   threshold (`docs/STREAM_FORM.md`, 0.025 at 9,000 updates).
@@ -154,7 +160,8 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 | Output spikes of 1/16 bit in place of 1/128 (`--output-step 8`), on trained weights | 34% fewer pulses on the test bed and 21% fewer at full size, for 0.00004 and 0.00002 bits per byte | The output's spike was the one spike whose weight no synapse learns, and it was finer than the score needs: an energy saving, no gain in bits | `knowledge_gap/output_step_on_trained_weights.json` |
 | The pool that lifts the ceiling, at full size | Removes saturation at the same energy; 0.007 ahead of the plain best where 0.010 was asked | The membranes cap the stack's learning rate; lifting frees the rate but adds no knowledge | `knowledge_gap/full_size_lifted_ceiling_pilot.json` |
 | A higher learning rate as the cause of the flattening | Ruled out over two seeds | Both models gain alike from their best rates | `knowledge_gap/learning_rate_with_data.json` |
-| A sparser code | Not built | The Transformer's units are as dense as the stack's cells | `knowledge_gap/unit_density.json` |
+| A sparser code | Not built | At 3e-4 the Transformer's units are as dense as the stack's cells, and at the best rates the stack's code is already the thinner one | `knowledge_gap/unit_density.json`, `knowledge_gap/unit_density_by_rate.json` |
+| A census of cells and units in use at each peak rate, on trained weights | The stack's code thins as the rate rises (30%, 16% and 7% of a level's cells fire at full size at 3e-4, 6e-4 and 1.2e-3) and with data; half of the Transformer's units carry nine tenths of a block's output at every rate, against 11% of the stack's cells at its best rate; no cell dies | A closed unit still passes a share and a silent cell passes nothing; not shown to cost bits, since the gap is no smaller at 3e-4 | `knowledge_gap/unit_density_by_rate.json` |
 
 ## Open bets, in order
 
@@ -170,8 +177,11 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 2. **The unit, in spikes: a cell that multiplies.** The Transformer's unit multiplies a gate by a value; the stack's
    cells add and threshold. v15's priced walk put plain units in place of gated ones as the largest step from the
    Transformer to the stack (0.025, against 0.001 for whole spikes). Of that, a hard gate recovers 0.013 and a
-   smooth plain unit 0.016 (`docs/STREAM_FORM.md`). The Transformer's units are as dense as the stack's cells
-   (`unit_density.json`), so the difference is the multiplying and not a sparser code. The spike forms so far:
+   smooth plain unit 0.016 (`docs/STREAM_FORM.md`). At 3e-4 the Transformer's units are as dense as the stack's cells
+   (`unit_density.json`), so the difference is not a sparser code. At the rates where the models train best the
+   stack's code is the thinner one, and it differs in what a unit below its threshold does: half of the
+   Transformer's units carry nine tenths of what a block passes on, because a smooth gate lets a share through below
+   zero, where a silent cell passes nothing (`unit_density_by_rate.json`). The spike forms so far:
    - a gate dendrite as a shunt, where k gate spikes let in the share k / (k + 4) of the value dendrite's charge:
      0.118 behind at full size, with its gate dendrites at the membrane's bound a fifth of the time
      (`full_size_unit_screen.json`). On the laptop's seed of the test bed it is 0.067 behind at 6,000 updates and
@@ -224,7 +234,13 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    largest step (0.012), but that step was an effect of the learning rate: at 3e-4 the fine pool is ahead of
    LayerNorm (`docs/STREAM_FORM.md`). It ranks below the unit.
 7. **Homeostatic synaptic scaling and intrinsic plasticity**: neurons keep their synapses and thresholds in the range
-   where they still learn, as cortical neurons do.
+   where they still learn, as cortical neurons do. The census by rate (`unit_density_by_rate.json`) says what there
+   is to keep: no cell is dead, so there is none to revive, but the share of cells in use falls from 30% to 7% at
+   full size as the rate rises from 3e-4 to 1.2e-3, and the stack stops gaining from the rate there. A cell's
+   resting charge cannot hold that share, since the charge that its synapses bring is below zero at most bytes. Two
+   forms are open: a set point that scales a cell's synapses to hold its share of bytes, and a cell with a soft
+   threshold that fires a few fine spikes below it, as a pool of neurons with scattered thresholds does, so that a
+   cell near its threshold passes a share as a closed unit of the Transformer does. Neither is built.
 8. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
    in the dentate gyrus, to take up what the old ones cannot.
 9. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,

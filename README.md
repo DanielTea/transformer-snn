@@ -134,9 +134,9 @@ knowledge (`full_size_lifted_ceiling_pilot.json`).
 **Ruled out on the way.** The pulse budget does not hold the stack
 back: its price falls to 0.00 to 0.02 by the end of every run at
 both depths, where a budget that binds runs at 0.10 to 0.24. Nor
-do noisy late weights, nor a code that grows denser with data: 35%
-to 56% of a level's cells fire at a byte at 6,000 and 24,000
-updates alike (`experiments/cell_activity.py`). Depth 22 saturates
+do noisy late weights, nor a code that grows denser with data: at
+3e-4, 35% to 56% of a level's cells fire at a byte at 6,000 and
+24,000 updates alike (`experiments/cell_activity.py`). Depth 22 saturates
 no more than depth 11.
 
 **Word heads at full size.** One word head in every read, a head

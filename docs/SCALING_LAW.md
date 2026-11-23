@@ -67,8 +67,10 @@ words most of all. Three other readings of the flattening were ruled out on the 
   22 is not the budget's either.
 - **Noisy late weights.** Averaging the weights helps the stack about as much as it helps the Transformer, and by
   the end of a run it helps neither.
-- **A dense code that grows denser.** 35% to 56% of a level's cells fire at every byte, at 6,000 and at 24,000 updates
-  alike, in the plain bed, which learns late better, as in the delayed one (`experiments/cell_activity.py`).
+- **A dense code that grows denser.** At 3e-4, 35% to 56% of a level's cells fire at every byte, at 6,000 and at
+  24,000 updates alike, in the plain bed, which learns late better, as in the delayed one
+  (`experiments/cell_activity.py`). At the higher rates the code grows sparser with data, not denser (the census by
+  rate below).
 
 The largest step that v15's walk from the Transformer to the stack priced was the unit: plain rectifying units in place
 of gated ones cost 0.025, against 0.001 for whole spikes (`docs/STREAM_FORM.md`). The stack's cells are plain units.
@@ -205,9 +207,55 @@ the first 131,072 bytes of the test split, scored as the headline was, they cost
 
 This is a saving in energy and no gain in bits. Whether a stack that trains with coarse output spikes turns the freed
 pulses into bits is not shown. The budget's price says little would come of it late in training: at the end one e-fold
-more pulses is worth 0.0045 nats a byte on the test bed and 0.0043 at full size. No training arm is queued.
-`full_size_loop_pilot.json` has an arm with a larger budget, which measures what more pulses are worth. If they are
-worth something, a coarse output gives part of them at no energy.
+more pulses is worth 0.0045 nats a byte on the test bed and 0.0043 at full size. A screen on the laptop measures it
+(`output_step_with_data.json`, pre-registered): a test bed trained with spikes of 1/16 bit at the old budget, for
+which the price predicts a lead of 0.009 after 6,000 updates and 0.002 after 24,000, and one trained at a budget cut
+by what the output saves. `full_size_loop_pilot.json` has an arm with a larger budget, which measures what more
+pulses are worth at full size.
+
+## The stack's code thins as the rate rises, and the Transformer's stays in use
+
+Recorded after the v18 release, a census on trained weights with no training (`unit_density_by_rate.json`). An
+earlier census of one pair at 3e-4 had found the Transformer's units as dense as the stack's cells, and nothing had
+been measured at full size or at the rates where the two models train best. `experiments/cell_activity.py` counts
+the cells of a level that fire at a byte and `experiments/unit_density.py` the units of a block whose gate is open.
+Both also count how many of them carry nine tenths of what the level or the block passes on.
+
+| Peak rate | Test bed: cells firing | Cells sending nine tenths | Units open | Units passing nine tenths | Full size: cells firing | Cells sending nine tenths | Units open | Units passing nine tenths |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1.5e-4 | 45% | 31% | 48% | 50% | – | – | – | – |
+| 3e-4 | 42% | 29% | 42% | 50% | 30% | 20% | 35% | 51% |
+| 6e-4 | 33% | 23% | 36% | 50% | 16% | 11% | 30% | 52% |
+| 1.2e-3 | 17% | 11% | 32% | 50% | 7% | 4% | 26% | 51% |
+| 2.4e-3 | 5% | 3% | 26% | 51% | – | – | – | – |
+
+Each entry is the median level or block after 24,000 updates, on the test bed the mean of two seeds, which differ by
+0.016 at most.
+
+![A higher learning rate thins the stack's code, not the Transformer's](../results/figures/event_lm_unit_density.png)
+
+At 3e-4 as many cells fire as units are open, 42% and 42% on the test bed. Above it the stack's code thins: 17% of a
+level's cells fire at 1.2e-3 and 5% at 2.4e-3 on the test bed, and 30%, 16% and 7% at 3e-4, 6e-4 and 1.2e-3 at full
+size. It thins with data as well: on the laptop's seed at 1.2e-3, 29% fire after 6,000 updates and 16% after 24,000,
+and the headline stack, trained at 3e-4 for 90,000 updates, fires at 18%. The Transformer's units close far less, from
+48% to 26% over the five rates on the test bed and from 35% to 26% at full size. And a closed unit still passes a
+share, because its gate is smooth: half of a block's units carry nine tenths of what it passes on, at every rate and
+both sizes. A silent cell passes nothing. Nine tenths of a level's spikes come from 29%, 11% and 3% of its cells at
+3e-4, 1.2e-3 and 2.4e-3 on the test bed. At each model's best full-size rate that is 11% of the stack's cells against
+51% of the Transformer's units.
+
+No cell dies: at full size none of 13,068 cells never fires at 3e-4 and 6e-4, and 2 at 1.2e-3. The thinning is in
+what the synapses weigh. With the rate a cell's resting charge falls (0.44, 0.40 and 0.33 of a threshold at full
+size), which alone would let it fire more often, while its input synapses grow (a median norm of 0.93, 1.51 and
+2.46). The cells become detectors that large synapses hold silent at most bytes. The pool that lifts the ceiling and
+noisy thresholds leave the density as it is.
+
+The stack stops gaining from a higher rate where its code is thin. On the test bed it is 0.004 worse at 2.4e-3 than
+at 1.2e-3, where the Transformer is 0.004 better, and at full size under the lifting pool it gains 0.001 from 6e-4 to
+1.2e-3, where the Transformer gains 0.007. But the gap to the Transformer is no smaller at 3e-4, where as many cells
+fire as units are open (0.036 at full size, as at the best rates). So this is a difference between the two models
+that grows with the rate and with data, and it is not shown to cost bits. No run has held the density while the rate
+rose, and none has let a silent cell pass anything.
 
 ## Still running
 
@@ -224,4 +272,5 @@ worth something, a coarse output gives part of them at no energy.
 | `proportional_gates_with_data.json` | The wide proportional gate under the lifting pool at 6,000 and 24,000 updates, two seeds on the server and one on the laptop (pre-registered) |
 | `full_size_proportional_gate.json` | The same gate at full size against the lifted plain stack, released only by a pass of the screen (pre-registered) |
 | `full_size_unit_screen.json` | Its third arm, self-gated cells at full size |
+| `output_step_with_data.json` | Output spikes of 1/16 bit in training, at the old budget and at a budget cut by the saving, a screen on the laptop (pre-registered) |
 | `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 next |

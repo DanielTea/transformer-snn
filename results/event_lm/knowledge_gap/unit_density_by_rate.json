@@ -1,0 +1,752 @@
+{
+ "study": "unit_density_by_rate",
+ "recorded_utc": "2026-11-23T14:17:43Z",
+ "kind": "A diagnostic after the fact, on trained weights, with no training and no pass mark. It extends unit_density.json, which measured one pair of the plain test bed at 3e-4 and said that nothing was measured at full size.",
+ "why": "unit_density.json found the Transformer's units as dense as the stack's cells, and the roadmap took a sparser code off the list on that. Both models have since moved to higher peak rates (1.2e-3 and 2.4e-3 on the test bed, 6e-4 and 1.2e-3 at full size), and the roadmap's seventh bet, cells that keep themselves in the range where they still learn, had no measurement of how many cells are out of it.",
+ "measure": "experiments/cell_activity.py on stacks, as 16 unbroken streams after 1,024 lead bytes: the share of a level's cells that fire at a byte, the share whose largest counts add up to nine tenths of the level's spikes at a byte, and the cells that never fire. experiments/unit_density.py on Transformers, on the second half of every window: the share of a block's units whose gate's drive is above zero, and the share whose largest outputs add up to nine tenths of what the block's units pass on. Both nine-tenths measures are taken before the output synapses. Averaged weights, the first validation bytes: 65,536 for the test bed and the Transformers, 32,768 for the full-size stacks; windows of 256 bytes for the test bed's Transformers and 512 for the full size's. Each entry gives the median over the levels or blocks, then the lowest and the highest. A cell's resting charge and the norm of its input synapses are read from the checkpoint. Full size: the 24,000-update pilots of full_size_rate_pilot.json and full_size_lifted_ceiling_pilot.json, fs-noise6 of full_size_unit_screen.json, and the headline pair (l2048-word-st and tf2048, 90,000 updates). Test bed: the two seeds of learning_rate_with_data.json at five rates, and the laptop's seed 20003 at 1.2e-3 at 6,000 and 24,000 updates (rd-base-6k-s3, rd-base-24k-s3). On the CPU. For plain cells the tool also counts the cells and bytes by the cell's charge in thresholds, after its rest is taken off; that count was taken for the laptop's seed.",
+ "seen_before_recording": "All of it: the measurement was read as it came in, and the nine-tenths measure for cells was added to experiments/cell_activity.py after the first pass showed the firing shares.",
+ "result": {
+  "full size, 24,000 updates on windows of 512 bytes, one seed": {
+   "3e-4": {
+    "stack": {
+     "cells firing at a byte": [
+      0.303,
+      0.244,
+      0.491
+     ],
+     "cells sending nine tenths of a level's spikes": [
+      0.204,
+      0.165,
+      0.326
+     ],
+     "cells that never fire": "0 of 13,068",
+     "median spikes of a firing cell, by level": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      6,
+      6,
+      7,
+      9
+     ],
+     "resting charge of a cell, in thresholds (median)": 0.444,
+     "size of a cell's input synapses (median norm)": 0.93
+    },
+    "Transformer": {
+     "units open at a byte": [
+      0.353,
+      0.321,
+      0.593
+     ],
+     "units passing nine tenths of a block's output": [
+      0.513,
+      0.353,
+      0.531
+     ]
+    },
+    "bits per byte": {
+     "stack": 1.34164,
+     "Transformer": 1.30572
+    }
+   },
+   "6e-4": {
+    "stack": {
+     "cells firing at a byte": [
+      0.163,
+      0.114,
+      0.377
+     ],
+     "cells sending nine tenths of a level's spikes": [
+      0.108,
+      0.075,
+      0.251
+     ],
+     "cells that never fire": "0 of 13,068",
+     "median spikes of a firing cell, by level": [
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      6,
+      7,
+      8,
+      9,
+      12
+     ],
+     "resting charge of a cell, in thresholds (median)": 0.396,
+     "size of a cell's input synapses (median norm)": 1.51
+    },
+    "Transformer": {
+     "units open at a byte": [
+      0.296,
+      0.25,
+      0.516
+     ],
+     "units passing nine tenths of a block's output": [
+      0.525,
+      0.297,
+      0.546
+     ]
+    },
+    "bits per byte": {
+     "stack": 1.31985,
+     "Transformer": 1.2837,
+     "stack under the lifting pool": 1.31341
+    }
+   },
+   "1.2e-3": {
+    "stack": {
+     "cells firing at a byte": [
+      0.068,
+      0.042,
+      0.245
+     ],
+     "cells sending nine tenths of a level's spikes": [
+      0.044,
+      0.027,
+      0.175
+     ],
+     "cells that never fire": "2 of 13,068",
+     "median spikes of a firing cell, by level": [
+      7,
+      7,
+      6,
+      7,
+      7,
+      7,
+      8,
+      10,
+      12,
+      16,
+      17
+     ],
+     "resting charge of a cell, in thresholds (median)": 0.329,
+     "size of a cell's input synapses (median norm)": 2.46
+    },
+    "Transformer": {
+     "units open at a byte": [
+      0.261,
+      0.168,
+      0.414
+     ],
+     "units passing nine tenths of a block's output": [
+      0.512,
+      0.293,
+      0.561
+     ]
+    },
+    "bits per byte": {
+     "stack": 1.34753,
+     "Transformer": 1.27625,
+     "stack under the lifting pool": 1.31255
+    }
+   }
+  },
+  "full size, other arms at 24,000 updates": {
+   "the lifting pool at 6e-4 (fs-st6-lift)": {
+    "cells firing at a byte": [
+     0.163,
+     0.119,
+     0.377
+    ],
+    "cells sending nine tenths of a level's spikes": [
+     0.108,
+     0.078,
+     0.241
+    ],
+    "cells that never fire": "0 of 13,068",
+    "median spikes of a firing cell, by level": [
+     6,
+     6,
+     6,
+     6,
+     6,
+     6,
+     6,
+     7,
+     7,
+     9,
+     11
+    ],
+    "resting charge of a cell, in thresholds (median)": 0.394,
+    "size of a cell's input synapses (median norm)": 1.51
+   },
+   "the lifting pool at 1.2e-3 (fs-st12-lift)": {
+    "cells firing at a byte": [
+     0.067,
+     0.044,
+     0.233
+    ],
+    "cells sending nine tenths of a level's spikes": [
+     0.043,
+     0.029,
+     0.143
+    ],
+    "cells that never fire": "9 of 13,068",
+    "median spikes of a firing cell, by level": [
+     7,
+     6,
+     6,
+     6,
+     6,
+     6,
+     6,
+     7,
+     8,
+     10,
+     14
+    ],
+    "resting charge of a cell, in thresholds (median)": 0.31,
+    "size of a cell's input synapses (median norm)": 2.39
+   },
+   "noisy thresholds at 6e-4 (fs-noise6)": {
+    "cells firing at a byte": [
+     0.155,
+     0.112,
+     0.369
+    ],
+    "cells sending nine tenths of a level's spikes": [
+     0.102,
+     0.073,
+     0.244
+    ],
+    "cells that never fire": "0 of 13,068",
+    "median spikes of a firing cell, by level": [
+     6,
+     6,
+     6,
+     6,
+     6,
+     6,
+     6,
+     7,
+     8,
+     9,
+     12
+    ],
+    "resting charge of a cell, in thresholds (median)": 0.397,
+    "size of a cell's input synapses (median norm)": 1.52
+   }
+  },
+  "full size, the headline pair after 90,000 updates on windows of 2,048 bytes": {
+   "stack (l2048-word-st, peak rate 3e-4)": {
+    "cells firing at a byte": [
+     0.179,
+     0.12,
+     0.439
+    ],
+    "cells sending nine tenths of a level's spikes": [
+     0.12,
+     0.08,
+     0.287
+    ],
+    "cells that never fire": "0 of 13,068",
+    "median spikes of a firing cell, by level": [
+     5,
+     5,
+     5,
+     5,
+     5,
+     5,
+     6,
+     6,
+     7,
+     8,
+     12
+    ],
+    "resting charge of a cell, in thresholds (median)": 0.295,
+    "size of a cell's input synapses (median norm)": 1.27
+   },
+   "Transformer (tf2048)": {
+    "units open at a byte": [
+     0.326,
+     0.3,
+     0.565
+    ],
+    "units passing nine tenths of a block's output": [
+     0.512,
+     0.245,
+     0.537
+    ]
+   }
+  },
+  "test bed, 24,000 updates": {
+   "1.5e-4": {
+    "seed 20001": {
+     "stack": {
+      "cells firing at a byte": [
+       0.454,
+       0.415,
+       0.528
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.317,
+       0.292,
+       0.358
+      ],
+      "cells that never fire": "0 of 6,132",
+      "median spikes of a firing cell, by level": [
+       3,
+       4,
+       4,
+       4,
+       5,
+       6
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.451,
+      "size of a cell's input synapses (median norm)": 0.57
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.481,
+       0.448,
+       0.59
+      ],
+      "units passing nine tenths of a block's output": [
+       0.504,
+       0.474,
+       0.524
+      ]
+     }
+    },
+    "seed 20002": {
+     "stack": {
+      "cells firing at a byte": [
+       0.438,
+       0.417,
+       0.522
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.307,
+       0.293,
+       0.354
+      ],
+      "cells that never fire": "0 of 6,132",
+      "median spikes of a firing cell, by level": [
+       3,
+       4,
+       4,
+       4,
+       5,
+       7
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.451,
+      "size of a cell's input synapses (median norm)": 0.56
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.477,
+       0.439,
+       0.597
+      ],
+      "units passing nine tenths of a block's output": [
+       0.505,
+       0.472,
+       0.523
+      ]
+     }
+    },
+    "bits per byte, two-seed mean": {
+     "stack": 1.63539,
+     "Transformer": 1.59913
+    }
+   },
+   "3e-4": {
+    "seed 20001": {
+     "stack": {
+      "cells firing at a byte": [
+       0.419,
+       0.394,
+       0.493
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.29,
+       0.274,
+       0.332
+      ],
+      "cells that never fire": "0 of 6,132",
+      "median spikes of a firing cell, by level": [
+       4,
+       4,
+       4,
+       5,
+       5,
+       7
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.424,
+      "size of a cell's input synapses (median norm)": 0.69
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.42,
+       0.395,
+       0.57
+      ],
+      "units passing nine tenths of a block's output": [
+       0.503,
+       0.383,
+       0.514
+      ]
+     }
+    },
+    "seed 20002": {
+     "stack": {
+      "cells firing at a byte": [
+       0.412,
+       0.396,
+       0.483
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.286,
+       0.274,
+       0.324
+      ],
+      "cells that never fire": "0 of 6,132",
+      "median spikes of a firing cell, by level": [
+       4,
+       4,
+       4,
+       4,
+       5,
+       7
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.424,
+      "size of a cell's input synapses (median norm)": 0.69
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.423,
+       0.399,
+       0.581
+      ],
+      "units passing nine tenths of a block's output": [
+       0.504,
+       0.396,
+       0.513
+      ]
+     }
+    },
+    "bits per byte, two-seed mean": {
+     "stack": 1.55276,
+     "Transformer": 1.49408
+    }
+   },
+   "6e-4": {
+    "seed 20001": {
+     "stack": {
+      "cells firing at a byte": [
+       0.326,
+       0.308,
+       0.422
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.224,
+       0.21,
+       0.279
+      ],
+      "cells that never fire": "0 of 6,132",
+      "median spikes of a firing cell, by level": [
+       4,
+       4,
+       4,
+       5,
+       6,
+       9
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.39,
+      "size of a cell's input synapses (median norm)": 0.89
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.357,
+       0.339,
+       0.506
+      ],
+      "units passing nine tenths of a block's output": [
+       0.504,
+       0.27,
+       0.526
+      ]
+     }
+    },
+    "seed 20002": {
+     "stack": {
+      "cells firing at a byte": [
+       0.331,
+       0.288,
+       0.418
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.228,
+       0.196,
+       0.276
+      ],
+      "cells that never fire": "0 of 6,132",
+      "median spikes of a firing cell, by level": [
+       4,
+       4,
+       4,
+       5,
+       6,
+       9
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.39,
+      "size of a cell's input synapses (median norm)": 0.88
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.364,
+       0.337,
+       0.507
+      ],
+      "units passing nine tenths of a block's output": [
+       0.504,
+       0.258,
+       0.524
+      ]
+     }
+    },
+    "bits per byte, two-seed mean": {
+     "stack": 1.50833,
+     "Transformer": 1.4572
+    }
+   },
+   "1.2e-3": {
+    "seed 20001": {
+     "stack": {
+      "cells firing at a byte": [
+       0.167,
+       0.126,
+       0.26
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.109,
+       0.084,
+       0.166
+      ],
+      "cells that never fire": "0 of 6,132",
+      "median spikes of a firing cell, by level": [
+       4,
+       4,
+       4,
+       5,
+       7,
+       10
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.326,
+      "size of a cell's input synapses (median norm)": 1.21
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.312,
+       0.261,
+       0.438
+      ],
+      "units passing nine tenths of a block's output": [
+       0.501,
+       0.285,
+       0.534
+      ]
+     }
+    },
+    "seed 20002": {
+     "stack": {
+      "cells firing at a byte": [
+       0.167,
+       0.123,
+       0.258
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.109,
+       0.082,
+       0.164
+      ],
+      "cells that never fire": "0 of 6,132",
+      "median spikes of a firing cell, by level": [
+       4,
+       4,
+       4,
+       5,
+       7,
+       9
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.328,
+      "size of a cell's input synapses (median norm)": 1.21
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.321,
+       0.269,
+       0.445
+      ],
+      "units passing nine tenths of a block's output": [
+       0.507,
+       0.243,
+       0.538
+      ]
+     }
+    },
+    "bits per byte, two-seed mean": {
+     "stack": 1.48947,
+     "Transformer": 1.4451
+    }
+   },
+   "2.4e-3": {
+    "seed 20001": {
+     "stack": {
+      "cells firing at a byte": [
+       0.049,
+       0.035,
+       0.095
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.031,
+       0.023,
+       0.058
+      ],
+      "cells that never fire": "3 of 6,132",
+      "median spikes of a firing cell, by level": [
+       3,
+       4,
+       5,
+       5,
+       7,
+       10
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.237,
+      "size of a cell's input synapses (median norm)": 1.66
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.266,
+       0.213,
+       0.376
+      ],
+      "units passing nine tenths of a block's output": [
+       0.498,
+       0.289,
+       0.549
+      ]
+     }
+    },
+    "seed 20002": {
+     "stack": {
+      "cells firing at a byte": [
+       0.049,
+       0.035,
+       0.096
+      ],
+      "cells sending nine tenths of a level's spikes": [
+       0.031,
+       0.023,
+       0.058
+      ],
+      "cells that never fire": "3 of 6,132",
+      "median spikes of a firing cell, by level": [
+       3,
+       4,
+       5,
+       5,
+       7,
+       10
+      ],
+      "resting charge of a cell, in thresholds (median)": 0.24,
+      "size of a cell's input synapses (median norm)": 1.66
+     },
+     "Transformer": {
+      "units open at a byte": [
+       0.26,
+       0.208,
+       0.368
+      ],
+      "units passing nine tenths of a block's output": [
+       0.513,
+       0.237,
+       0.556
+      ]
+     }
+    },
+    "bits per byte, two-seed mean": {
+     "stack": 1.49369,
+     "Transformer": 1.44116
+    }
+   }
+  },
+  "test bed at 1.2e-3 with data, the laptop's seed 20003": {
+   "6,000 updates": {
+    "cells firing at a byte": [
+     0.292,
+     0.275,
+     0.371
+    ],
+    "cells sending nine tenths of a level's spikes": [
+     0.2,
+     0.186,
+     0.246
+    ],
+    "cells that never fire": "0 of 6,132",
+    "median spikes of a firing cell, by level": [
+     4,
+     4,
+     5,
+     5,
+     6,
+     8
+    ],
+    "resting charge of a cell, in thresholds (median)": 0.468,
+    "size of a cell's input synapses (median norm)": 0.94,
+    "cells and bytes by the cell's charge in thresholds (median level)": {
+     "below -8": 0.349,
+     "-8 to -4": 0.179,
+     "-4 to -2": 0.088,
+     "-2 to -1": 0.042,
+     "-1 to 0": 0.04,
+     "0 to 0.5": 0.019,
+     "0.5 and above": 0.292
+    }
+   },
+   "24,000 updates": {
+    "cells firing at a byte": [
+     0.164,
+     0.13,
+     0.26
+    ],
+    "cells sending nine tenths of a level's spikes": [
+     0.111,
+     0.087,
+     0.166
+    ],
+    "cells that never fire": "0 of 6,132",
+    "median spikes of a firing cell, by level": [
+     4,
+     4,
+     4,
+     5,
+     7,
+     10
+    ],
+    "resting charge of a cell, in thresholds (median)": 0.326,
+    "size of a cell's input synapses (median norm)": 1.21,
+    "cells and bytes by the cell's charge in thresholds (median level)": {
+     "below -8": 0.565,
+     "-8 to -4": 0.153,
+     "-4 to -2": 0.062,
+     "-2 to -1": 0.027,
+     "-1 to 0": 0.024,
+     "0 to 0.5": 0.011,
+     "0.5 and above": 0.164
+    }
+   }
+  }
+ },
+ "reading": "At 3e-4, where unit_density.json measured, the stack's cells fire about as often as the Transformer's units are open: on the test bed 42% of a level's cells and 42% of a block's units at a byte. That does not hold at the rates where the models train best. The stack's code thins as the peak rate rises. On the test bed 45%, 42%, 33%, 17% and 5% of a level's cells fire at a byte at 1.5e-4, 3e-4, 6e-4, 1.2e-3 and 2.4e-3 (the median level; the two seeds differ by 0.016 at most), and at full size 30%, 16% and 7% at 3e-4, 6e-4 and 1.2e-3. It thins with data as well: on the laptop's seed at 1.2e-3, 29% at 6,000 updates and 16% at 24,000, and the headline stack, trained at 3e-4 for 90,000 updates, fires at 18% where the 24,000-update pilot at that rate fires at 30%. The Transformer's units close far less: 48%, 42%, 36%, 32% and 26% are open over the same five rates on the test bed, and 35%, 30% and 26% at full size. And a closed unit still passes something, because a smooth gate lets a share through below zero: half of a block's units carry nine tenths of what the block passes on, at every rate and at both sizes (0.50 to 0.53 over all 14 Transformers). A silent cell passes nothing. Nine tenths of a level's spikes come from 31%, 29%, 23%, 11% and 3% of its cells on the test bed and from 20%, 11% and 4% at full size. At each model's best full-size rate that is 11% of the stack's cells against 51% of the Transformer's units. No cell dies: at full size none of 13,068 cells never fires at 3e-4 and at 6e-4, 2 at 1.2e-3 and 9 at 1.2e-3 under the lifting pool. The thinning is in what the synapses weigh and not in the cells' rests: with the rate a cell's resting charge falls (0.44, 0.40 and 0.33 of a threshold at full size), which alone would let it fire more often, while its input synapses grow (a median norm of 0.93, 1.51 and 2.46). The cells become detectors that large synapses hold silent at most bytes. The pool that lifts the ceiling and noisy thresholds leave the density as it is.",
+ "how far the silent cells sit from their thresholds": "Counted on the laptop's seed of the test bed (1.2e-3). A cell fires from half a threshold of charge on, after its rest is taken off. After 24,000 updates 16% of cells and bytes are there in the median level, 1% lie within half a threshold below, 2% between zero and one threshold below zero, and 57% more than eight thresholds below zero. After 6,000 updates 29% fire and 35% lie more than eight thresholds below zero. A cell's resting charge is a third of a threshold. The silent cells are far from firing, and they move further with data: a lower rest, or a threshold that is soft over one threshold, would reach a few in a hundred of them.",
+ "what it shows and what it does not": "The stack stops gaining from a higher rate where its code is thin. On the test bed its best rate is 1.2e-3, and at 2.4e-3, with 5% of its cells firing, it is 0.0042 worse, where the Transformer is 0.0039 better. At full size under the lifting pool it gains 0.0009 from 6e-4 to 1.2e-3, where the Transformer gains 0.0074. But the gap to the Transformer is no smaller at 3e-4, where about as many cells fire as units are open: 0.036 at full size at 3e-4 against 0.036 at each model's best rate under the lifting pool, and 0.059 against 0.048 on the test bed. So the measurement shows a difference between the two models that grows with the rate and with data, and does not show that it costs bits. No run held the density while the rate rose, and none let a silent cell pass anything.",
+ "limits": "One seed at full size, and pilots of 24,000 updates on windows of 512 bytes. A unit that is open and a cell that fires are not the same measure, which is why the nine-tenths measure is given for both. The headline stack differs from the pilot at 3e-4 in its windows and its reads as well as its length. Nothing here is an intervention. The cells' charge was counted on the laptop's seed alone."
+}
