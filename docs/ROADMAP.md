@@ -160,6 +160,7 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 | Noisy thresholds at full size | Level: 0.004 better, none of it on new contexts | A smooth slope alone is not the unit's lead | `knowledge_gap/full_size_unit_screen.json` |
 | Self-gated cells at full size | Level: 0.001 behind, 0.006 behind on new contexts | A cell that gates itself is a plain cell | `knowledge_gap/full_size_unit_screen.json` |
 | Gated cells under the pool that lifts the ceiling, at full size | Fail: 0.113 behind the lifted plain stack | Saturation was not why gated cells lose: with no cell at its cap the loss is the same | `knowledge_gap/full_size_lifted_gate.json` |
+| A proportional gate under the lifting pool, on the test bed by slope, two seeds | Fail: 0.065 and 0.048 behind at 6,000 updates, 0.802 and 0.653 at 24,000 | With data the graded gate turns into a switch, and its synapses grow until the range rule cuts thousands of neurons; nothing is at a cap | `knowledge_gap/proportional_gates_with_data.json` |
 | Noisy thresholds on the test bed, by slope | Reported only: 0.0036 ahead at 6,000 updates, 0.0019 at 24,000 | A true slope for the threshold cell is worth 0.002 to 0.004 and fades with data | `knowledge_gap/noisy_thresholds_with_data.json` |
 | Output spikes of 1/16 bit in place of 1/128 (`--output-step 8`), on trained weights | 34% fewer pulses on the test bed and 21% fewer at full size, for 0.00004 and 0.00002 bits per byte | The output's spike was the one spike whose weight no synapse learns, and it was finer than the score needs: an energy saving, no gain in bits | `knowledge_gap/output_step_on_trained_weights.json` |
 | The pool that lifts the ceiling, at full size | Removes saturation at the same energy; 0.007 ahead of the plain best where 0.010 was asked | The membranes cap the stack's learning rate; lifting frees the rate but adds no knowledge | `knowledge_gap/full_size_lifted_ceiling_pilot.json` |
@@ -207,23 +208,31 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
      updates and 0.0019 at 24,000, a lead that shrinks with data, so they earn no seeds
      (`noisy_thresholds_with_data.json`).
 
-   Built and checked: **a proportional gate** (`--granule-ramp 16 --granule-inner-gate`). The gate dendrite fires
+   Built, checked, and failed once it had data: **a proportional gate** (`--granule-ramp 16 --granule-inner-gate`). The gate dendrite fires
    four steps for every threshold of its charge above the rest, and k steps let in k / 64 of the value dendrite's
    charge. Every step lets in the same share, the gate is wide open at 16 thresholds, and it never lets in more than
    the whole. Its steps stay inside the cell, as a dendritic spike sends nothing down the axon. In a check of 2,250
    updates (`proportional_gate_check.json`) it is the first gated cell that keeps pace with plain cells: under the
    lifting pool it leads by 0.088 at 750 updates and is level at 2,250, where the shunting gates trail by 0.063 to
-   0.080. Its gates stay graded. Sorted by the share of the value that an open gate lets in (up to a quarter, a
+   0.080. At that point its gates are graded. Sorted by the share of the value that an open gate lets in (up to a quarter, a
    half, three quarters, or more), they spread 40 / 27 / 16 / 17% at the first level and 28 / 23 / 17 / 32% at the
    last (`experiments/gate_state.py`). Every gate that lost has half to all of its open states in the last quarter
    (48% to 100%, the shunting gates 66% to 79%): it works as a switch. A narrow ramp (4 thresholds), or any ramp
    under the bounded pool, saturates into a switch and runs away. The inner steps are not pulses and the budget
    counts none, but they are taken: 47,915 a byte beside the stack's 112,663 pulses, a cost that every report of
-   this gate states. The screen by slope is pre-registered, two seeds on the server's fan2 bed and one on the
-   laptop (`proportional_gates_with_data.json`), and it reports whether the gates stay graded with data. A pass
-   releases a full-size run under the lifting pool against the lifted plain stack
-   (`full_size_proportional_gate.json`). A set point, a resting level that keeps each gate open at about half of
-   the bytes as cortical neurons keep their excitability in range, waits for that verdict.
+   this gate states.
+
+   The screen by slope failed on both seeds of the server's fan2 bed (`proportional_gates_with_data.json`): the
+   gate is 0.065 and 0.048 behind at 6,000 updates and 0.802 and 0.653 behind at 24,000. With data it does not
+   stay graded. An open gate lets in 0.57 to 0.74 of its value at 6,000 updates and 0.82 to 0.87 at 24,000, where
+   three quarters or more of the open gates stand in the last quarter: it turns into the switch. Its synapses grow
+   until the range rule shrinks 9,000 to 14,000 neurons, the stream's neurons fire twice as much, and the output
+   is left with a fifth of its pulses. Nothing is at a cap, so this is not saturation, and it starts after the
+   rate has fallen below its peak. The full-size run was not released (`full_size_proportional_gate.json`), and
+   the laptop's seed was not run. Untried: a lower rate or a decay on the gate's drive, and a set point, a resting
+   level that keeps each gate open at about half of the bytes as cortical neurons keep their excitability in
+   range. They wait for the float diagnostic below: if a gated unit earns nothing at this size in floats, no spike
+   form of it can.
 
    Two controls in floats would say whether the unit also explains the gap late in training, since the walk priced
    it at 9,000 updates: a Transformer with plain units on the test bed at 6,000 and 24,000 updates (does it flatten

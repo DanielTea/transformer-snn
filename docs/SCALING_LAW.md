@@ -81,10 +81,13 @@ and the self-gated cell is level at both lengths. A third of the gated stack's p
 trails, so most of the loss is the gate's form and not that energy (`proportional_gate_check.json`). The gates that
 lose work as switches: half to all of their open states let in more than three quarters of the value. One gate keeps
 pace with plain cells in that check, a gate that opens in proportion to its charge under the pool that lifts the
-ceiling, and its open states spread over the whole range. Its screen by slope is pre-registered
-(`proportional_gates_with_data.json`), and a pass releases a full-size run (`full_size_proportional_gate.json`).
+ceiling, and its open states spread over the whole range. With data it fails too
+(`proportional_gates_with_data.json`): on two seeds it is 0.056 behind at 6,000 updates and 0.73 behind at 24,000.
+The gate turns into a switch (an open gate lets in 0.57 to 0.74 of the value at 6,000 updates and 0.82 to 0.87 at
+24,000), its synapses grow until the range rule shrinks 9,000 to 14,000 neurons, and the output is left with a
+fifth of its pulses. Nothing is at a cap. The full-size run was not released (`full_size_proportional_gate.json`).
 
-![The gate that keeps pace stays graded; the gates that lose are switches](../results/figures/event_lm_gate_state.png)
+![At 2,250 updates the gate that keeps pace is graded; the gates that lose are switches](../results/figures/event_lm_gate_state.png)
 
 A second screen measures the other half of a smooth unit, in spikes: noisy thresholds
 (`noisy_thresholds_with_data.json`). A real neuron's membrane is noisy, so near its threshold it fires by chance, and
@@ -303,9 +306,7 @@ rose, and none has let a silent cell pass anything.
 | `cell_dither_with_data.json` | Stochastic firing of the threshold cells, alone and with quantal release |
 | `loop_with_data.json` | A looped test bed at 6,000 and 24,000 updates against a plain bed given the same pulse budget, a screen on the laptop |
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
-| `proportional_gates_with_data.json` | The wide proportional gate under the lifting pool at 6,000 and 24,000 updates, two seeds on the server and one on the laptop (pre-registered) |
-| `full_size_proportional_gate.json` | The same gate at full size against the lifted plain stack, released only by a pass of the screen (pre-registered) |
 | `plain_units_with_data.json` | A diagnostic in floats on the server's CPU: the test bed's Transformer with plain or gated units, hard or smooth, at 6,000 and 24,000 updates: which property of the unit falls behind with data (pre-registered) |
-| `skip_fibres_with_data.json` | Skip fibres (`--stack-skips`): a level's read and cells also hear the stream of earlier levels through gains of their own, at 6,000 and 24,000 updates on two seeds; on the looped bed a screen on the laptop (pre-registered) |
+| `skip_fibres_with_data.json` | Skip fibres (`--stack-skips`): a level's read and cells also hear the stream of earlier levels through gains of their own, at 6,000 and 24,000 updates on two seeds; on the looped bed with two seeds on the server and a third on the laptop (pre-registered) |
 | `output_step_with_data.json` | Output spikes of 1/16 bit in training, at the old budget and at a budget cut by the saving, a screen on the laptop (pre-registered) |
-| `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 next |
+| `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 since 20:20 UTC |
