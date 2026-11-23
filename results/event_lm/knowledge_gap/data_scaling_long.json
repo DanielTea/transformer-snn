@@ -21,5 +21,10 @@
   "recorded_utc": "2026-11-22T16:36:59Z",
   "change": "Curves at 1.2e-3 (both models and the plain bed, all five sizes, both seeds) are queued now, before learning_rate_with_data is read, because on seed 20001 1.2e-3 beats 3e-4 and 6e-4 for both models. Each model is still read at its best rate by that study; if that is 2.4e-3, curves at 2.4e-3 are added and read in place. The plain bed is read at its own best rate among those it has curves for.",
   "seen_before_amendment": "The 24,000-update points listed in learning_rate_with_data's amendment_2; no run of this study at another size has finished."
+ },
+ "amendment_3": {
+  "recorded_utc": "2026-11-23T02:37:04Z",
+  "change": "amendment_2 applied: by learning_rate_with_data's two seeds the Transformer is best at 2.4e-3 (two-seed mean 1.44116 against 1.44511 at 1.2e-3) and the stack at 1.2e-3. The Transformer's curve at 2.4e-3 is queued (ds-tf24 at 6,000, 12,000, 48,000 and 96,000 updates, seeds 20001 and 20002; its 24,000-update points are tf24-lr24-s1 and -s2) and read in place of its curve at 1.2e-3, which still runs and is reported beside it. experiments/data_scaling_long.py reads the new rate.",
+  "seen_before_amendment": "learning_rate_with_data's ten 24,000-update scores of each seed; no run of this study at 6,000, 12,000, 48,000 or 96,000 updates has finished."
  }
 }

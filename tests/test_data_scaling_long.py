@@ -55,6 +55,20 @@ def test_each_model_is_read_at_its_best_rate_and_the_slopes_have_their_signs(tmp
     assert (tmp_path / "event_lm_data_scaling_long.png").is_file()
 
 
+def test_a_transformer_best_at_2_4e_3_is_read_at_that_rate(tmp_path):
+    _scores(tmp_path)
+    for size in (6, 12, 24, 48, 96):
+        for seed in (1, 2):
+            value = _law(1.05, 60, 0.21, size) - 0.006 + 0.001 * seed
+            name = f"tf24-lr24-s{seed}" if size == 24 else f"ds-tf24-{size}k-s{seed}"
+            _write(tmp_path, name, value, transformer=True)
+    points = collect(tmp_path)
+    assert set(points["tf24"]) == {6, 12, 24, 48, 96}
+    summary, rates = summarize(points)
+    assert rates["tf"] == "24" and rates["st"] == "12"
+    assert summary["gaps"]["st12"]["against"] == "tf24"
+
+
 def test_one_rate_alone_falls_back_to_the_old_rate(tmp_path):
     _write(tmp_path, "tf24-lr12-s1", 1.44, transformer=True)
     _write(tmp_path, "bed24-s1", 1.55)

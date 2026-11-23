@@ -25,5 +25,158 @@
   },
   "why": "On seed 20001 both models still gained from 6e-4 to 1.2e-3 (the stack 1.50363 to 1.48638, the Transformer 1.45690 to 1.44423), so the best rate may lie above 1.2e-3. The reading takes each model's best of the five rates; it is otherwise unchanged.",
   "seen_before_amendment": "Seed 20001 at 1.5e-4, 3e-4, 6e-4 and 1.2e-3 for both models: the stack 1.63293, 1.54749, 1.50363, 1.48638; the Transformer 1.59167, 1.49270, 1.45690, 1.44423. Seed 20002 at 3e-4: the stack 1.55804, the Transformer 1.49545. No run at 2.4e-3."
+ },
+ "result": {
+  "recorded_utc": "2026-11-23T02:37:04Z",
+  "bpb, seeds 20001 and 20002": {
+   "stack": {
+    "1.5e-4": [
+     1.63293,
+     1.63785
+    ],
+    "3e-4": [
+     1.54749,
+     1.55804
+    ],
+    "6e-4": [
+     1.50363,
+     1.51303
+    ],
+    "1.2e-3": [
+     1.48638,
+     1.49256
+    ],
+    "2.4e-3": [
+     1.49237,
+     1.49501
+    ]
+   },
+   "transformer": {
+    "1.5e-4": [
+     1.59167,
+     1.60659
+    ],
+    "3e-4": [
+     1.4927,
+     1.49545
+    ],
+    "6e-4": [
+     1.4569,
+     1.4575
+    ],
+    "1.2e-3": [
+     1.44423,
+     1.44598
+    ],
+    "2.4e-3": [
+     1.44553,
+     1.43679
+    ]
+   }
+  },
+  "two-seed means": {
+   "stack": {
+    "1.5e-4": 1.63539,
+    "3e-4": 1.55276,
+    "6e-4": 1.50833,
+    "1.2e-3": 1.48947,
+    "2.4e-3": 1.49369
+   },
+   "transformer": {
+    "1.5e-4": 1.59913,
+    "3e-4": 1.49408,
+    "6e-4": 1.4572,
+    "1.2e-3": 1.4451,
+    "2.4e-3": 1.44116
+   }
+  },
+  "best_rates": {
+   "stack": "1.2e-3",
+   "transformer": "2.4e-3"
+  },
+  "gain from 3e-4 to the best rate": {
+   "stack": 0.06329,
+   "transformer": 0.05292,
+   "difference": 0.01037
+  },
+  "gap": {
+   "at 3e-4": 0.05868,
+   "at each model's best rate": 0.04831,
+   "at 1.2e-3 for both": 0.04437
+  },
+  "gap at each model's best rate by context (gap_by_piece, near 240, far 8,192)": {
+   "seed 20001": {
+    "whole": 0.04086,
+    "copyable near": {
+     "gap": 0.0065,
+     "interval_95": [
+      -0.015,
+      0.0315
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.0622,
+     "interval_95": [
+      0.027,
+      0.0898
+     ],
+     "share": 0.1102
+    },
+    "new": {
+     "gap": 0.0558,
+     "interval_95": [
+      0.0505,
+      0.061
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0585,
+     "interval_95": [
+      0.0364,
+      0.083
+     ],
+     "share": 0.3109
+    }
+   },
+   "seed 20002": {
+    "whole": 0.05572,
+    "copyable near": {
+     "gap": -0.0195,
+     "interval_95": [
+      -0.0445,
+      0.0082
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.0754,
+     "interval_95": [
+      0.0472,
+      0.1066
+     ],
+     "share": 0.1102
+    },
+    "new": {
+     "gap": 0.075,
+     "interval_95": [
+      0.0699,
+      0.0807
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0613,
+     "interval_95": [
+      0.0406,
+      0.089
+     ],
+     "share": 0.3109
+    }
+   }
+  },
+  "verdict": "Not a learning-rate artefact at these rates: from its own 3e-4 to its best rate the stack gains 0.0633 and the Transformer 0.0529, a difference of 0.0104, under the 0.020 the reading set. The stack is best at 1.2e-3 on both seeds; the Transformer at 2.4e-3 on the two-seed mean (1.2e-3 on seed 20001, 2.4e-3 on seed 20002).",
+  "reading": "Both models wanted a higher rate than the 3e-4 of every earlier run, and the stack a little more, but not enough to call the flattening an artefact of the rate. At each model's best rate the test bed's gap is 0.0483 against 0.0587 at 3e-4, and it is on new contexts on both seeds (+0.056 and +0.075 on 76% of bytes). By data_scaling_long's amendment_2 the Transformer's curve at 2.4e-3 is now read in place of its curve at 1.2e-3. At full size the higher rate did not favour the stack (full_size_rate_pilot.json)."
  }
 }

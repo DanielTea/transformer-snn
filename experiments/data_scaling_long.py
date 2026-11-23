@@ -25,11 +25,12 @@ from plot_state_reads import GREEN, VIOLET
 BYTES_PER_UPDATE = 16 * 256
 # Runs of other studies that are this study's points: name pattern -> (model at a rate, thousands of updates).
 REUSED = {r"tf24-s(\d)": ("tf3", 24), r"tf24-lr6-s(\d)": ("tf6", 24), r"tf24-lr12-s(\d)": ("tf12", 24),
-          r"bed24-s(\d)": ("st3", 24), r"bed24-lr6-s(\d)": ("st6", 24), r"bed24-lr12-s(\d)": ("st12", 24),
-          r"pl24-s(\d)": ("pl3", 24), r"pl24-lr12-s(\d)": ("pl12", 24), r"bed6-s(\d)": ("st3", 6)}
+          r"tf24-lr24-s(\d)": ("tf24", 24), r"bed24-s(\d)": ("st3", 24), r"bed24-lr6-s(\d)": ("st6", 24),
+          r"bed24-lr12-s(\d)": ("st12", 24), r"bed24-lr24-s(\d)": ("st24", 24), r"pl24-s(\d)": ("pl3", 24),
+          r"pl24-lr12-s(\d)": ("pl12", 24), r"bed6-s(\d)": ("st3", 6)}
 MODELS = {"tf": ("Transformer", ORANGE), "st": ("Spiking stack, delayed fibres, trained on streams", VIOLET),
           "pl": ("Spiking stack, plain, trained in windows", GREEN)}
-RATES = {"3": 3e-4, "6": 6e-4, "12": 1.2e-3}
+RATES = {"3": 3e-4, "6": 6e-4, "12": 1.2e-3, "24": 2.4e-3}
 # Two-sided 90% points of Student's t for 1 to 12 degrees of freedom.
 T90 = (6.314, 2.920, 2.353, 2.132, 2.015, 1.943, 1.895, 1.860, 1.833, 1.812, 1.796, 1.782)
 
@@ -45,7 +46,7 @@ def collect(folder):
     points = {}
     for path in sorted(Path(folder).glob("*.json")):
         name = path.stem
-        match = re.fullmatch(r"ds-(tf|st|pl)(3|6|12)-(\d+)k-s(\d)", name)
+        match = re.fullmatch(r"ds-(tf|st|pl)(3|6|12|24)-(\d+)k-s(\d)", name)
         if match:
             tag, size, seed = match.group(1) + match.group(2), int(match.group(3)), int(match.group(4))
         else:
