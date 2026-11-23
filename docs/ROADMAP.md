@@ -298,8 +298,8 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 
    Built and pre-registered: **a slope far below the threshold** (`--granule-slope-tail 4`,
    `subthreshold_slope_with_data.json`). It is a third form, and it changes no spike. A plain cell learns from a
-   smooth threshold one fine spike wide, so a silent cell learns only where it almost fires, and nothing holds its
-   charge at the bytes where it is silent. With the tail its slope is one above zero charge and falls with the
+   smooth threshold one spike wide (at full size a fine spike, a sixteenth of a threshold), so a silent cell learns
+   only where it almost fires, and nothing holds its charge at the bytes where it is silent. With the tail its slope is one above zero charge and falls with the
    square of the distance below it, to a quarter at four whole thresholds, as plasticity in a neuron depends on
    how far the membrane stands from its threshold and does not wait for a spike. A cell eight thresholds below
    zero then still learns at a ninth of the full slope. In its local form the slope below zero teaches only the
