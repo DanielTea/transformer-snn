@@ -240,7 +240,11 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    resting charge cannot hold that share, since the charge that its synapses bring is below zero at most bytes. Two
    forms are open: a set point that scales a cell's synapses to hold its share of bytes, and a cell with a soft
    threshold that fires a few fine spikes below it, as a pool of neurons with scattered thresholds does, so that a
-   cell near its threshold passes a share as a closed unit of the Transformer does. Neither is built.
+   cell near its threshold passes a share as a closed unit of the Transformer does. Neither is built. The charge
+   count on every stack of the census (its amendment) narrows the second form: at the best rates only 1% to 3.5%
+   of cells and bytes lie within one threshold below firing at full size, and 63% to 86% lie more than eight
+   thresholds below zero, so a threshold soft over one threshold would reach almost nothing. A soft threshold has to
+   be as wide as the charge's spread, or the set point has to hold the share.
 8. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
    in the dentate gyrus, to take up what the old ones cannot.
 9. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,
