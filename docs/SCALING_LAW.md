@@ -180,8 +180,9 @@ its record asked. Against the plain stack at the old budget, the design it would
 whole and on new contexts, for 1.63 times the pulses and about 1.4 times the training time. More pulses alone
 hurt: the plain stack puts them into the same eleven levels and its membranes saturate (3.0% of the cells'
 entries at their bound against 0.8%, 2.9% of the reads' against 0.3%), where the loop spreads them over eighteen
-passes (1.4% and 1.6%). The loop has earned a run of 90,000 updates beside the pair. Not yet separated: whether
-the loop needs the raised budget at full size, and whether the pool that lifts the ceiling adds to it.
+passes (1.4% and 1.6%). The loop has earned a run of 90,000 updates beside the pair, which is pre-registered
+(`full_size_loop_run.json`) and queued for the night of 2026-11-23. Not yet separated: whether the loop needs
+the raised budget at full size, and whether the pool that lifts the ceiling adds to it.
 
 ## The cell's shape holds with data
 
@@ -310,3 +311,4 @@ rose, and none has let a silent cell pass anything.
 | `skip_fibres_with_data.json` | Skip fibres (`--stack-skips`): a level's read and cells also hear the stream of earlier levels through gains of their own, at 6,000 and 24,000 updates on two seeds; on the looped bed with two seeds on the server and a third on the laptop (pre-registered) |
 | `output_step_with_data.json` | Output spikes of 1/16 bit in training, at the old budget and at a budget cut by the saving, a screen on the laptop (pre-registered) |
 | `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 since 20:20 UTC |
+| `full_size_loop_run.json` | The looped stack at full size and full length: the pair's stack arm with levels 2 to 8 run twice and the pulse budget scaled with the passes, 90,000 updates, read against the pair's plain stack and its Transformer; queued for the night of 2026-11-23 behind the pair's Transformer (pre-registered) |

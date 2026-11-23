@@ -253,7 +253,10 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    contexts) and 0.010 ahead of the plain stack at the old budget (0.010 on new contexts), the first part at equal
    parameters that adds knowledge at full size. It spends 1.63 times the pulses and 1.4 times the training time.
    The raised budget alone makes the plain stack 0.009 worse, because its membranes saturate. The loop has earned
-   a run of 90,000 updates beside the pair. Open before it: whether the loop needs the raised budget at full size,
+   a run of 90,000 updates beside the pair, and that run is pre-registered (`full_size_loop_run.json`): the
+   pair's stack arm with the loop and its budget, queued for the night of 2026-11-23 and read against the pair's
+   plain stack and its Transformer. It holds if the looped stack is at least 0.005 better than the plain one on
+   test and validation. Still open, and piloted beside it: whether the loop needs the raised budget at full size,
    and whether the pool that lifts the ceiling adds to it.
 6. **Skip fibres** (`skip_fibres_with_data.json`, pre-registered): every part of the stack hears one stream, the
    running sum of all that came before, fired again as whole counts after every read and cell layer.
@@ -265,7 +268,7 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    sixteenths, start at zero, where the stack trains bit for bit as before, and add 0.2% to 0.3% parameters; the
    charge stays exact. The screen runs the plain test bed with one set of fibres for a level's read and cells, and
    with fibres of their own for the read's probes, tags and payloads, on two seeds; and the looped bed with gains
-   that every pass has for itself, on the laptop's seed. The same idea helps a Transformer, which any comparison
+   that every pass has for itself, on two seeds on the server and a third on the laptop. The same idea helps a Transformer, which any comparison
    that uses it will say.
 7. **A learned normalization pool**: divisive normalization with learned weights per channel, as cortical
    normalization weighs its pool, in place of one global sum. The pool in place of LayerNorm was v15's second
