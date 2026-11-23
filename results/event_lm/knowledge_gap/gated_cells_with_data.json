@@ -211,5 +211,591 @@
    "gap_by_piece_laptop_self-24k-vs-base-24k.json"
   ],
   "verdict": "Neither cell form earns seeds. The gated cell trails the base by 0.067 at 6,000 updates and 0.108 at 24,000; the self-gated cell is level at both lengths. A gate does not change the stack's slope at its best rate in either form tested here."
+ },
+ "diagnosis": {
+  "recorded_utc": "2026-11-23T11:55:50Z",
+  "kind": "Added after the verdict and not pre-registered. It explains the result and changes no verdict.",
+  "measure": "experiments/gate_state.py --enwik8 data/enwik8 --split validation --bytes 65536 --streams 16 --lead 1024 --piece 512: the first 65,536 validation bytes as 16 streams, the 1,024 lead bytes of every stream left out; averaged weights, as scored",
+  "finding": "The gated cell's gate dendrites fire, and the budget counts their steps: 36,991 of 111,521 pulses a byte at 6,000 updates (33%) and 23,454 of 112,207 at 24,000 (21%). The price takes them from the rest of the stack: the reads' probes, tags and payloads fire 14,402 and 22,479 pulses a byte where the base's fire 30,573 and 32,164, and the output 29,643 and 35,916 against 38,711 and 43,281. The self-gated cell's steps stay inside the cell and its pulses are spread as the base's are. In both forms most open gates let in more than three quarters of the value: 63% to 78% and 60% to 83% of the gated cell's open gates at 6,000 and 24,000 updates, 60% to 77% and 52% to 81% of the self-gated cell's, and at most 5% let in a quarter or less. The proportional gate that kept pace in the design check spreads its open gates over all four quarters (proportional_gate_check.json, amendment).",
+  "runs": {
+   "rd-base-6k-s3": {
+    "weights": "model.pt.averaged",
+    "pulses_a_byte": 111330,
+    "pulses_by_population": {
+     "output": 38711,
+     "reads": 30573,
+     "cells": 12878,
+     "stream after cells": 9700,
+     "racing cells": 6144,
+     "read pulses": 5663,
+     "stream after reads": 5226,
+     "input": 2390,
+     "pools": 45
+    },
+    "cells_by_level": {
+     "level 0": {
+      "firing": 0.3048,
+      "mean_count": 1.5683,
+      "spikes_a_byte": 1603
+     },
+     "level 1": {
+      "firing": 0.2783,
+      "mean_count": 1.4956,
+      "spikes_a_byte": 1529
+     },
+     "level 2": {
+      "firing": 0.2753,
+      "mean_count": 1.5852,
+      "spikes_a_byte": 1620
+     },
+     "level 3": {
+      "firing": 0.2795,
+      "mean_count": 1.8429,
+      "spikes_a_byte": 1883
+     },
+     "level 4": {
+      "firing": 0.319,
+      "mean_count": 2.4597,
+      "spikes_a_byte": 2514
+     },
+     "level 5": {
+      "firing": 0.3715,
+      "mean_count": 3.6494,
+      "spikes_a_byte": 3730
+     }
+    }
+   },
+   "rd-base-24k-s3": {
+    "weights": "model.pt.averaged",
+    "pulses_a_byte": 112659,
+    "pulses_by_population": {
+     "output": 43281,
+     "reads": 32164,
+     "stream after cells": 11211,
+     "cells": 8312,
+     "racing cells": 6144,
+     "stream after reads": 5949,
+     "read pulses": 4164,
+     "input": 1391,
+     "pools": 42
+    },
+    "cells_by_level": {
+     "level 0": {
+      "firing": 0.1801,
+      "mean_count": 0.8004,
+      "spikes_a_byte": 818
+     },
+     "level 1": {
+      "firing": 0.1307,
+      "mean_count": 0.6574,
+      "spikes_a_byte": 672
+     },
+     "level 2": {
+      "firing": 0.1295,
+      "mean_count": 0.7347,
+      "spikes_a_byte": 751
+     },
+     "level 3": {
+      "firing": 0.1486,
+      "mean_count": 1.0056,
+      "spikes_a_byte": 1028
+     },
+     "level 4": {
+      "firing": 0.1918,
+      "mean_count": 1.6761,
+      "spikes_a_byte": 1713
+     },
+     "level 5": {
+      "firing": 0.2603,
+      "mean_count": 3.2594,
+      "spikes_a_byte": 3331
+     }
+    }
+   },
+   "gate-6k-s3": {
+    "weights": "model.pt.averaged",
+    "pulses_a_byte": 111521,
+    "pulses_by_population": {
+     "gate dendrites": 36991,
+     "output": 29643,
+     "reads": 14402,
+     "cells": 9717,
+     "stream after cells": 7777,
+     "racing cells": 6144,
+     "stream after reads": 2359,
+     "input": 2322,
+     "read pulses": 2131,
+     "pools": 35
+    },
+    "gate_steps_a_byte": 36991,
+    "cells_by_level": {
+     "level 0": {
+      "firing": 0.3822,
+      "mean_count": 1.701,
+      "spikes_a_byte": 1158,
+      "gate_open": 0.4215,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7492,
+      "open_gates_by_quarter_share": [
+       0.0314,
+       0.0939,
+       0.2441,
+       0.6307
+      ],
+      "gate_steps_a_byte": 5572,
+      "body_at_most": 0.0,
+      "mean_quanta": 6.0137
+     },
+     "level 1": {
+      "firing": 0.3912,
+      "mean_count": 1.7685,
+      "spikes_a_byte": 1204,
+      "gate_open": 0.4302,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7534,
+      "open_gates_by_quarter_share": [
+       0.0311,
+       0.0919,
+       0.2329,
+       0.6441
+      ],
+      "gate_steps_a_byte": 5831,
+      "body_at_most": 0.0,
+      "mean_quanta": 6.1106
+     },
+     "level 2": {
+      "firing": 0.398,
+      "mean_count": 1.9445,
+      "spikes_a_byte": 1324,
+      "gate_open": 0.4344,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7589,
+      "open_gates_by_quarter_share": [
+       0.0298,
+       0.0883,
+       0.2223,
+       0.6596
+      ],
+      "gate_steps_a_byte": 6015,
+      "body_at_most": 0.0,
+      "mean_quanta": 6.5269
+     },
+     "level 3": {
+      "firing": 0.3869,
+      "mean_count": 2.1682,
+      "spikes_a_byte": 1477,
+      "gate_open": 0.4171,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.77,
+      "open_gates_by_quarter_share": [
+       0.0271,
+       0.08,
+       0.2024,
+       0.6905
+      ],
+      "gate_steps_a_byte": 5992,
+      "body_at_most": 0.0,
+      "mean_quanta": 7.0327
+     },
+     "level 4": {
+      "firing": 0.4145,
+      "mean_count": 2.7975,
+      "spikes_a_byte": 1905,
+      "gate_open": 0.4413,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7838,
+      "open_gates_by_quarter_share": [
+       0.0232,
+       0.069,
+       0.1773,
+       0.7305
+      ],
+      "gate_steps_a_byte": 6581,
+      "body_at_most": 0.0,
+      "mean_quanta": 7.6454
+     },
+     "level 5": {
+      "firing": 0.4418,
+      "mean_count": 3.8892,
+      "spikes_a_byte": 2649,
+      "gate_open": 0.4642,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7971,
+      "open_gates_by_quarter_share": [
+       0.0189,
+       0.0566,
+       0.1477,
+       0.7768
+      ],
+      "gate_steps_a_byte": 7000,
+      "body_at_most": 0.0,
+      "mean_quanta": 8.4913
+     }
+    }
+   },
+   "gate-24k-s3": {
+    "weights": "model.pt.averaged",
+    "pulses_a_byte": 112207,
+    "pulses_by_population": {
+     "output": 35916,
+     "gate dendrites": 23454,
+     "reads": 22479,
+     "stream after cells": 9036,
+     "cells": 6737,
+     "racing cells": 6144,
+     "stream after reads": 4328,
+     "read pulses": 2720,
+     "input": 1355,
+     "pools": 37
+    },
+    "gate_steps_a_byte": 23454,
+    "cells_by_level": {
+     "level 0": {
+      "firing": 0.2769,
+      "mean_count": 1.0187,
+      "spikes_a_byte": 694,
+      "gate_open": 0.3148,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7372,
+      "open_gates_by_quarter_share": [
+       0.0367,
+       0.106,
+       0.2572,
+       0.6002
+      ],
+      "gate_steps_a_byte": 4077,
+      "body_at_most": 0.0,
+      "mean_quanta": 5.2037
+     },
+     "level 1": {
+      "firing": 0.2414,
+      "mean_count": 1.0468,
+      "spikes_a_byte": 713,
+      "gate_open": 0.2676,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7524,
+      "open_gates_by_quarter_share": [
+       0.0333,
+       0.0962,
+       0.2299,
+       0.6406
+      ],
+      "gate_steps_a_byte": 3722,
+      "body_at_most": 0.0,
+      "mean_quanta": 5.9789
+     },
+     "level 2": {
+      "firing": 0.2326,
+      "mean_count": 1.2262,
+      "spikes_a_byte": 835,
+      "gate_open": 0.2525,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7707,
+      "open_gates_by_quarter_share": [
+       0.0288,
+       0.0832,
+       0.1999,
+       0.6881
+      ],
+      "gate_steps_a_byte": 3781,
+      "body_at_most": 0.0,
+      "mean_quanta": 6.6462
+     },
+     "level 3": {
+      "firing": 0.1956,
+      "mean_count": 1.2569,
+      "spikes_a_byte": 856,
+      "gate_open": 0.209,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7775,
+      "open_gates_by_quarter_share": [
+       0.0266,
+       0.0769,
+       0.1838,
+       0.7127
+      ],
+      "gate_steps_a_byte": 3107,
+      "body_at_most": 0.0,
+      "mean_quanta": 7.5665
+     },
+     "level 4": {
+      "firing": 0.2391,
+      "mean_count": 1.9034,
+      "spikes_a_byte": 1296,
+      "gate_open": 0.2516,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7946,
+      "open_gates_by_quarter_share": [
+       0.021,
+       0.0611,
+       0.1511,
+       0.7668
+      ],
+      "gate_steps_a_byte": 3838,
+      "body_at_most": 0.0,
+      "mean_quanta": 8.3779
+     },
+     "level 5": {
+      "firing": 0.3148,
+      "mean_count": 3.4407,
+      "spikes_a_byte": 2343,
+      "gate_open": 0.3266,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.8104,
+      "open_gates_by_quarter_share": [
+       0.0146,
+       0.0432,
+       0.1104,
+       0.8317
+      ],
+      "gate_steps_a_byte": 4931,
+      "body_at_most": 0.0,
+      "mean_quanta": 9.4068
+     }
+    }
+   },
+   "self-6k-s3": {
+    "weights": "model.pt.averaged",
+    "pulses_a_byte": 111180,
+    "pulses_by_population": {
+     "output": 37923,
+     "reads": 31778,
+     "cells": 11890,
+     "stream after cells": 9579,
+     "racing cells": 6144,
+     "read pulses": 5974,
+     "stream after reads": 5449,
+     "input": 2398,
+     "pools": 46,
+     "gate dendrites": 0
+    },
+    "gate_steps_a_byte": 37327,
+    "cells_by_level": {
+     "level 0": {
+      "firing": 0.2854,
+      "mean_count": 1.4414,
+      "spikes_a_byte": 1473,
+      "gate_open": 0.3107,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.737,
+      "open_gates_by_quarter_share": [
+       0.0382,
+       0.1082,
+       0.2491,
+       0.6046
+      ],
+      "gate_steps_a_byte": 5984,
+      "body_at_most": 0.0,
+      "mean_quanta": 6.2697
+     },
+     "level 1": {
+      "firing": 0.2737,
+      "mean_count": 1.4538,
+      "spikes_a_byte": 1486,
+      "gate_open": 0.2964,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7431,
+      "open_gates_by_quarter_share": [
+       0.0358,
+       0.1029,
+       0.2409,
+       0.6204
+      ],
+      "gate_steps_a_byte": 5793,
+      "body_at_most": 0.0,
+      "mean_quanta": 6.7362
+     },
+     "level 2": {
+      "firing": 0.2446,
+      "mean_count": 1.3929,
+      "spikes_a_byte": 1423,
+      "gate_open": 0.2639,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7482,
+      "open_gates_by_quarter_share": [
+       0.0342,
+       0.0986,
+       0.2307,
+       0.6365
+      ],
+      "gate_steps_a_byte": 5181,
+      "body_at_most": 0.0,
+      "mean_quanta": 7.4406
+     },
+     "level 3": {
+      "firing": 0.2809,
+      "mean_count": 1.8381,
+      "spikes_a_byte": 1879,
+      "gate_open": 0.2991,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7662,
+      "open_gates_by_quarter_share": [
+       0.0282,
+       0.0823,
+       0.2003,
+       0.6891
+      ],
+      "gate_steps_a_byte": 6148,
+      "body_at_most": 0.0,
+      "mean_quanta": 8.1451
+     },
+     "level 4": {
+      "firing": 0.3127,
+      "mean_count": 2.3237,
+      "spikes_a_byte": 2375,
+      "gate_open": 0.3299,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7774,
+      "open_gates_by_quarter_share": [
+       0.0241,
+       0.0707,
+       0.176,
+       0.7292
+      ],
+      "gate_steps_a_byte": 6818,
+      "body_at_most": 0.0,
+      "mean_quanta": 8.9274
+     },
+     "level 5": {
+      "firing": 0.3536,
+      "mean_count": 3.1841,
+      "spikes_a_byte": 3254,
+      "gate_open": 0.3696,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7856,
+      "open_gates_by_quarter_share": [
+       0.0199,
+       0.0586,
+       0.1482,
+       0.7733
+      ],
+      "gate_steps_a_byte": 7403,
+      "body_at_most": 0.0,
+      "mean_quanta": 10.0162
+     }
+    }
+   },
+   "self-24k-s3": {
+    "weights": "model.pt.averaged",
+    "pulses_a_byte": 111459,
+    "pulses_by_population": {
+     "output": 41335,
+     "reads": 33348,
+     "stream after cells": 11100,
+     "cells": 7432,
+     "stream after reads": 6248,
+     "racing cells": 6144,
+     "read pulses": 4407,
+     "input": 1404,
+     "pools": 41,
+     "gate dendrites": 0
+    },
+    "gate_steps_a_byte": 21041,
+    "cells_by_level": {
+     "level 0": {
+      "firing": 0.1578,
+      "mean_count": 0.6624,
+      "spikes_a_byte": 677,
+      "gate_open": 0.1827,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7007,
+      "open_gates_by_quarter_share": [
+       0.0516,
+       0.1411,
+       0.2918,
+       0.5156
+      ],
+      "gate_steps_a_byte": 3025,
+      "body_at_most": 0.0,
+      "mean_quanta": 5.3828
+     },
+     "level 1": {
+      "firing": 0.1284,
+      "mean_count": 0.6185,
+      "spikes_a_byte": 632,
+      "gate_open": 0.1476,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.718,
+      "open_gates_by_quarter_share": [
+       0.046,
+       0.1273,
+       0.2698,
+       0.5569
+      ],
+      "gate_steps_a_byte": 2666,
+      "body_at_most": 0.0,
+      "mean_quanta": 6.244
+     },
+     "level 2": {
+      "firing": 0.124,
+      "mean_count": 0.6891,
+      "spikes_a_byte": 704,
+      "gate_open": 0.1401,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7361,
+      "open_gates_by_quarter_share": [
+       0.0397,
+       0.1112,
+       0.2451,
+       0.604
+      ],
+      "gate_steps_a_byte": 2681,
+      "body_at_most": 0.0,
+      "mean_quanta": 6.9986
+     },
+     "level 3": {
+      "firing": 0.1457,
+      "mean_count": 0.9701,
+      "spikes_a_byte": 991,
+      "gate_open": 0.1608,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7582,
+      "open_gates_by_quarter_share": [
+       0.0322,
+       0.0915,
+       0.2107,
+       0.6657
+      ],
+      "gate_steps_a_byte": 3279,
+      "body_at_most": 0.0,
+      "mean_quanta": 7.8276
+     },
+     "level 4": {
+      "firing": 0.1876,
+      "mean_count": 1.5531,
+      "spikes_a_byte": 1587,
+      "gate_open": 0.2026,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7781,
+      "open_gates_by_quarter_share": [
+       0.0248,
+       0.0718,
+       0.1725,
+       0.7309
+      ],
+      "gate_steps_a_byte": 4238,
+      "body_at_most": 0.0,
+      "mean_quanta": 8.804
+     },
+     "level 5": {
+      "firing": 0.2349,
+      "mean_count": 2.779,
+      "spikes_a_byte": 2840,
+      "gate_open": 0.2479,
+      "gate_wide_open": 0.0,
+      "share_when_open": 0.7968,
+      "open_gates_by_quarter_share": [
+       0.017,
+       0.0499,
+       0.1238,
+       0.8093
+      ],
+      "gate_steps_a_byte": 5153,
+      "body_at_most": 0.0,
+      "mean_quanta": 10.0526
+     }
+    }
+   }
+  }
  }
 }

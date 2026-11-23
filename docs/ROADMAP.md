@@ -173,11 +173,11 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    - a gate dendrite as a shunt, where k gate spikes let in the share k / (k + 4) of the value dendrite's charge:
      0.118 behind at full size, with its gate dendrites at the membrane's bound a fifth of the time
      (`full_size_unit_screen.json`). On the laptop's seed of the test bed it is 0.067 behind at 6,000 updates and
-     0.108 behind at 24,000 (`gated_cells_with_data.json`). A fifth of its pulses were the gate's own steps
-     (23,000 of 104,000 a byte): the reads lost 30% of their spikes and the output 16%. A gate whose steps stay
-     inside the cell (`--granule-inner-gate`) spends pulses as the plain stack does, but in a check of 2,250
-     updates it is still 0.066 behind, so that energy tax is the smaller part of the loss
-     (`proportional_gate_check.json`);
+     0.108 behind at 24,000 (`gated_cells_with_data.json`). Its gates' own steps were a third of its pulses at
+     6,000 updates and a fifth at 24,000 (23,454 of 112,207 a byte, `experiments/gate_state.py`), where the reads
+     lost 30% of their spikes and the output 17%. A gate whose steps stay inside the cell (`--granule-inner-gate`)
+     spends pulses as the plain stack does, but in a check of 2,250 updates it is still 0.066 behind, so that
+     energy tax is the smaller part of the loss (`proportional_gate_check.json`);
    - the same under the pool that lifts the ceiling, so that no gate reaches a bound
      (`full_size_lifted_gate.json` and `lifted_gates_with_data.json`, queued);
    - self-gated cells: level on the test bed at 6,000 and at 24,000 updates (0.0014 and 0.0016 behind), with no
@@ -192,10 +192,16 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    the whole. Its steps stay inside the cell, as a dendritic spike sends nothing down the axon. In a check of 2,250
    updates (`proportional_gate_check.json`) it is the first gated cell that keeps pace with plain cells: under the
    lifting pool it leads by 0.088 at 750 updates and is level at 2,250, where the shunting gates trail by 0.063 to
-   0.080. Its gates stay graded, letting in about half of the value when open. The gates that lost acted as
-   switches: a narrow ramp (4 thresholds), or any ramp under the bounded pool, saturates into a switch and runs
-   away. The screen by slope is pre-registered, two seeds on the server's fan2 bed and one on the laptop
-   (`proportional_gates_with_data.json`). A set point, a resting level that keeps each gate open at about half of
+   0.080. Its gates stay graded. Sorted by the share of the value that an open gate lets in (up to a quarter, a
+   half, three quarters, or more), they spread 40 / 27 / 16 / 17% at the first level and 28 / 23 / 17 / 32% at the
+   last (`experiments/gate_state.py`). Every gate that lost has half to all of its open states in the last quarter
+   (48% to 100%, the shunting gates 66% to 79%): it works as a switch. A narrow ramp (4 thresholds), or any ramp
+   under the bounded pool, saturates into a switch and runs away. The inner steps are not pulses and the budget
+   counts none, but they are taken: 47,915 a byte beside the stack's 112,663 pulses, a cost that every report of
+   this gate states. The screen by slope is pre-registered, two seeds on the server's fan2 bed and one on the
+   laptop (`proportional_gates_with_data.json`), and it reports whether the gates stay graded with data. A pass
+   releases a full-size run under the lifting pool against the lifted plain stack
+   (`full_size_proportional_gate.json`). A set point, a resting level that keeps each gate open at about half of
    the bytes as cortical neurons keep their excitability in range, waits for that verdict.
 
    Two controls in floats would say whether the unit also explains the gap late in training, since the walk priced

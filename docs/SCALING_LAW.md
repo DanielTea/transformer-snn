@@ -74,9 +74,14 @@ The largest step that v15's walk from the Transformer to the stack priced was th
 of gated ones cost 0.025, against 0.001 for whole spikes (`docs/STREAM_FORM.md`). The stack's cells are plain units.
 Gated cells were only judged at 6,000 updates. A screen on the laptop measured them by their slope
 (`gated_cells_with_data.json`): the gated cell trails the plain bed by 0.067 at 6,000 updates and by 0.108 at 24,000,
-and the self-gated cell is level at both lengths. A fifth of the gated stack's pulses were its gates' own steps, but a
-gate whose steps stay inside the cell still trails, so most of the loss is the gate's form and not that energy
-(`proportional_gate_check.json`). A second screen measures the other half of a smooth unit, in spikes: noisy thresholds
+and the self-gated cell is level at both lengths. A third of the gated stack's pulses at 6,000 updates and a fifth at
+24,000 were its gates' own steps (`experiments/gate_state.py`), but a gate whose steps stay inside the cell still
+trails, so most of the loss is the gate's form and not that energy (`proportional_gate_check.json`). The gates that
+lose work as switches: half to all of their open states let in more than three quarters of the value. One gate keeps
+pace with plain cells in that check, a gate that opens in proportion to its charge under the pool that lifts the
+ceiling, and its open states spread over the whole range. Its screen by slope is pre-registered
+(`proportional_gates_with_data.json`), and a pass releases a full-size run (`full_size_proportional_gate.json`). A
+second screen measures the other half of a smooth unit, in spikes: noisy thresholds
 (`noisy_thresholds_with_data.json`). A real neuron's membrane is noisy, so near its threshold it fires by chance, and
 its average rate is a smooth curve of its input. Under logistic noise of half a threshold, a cell's average count is
 within 0.025 spikes of 0.5 · softplus(2 · charge / threshold). The cell learns from that curve's slope, where a plain
@@ -176,6 +181,8 @@ the runs, the test bed has it too in every study recorded from now on.
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `gated_cells_with_data.json` | Gated and self-gated cells at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `proportional_gate_check.json` | A design check of 2,250 updates: gates whose steps stay inside the cell, and proportional gates, under the bounded and the lifting pool |
+| `proportional_gates_with_data.json` | The wide proportional gate under the lifting pool at 6,000 and 24,000 updates, two seeds on the server and one on the laptop (pre-registered) |
+| `full_size_proportional_gate.json` | The same gate at full size against the lifted plain stack, released only by a pass of the screen (pre-registered) |
 | `noisy_thresholds_with_data.json` | Noisy thresholds at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `full_size_unit_screen.json` | Its third arm, self-gated cells at full size |
 | `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 next |
