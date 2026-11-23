@@ -42,8 +42,8 @@ def plot_nab(evaluation, scores, pilot, arms, output):
         ax.plot(days, np.clip(score, None, np.quantile(score, 0.999)), color=color, linewidth=0.8)
         ax.axhline(row["threshold"], color=color, linewidth=0.8, linestyle=(0, (4, 3)))
         ax.set_ylabel("Score", color=MUTED)
-        ax.text(0.005, 0.04, f"{label} · AUC {row['auc']:.3f} · caught {row['caught']} of {row['anomalies']}",
-                transform=ax.transAxes, color=color, size=9.5, va="bottom",
+        ax.text(0.005, 0.97, f"{label} · AUC {row['auc']:.3f} · caught {row['caught']} of {row['anomalies']}",
+                transform=ax.transAxes, color=color, size=9.5, va="top",
                 bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 2})
     axes[-1].set_xlabel("Days", color=MUTED)
     fig.tight_layout()
