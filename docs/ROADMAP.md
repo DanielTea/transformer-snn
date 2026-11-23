@@ -16,18 +16,23 @@ claims are made, and what to try next. Every number links to a record in
 
 | Scale | Stack | Transformer | Gap (bits per byte) |
 |---|---|---|---|
-| Full size, best so far (l2048-know-st, 36.3M parameters, 368.6M training bytes), enwik8 test | 1.1170 | 1.1067 (34.75M) | **0.010 behind** |
+| Full size, best so far (v18: l2048-word-st, 36.3M parameters), enwik8 test | 1.1162 | 1.1067 (34.75M) | **0.0095 behind** |
+| The same stack against the Transformer with output synapses that learn while it reads | 1.1162 | 1.1032 | 0.013 behind |
+| Full size, v17 (l2048-know-st, 36.3M), enwik8 test | 1.1170 | 1.1067 | 0.010 behind |
 | Full size, v16 (34.8M), enwik8 test | 1.1199 | 1.1067 | 0.013 behind |
 | Test bed (5.2M), 24.6M training bytes, 2M validation bytes as long streams | 1.7724 | 1.8190 | 0.047 ahead |
 | Test bed (5.2M), 98.3M training bytes, the same bytes | 1.5468 | 1.4927 | **0.054 behind** |
+| Test bed, 98.3M training bytes, each model at its best learning rate, mean of two seeds | 1.4895 | 1.4412 | 0.048 behind |
 
 The full-size stacks read up to 8,192 cells back and have fast synapses that
-learn while they read; the best one has 128 knowledge cells a head and trained
-on streams. The full-size Transformer reads windows of 2,048 bytes. The
-test-bed stack has delayed fibres and trained on streams. Sources:
-`results/event_lm/long_streams/leaderboard.json`,
-`results/event_lm/knowledge_gap/full_size.json` and
-`results/event_lm/knowledge_gap/gap_with_data.json`; figure
+learn while they read; the best one has 128 knowledge cells and a word head in
+every read and trained on streams. The full-size Transformer reads windows of
+2,048 bytes. The test-bed stack has delayed fibres and trained on streams.
+Sources: `results/event_lm/long_streams/leaderboard.json`,
+`results/event_lm/knowledge_gap/full_size.json`,
+`results/event_lm/knowledge_gap/full_size_word_heads.json`,
+`results/event_lm/knowledge_gap/gap_with_data.json` and
+`results/event_lm/knowledge_gap/learning_rate_with_data.json`; figure
 `results/figures/event_lm_best_model.png`.
 
 ## The diagnosis: memory is solved, knowledge is not
@@ -65,6 +70,19 @@ None changed the slope. What closes the gap must keep the stack learning
 knowledge late in training: how its synapses learn through spikes, not one
 more part beside them.
 
+**What v18 and the day after added.** Three findings narrow the search to the
+cell itself.
+
+- The cell's shape is the first change whose gain on knowledge did not fade.
+  The full size's shape is 0.020 better on new contexts after 24,000 updates,
+  at each of four seeds (`cell_shape_with_data.json`).
+- The Transformer's code is no sparser than the stack's. 40 to 57% of its
+  units are open at a byte, against 35 to 49% of the stack's cells firing
+  (`unit_density.json`, a diagnostic). Sparse codes are not the lever.
+- The largest priced difference between the two models is still the unit.
+  The Transformer's multiplies a gate by a value; the stack's cells add and
+  threshold (`docs/STREAM_FORM.md`, 0.025 at 9,000 updates).
+
 ## The target: a scaling law the other way around
 
 A stack that beats the Transformer must learn more from each added byte, not less: its gap must shrink as both see
@@ -82,8 +100,9 @@ training on streams and knowledge cells all helped most early and faded with dat
   updates are smaller than a tick. Finer grids and quantal release, synapses that round at random while training so
   that each step moves their expected charge (`--weight-dither`), are tested in `weight_precision_with_data.json`.
 
-The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4 on one seed,
-`learning_rate_with_data.json`), so every comparison now takes each model at its best rate.
+Both models gain from a higher learning rate, and about alike: over two seeds the stack gains 0.063 at 1.2e-3 and the
+Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The flattening is not an effect of the rate
+(`learning_rate_with_data.json`), and every comparison now takes each model at its best rate.
 
 ## Rules for claims
 
@@ -127,27 +146,53 @@ The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4
 | Branching dendrites, apical bursts, racing experts | Fail | Splitting or gating cells at equal parameters does not add knowledge | `knowledge_gap/preregistered.json` |
 | Looped levels | A tied pass is worth about a third of a level | Depth needs its own synapses | `results/event_lm/stack_loop/preregistered.json` |
 | Echo learning, consolidating fast synapses, doubled pulse budget, squared cells | Fail | See `docs/V16_HANDOFF.md`, "What not to try again" | |
+| The full size's cell shape on the test bed (every channel's present byte and one delayed copy) | **Pass at four seeds**: 0.015 ahead at 24,000 updates, 0.020 on new contexts | The first gain on knowledge that did not fade with data, and it is in the cell | `knowledge_gap/cell_shape_with_data.json` |
+| Word heads at full size | Fail by their mark: 0.0009 ahead where 0.003 was asked; the best spiking score so far | Memory again, not knowledge | `knowledge_gap/full_size_word_heads.json` |
+| Gated cells at full size (a gate dendrite as a shunt) | Fail: 0.118 behind | Their gate dendrites sit at the membrane's bound a fifth of the time | `knowledge_gap/full_size_unit_screen.json` |
+| Noisy thresholds at full size | Level: 0.004 better, none of it on new contexts | A smooth slope alone is not the unit's lead | `knowledge_gap/full_size_unit_screen.json` |
+| The pool that lifts the ceiling, at full size | Removes saturation at the same energy; 0.007 ahead of the plain best where 0.010 was asked | The membranes cap the stack's learning rate; lifting frees the rate but adds no knowledge | `knowledge_gap/full_size_lifted_ceiling_pilot.json` |
+| A higher learning rate as the cause of the flattening | Ruled out over two seeds | Both models gain alike from their best rates | `knowledge_gap/learning_rate_with_data.json` |
+| A sparser code | Not built | The Transformer's units are as dense as the stack's cells | `knowledge_gap/unit_density.json` |
 
 ## Open bets, in order
 
-1. **Each model at its best learning rate at full size** (`full_size_rate_pilot.json`, running, then
-   `full_size_best_rate_pair.json`): on the test bed the stack gains 0.013 more than the Transformer from its best rate,
-   most of it on new contexts; v17's full-size gap is 0.010. The pilot did not repeat that: after 24,000 updates the
-   stack is best at 6e-4 (1.3199), the Transformer at 1.2e-3 (1.2762), and the gap at the best rates is 0.044 against
-   0.036 at 3e-4. Both gain alike on new contexts. Its membranes saturate at the higher rate:
-   at 1.2e-3, 2.7% of the reads' entries and 2.0% of the cells' sit at their bound, up to 11.8% at the top level,
-   where a neuron learns nothing through its charge (`experiments/membrane_saturation.py`). v15's pool that lifts the
-   ceiling removes that bound and was never used in a release. A full-size pilot of it at 6e-4 and 1.2e-3 decides
-   whether the pair's stack trains lifted (`full_size_lifted_ceiling_pilot.json`).
-2. **The unit, in spikes** (`gated_cells_with_data.json`, `noisy_thresholds_with_data.json`, laptop screens running).
-   v15's priced walk put plain units in place of gated ones as the largest step from the Transformer to the stack
-   (0.025, against 0.001 for whole spikes). Two spike-native halves of a gated unit are screened by their slope at the
-   best rate:
-   - dendritic gating: a gate dendrite lets in a share of what a value dendrite collects;
-   - noisy thresholds: membrane noise makes a cell smooth on average, and it learns from that true slope. The noise
-     falls with the learning rate, so scoring stays exact.
-   At full size (`full_size_unit_screen.json`) gated cells lost by 0.118 and noisy thresholds were level (0.004
-   better, none of it on new contexts); the self-gated arm and the test-bed screens by slope still run.
+1. **The full-size pair, each model at its best learning rate** (`full_size_best_rate_pair.json`, running): the plain
+   stack at 6e-4 and the Transformer at 1.2e-3, 90,000 updates each. The pilot behind it
+   (`full_size_rate_pilot.json`): after 24,000 updates the stack is best at 6e-4 (1.3199) and the Transformer at
+   1.2e-3 (1.2762). The gap at the best rates is 0.044 against 0.036 at 3e-4, and both gain alike on new contexts.
+   The stack's membranes saturate at the higher rate: at 1.2e-3, 2.7% of the reads' entries and 2.0% of the cells'
+   sit at their bound, up to 11.8% at the top level, where a neuron learns nothing through its charge
+   (`experiments/membrane_saturation.py`). The pool that lifts the ceiling removes that bound at the same energy and
+   is worth 0.035 at 1.2e-3. Its best arm was 0.007 ahead of the plain best where 0.010 was asked, so the pair's
+   stack trains plain (`full_size_lifted_ceiling_pilot.json`).
+2. **The unit, in spikes: a cell that multiplies.** The Transformer's unit multiplies a gate by a value; the stack's
+   cells add and threshold. v15's priced walk put plain units in place of gated ones as the largest step from the
+   Transformer to the stack (0.025, against 0.001 for whole spikes). Of that, a hard gate recovers 0.013 and a
+   smooth plain unit 0.016 (`docs/STREAM_FORM.md`). The Transformer's units are as dense as the stack's cells
+   (`unit_density.json`), so the difference is the multiplying and not a sparser code. The spike forms so far:
+   - a gate dendrite as a shunt, where k gate spikes let in the share k / (k + 4) of the value dendrite's charge:
+     0.118 behind at full size, with its gate dendrites at the membrane's bound a fifth of the time
+     (`full_size_unit_screen.json`). On the laptop's seed of the test bed it is 0.067 behind at 6,000 updates and
+     0.108 behind at 24,000 (`gated_cells_with_data.json`; the self-gated arm of that screen still runs);
+   - the same under the pool that lifts the ceiling, so that no gate reaches a bound
+     (`full_size_lifted_gate.json` and `lifted_gates_with_data.json`, queued);
+   - self-gated cells: level on the test bed at 6,000 updates; the full-size arm is queued;
+   - noisy thresholds, where membrane noise makes a cell smooth on average and it learns from that true slope:
+     level at full size (0.004 better, none of it on new contexts); the test bed's screen by slope is queued
+     (`noisy_thresholds_with_data.json`).
+
+   Proposed next and not built: **a coincidence cell**. The cell fires once for every gate spike and value spike
+   that meet within the byte, so g gate spikes and v value spikes give v × g / T spikes, where T is the most spikes
+   a dendrite sends in a byte. The shunt's slope fades as its gate opens; this one's does not. v15's product let
+   every gate spike pass the value's charge once more, and its pulses ran to 645,000 a byte; this cell never fires
+   more than its quieter dendrite. With it comes a set point: each gate moves its resting level so that it is open
+   at about half of the bytes, where the Transformer's gates are (`unit_density.json`), as cortical neurons keep
+   their excitability in range. It is tested against the lifted gate once that verdict is in.
+
+   Two controls in floats would say whether the unit also explains the gap late in training, since the walk priced
+   it at 9,000 updates: a Transformer with plain units on the test bed at 6,000 and 24,000 updates (does it flatten
+   as the stack does?), and the stack in floats at full size at 24,000 updates (do spikes cost anything late, on a
+   charge grid 16 times finer than the test bed's?). They are diagnostics and never a path.
 3. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
    `randomness_at_best_rate.json`): does the charge grid limit late learning?
 4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
@@ -158,7 +203,8 @@ The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4
    equal energy against a plain stack given the same budget.
 6. **A learned normalization pool**: divisive normalization with learned weights per channel, as cortical
    normalization weighs its pool, in place of one global sum. The pool in place of LayerNorm was v15's second
-   largest step (0.012).
+   largest step (0.012), but that step was an effect of the learning rate: at 3e-4 the fine pool is ahead of
+   LayerNorm (`docs/STREAM_FORM.md`). It ranks below the unit.
 7. **Homeostatic synaptic scaling and intrinsic plasticity**: neurons keep their synapses and thresholds in the range
    where they still learn, as cortical neurons do.
 8. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
@@ -169,13 +215,13 @@ The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4
 11. **More data at full size**, once a design's slope is negative on the test bed.
 
 Myelinated fibres and the cerebellar sheet failed at 6,000 updates (`myelin_and_sheet.json`); the sheet is re-tested
-by slope under 9. Ruled out as causes of the flattening (`learning_rate_by_context.json`): the pulse budget, noisy
-late weights, and a code that grows denser with data.
+by slope under 9. Ruled out as causes of the flattening: the pulse budget, noisy late weights and a code that grows
+denser with data (`learning_rate_by_context.json`), and the learning rate (`learning_rate_with_data.json`).
 
 ## How to continue
 
-- The newest handoff (`docs/V16_HANDOFF.md`, and v17's when released) says
-  how to restore checkpoints, rescore and retrain.
+- The newest handoff (`docs/V18_HANDOFF.md`) says how to restore checkpoints,
+  rescore and retrain.
 - `experiments/train_event_lm.py` trains every arm; `experiments/eval_stream.py`
   scores streams, and `experiments/gap_by_piece.py` splits two scorings.
 - Pre-registrations and verdicts are in `results/event_lm/*/`. Read a study's

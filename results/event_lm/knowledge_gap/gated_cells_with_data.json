@@ -16,5 +16,108 @@
   "recorded_utc": "2026-11-22T21:08:54Z",
   "change": "The laptop's runs from rd-both-24k-s3 on run on a frozen copy of commit e5d3a1e (checkpoints/laptop-loop/code-e5d3a1e), so that edits in the worktree cannot change them. It is v17l with the --cell-noise option added, which these runs leave off and which then draws no random number: the same computation as v17l. rd-base-24k-s3 trained on the worktree at e3c52ef, whose training and scoring code equals v17l.",
   "seen_before_amendment": "rd-base-24k-s3 at 10,500 updates (1.7683 in windows); no other laptop run of either study has trained."
+ },
+ "result": {
+  "recorded_utc": "2026-11-23T07:17:26Z",
+  "state": "The gate arm is read; the self-gated arm's run of 24,000 updates is training and its reading follows.",
+  "base": {
+   "6,000 updates": 1.62828,
+   "24,000 updates": 1.48247,
+   "pulses a byte at 24,000 updates": 116193
+  },
+  "arm gate": {
+   "6,000 updates": 1.69516,
+   "24,000 updates": 1.59059,
+   "lead over the base": {
+    "6,000 updates": -0.06688,
+    "24,000 updates": -0.10812
+   },
+   "pulses a byte at 24,000 updates": 116362,
+   "by context at 6,000 updates, gate minus base (near 240, far 8,192)": {
+    "copyable near": {
+     "gap": 0.0325,
+     "interval_95": [
+      0.0183,
+      0.0498
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.1988,
+     "interval_95": [
+      0.1747,
+      0.2193
+     ],
+     "share": 0.1102
+    },
+    "seen, other follower": {
+     "gap": -0.471,
+     "interval_95": [
+      -0.5569,
+      -0.37
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": 0.0897,
+     "interval_95": [
+      0.0848,
+      0.0937
+     ],
+     "share": 0.7605
+    }
+   },
+   "by context at 24,000 updates, gate minus base": {
+    "copyable near": {
+     "gap": 0.0798,
+     "interval_95": [
+      0.0638,
+      0.0938
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.2182,
+     "interval_95": [
+      0.1947,
+      0.2388
+     ],
+     "share": 0.1102
+    },
+    "seen, other follower": {
+     "gap": -0.4845,
+     "interval_95": [
+      -0.5836,
+      -0.3874
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": 0.1375,
+     "interval_95": [
+      0.132,
+      0.1422
+     ],
+     "share": 0.7605
+    }
+   },
+   "membranes at their bound (experiments/membrane_saturation.py, 65,536 validation bytes)": {
+    "the gate dendrites, counted as other": {
+     "6,000 updates": 0.0921,
+     "24,000 updates": 0.076
+    },
+    "cells and reads": "under 0.1% at both lengths"
+   },
+   "verdict": "Reported only: the gated cell trails the base at both lengths, by 0.067 at 6,000 updates and 0.108 at 24,000, and by more on new contexts (0.090 and 0.138). It earns no seeds on the server. Its gate dendrites sit at their bound at 9% and 8% of their entries, as at full size (full_size_unit_screen.json); lifted_gates_with_data.json tests the same cell with no bound."
+  },
+  "arm self": {
+   "6,000 updates": 1.62969,
+   "lead over the base at 6,000 updates": -0.00141,
+   "24,000 updates": "training"
+  },
+  "records": [
+   "gap_by_piece_laptop_gate-6k-vs-base-6k.json",
+   "gap_by_piece_laptop_gate-24k-vs-base-24k.json"
+  ]
  }
 }
