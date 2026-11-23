@@ -19,6 +19,7 @@ LIGHT_VIOLET, DARK_VIOLET = "#8f73c9", "#4a2a85"
 RUNS = {
     "fs-st6": ("Full size, peak rate 6e-4", LIGHT_VIOLET, "-"),
     "fs-st12": ("Full size, peak rate 1.2e-3", DARK_VIOLET, "-"),
+    "fs-st12-lift": ("Full size, 1.2e-3, lifted ceiling", DARK_VIOLET, ":"),
     "bed24-lr24-s1": ("Test bed (6 levels), 2.4e-3", GRAY, "--"),
 }
 
@@ -33,11 +34,11 @@ def series(record, run, kind):
 def figure(record, output):
     fig, axes = plt.subplots(1, 2, figsize=(12.4, 4.9), sharey=True)
     fig.subplots_adjust(left=0.07, right=0.9, bottom=0.15, top=0.74, wspace=0.12)
-    fig.text(0.035, 0.965, "At higher rates the full-size stack's membranes saturate", size=20, weight="bold",
+    fig.text(0.035, 0.965, "Saturated membranes cap the full-size stack's rate", size=20, weight="bold",
              color=TEXT, va="top")
     fig.text(0.036, 0.875, "Share of each level's entries whose charge reached the membrane's bound, where a neuron "
-             "fires its largest count and learns nothing through its charge.\nFirst 32,768 validation bytes as 16 "
-             "streams; full size after 24,000 updates. The pool that lifts the ceiling removes the bound.",
+             "fires its largest count and learns nothing through its charge.\nFor the lifted stack, the share whose "
+             "count reached its cap. First 32,768 validation bytes as 16 streams; full size after 24,000 updates.",
              size=10, color=MUTED, va="top")
     for ax, (kind, title) in zip(axes, (("reads", "State reads"), ("cells", "Threshold cells"))):
         style(ax, grid_axis="y")

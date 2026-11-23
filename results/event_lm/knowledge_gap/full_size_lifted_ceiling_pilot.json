@@ -9,5 +9,94 @@
  },
  "measure": "as full_size_rate_pilot: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, averaged weights, bits kept; beside it the share of entries at the membrane bound (experiments/membrane_saturation.py, first 32,768 validation bytes) and the trainer's pulses a byte",
  "reading": "If the better lifted arm scores at least 0.010 below the plain stack's best pilot score (the best of fs-st3, fs-st6 and fs-st12), the pair's stack arm trains with the lifted ceiling at that arm's rate, in both of its stages; if the plain stack did not qualify for the pair under its own rate rule, the lifted stack takes its place on the same condition. Otherwise the pair runs as recorded. Recorded either way: both scores, the saturation of each arm and the pulses a byte.",
- "seen_before_recording": "fs-st12 1.34753, fs-tf12 1.27625, fs-st6 1.31985, fs-tf6 1.28370; the 3e-4 pair still training (fs-st3 1.5367 and fs-tf3 1.5605 in windows at 10,500 and 9,000 updates); the saturation numbers above; a 4-update CPU check of the lifted recipe at 1.2e-3 (finite, 34,810,900 parameters). No lifted full-size run has trained."
+ "seen_before_recording": "fs-st12 1.34753, fs-tf12 1.27625, fs-st6 1.31985, fs-tf6 1.28370; the 3e-4 pair still training (fs-st3 1.5367 and fs-tf3 1.5605 in windows at 10,500 and 9,000 updates); the saturation numbers above; a 4-update CPU check of the lifted recipe at 1.2e-3 (finite, 34,810,900 parameters). No lifted full-size run has trained.",
+ "result": {
+  "recorded_utc": "2026-11-23T00:25:39Z",
+  "bpb": {
+   "lifted": {
+    "6e-4": 1.31341,
+    "1.2e-3": 1.31255
+   },
+   "plain (full_size_rate_pilot)": {
+    "3e-4": 1.34164,
+    "6e-4": 1.31985,
+    "1.2e-3": 1.34753
+   },
+   "Transformer (full_size_rate_pilot)": {
+    "3e-4": 1.30572,
+    "6e-4": 1.2837,
+    "1.2e-3": 1.27625
+   }
+  },
+  "what lifting gains at the same rate": {
+   "6e-4": -0.0064,
+   "1.2e-3": -0.035
+  },
+  "decision": "The better lifted arm (1.2e-3, 1.31255) is 0.0073 below the plain stack's best (6e-4, 1.31985), short of 0.010, so the pair's stack arm trains plain at 6e-4 as recorded. The decision script released it at 2026-11-23T00:20:02Z (sched decision file).",
+  "membrane_saturation (share of entries at the bound, or for lifted runs at the cap; whole stack and top level)": {
+   "plain 6e-4": {
+    "reads": [
+     0.003,
+     0.0144
+    ],
+    "cells": [
+     0.0075,
+     0.0594
+    ]
+   },
+   "plain 1.2e-3": {
+    "reads": [
+     0.0271,
+     0.0966
+    ],
+    "cells": [
+     0.02,
+     0.1181
+    ]
+   },
+   "lifted 6e-4": {
+    "reads": [
+     0.0,
+     0.0
+    ],
+    "cells": [
+     0.0,
+     0.0
+    ]
+   },
+   "lifted 1.2e-3": {
+    "reads": [
+     0.0,
+     0.0
+    ],
+    "cells": [
+     0.0,
+     0.0002
+    ]
+   }
+  },
+  "stack_pulses_per_byte": {
+   "budget": 310000,
+   "training, last update": {
+    "lifted 6e-4": 307636,
+    "lifted 1.2e-3": 307814
+   },
+   "validation, last evaluation": {
+    "lifted 6e-4": 314993,
+    "lifted 1.2e-3": 315568
+   },
+   "price at the end": {
+    "lifted 6e-4": 0.004,
+    "lifted 1.2e-3": 0.003
+   }
+  },
+  "gap to the Transformer": {
+   "at each model's best rate, plain": 0.0436,
+   "at each model's best rate, lifted": 0.0363,
+   "at 3e-4, plain": 0.0359,
+   "at 6e-4, lifted": 0.0297,
+   "at 1.2e-3, lifted": 0.0363
+  },
+  "reading": "The pool that lifts the ceiling removes the saturation entirely, at the same energy: no read and almost no cell reaches its cap (at most 0.02% at the top level), where the plain stack at 1.2e-3 had 9.7% and 11.8% at its bound. It turns the stack's loss at 1.2e-3 into a level result with 6e-4 (1.31255 against 1.31341), 0.035 better than the plain stack at 1.2e-3. Against the Transformer at each model's best rate the lifted stack is 0.036 behind, as the plain stack was at 3e-4: lifting removes the widening that the higher rates brought, and does not close the gap. One seed; 24,000-update runs on windows of 512 bytes, scored at the trained reach without fast synapses."
+ }
 }

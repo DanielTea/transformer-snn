@@ -95,15 +95,27 @@ At each model's best rate the gap is 0.044, wider than at 3e-4. The Transformer 
 stack does (0.029 against 0.022). On new contexts the two gain alike (the stack 0.029, the Transformer 0.028); the
 Transformer's extra gain is on near copies. The stack is best at a lower rate, and at the higher one its membranes saturate:
 
-![At higher rates the full-size stack's membranes saturate](../results/figures/event_lm_membrane_saturation.png)
+![Saturated membranes cap the full-size stack's rate](../results/figures/event_lm_membrane_saturation.png)
 
 At 1.2e-3, 2.7% of the reads' entries and 2.0% of the cells' sit at the membrane's bound, up to 9.7% and 11.8% at the
 top level. A neuron there fires its largest count whatever more it hears, and learns nothing through its charge. The
 test bed barely saturates even at 2.4e-3, which is why it never showed this (`membrane_saturation.json`,
 `experiments/membrane_saturation.py`). v15's pool that lifts the ceiling divides the charge before the bound. In a
 continued run at 1e-3 it was 0.019 ahead, and no release used it, because all of them trained at 3e-4, where nothing
-saturates. A full-size pilot of the lifted stack at 6e-4 and 1.2e-3 decides the form of the pair's stack arm
-(`full_size_lifted_ceiling_pilot.json`).
+saturates. A full-size pilot of the lifted stack (`full_size_lifted_ceiling_pilot.json`):
+
+| 2M validation bytes as streams | 6e-4 | 1.2e-3 |
+|---|---:|---:|
+| Plain stack | 1.3199 | 1.3475 |
+| Lifted stack | 1.3134 | **1.3126** |
+| Transformer | 1.2837 | 1.2762 |
+
+Lifting removes the saturation entirely, at the same energy (about 308,000 pulses a byte in training): no read and
+almost no cell reaches its cap. At 1.2e-3 it is worth 0.035, and the stack is level across 6e-4 and 1.2e-3 instead of
+breaking at the higher rate. At each model's best rate the lifted stack is 0.036 behind the Transformer, as the plain
+stack was at 3e-4. Lifting removes the widening, and the gap that remains is the stack's knowledge. Its best arm was
+0.0073 ahead of the plain stack's best, short of the 0.010 that the record asked, so the full-size pair trains the
+plain stack at 6e-4 as recorded.
 
 ## Still running
 
@@ -116,6 +128,5 @@ saturates. A full-size pilot of the lifted stack at 6e-4 and 1.2e-3 decides the 
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `gated_cells_with_data.json` | Gated and self-gated cells at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `noisy_thresholds_with_data.json` | Noisy thresholds at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
-| `full_size_lifted_ceiling_pilot.json` | The full-size stack with the pool that lifts the ceiling, at 6e-4 and 1.2e-3; it decides the pair's stack arm |
 | `full_size_best_rate_pair.json` | The best stack and its Transformer at full size, each at its best full-size rate; queued by the pilot's rule the night the pilot ends |
 | `full_size_word_heads.json` | Word heads at full size |
