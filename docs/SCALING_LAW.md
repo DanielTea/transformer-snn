@@ -1,7 +1,7 @@
 # A scaling law the other way around
 
-*A study in progress for Volley's next release, v18. Every number here is from a finished run. The verdicts are those of the
-records in `results/event_lm/knowledge_gap/`, which were committed before their runs.*
+*The study of Volley v18. Every number here is from a finished run. The verdicts are those of the records in
+`results/event_lm/knowledge_gap/`, which were committed before their runs. What still runs is listed at the end.*
 
 v17 found that the stack's gap to the Transformer is knowledge, and that on the test bed it reopens with more data:
 the delayed stack trained on streams leads its Transformer after 6,000 updates and trails it after 24,000. A stack
@@ -119,6 +119,25 @@ stack was at 3e-4. Lifting removes the widening, and the gap that remains is the
 0.0073 ahead of the plain stack's best, short of the 0.010 that the record asked, so the full-size pair trains the
 plain stack at 6e-4 as recorded.
 
+## The unit at full size, and word heads
+
+The largest step that v15's walk from the Transformer to the stack priced was the unit (0.025). One 24,000-update
+run each at full size, against the plain stack at 6e-4 (`full_size_unit_screen.json`):
+
+| 2M validation bytes as streams | Score | Against the plain stack | On new contexts |
+|---|---:|---:|---:|
+| Plain stack | 1.3199 | | |
+| Gated cells, equal parameters | 1.4381 | +0.118 | +0.162 |
+| Noisy thresholds | 1.3157 | −0.004 | level |
+
+Gated cells lose badly: their gate dendrites sit at their bound a fifth of the time. Noisy thresholds train level at
+the same energy, with a small gain on near copies. Neither closes the knowledge gap. The self-gated arm runs next.
+
+Word heads at full size, at 90,000 updates with v15's fast synapses at reach 8,192, gain 0.0009 on test over v17's
+stack (paired interval 0.0004 to 0.0013), under the 0.003 their record asked (`full_size_word_heads.json`). The run is
+the best spike-only stack so far, 1.11615 on test and 1.14908 on validation: 0.0095 behind the Transformer as it
+reads, and 0.013 behind the Transformer with taught output synapses. Its gap keeps v17's shape, all of it knowledge.
+
 ## Still running
 
 | Record | Question |
@@ -130,6 +149,5 @@ plain stack at 6e-4 as recorded.
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `gated_cells_with_data.json` | Gated and self-gated cells at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `noisy_thresholds_with_data.json` | Noisy thresholds at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
-| `full_size_unit_screen.json` | Gated, self-gated and noisy-threshold cells at full size, one 24,000-update run each against the plain stack at 6e-4 |
-| `full_size_best_rate_pair.json` | The best stack and its Transformer at full size, each at its best full-size rate; queued by the pilot's rule the night the pilot ends |
-| `full_size_word_heads.json` | Word heads at full size |
+| `full_size_unit_screen.json` | Its third arm, self-gated cells at full size |
+| `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 next |

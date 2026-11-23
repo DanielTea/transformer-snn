@@ -146,6 +146,8 @@ The test bed's Transformer also gains from a higher learning rate (0.036 at 6e-4
    - dendritic gating: a gate dendrite lets in a share of what a value dendrite collects;
    - noisy thresholds: membrane noise makes a cell smooth on average, and it learns from that true slope. The noise
      falls with the learning rate, so scoring stays exact.
+   At full size (`full_size_unit_screen.json`) gated cells lost by 0.118 and noisy thresholds were level (0.004
+   better, none of it on new contexts); the self-gated arm and the test-bed screens by slope still run.
 3. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
    `randomness_at_best_rate.json`): does the charge grid limit late learning?
 4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes

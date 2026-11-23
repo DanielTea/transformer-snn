@@ -13,42 +13,35 @@ can. In the game, a volley answers the ball before it bounces, as
 the model answers each byte when it comes. Releases up to v17 were
 published as ShuntFormer; their tags and files keep that name.
 
-The newest release, **v17**, finds where the spike-only stack's
-gap to the Transformer lies. Split byte by byte by what each
-byte's context offers, the stack **remembers better** than a
-Transformer of its size at every distance tried, and is behind
-only on **knowledge**: predicting a byte from what it learned
-rather than from what it can copy. Its best stack is v16's with
-128 learned knowledge cells a head, trained on streams. Read as
-one unbroken stream that reaches 8,192 cells back while its fast
-synapses learn, it scores **1.117 bits per byte** on the full
-enwik8 test split. The Transformer of about its size and the same
-training scores **1.107**. The stack is 0.0103 behind (paired 95%
-interval 0.0092 to 0.0114) and 0.003 ahead of v16.
+The newest release, **v18**, finds what caps the spike-only stack
+when it learns faster, and removes it. At full size (34.8M
+parameters) the stack's membranes saturate at higher learning
+rates: at a peak rate of 1.2e-3, up to 12% of its top level's
+neurons sit at their bound, where a neuron fires its largest count
+whatever more it hears and stops learning through its charge. That
+is why, at full size, the Transformer gains more from a higher
+rate than the stack. A pool that divides the charge before the
+bound, built in v15 and never released, removes the saturation
+entirely at the same energy and is worth 0.035 bits per byte at
+1.2e-3. What remains is knowledge: with each model at its best
+rate, the full-size gap is 0.036 in 24,000-update runs, and it
+sits on new contexts. On the test bed, two seeds show that the
+stack's flattening with data is not an artefact of the learning
+rate. Word heads at full size give the best spike-only stack so
+far, **1.116 bits per byte** on the enwik8 test: 0.0009 ahead of
+v17, less than their own pre-registered mark of 0.003. It is
+0.0095 behind the Transformer as it reads the test, and 0.013
+behind the Transformer with taught output synapses. Neither of two
+spike-only forms of a better unit closes the gap at full size:
+gated cells lose badly, and noisy thresholds train level. The v18
+weights are release assets, and the model that runs from a clone
+is v11.
 
-![Where the gap is: the stack minus the Transformer by what each byte's context offers](results/figures/event_lm_gap_by_context.png)
-
-When it can copy from the last 2 KB, the stack is 0.09 bits per
-byte better than the Transformer. When it copies from 2 to 8 KB
-back, beyond the Transformer's window, it is 0.31 better. On new
-contexts, three quarters of the bytes, it is 0.06 behind, more
-than the whole gap.
-
-Fifteen ideas were tested against that gap under rules recorded
-before their runs, and none closed it. Parts added beside the
-cells changed memory or helped only early in training. One finding
-holds at four seeds: a single learned cell a head that fits
-nothing gives a read a place to put its spikes, as attention sinks
-do in Transformers, and takes away the seed lottery of copying.
-
-With four times the data, the test bed's gap reopens, because
-every part that helped knowledge helped early. From here every
-design is judged by how its gap moves as the data doubles
-([roadmap](docs/ROADMAP.md)). The v17 weights are release assets,
-and the model that runs from a clone is v11.
+![Saturated membranes cap the full-size stack's rate](results/figures/event_lm_membrane_saturation.png)
 
 | Release | Adds | enwik8 test | Transformer | Scored in |
 |---|---|---:|---:|---|
+| [v18](#v18-membranes-that-saturate-and-a-ceiling-that-lifts) | Word heads, the learning rate at full size, membranes that saturate and the ceiling that lifts | 1.116 | **1.107** | Unbroken streams; windows of 2,048 bytes |
 | [v17](#v17-the-knowledge-gap) | Knowledge cells in the race, training on streams, where the gap is | 1.117 | **1.107** | Unbroken streams; windows of 2,048 bytes |
 | [v16](#v16-long-streams) | Transformers on the stack's window lengths, forgetting slopes, fast synapses trained in the loop | 1.120 | **1.107** | Unbroken streams; windows of 2,048 bytes |
 | [v15](#v15-a-stack-that-reads-a-stream) | A stack of state reads and threshold cells that reads a stream | **1.141** | 1.144 | Unbroken streams |
@@ -58,10 +51,11 @@ and the model that runs from a clone is v11.
 | [v11](#v11-surprise-clock-and-fast-synapses) | Fast synapses written by error spikes | 1.645 | 1.704 | One continuous stream |
 
 Each Transformer has the size and the training of its row. The
-Transformers of v17 and v16 trained on windows of 2,048 bytes from
-24,000 updates, as their stacks did, and read 2,048; every other
-one reads 512 bytes. v17's stack has 36.26M parameters, 4.2% more
-than its Transformer, for its knowledge cells. v16 to v12 have
+Transformers of v18, v17 and v16 trained on windows of 2,048 bytes
+from 24,000 updates, as their stacks did, and read 2,048; every
+other one reads 512 bytes. The stacks of v18 and v17 have 36.26M
+parameters, 4.2% more than their Transformer, for their knowledge
+cells; v18's word heads add 352 more. v16 to v12 have
 about 34.8M parameters and
 368.64M training targets from random weights. The Transformer of
 v15 has the standard shape and trained under the rotated
@@ -78,10 +72,110 @@ the v11 Transformer scores 1.578. Every arm is one seed.
 
 [Knowledge-gap study](docs/KNOWLEDGE_GAP.md) ·
 [Roadmap](docs/ROADMAP.md) ·
-[Model card](models/spiking-byte-lm-v17/README.md) ·
+[Scaling-law study](docs/SCALING_LAW.md) ·
+[Model card](models/spiking-byte-lm-v18/README.md) ·
 [Leaderboard](docs/LEADERBOARD.md) ·
-[Research handoff](docs/V17_HANDOFF.md) ·
-[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v17)
+[Research handoff](docs/V18_HANDOFF.md) ·
+[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v18)
+
+## v18: membranes that saturate, and a ceiling that lifts
+
+v17 found that the stack's gap to the Transformer is knowledge,
+and that on the test bed it reopens with more data. v18 asks
+whether the stack was held back by the learning rate every earlier
+release used, 3e-4, and finds what caps it at full size. Every
+test was recorded before its runs
+(`results/event_lm/knowledge_gap/`); the study is
+[docs/SCALING_LAW.md](docs/SCALING_LAW.md).
+
+**The test bed wanted a higher rate, but the flattening is not its
+artefact.** At five peak rates and two seeds, both models do
+better than at 3e-4: the stack at 1.2e-3, the Transformer at
+2.4e-3. From 3e-4 to its best rate the stack gains 0.063 and the
+Transformer 0.053. The difference, 0.010, is under the 0.020 that
+the study set for calling the flattening an artefact of the rate.
+At each model's best rate the gap is 0.048, and it is on new
+contexts on both seeds (`learning_rate_with_data.json`).
+
+![Both models wanted a higher learning rate](results/figures/event_lm_learning_rate.png)
+
+**At full size the Transformer gains more from a higher rate.** In
+complete 24,000-update runs the stack is best at 6e-4 and the
+Transformer at 1.2e-3, and the gap at their best rates is 0.044,
+wider than the 0.036 at 3e-4 (`full_size_rate_pilot.json`). On new
+contexts the two gain alike from their best rates; the
+Transformer's extra gain is on bytes it can copy.
+
+**Because the stack's membranes saturate.** A membrane holds the
+charge of a neuron's largest count at its resting threshold.
+Charge beyond that is cut, so the neuron fires its largest count
+whatever more it hears and learns nothing through its charge. At
+1.2e-3, 2.7% of the full-size stack's read entries and 2.0% of its
+cells' sit at the bound, up to 9.7% and 11.8% at the top level; at
+3e-4 almost none do. The test bed barely saturates even at 2.4e-3,
+which is why it never showed this
+(`experiments/membrane_saturation.py`,
+`membrane_saturation.json`).
+
+**The pool that lifts the ceiling removes it.** v15 built a pool
+that divides the charge before the membrane bounds it, so a neuron
+fires up to its largest count at every threshold. No release used
+it, because all trained at 3e-4. At full size it removes the
+saturation entirely, at the same energy (about 308,000 pulses a
+byte in training), and turns the stack's loss at 1.2e-3 into a
+level result with 6e-4 (1.3126 against 1.3134; the plain stack
+scores 1.3475 at 1.2e-3). With each model at its best rate the
+lifted stack is 0.036 behind, as at 3e-4: lifting removes the
+widening that higher rates brought, and the gap that remains is
+knowledge (`full_size_lifted_ceiling_pilot.json`).
+
+![At full size, lifting the ceiling stops the stack breaking at a high rate](results/figures/event_lm_full_size_rate.png)
+
+**Ruled out on the way.** The pulse budget does not hold the stack
+back: its price falls to 0.00 to 0.02 by the end of every run at
+both depths, where a budget that binds runs at 0.10 to 0.24. Nor
+do noisy late weights, nor a code that grows denser with data: 35%
+to 56% of a level's cells fire at a byte at 6,000 and 24,000
+updates alike (`experiments/cell_activity.py`). Depth 22 saturates
+no more than depth 11.
+
+**Word heads at full size.** One word head in every read, a head
+that reaches only the present word's cells and weighs each by its
+place in the word, gains 0.0009 on test (paired 95% interval
+0.0004 to 0.0013) and 0.0006 on validation (0.0001 to 0.0010) over
+v17's stack. That is under the 0.003 its record asked, so word
+heads do not join the design. The run is still the best spike-only
+stack so far: 1.11615 on test and 1.14908 on validation, read as a
+stream reaching 8,192 cells with taught output synapses
+(`full_size_word_heads.json`, [model
+card](models/spiking-byte-lm-v18/README.md)). Its gap to the
+Transformer keeps v17's shape: better on bytes it can copy, by
+0.10 within 2 KB and 0.40 from 2 to 8 KB back, and 0.057 behind on
+new contexts.
+
+**The unit, in spikes.** The largest step that v15's walk from the
+Transformer to the stack priced was the unit: plain rectifying
+units in place of gated ones cost 0.025. Two spike-only answers
+were tested at full size: gated threshold cells, in which a gate
+dendrite lets in a share of what a value dendrite collects (built
+for an earlier pilot), and noisy thresholds, new in v18, in which
+a cell's membrane carries logistic noise while training, so that
+its average count is a smooth curve and the cell learns from that
+curve's true slope; scoring stays exact. At full size, in one 24,000-update run each against the
+plain stack at 6e-4 (`full_size_unit_screen.json`), gated cells at
+equal parameters lose by 0.118, worse on every kind of context;
+their gate dendrites sit at their bound a fifth of the time, so
+the gate opens fully and the cell loses its range. Noisy
+thresholds are 0.004 better at the same energy, all of it on near
+copies and none on new contexts. The self-gated arm runs next, and
+the test bed screens both forms by their slope over data.
+
+**Still running** for v19: the full-size pair, each model at its
+best rate (90,000 updates); the data-scaling curves from 6,000 to
+96,000 updates at each model's best rate; quantal release and
+stochastic firing at two rates; the full size's cell shape at four
+seeds; and the test bed's screens of gated cells and noisy
+thresholds by their slope.
 
 ## v17: the knowledge gap
 
@@ -667,6 +761,16 @@ and what not to try again.
 [Restore and rescore](docs/V17_HANDOFF.md#restore-the-checkpoints) ·
 [Exact manifest](models/spiking-byte-lm-v17/manifest.json)
 
+The v18 archives hold the best spike-only stack so far, v17's with
+a word head in every read, and the full-size stack of the
+learning-rate pilots with the pool that lifts the ceiling. A third
+asset holds the bits of every scored piece, the full-size pilots'
+included. Its handoff has the restore commands, the probe of
+membrane saturation, and the flags of the lifted ceiling, noisy
+thresholds and gated cells.
+[Restore and rescore](docs/V18_HANDOFF.md#restore-the-checkpoints) ·
+[Exact manifest](models/spiking-byte-lm-v18/manifest.json)
+
 Regenerate the leaderboards, scientific figures and browser report
 from the checked-in records.
 
@@ -677,6 +781,8 @@ python experiments/plot_coasting_heads.py
 python experiments/plot_state_reads.py
 python experiments/plot_read_clocks.py
 python experiments/plot_stream_form.py
+python experiments/plot_saturation.py
+python experiments/plot_full_size_rate.py
 python experiments/make_report.py docs/report.html
 ```
 

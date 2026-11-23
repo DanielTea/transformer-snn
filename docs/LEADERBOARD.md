@@ -4,6 +4,17 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
+## Word heads, trained on streams · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
+|---|---:|---|---:|---:|---:|---:|
+| 36.26M SNN stack, knowledge cells and word heads, trained on streams | 36,264,308 | Stream, reach 8,192, taught output synapses | 1.11615 | 3 | — | — |
+| 36.26M SNN stack, knowledge cells, trained on streams (v17) | 36,263,956 | Stream, reach 8,192, taught output synapses | 1.11702 | 4 | — | — |
+| 34.75M full attention, windows of 2,048 bytes | 34,752,000 | Windows with 2,032 bytes of history, taught output synapses | **1.10321** | 1 | — | — |
+| 34.75M full attention, windows of 2,048 bytes | 34,752,000 | Windows with 2,032 bytes of history | 1.10669 | 2 | — | — |
+
+The word-head stack is v17's with one word head in every read: a head that reaches only the present word's cells and weighs each by its place in the word. It is the best spike-only stack so far, 0.0009 ahead of v17's on test (paired 95% interval 0.0004 to 0.0013), less than the 0.003 its record asked (`results/event_lm/knowledge_gap/full_size_word_heads.json`). [Model card](../models/spiking-byte-lm-v18/README.md) · [Scaling-law study](SCALING_LAW.md)
+
 ## Knowledge cells trained on streams · 368,640,000 training targets · seed 20001
 
 | Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
