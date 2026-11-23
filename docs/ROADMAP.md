@@ -150,6 +150,7 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 | Word heads at full size | Fail by their mark: 0.0009 ahead where 0.003 was asked; the best spiking score so far | Memory again, not knowledge | `knowledge_gap/full_size_word_heads.json` |
 | Gated cells at full size (a gate dendrite as a shunt) | Fail: 0.118 behind | Their gate dendrites sit at the membrane's bound a fifth of the time | `knowledge_gap/full_size_unit_screen.json` |
 | Noisy thresholds at full size | Level: 0.004 better, none of it on new contexts | A smooth slope alone is not the unit's lead | `knowledge_gap/full_size_unit_screen.json` |
+| Noisy thresholds on the test bed, by slope | Reported only: 0.0036 ahead at 6,000 updates, 0.0019 at 24,000 | A true slope for the threshold cell is worth 0.002 to 0.004 and fades with data | `knowledge_gap/noisy_thresholds_with_data.json` |
 | The pool that lifts the ceiling, at full size | Removes saturation at the same energy; 0.007 ahead of the plain best where 0.010 was asked | The membranes cap the stack's learning rate; lifting frees the rate but adds no knowledge | `knowledge_gap/full_size_lifted_ceiling_pilot.json` |
 | A higher learning rate as the cause of the flattening | Ruled out over two seeds | Both models gain alike from their best rates | `knowledge_gap/learning_rate_with_data.json` |
 | A sparser code | Not built | The Transformer's units are as dense as the stack's cells | `knowledge_gap/unit_density.json` |
@@ -183,7 +184,8 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    - self-gated cells: level on the test bed at 6,000 and at 24,000 updates (0.0014 and 0.0016 behind), with no
      growth, so they earn no seeds (`gated_cells_with_data.json`); the full-size arm is half trained;
    - noisy thresholds, where membrane noise makes a cell smooth on average and it learns from that true slope:
-     level at full size (0.004 better, none of it on new contexts); the test bed's screen by slope is queued
+     level at full size (0.004 better, none of it on new contexts), and on the test bed 0.0036 ahead at 6,000
+     updates and 0.0019 at 24,000, a lead that shrinks with data, so they earn no seeds
      (`noisy_thresholds_with_data.json`).
 
    Built and checked: **a proportional gate** (`--granule-ramp 16 --granule-inner-gate`). The gate dendrite fires

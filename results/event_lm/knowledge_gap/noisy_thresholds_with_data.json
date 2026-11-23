@@ -10,5 +10,114 @@
  "training": "the base's recipe (arm.sh's KIND stack, peak rate 1.2e-3, warmup 300, cosine over the run, pulse budget 113,000), 6,000 and 24,000 updates, seed 20003, the laptop's GPU (MPS), one run at a time after gated_cells_with_data's runs; code: the frozen copy of e5d3a1e that checkpoints/laptop-loop/run-queue.sh runs (v17l with the --cell-noise option added)",
  "measure": "experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams, lead 8,192, averaged weights, bits of every piece kept; the arm paired with the base of the same length; experiments/gap_by_piece.py splits each lead by what the context offers (near 240, far 8,192); the trainer's pulses a byte reported beside",
  "reading": "A screen with one seed. The arm earns two seeds on the server (s1 and s2, 6,000 and 24,000 updates, read by experiments/read_lead_study.py's shared reading against bed24-lr12 and rd-base-6k) if at 24,000 updates it leads the base by at least 0.005 and its lead at 24,000 updates is at least 0.005 larger than at 6,000. Otherwise it is reported only. Recorded either way: both leads, the leads on new contexts and on the fourth letter of a word on, and the pulses a byte at 24,000 updates.",
- "seen_before_recording": "CPU stress runs of 120 updates at peak rate 1.2e-3 reached after 30 updates (seed 20003, not a measure): noise 3.2897 in windows and 2.9880 on streams, base 3.3006 and 2.9963. The base's laptop run rd-base-24k-s3 stood at 1.7683 in windows at 10,500 updates; no arm of this screen or of gated_cells_with_data has trained. The full-size learning-rate pilot's pairs at 1.2e-3 and 6e-4 (full_size_rate_pilot.json) have been seen; they do not bear on this screen."
+ "seen_before_recording": "CPU stress runs of 120 updates at peak rate 1.2e-3 reached after 30 updates (seed 20003, not a measure): noise 3.2897 in windows and 2.9880 on streams, base 3.3006 and 2.9963. The base's laptop run rd-base-24k-s3 stood at 1.7683 in windows at 10,500 updates; no arm of this screen or of gated_cells_with_data has trained. The full-size learning-rate pilot's pairs at 1.2e-3 and 6e-4 (full_size_rate_pilot.json) have been seen; they do not bear on this screen.",
+ "result": {
+  "recorded_utc": "2026-11-23T12:47:33Z",
+  "base": {
+   "6,000 updates": 1.62828,
+   "24,000 updates": 1.48247,
+   "pulses a byte at 24,000 updates": 116193
+  },
+  "arm noise": {
+   "6,000 updates": 1.62467,
+   "24,000 updates": 1.48058,
+   "lead over the base": {
+    "6,000 updates": 0.00361,
+    "24,000 updates": 0.00188
+   },
+   "growth of the lead from 6,000 to 24,000 updates": -0.00173,
+   "pulses a byte at 24,000 updates": 116114,
+   "by context at 6,000 updates, noise minus base (near 240, far 8,192)": {
+    "copyable near": {
+     "gap": -0.0972,
+     "interval_95": [
+      -0.1104,
+      -0.0831
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.05,
+     "interval_95": [
+      0.0334,
+      0.0665
+     ],
+     "share": 0.1102
+    },
+    "seen, other follower": {
+     "gap": -0.1183,
+     "interval_95": [
+      -0.1971,
+      -0.0422
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": 0.006,
+     "interval_95": [
+      0.0026,
+      0.0096
+     ],
+     "share": 0.7605
+    }
+   },
+   "by context at 24,000 updates, noise minus base": {
+    "copyable near": {
+     "gap": 0.0092,
+     "interval_95": [
+      -0.001,
+      0.0184
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": -0.0475,
+     "interval_95": [
+      -0.0628,
+      -0.0331
+     ],
+     "share": 0.1102
+    },
+    "seen, other follower": {
+     "gap": 0.0939,
+     "interval_95": [
+      0.024,
+      0.1645
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": -0.0032,
+     "interval_95": [
+      -0.0068,
+      -0.0001
+     ],
+     "share": 0.7605
+    }
+   },
+   "on the fourth letter of a word on, noise minus base": {
+    "6,000 updates": {
+     "gap": -0.0078,
+     "interval_95": [
+      -0.0254,
+      0.0088
+     ],
+     "share": 0.3109
+    },
+    "24,000 updates": {
+     "gap": 0.0269,
+     "interval_95": [
+      0.0113,
+      0.0413
+     ],
+     "share": 0.3109
+    }
+   }
+  },
+  "verdict": "Reported only: noisy thresholds lead the base by 0.0036 at 6,000 updates and by 0.0019 at 24,000, under the 0.005 asked, and the lead shrinks with data (-0.0017) where a growth of 0.005 was asked. They earn no seeds on the server. On new contexts the arm is 0.0060 behind at 6,000 updates and 0.0032 ahead at 24,000 (interval 0.0001 to 0.0068), a swing of 0.009 towards it, but on one seed, and the copies swing by ten times as much: the near ones against it (0.097 ahead, then 0.009 behind) and the far ones towards it (0.050 behind, then 0.048 ahead). On the fourth letter of a word on it is level at 6,000 updates and 0.027 behind at 24,000. The same energy as the base. With the full size's arm (full_size_unit_screen.json: 0.004 better, none of it on new contexts), a true slope for the threshold cell is worth 0.002 to 0.004 and does not change the slope with data.",
+  "records": [
+   "gap_by_piece_laptop_noise-6k-vs-base-6k.json",
+   "gap_by_piece_laptop_noise-24k-vs-base-24k.json"
+  ]
+ }
 }

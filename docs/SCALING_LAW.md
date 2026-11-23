@@ -89,7 +89,9 @@ A second screen measures the other half of a smooth unit, in spikes: noisy thres
 its average rate is a smooth curve of its input. Under logistic noise of half a threshold, a cell's average count is
 within 0.025 spikes of 0.5 · softplus(2 · charge / threshold). The cell learns from that curve's slope, where a plain
 cell learns from a stand-in. The noise falls with the learning rate, so training ends on the whole counts that scoring
-fires.
+fires. On the laptop's seed the arm leads the plain bed by 0.0036 at 6,000 updates and by 0.0019 at 24,000, at the
+same energy: under the 0.005 its record asked, and shrinking with data, so it earns no seeds. At full size it was
+0.004 better. A true slope for the threshold cell is worth 0.002 to 0.004 and does not change the slope with data.
 
 ## At full size the membranes cap the rate
 
@@ -182,10 +184,7 @@ the runs, the test bed has it too in every study recorded from now on.
 | `full_size_loop_pilot.json` | Depth by recurrence at full size: levels 2 to 8 run twice with tied synapses, with the energy it takes as an arm of its own |
 | `loop_with_data.json` | A looped test bed at 6,000 and 24,000 updates against a plain bed given the same pulse budget, a screen on the laptop |
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
-| `gated_cells_with_data.json` | Gated and self-gated cells at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
-| `proportional_gate_check.json` | A design check of 2,250 updates: gates whose steps stay inside the cell, and proportional gates, under the bounded and the lifting pool |
 | `proportional_gates_with_data.json` | The wide proportional gate under the lifting pool at 6,000 and 24,000 updates, two seeds on the server and one on the laptop (pre-registered) |
 | `full_size_proportional_gate.json` | The same gate at full size against the lifted plain stack, released only by a pass of the screen (pre-registered) |
-| `noisy_thresholds_with_data.json` | Noisy thresholds at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `full_size_unit_screen.json` | Its third arm, self-gated cells at full size |
 | `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 next |
