@@ -237,6 +237,8 @@ class EventLMConfig:
     granule_soft: bool = False
     granule_slope: bool = False
     granule_slope_width: int = 1
+    granule_slope_tail: float = 0.0
+    granule_slope_tail_local: bool = False
     granule_delays: int = 1
     granule_relays: int = 0
     granule_traces: int = 0
@@ -3234,13 +3236,23 @@ class _ExcitatoryFire(_IntegrateFire):
     ``smooth`` is that number, and the smooth threshold is as wide as it is
     for whole spikes.
 
+    With ``tail`` a silent cell learns from how far its membrane stands below
+    its threshold, however far that is. The slope is one from zero charge on,
+    as it is for the spikes that the cell fires, and below zero it falls with
+    the square of the distance: one over (1 + d / tail) squared for a charge
+    of d spikes below zero, so at ``tail`` spikes below a quarter is left.
+    The spikes are the same. ``own`` is the same charge as the cell's own
+    synapses and its rest alone answer for it. The slope below zero then
+    reaches only those, as plasticity that the membrane's voltage gates stays
+    at the synapse, and what the cell hears is taught by its spikes alone.
+
     Under ``cell_noise`` a population whose membranes may carry noise (the plain
     threshold cells) adds logistic noise to its charge while training, and a smooth cell
     learns from the slope of the count it fires on average under the noise at
     its peak, a softplus as wide as the noise, in place of the plain slope.
     """
 
-    def forward(self, current, quanta=None, *, reference=None, smooth=False):
+    def forward(self, current, quanta=None, *, reference=None, smooth=False, tail=0.0, own=None):
         noisy = (self.noisy and _CELL_NOISE[0] > 0 and reference is None and torch.is_grad_enabled()
                  and current.is_floating_point())
         threshold = self.threshold if quanta is None else quanta * (self.threshold // self.quanta_per_threshold)
@@ -3256,6 +3268,14 @@ class _ExcitatoryFire(_IntegrateFire):
             # The slope of the count that the cell fires on average under the noise at its peak.
             peak = _CELL_NOISE[0]
             learned = smooth * peak * F.softplus(current / (threshold * smooth * peak))
+        elif tail:
+            # One spike of slope for every spike of charge above zero, and from zero down the slope of a membrane
+            # that is ``tail`` spikes deep, 1 / (1 - charge / tail)^2. The two sides are told apart here, so that the
+            # slope at zero charge is counted once, on the side below, on every device.
+            spikes = current / threshold
+            below = spikes if own is None else own / (threshold.detach() if torch.is_tensor(threshold) else threshold)
+            depth = below.detach().clamp(max=0)
+            learned = (spikes.detach() > 0) * spikes + ((below.detach() <= 0) * (1 - depth / tail) ** -2) * below
         else:
             learned = smooth * F.gelu(current / (threshold * smooth))
         return counts.detach() + (learned - learned.detach())
@@ -3270,8 +3290,9 @@ class _ShapedFire(_ExcitatoryFire):
     leave it. The spikes counted for a pulse budget are those that leave.
     """
 
-    def forward(self, current, quanta=None, *, reference=None, smooth=False, bursts=None, opened=None):
-        counts = super().forward(current, quanta, reference=reference, smooth=smooth)
+    def forward(self, current, quanta=None, *, reference=None, smooth=False, bursts=None, opened=None, tail=0.0,
+                own=None):
+        counts = super().forward(current, quanta, reference=reference, smooth=smooth, tail=tail, own=own)
         if bursts is not None:
             counts = (counts * (1 + bursts)).clamp(max=self.capped)
         return counts if opened is None else counts * opened
@@ -3606,6 +3627,15 @@ class _GranuleLayer(nn.Module):
     ``granule_slope_width`` of them where that is set. A cell under a fine
     pool fires ``pool_fine`` spikes for the charge of a whole one, so that
     width keeps the slope as wide as it is without the pool.
+    With ``granule_slope_tail`` the slope reaches as far below the threshold
+    as a cell's charge stands: it is one for a cell that fires and falls
+    with the square of the distance below zero, to a quarter at that many
+    whole thresholds. The cells' spikes are unchanged. Most silent cells of
+    a trained stack stand many thresholds below zero, where a smooth
+    threshold teaches them nothing. With ``granule_slope_tail_local`` that
+    slope below zero teaches only the cell's own synapses and its rest, as
+    plasticity gated by the membrane's voltage stays at the synapse: the
+    stream and the pool learn from the cells' spikes alone.
     With ``granule_soft`` the cells neither race nor spike: each answers
     with a real number, a smooth threshold of its own charge, through the
     synapses and the gains of the race. That is a stand-in for diagnosis,
@@ -3877,6 +3907,9 @@ class _GranuleLayer(nn.Module):
             self.sharpness = nn.Parameter(torch.zeros(clusters, 1))
         # A plain cell's smooth threshold is that many of its spikes wide, and a gate's that many thresholds.
         self.soft, self.slope, self.slope_width = cfg.granule_soft, cfg.granule_slope, cfg.granule_slope_width
+        # The depth of the slope below zero, in the cells' own spikes: a fine pool counts ``pool_fine`` of them for
+        # a whole threshold.
+        self.tail, self.tail_local = cfg.granule_slope_tail * cfg.pool_fine, cfg.granule_slope_tail_local
         self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
         self.emit = _IntegrateFire(cap, self.bits, False)
 
@@ -4059,6 +4092,13 @@ class _GranuleLayer(nn.Module):
             charge = _mixed_charge(collect, heard) if mixed else collect(heard)
         # A quarter spike of rest is a quarter of the cell's present threshold.
         rest = self.rest_quarters().squeeze(-1) * quanta * self.quarter()
+        own = None
+        if self.tail and self.tail_local and torch.is_grad_enabled() and charge.requires_grad:
+            # The same charge once more, as the cell's own synapses and rest answer for it: what they hear and the
+            # pool's threshold are taken as given.
+            given = heard.detach()
+            own = (_mixed_charge(collect, given) if mixed else collect(given)) - (
+                self.rest_quarters().squeeze(-1) * quanta.detach() * self.quarter())
         if self.gated:
             # The gate dendrite fires above the rest, and its spikes let the value dendrite's charge into the body.
             # A cell that gates itself opens by its own charge.
@@ -4078,6 +4118,8 @@ class _GranuleLayer(nn.Module):
                 shaped["bursts"] = self.bursts(apical, quanta)
             if self.experts > 1:
                 shaped["opened"] = self.opened(heard, quanta)
+            if self.tail:
+                shaped.update(tail=self.tail, own=own)
             return self.fire(charge, quanta, smooth=self.slope * self.slope_width, **shaped)
         if self.soft:
             # The charge in thresholds, as the race takes it, and no competition between the cells.
@@ -4615,6 +4657,15 @@ class EventLM(nn.Module):
                     or cfg.granule_slope_width > 1 and not (cfg.granule_slope or cfg.granule_gate)):
                 raise ValueError("the smooth threshold of a granule cell is 1 to 64 of its spikes wide, and wider "
                                  "than one only for cells that learn below their thresholds")
+            tail = cfg.granule_slope_tail
+            if (isinstance(tail, bool) or not isinstance(tail, (int, float)) or not 0 <= tail <= 64
+                    or not isinstance(cfg.granule_slope_tail_local, bool)
+                    or cfg.granule_slope_tail_local and not tail
+                    or tail and (not cfg.granule_slope or cfg.granule_slope_width != 1 or cfg.granule_gate
+                                 or cfg.granule_veto or cfg.granule_branches > 1)):
+                raise ValueError("the slope far below the threshold is up to 64 thresholds deep and belongs to plain "
+                                 "threshold cells that learn from a slope one spike wide; only such a slope can stay "
+                                 "at the cell's own synapses")
             if cfg.granule_reach is not None and (
                     not isinstance(cfg.granule_reach, int) or not 1 <= cfg.granule_reach <= cfg.dim):
                 raise ValueError("the axons of a granule cluster reach a whole number of the stream's channels")

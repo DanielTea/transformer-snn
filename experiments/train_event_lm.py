@@ -346,6 +346,10 @@ def build_model(args):
                             granule_slope=getattr(args, "granule_slope", EventLMConfig.granule_slope),
                             granule_slope_width=getattr(args, "granule_slope_width",
                                                         EventLMConfig.granule_slope_width),
+                            granule_slope_tail=getattr(args, "granule_slope_tail",
+                                                       EventLMConfig.granule_slope_tail),
+                            granule_slope_tail_local=getattr(args, "granule_slope_tail_local",
+                                                             EventLMConfig.granule_slope_tail_local),
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
@@ -847,6 +851,15 @@ def main():
                         help="the smooth threshold that cells learn from is as wide as SPIKES of a cell's spikes "
                              "(1 when omitted); with a fine pool its number of fine spikes keeps the slope as "
                              "wide as it is for whole spikes")
+    parser.add_argument("--granule-slope-tail", type=float, default=EventLMConfig.granule_slope_tail,
+                        metavar="THRESHOLDS",
+                        help="a silent threshold cell learns from how far its membrane stands below its threshold: "
+                             "the slope is one for a cell that fires and falls with the square of the distance "
+                             "below zero, to a quarter at THRESHOLDS whole thresholds; the spikes are unchanged; "
+                             "off when omitted or 0")
+    parser.add_argument("--granule-slope-tail-local", action="store_true",
+                        help="the slope far below the threshold teaches only the cell's own synapses and its rest; "
+                             "the stream and the pool learn from the cells' spikes alone")
     parser.add_argument("--granule-races", type=int, default=EventLMConfig.granule_races,
                         help="equal groups in which the cells of a granule cluster race, each for the budget")
     parser.add_argument("--granule-soften", type=float, default=EventLMConfig.granule_soften,
@@ -1144,6 +1157,8 @@ def main():
         parser.error("--cell-noise takes a width of more than 0 and at most 4 thresholds")
     if args.cell_noise is not None and args.cell_dither:
         parser.error("--cell-noise and --cell-dither are two kinds of random firing; choose one")
+    if args.cell_noise is not None and args.granule_slope_tail:
+        parser.error("--cell-noise teaches a cell the slope of its noise; --granule-slope-tail is another slope")
     if args.resume and (args.checkpoint is None or args.save_every < 1):
         parser.error("--resume needs --checkpoint and --save-every")
     if args.stop_at is not None and (not args.resume or not 0 < args.stop_at < args.steps
