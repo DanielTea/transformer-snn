@@ -256,8 +256,9 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    a run of 90,000 updates beside the pair, and that run is pre-registered (`full_size_loop_run.json`): the
    pair's stack arm with the loop and its budget, queued for the night of 2026-11-23 and read against the pair's
    plain stack and its Transformer. It holds if the looped stack is at least 0.005 better than the plain one on
-   test and validation. Still open, and piloted beside it: whether the loop needs the raised budget at full size,
-   and whether the pool that lifts the ceiling adds to it.
+   test and validation. Still open, and piloted beside it (`full_size_loop_variants.json`, pre-registered): whether
+   the loop needs the raised budget at full size, and whether the pool that lifts the ceiling adds to it. The
+   pilot picks the form of the loop's next full-length run.
 6. **Skip fibres** (`skip_fibres_with_data.json`, pre-registered): every part of the stack hears one stream, the
    running sum of all that came before, fired again as whole counts after every read and cell layer.
    DeepCrossAttention (arXiv 2502.06785) finds that a Transformer gains when each layer hears the earlier layers
