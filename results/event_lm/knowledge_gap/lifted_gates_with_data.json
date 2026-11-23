@@ -1,0 +1,14 @@
+{
+ "study": "lifted_gates_with_data",
+ "recorded_utc": "2026-11-23T05:36:36Z",
+ "kind": "A screen on the laptop's GPU, one seed, by slope over data: whether gated cells under the lifting pool earn two seeds on the server.",
+ "why": "Gated cells lose at the best rate on the test bed (gate-6k-s3 1.69516 against rd-base-6k-s3 1.62828, gated_cells_with_data's first point) and at full size (full_size_unit_screen: 0.118 behind). In both, their gate dendrites saturate: on the test bed at 1.2e-3 the share of gate entries at the membrane's bound rises from 3.8% at the lowest level to 22% at the highest (experiments/membrane_saturation.py on gate-6k-s3), where plain cells stay under 0.1%; at full size it is 21% overall. A saturated gate jams open while its smooth slope keeps pushing its charge up. The pool that lifts the ceiling now lifts gates and gated bodies (97a2772). Since lifting also changes the reads, the lifted gated cells are paired with a lifted plain stack.",
+ "arms": {
+  "gate-lift": "--granule-gate 4 --granule-shunt --granule-cells 681 --pool-lifts-ceiling: gated cells, the lifting pool on reads, gates and bodies; the parameters of gated_cells_with_data's gate arm",
+  "lift": "--pool-lifts-ceiling: the plain test bed under the lifting pool, 5,249,060 parameters; the base of this screen"
+ },
+ "training": "the delayed test bed's recipe at peak rate 1.2e-3, warmup 300, cosine over the run, 6,000 and 24,000 updates, seed 20003, the laptop's GPU one run at a time after the queue's earlier runs; code: the frozen copy of 97a2772 (checkpoints/laptop-loop/code-97a2772)",
+ "measure": "experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams, lead 8,192, averaged weights, bits kept; gate-lift paired with lift of the same length; experiments/gap_by_piece.py (near 240, far 8,192); the share of gate entries at their caps (experiments/membrane_saturation.py); the trainer's pulses a byte",
+ "reading": "A screen with one seed. The lifted gate earns two seeds on the server (s1 and s2 at 6,000 and 24,000 updates, with lifted plain bases) if at 24,000 updates it leads lift by at least 0.005 and its lead at 24,000 is at least 0.005 larger than at 6,000. Otherwise it is reported only. Recorded either way: both leads, the leads on new contexts, the gate saturation, and the scores beside the unlifted gate-6k-s3 and gate-24k-s3 and rd-base-6k-s3 and -24k-s3.",
+ "seen_before_recording": "On the laptop: rd-base-6k-s3 1.62828, rd-base-24k-s3 1.48247, gate-6k-s3 1.69516 (gate saturation 3.8% to 22% by level), self-6k-s3 1.62969; gate-24k-s3 is training. At full size: fs-gate6 1.43806 with 21% of gate entries at the bound; fs-gate6-lift is queued on the server and has not trained. No lifted run on the test bed has trained."
+}
