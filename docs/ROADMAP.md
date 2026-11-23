@@ -151,6 +151,8 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 | Trained plasticity with knowledge cells | Fail | They get in each other's way | `knowledge_and_plasticity.json` |
 | Branching dendrites, apical bursts, racing experts | Fail | Splitting or gating cells at equal parameters does not add knowledge | `knowledge_gap/preregistered.json` |
 | Looped levels | A tied pass is worth about a third of a level | Depth needs its own synapses | `results/event_lm/stack_loop/preregistered.json` |
+| Looped levels at full size (levels 2 to 8 run twice, tied synapses, the budget scaled with the passes) | **Pass**: 0.019 ahead of the plain stack given the same pulses, 0.026 on new contexts; 0.010 ahead of the plain stack at the old budget | The first part at equal parameters that adds knowledge at full size, for 1.63 times the pulses and 1.4 times the training time | `knowledge_gap/full_size_loop_pilot.json` |
+| A raised pulse budget alone at full size (507,000 for 310,000 a byte) | Fail: 0.009 behind | More pulses in the same levels saturate the membranes | `knowledge_gap/full_size_loop_pilot.json` |
 | Echo learning, consolidating fast synapses, doubled pulse budget, squared cells | Fail | See `docs/V16_HANDOFF.md`, "What not to try again" | |
 | The full size's cell shape on the test bed (every channel's present byte and one delayed copy) | **Pass at four seeds**: 0.015 ahead at 24,000 updates, 0.020 on new contexts | The first gain on knowledge that did not fade with data, and it is in the cell | `knowledge_gap/cell_shape_with_data.json` |
 | Word heads at full size | Fail by their mark: 0.0009 ahead where 0.003 was asked; the best spiking score so far | Memory again, not knowledge | `knowledge_gap/full_size_word_heads.json` |
@@ -235,10 +237,15 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    `randomness_at_best_rate.json`): does the charge grid limit late learning?
 4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
    the base for the rest.
-5. **Depth by recurrence at full size** (`full_size_loop_pilot.json`, queued): a looped stack runs its middle levels
+5. **Depth by recurrence at full size** (`full_size_loop_pilot.json`, passed): a looped stack runs its middle levels
    twice with tied synapses, more computation per parameter, as cortex iterates. On the test bed a loop gained 0.047
-   and 0.062 over depth 6 at equal parameters, with a budget scaled to its passes; the pilot measures the loop at
-   equal energy against a plain stack given the same budget.
+   and 0.062 over depth 6 at equal parameters, with a budget scaled to its passes. At full size, after 24,000
+   updates, the looped stack scores 1.3102: 0.019 ahead of the plain stack given the same pulses (0.026 on new
+   contexts) and 0.010 ahead of the plain stack at the old budget (0.010 on new contexts), the first part at equal
+   parameters that adds knowledge at full size. It spends 1.63 times the pulses and 1.4 times the training time.
+   The raised budget alone makes the plain stack 0.009 worse, because its membranes saturate. The loop has earned
+   a run of 90,000 updates beside the pair. Open before it: whether the loop needs the raised budget at full size,
+   and whether the pool that lifts the ceiling adds to it.
 6. **A learned normalization pool**: divisive normalization with learned weights per channel, as cortical
    normalization weighs its pool, in place of one global sum. The pool in place of LayerNorm was v15's second
    largest step (0.012), but that step was an effect of the learning rate: at 3e-4 the fine pool is ahead of

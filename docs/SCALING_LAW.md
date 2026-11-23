@@ -160,6 +160,26 @@ stack (paired interval 0.0004 to 0.0013), under the 0.003 their record asked (`f
 the best spike-only stack so far, 1.11615 on test and 1.14908 on validation: 0.0095 behind the Transformer as it
 reads, and 0.013 behind the Transformer with taught output synapses. Its gap keeps v17's shape, all of it knowledge.
 
+## Depth by recurrence adds knowledge at full size
+
+Recorded after the v18 release (`full_size_loop_pilot.json`). A looped stack runs levels 2 to 8 twice with the same
+synapses: 18 level passes on the parameters of 11, with the pulse budget scaled by the passes. Its control is the
+plain stack given the same budget. One 24,000-update run each at 6e-4:
+
+| 2M validation bytes as streams | Pulses a byte | Score | Against the plain stack | On new contexts |
+|---|---:|---:|---:|---:|
+| Plain stack | 308,000 | 1.3199 | | |
+| Plain stack, raised budget | 506,000 | 1.3291 | +0.009 | +0.016 |
+| Looped stack, raised budget | 504,000 | 1.3102 | −0.010 | −0.010 |
+
+At equal energy the loop gains 0.019, and 0.026 on new contexts (interval 0.023 to 0.028), which passes the 0.010
+its record asked. Against the plain stack at the old budget, the design it would replace, it gains 0.010 on the
+whole and on new contexts, for 1.63 times the pulses and about 1.4 times the training time. More pulses alone
+hurt: the plain stack puts them into the same eleven levels and its membranes saturate (3.0% of the cells'
+entries at their bound against 0.8%, 2.9% of the reads' against 0.3%), where the loop spreads them over eighteen
+passes (1.4% and 1.6%). The loop has earned a run of 90,000 updates beside the pair. Not yet separated: whether
+the loop needs the raised budget at full size, and whether the pool that lifts the ceiling adds to it.
+
 ## The cell's shape holds with data
 
 Recorded after the v18 release. A full-size cell hears every channel's present byte and one delayed copy of it. The
@@ -217,8 +237,8 @@ pulses into bits is not shown. The budget's price says little would come of it l
 more pulses is worth 0.0045 nats a byte on the test bed and 0.0043 at full size. A screen on the laptop measures it
 (`output_step_with_data.json`, pre-registered): a test bed trained with spikes of 1/16 bit at the old budget, for
 which the price predicts a lead of 0.009 after 6,000 updates and 0.002 after 24,000, and one trained at a budget cut
-by what the output saves. `full_size_loop_pilot.json` has an arm with a larger budget, which measures what more
-pulses are worth at full size.
+by what the output saves. At full size more pulses in the same levels are worth less than nothing: the plain stack
+given 507,000 pulses a byte for 310,000 is 0.009 worse (`full_size_loop_pilot.json`, above).
 
 ## The stack's code thins as the rate rises, and the Transformer's stays in use
 
@@ -281,7 +301,6 @@ rose, and none has let a silent cell pass anything.
 | `data_scaling_long.json` | The curves: the Transformer, the delayed stack and the plain stack at 6,000 to 96,000 updates, at each model's best rate |
 | `weight_precision_with_data.json` | Finer charge grids and quantal release, at 6,000 and 24,000 updates |
 | `cell_dither_with_data.json` | Stochastic firing of the threshold cells, alone and with quantal release |
-| `full_size_loop_pilot.json` | Depth by recurrence at full size: levels 2 to 8 run twice with tied synapses, with the energy it takes as an arm of its own |
 | `loop_with_data.json` | A looped test bed at 6,000 and 24,000 updates against a plain bed given the same pulse budget, a screen on the laptop |
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `proportional_gates_with_data.json` | The wide proportional gate under the lifting pool at 6,000 and 24,000 updates, two seeds on the server and one on the laptop (pre-registered) |
