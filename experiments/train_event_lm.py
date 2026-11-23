@@ -375,6 +375,9 @@ def build_model(args):
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
                             granule_self_gate=getattr(args, "granule_self_gate", EventLMConfig.granule_self_gate),
                             granule_shunt=getattr(args, "granule_shunt", EventLMConfig.granule_shunt),
+                            granule_ramp=getattr(args, "granule_ramp", EventLMConfig.granule_ramp),
+                            granule_inner_gate=getattr(args, "granule_inner_gate",
+                                                       EventLMConfig.granule_inner_gate),
                             output_tied=getattr(args, "tied_output", EventLMConfig.output_tied),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
                             granule_branches=getattr(args, "granule_branches", EventLMConfig.granule_branches),
@@ -804,6 +807,14 @@ def main():
                         help="with --granule-gate, the gate is a shunting conductance: k gate spikes let in the share "
                              "k / (k + gate) of the collected charge, so a body never fires more than a plain cell; "
                              "with --granule-self-gate a cell fires about k * k / (k + 1) for k thresholds")
+    parser.add_argument("--granule-ramp", type=int, default=EventLMConfig.granule_ramp, metavar="THRESHOLDS",
+                        help="with --granule-gate, the gate opens in proportion to its count and is wide open at "
+                             "THRESHOLDS of its charge (1 to 16): k gate spikes let in k parts of the collected "
+                             "charge in the most spikes the gate fires, so a body never fires more than a plain "
+                             "cell and every gate spike lets in as much as the one before")
+    parser.add_argument("--granule-inner-gate", action="store_true",
+                        help="with --granule-gate, the gate dendrite sends no spike: its steps stay inside the "
+                             "cell, as a veto's do, and only the body's spikes count as pulses")
     parser.add_argument("--granule-branches", type=int, default=EventLMConfig.granule_branches, metavar="BRANCHES",
                         help="the dendrite of every plain granule cell branches BRANCHES times: each branch sums an "
                              "equal share of the cell's fibres and passes on only the charge above a threshold of its "

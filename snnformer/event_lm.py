@@ -256,6 +256,14 @@ class EventLMConfig:
     # the collected charge, so the body never fires more than a plain cell would for that charge. A cell that gates
     # itself then fires about k * k / (k + 1) spikes for k thresholds: a square near silence and a line above.
     granule_shunt: bool = False
+    # A gated cell whose gate opens in proportion to its count, wide open at this many thresholds of the gate's
+    # charge: with k gate spikes it lets in k parts in T of the collected charge, where T is the most spikes the gate
+    # fires at the present threshold. The body never fires more than a plain cell would for that charge, and every
+    # further gate spike lets in as much as the one before, where a shunting gate lets in less and less.
+    granule_ramp: int = 0
+    # A gated cell whose gate dendrite sends no spike: its steps stay inside the cell, as a veto's do, so only the
+    # body's spikes count as pulses. A gate that fires spends several fine spikes for every threshold of its charge.
+    granule_inner_gate: bool = False
     granule_veto: int = 0
     # Granule cells whose dendrite branches this many times: each branch sums an equal share of the cell's fibres and
     # passes on only the charge above a threshold of its own, and the body fires for the sum of what its branches
@@ -3196,13 +3204,36 @@ class _GatedFire(_IntegrateFire):
     The product of the charge and the gate's count is then taken in whole
     numbers of 32 bits, where it is exact (the charge stays below 2 ** 24 ticks
     and the count below 2 ** 7).
+
+    A ``shunt`` gate is a conductance: with k spikes it lets in the share
+    k / (k + ``unit``) of the collected charge. A ``ramp`` gate opens in
+    proportion: with k spikes it lets in k parts in T, where T is the most
+    spikes the gate fires at the present threshold, those of ``ramp``
+    thresholds of its charge. It is what a body does that fires for the
+    spikes of its value dendrite that arrive while its gate is open: with the
+    gate open in k of the T time slots of a byte, k in T of them pass.
     """
 
     def __init__(self, cap: int, charge_bits: int, unit: int, quanta_per_threshold: int = _PACKET_UNITS,
-                 shunt: bool = False):
+                 shunt: bool = False, ramp: int = 0):
         super().__init__(cap, charge_bits, False, quanta_per_threshold=quanta_per_threshold, capped=True)
         self.unit = unit
         self.shunt = shunt
+        self.ramp = ramp
+
+    def parts(self, units, opened):
+        """The parts of which the gate lets in one for each of its spikes: the body fires a spike for that many
+        present thresholds of the collected charge times the gate's count."""
+        if self.shunt:
+            # A shunting gate is a conductance: with k spikes it lets in the share k / (k + unit) of the collected
+            # charge, half of it at one threshold of the gate's charge and never more than all of it.
+            return opened + self.unit
+        if not self.ramp:
+            return self.unit
+        # A ramp gate lets in all of the collected charge at its largest count. Its membrane holds ``ramp`` whole
+        # thresholds, so a pool that raises the threshold leaves it fewer spikes unless the pool lifts the ceiling.
+        most = self.ramp * self.unit
+        return most if self.lifted else ((most * self.quanta_per_threshold) // units).clamp(1, most)
 
     def forward(self, current, quanta=None, *, reference=None, opened=None):
         if self.lifted:
@@ -3211,20 +3242,14 @@ class _GatedFire(_IntegrateFire):
         passed = bounded * opened
         units = quanta.to(torch.int32)
         quantum = self.threshold // self.quanta_per_threshold
-        if self.shunt:
-            # A shunting gate is a conductance: with k spikes it lets in the share k / (k + unit) of the collected
-            # charge, half of it at one threshold of the gate's charge and never more than all of it.
-            threshold = units * quantum * (opened.detach().to(torch.int32) + self.unit)
-        else:
-            threshold = units * (quantum * self.unit)
+        threshold = units * quantum * self.parts(units, opened.detach().to(torch.int32))
         charge = passed.to(torch.int32)
         magnitude = (charge.abs() + threshold // 2) // threshold
         limit = ((self.cap * self.quanta_per_threshold) // units).clamp(max=self.capped)
         counts = magnitude.minimum(limit) * charge.sign()
         if not current.is_floating_point():
             return counts
-        share = (opened + self.unit) if self.shunt else self.unit
-        surrogate = passed / (quanta * quantum * share)
+        surrogate = passed / (quanta * quantum * self.parts(units, opened))
         return counts.to(current.dtype) + (surrogate - surrogate.detach())
 
     def _lifted(self, current, quanta, opened):
@@ -3232,13 +3257,12 @@ class _GatedFire(_IntegrateFire):
         units = quanta.to(torch.int32)
         quantum = self.threshold // self.quanta_per_threshold
         gate = opened.detach().to(torch.int32)
-        threshold = units * quantum * (gate + self.unit) if self.shunt else units * (quantum * self.unit)
+        threshold = units * quantum * self.parts(units, gate)
         passed = current.detach().to(torch.int32) * gate
         counts = ((passed.abs() + threshold // 2) // threshold).clamp(max=self.capped) * passed.sign()
         if not current.is_floating_point():
             return counts
-        share = (opened + self.unit) if self.shunt else self.unit
-        surrogate = (current * opened / (quanta * quantum * share)).clamp(-self.capped, self.capped)
+        surrogate = (current * opened / (quanta * quantum * self.parts(units, opened))).clamp(-self.capped, self.capped)
         return counts.to(current.dtype) + (surrogate - surrogate.detach())
 
 
@@ -3527,6 +3551,24 @@ class _GranuleLayer(nn.Module):
     about k * k / (k + 1) spikes for k thresholds of charge: a square near
     silence, as a squared rectifier, and a line above, as a plain cell.
 
+    With ``granule_ramp`` as well, the gate opens in proportion to its count
+    and is wide open at that many thresholds of its charge. Its k spikes let
+    in k parts in T of the collected charge, where T is the most spikes the
+    gate fires at the present threshold. That is what a body does that fires
+    for the spikes of its value dendrite that arrive while its gate is open:
+    with the gate open in k of the T time slots of a byte, k in T of them
+    pass. The body never fires more than a plain cell would for the collected
+    charge, and every further gate spike lets in as much as the one before,
+    where a shunting gate is half open at one threshold and then lets in less
+    and less. A cell that gates itself fires about k * k / ``granule_ramp``
+    spikes for k thresholds of charge up to the ramp's width and k above it.
+
+    With ``granule_inner_gate`` as well, the gate dendrite sends no spike. Its
+    steps stay inside the cell, as a veto's do, and only the body's spikes
+    count as pulses. A gate that fires spends ``granule_gate`` fine spikes for
+    every threshold of its charge, which a pulse budget takes from the rest
+    of the stack.
+
     With ``granule_veto`` every cell has a second dendrite on the same fibres
     that does not fire. Its charge closes the cell, in ``granule_veto`` steps
     over the charge of one whole spike: a quarter of the cell's own charge is
@@ -3678,16 +3720,19 @@ class _GranuleLayer(nn.Module):
                 self.gate = nn.Parameter(torch.empty(clusters, cells, fan))
                 nn.init.normal_(self.gate, std=cfg.granule_gain / math.sqrt(fan))
             # A gate counts sixteen thresholds of charge at most, and no more spikes than those are at a whole
-            # threshold.
-            self.open = _ExcitatoryFire(_GATE_CAP, self.bits, False, quanta_per_threshold=cfg.pool_quanta * self.gated,
-                                        capped=_GATE_CAP * self.gated)
-            self.fire = _GatedFire(cell_cap, self.bits, self.gated, cfg.pool_quanta, shunt=cfg.granule_shunt)
+            # threshold. A ramp gate counts the thresholds at which it is wide open.
+            span = cfg.granule_ramp or _GATE_CAP
+            self.open = _ExcitatoryFire(span, self.bits, False, quanta_per_threshold=cfg.pool_quanta * self.gated,
+                                        capped=span * self.gated)
+            self.fire = _GatedFire(cell_cap, self.bits, self.gated, cfg.pool_quanta, shunt=cfg.granule_shunt,
+                                   ramp=cfg.granule_ramp)
             self.open.price_share = self.fire.price_share = cfg.granule_price
             # Under a pool that lifts the ceiling neither the gate nor the body is bounded by its membrane: a gate
             # under a loud stream opens as far as its charge says, where a bounded gate jams at its membrane.
             self.open.lifted = self.fire.lifted = cfg.pool_lifts_ceiling
-            # The gate of a cell that gates itself counts the cell's own charge and sends no spike.
-            self.open.dendrite = cfg.granule_self_gate
+            # The gate of a cell that gates itself counts the cell's own charge and sends no spike, and neither
+            # does an inner gate.
+            self.open.dendrite = cfg.granule_self_gate or cfg.granule_inner_gate
         elif cfg.granule_veto:
             # ``veto`` holds the synapses of the veto dendrite. They start silent.
             self.veto = nn.Parameter(torch.zeros(clusters, cells, fan))
@@ -4394,8 +4439,10 @@ class EventLM(nn.Module):
                 for read in self.state_reads.values():
                     object.__setattr__(read, "library", self.library)
         self.granule_layers = None
-        if (cfg.granule_self_gate or cfg.granule_shunt) and cfg.granule_after is None:
-            raise ValueError("granule_self_gate and granule_shunt gate the cells of granule layers, and there are none")
+        if ((cfg.granule_self_gate or cfg.granule_shunt or cfg.granule_ramp or cfg.granule_inner_gate)
+                and cfg.granule_after is None):
+            raise ValueError("granule_self_gate, granule_shunt, granule_ramp and granule_inner_gate gate the cells of "
+                             "granule layers, and there are none")
         if cfg.granule_after is not None:
             below = cfg.depth if cfg.clock_start is None else cfg.clock_start
             if (cfg.carry or cfg.continuous or not cfg.granule_after
@@ -4440,6 +4487,15 @@ class EventLM(nn.Module):
                 raise ValueError("a cell that gates itself is a gated cell: granule_self_gate needs granule_gate")
             if not isinstance(cfg.granule_shunt, bool) or cfg.granule_shunt and not cfg.granule_gate:
                 raise ValueError("a shunting gate is the gate of a gated cell: granule_shunt needs granule_gate")
+            if (not isinstance(cfg.granule_ramp, int) or isinstance(cfg.granule_ramp, bool)
+                    or not 0 <= cfg.granule_ramp <= _GATE_CAP
+                    or cfg.granule_ramp and (not cfg.granule_gate or cfg.granule_shunt)):
+                raise ValueError("a ramp gate is the gate of a gated cell, wide open at 1 to 16 thresholds of its "
+                                 "charge, and no shunt: granule_ramp needs granule_gate without granule_shunt")
+            if not isinstance(cfg.granule_inner_gate, bool) or cfg.granule_inner_gate and (
+                    not cfg.granule_gate or cfg.granule_self_gate):
+                raise ValueError("an inner gate is the gate dendrite of a gated cell with synapses of its own: "
+                                 "granule_inner_gate needs granule_gate without granule_self_gate")
             if cfg.granule_gate:
                 # The largest charge a body collects, times the most spikes of its gate.
                 collected = (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution) << (
