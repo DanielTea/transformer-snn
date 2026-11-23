@@ -80,8 +80,11 @@ trails, so most of the loss is the gate's form and not that energy (`proportiona
 lose work as switches: half to all of their open states let in more than three quarters of the value. One gate keeps
 pace with plain cells in that check, a gate that opens in proportion to its charge under the pool that lifts the
 ceiling, and its open states spread over the whole range. Its screen by slope is pre-registered
-(`proportional_gates_with_data.json`), and a pass releases a full-size run (`full_size_proportional_gate.json`). A
-second screen measures the other half of a smooth unit, in spikes: noisy thresholds
+(`proportional_gates_with_data.json`), and a pass releases a full-size run (`full_size_proportional_gate.json`).
+
+![The gate that keeps pace stays graded; the gates that lose are switches](../results/figures/event_lm_gate_state.png)
+
+A second screen measures the other half of a smooth unit, in spikes: noisy thresholds
 (`noisy_thresholds_with_data.json`). A real neuron's membrane is noisy, so near its threshold it fires by chance, and
 its average rate is a smooth curve of its input. Under logistic noise of half a threshold, a cell's average count is
 within 0.025 spikes of 0.5 · softplus(2 · charge / threshold). The cell learns from that curve's slope, where a plain
