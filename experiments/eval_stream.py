@@ -32,6 +32,7 @@ by eval_warmed_windows.py.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import hashlib
 import json
 import math
@@ -128,6 +129,24 @@ def forget_by_power(model, slope, levels=None, replace=False):
         read.forget_rate = 1.0
 
 
+def coarsen_output(model, step):
+    """Let every spike of a stack's output neurons stand for ``step`` fine steps of evidence, as the setting
+    ``output_step`` does from the start of training. It changes no weight: the threshold of the output neurons stands
+    that many times higher, they fire that many times fewer spikes, and the counts are scored in fine steps as
+    before. The step is a power of two, no finer than the stack's own."""
+    fire, held = model.output_emit, model.output_step
+    if (not isinstance(step, int) or step < held or step & (step - 1) or step > fire.cap * held
+            or step > 1 and model.output_reference is not None):
+        raise ValueError("an output spike stands for a power of two of fine steps of evidence, no fewer than the "
+                         "stack was built with and no more than a neuron's largest count")
+    coarser = (step // held).bit_length() - 1
+    fire.bits += coarser
+    fire.threshold <<= coarser
+    fire.cap >>= coarser
+    model.output_step = step
+    model.cfg = replace(model.cfg, output_step=step)
+
+
 @torch.inference_mode()
 def score(model, rows, piece, device):
     """The bits of every piece of every stream as [streams, pieces], and the number of scored targets. The rows
@@ -190,6 +209,10 @@ def main():
                              "included, and keep firing")
     parser.add_argument("--averaged", action="store_true",
                         help="score the averaged weights that a partial checkpoint holds beside its last ones")
+    parser.add_argument("--output-step", type=int, metavar="STEPS",
+                        help="every spike of the output neurons stands for this many fine steps of evidence, a "
+                             "power of two no finer than the stack's own: the same weights with an output that "
+                             "fires that many times fewer spikes")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--json", type=Path, required=True)
@@ -247,6 +270,11 @@ def main():
             model.synaptic_scaling()
         if args.reach is not None:
             lengthen_reach(model, args.reach, args.reach_levels)
+        if args.output_step is not None:
+            try:
+                coarsen_output(model, args.output_step)
+            except ValueError as error:
+                parser.error(f"{path}: {error}")
         if args.forget_slope is not None:
             try:
                 forget_by_power(model, args.forget_slope, args.reach_levels, replace=args.forget_slope_replaces)
@@ -285,6 +313,11 @@ def main():
         if args.averaged:
             # A partial checkpoint was scored at the average that it holds, not at the weights that its file names.
             row["averaged_weights"] = True
+        if model.output_step > 1:
+            # The fine steps of evidence that one output spike stands for, and whether training set them.
+            row["output_step"] = model.output_step
+            if args.output_step is not None and checkpoint["cfg"].get("output_step", 1) != model.output_step:
+                row["output_step_in_training"] = checkpoint["cfg"].get("output_step", 1)
         if args.forget_slope is not None:
             row["forget_slope"] = args.forget_slope
             if args.forget_slope_replaces:

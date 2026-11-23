@@ -32,7 +32,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import _atomic_output, resolve_device  # noqa: E402
-from eval_stream import stream_rows  # noqa: E402
+from eval_stream import coarsen_output, stream_rows  # noqa: E402
 from snnformer.event_lm import EventLM, _GatedFire, _IntegrateFire, _StateRead, emitted_pulses  # noqa: E402
 from train_event_lm import load_checkpoint  # noqa: E402
 from train_lm import load_splits  # noqa: E402
@@ -180,6 +180,9 @@ def main():
     parser.add_argument("--streams", type=int, default=16)
     parser.add_argument("--lead", type=int, default=1024, help="unscored bytes that a part after the first hears")
     parser.add_argument("--piece", type=int, default=512)
+    parser.add_argument("--output-step", type=int, metavar="STEPS",
+                        help="every spike of the output neurons stands for this many fine steps of evidence, a "
+                             "power of two no finer than the stack's own (as eval_stream.py takes it)")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--json", type=Path, required=True)
     args = parser.parse_args()
@@ -193,11 +196,17 @@ def main():
         model, checkpoint = load_checkpoint(path, device)
         if not isinstance(model, EventLM) or not model.cfg.stack:
             parser.error(f"{path}: the gates are measured on a stack of reads and cells")
+        if args.output_step is not None:
+            try:
+                coarsen_output(model, args.output_step)
+            except ValueError as error:
+                parser.error(f"{path}: {error}")
         found = gate_state(model, inputs, args.piece, device, skip=args.lead)
         record["runs"][path.parent.name] = {"run_name": checkpoint.get("run_name"), "weights": path.name,
                                             "peak_rate": checkpoint["args"].get("lr"),
                                             "schedule_updates": checkpoint["args"].get("steps"),
-                                            "lifted": bool(model.cfg.pool_lifts_ceiling), **found}
+                                            "lifted": bool(model.cfg.pool_lifts_ceiling),
+                                            "output_step": model.output_step, **found}
         gated = [row for row in found["cells_by_level"].values() if "gate_open" in row]
         print(path.parent.name, f"{found['pulses_a_byte']:,.0f} pulses a byte;",
               " ".join(f"{label} {value:,.0f}" for label, value in list(found["pulses_by_population"].items())[:5]),

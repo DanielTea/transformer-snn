@@ -319,6 +319,11 @@ class EventLMConfig:
     read_forget_rate: float = 1.0
     # An output neuron fires up to this many eighths of a bit of evidence for or against its byte.
     output_cap: int = _OUTPUT_CAP
+    # A spike of a stack's output neuron stands for this many of the fine steps of evidence, a power of two: at a
+    # resolution of 16 a fine step is a 128th of a bit, and at 8 here a neuron fires one spike for a sixteenth of a
+    # bit. The counts that the stack returns stay in fine steps and are scored as before; the neurons fire that
+    # many times fewer spikes, and those are what a pulse budget counts.
+    output_step: int = 1
     # The neurons of state reads and cell layers count their threshold in quanta this many times finer than the
     # four of a packet threshold, and every spike of their pool adds one of those.
     pool_fine: int = 1
@@ -4229,6 +4234,11 @@ class EventLM(nn.Module):
             raise ValueError("the output cap is a whole number of eighths of a bit, and an output neuron's largest "
                              "charge stays within the range of exact sums")
         output_cap = cfg.output_cap * cfg.resolution
+        if (not isinstance(cfg.output_step, int) or isinstance(cfg.output_step, bool) or cfg.output_step < 1
+                or cfg.output_step & (cfg.output_step - 1) or cfg.output_step > output_cap
+                or cfg.output_step > 1 and (not cfg.stack or cfg.output_reference)):
+            raise ValueError("an output spike stands for a power of two of fine steps of evidence, no more than a "
+                             "neuron's largest count, in a stack whose output neurons share no reference")
         if (not all(isinstance(size, int) and size >= 1 and not size & (size - 1)
                     for size in (cfg.pool_fine, cfg.pool_rate))
                 or cfg.pool_rate.bit_length() > cfg.inhibition_bits + 1
@@ -4310,12 +4320,18 @@ class EventLM(nn.Module):
         if cfg.output_tied:
             # One row of synapses for every byte: its way into the stream and its output neuron's way out of it.
             self.output.weight = self.input.weight
-        self.output_emit = _IntegrateFire(output_cap, output_bits, cfg.carry, continuous=cfg.continuous)
+        # An output spike that stands for several fine steps has a threshold that many times higher, and the
+        # neuron's largest count is that many times smaller: its membrane holds the same evidence.
+        self.output_step = cfg.output_step
+        coarser = cfg.output_step.bit_length() - 1
+        self.output_emit = _IntegrateFire(output_cap >> coarser, output_bits + coarser, cfg.carry,
+                                          continuous=cfg.continuous)
         self.output_pool = None
         if cfg.output_pool:
             # The pool divides what the stream's activity multiplies: the evidence of the output neurons then
             # does not grow with the number of pulses that carry it.
-            self.output_emit = _ShuntedFire(output_cap, output_bits, False, quanta_per_threshold=cfg.output_pool)
+            self.output_emit = _ShuntedFire(output_cap >> coarser, output_bits + coarser, False,
+                                            quanta_per_threshold=cfg.output_pool)
             self.output_pool = _stream_pool(cfg)
         # A second vocabulary population reads the byte-rate stream through the same
         # synapses. Its higher threshold removes the finer spike resolution.
@@ -5400,6 +5416,9 @@ class EventLM(nn.Module):
                 current, 1 + self.output_pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)))
         else:
             counts = self.output_emit(current, reference=self._reference_counts(current))
+        if self.output_step > 1:
+            # Every spike stands for that many fine steps of evidence, in which the counts are scored.
+            counts = counts * self.output_step
         if fibres is not None:
             # A stream runs the rule in whole numbers, except in training on streams, where trained fast synapses
             # run their window form from the state that the stream hands on, so that the gains learn.

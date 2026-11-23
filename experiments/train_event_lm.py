@@ -367,6 +367,7 @@ def build_model(args):
                             read_forget=getattr(args, "read_forget", EventLMConfig.read_forget),
                             read_forget_rate=getattr(args, "read_forget_rate", EventLMConfig.read_forget_rate),
                             output_cap=getattr(args, "output_cap", EventLMConfig.output_cap),
+                            output_step=getattr(args, "output_step", EventLMConfig.output_step),
                             pool_fine=getattr(args, "pool_fine", EventLMConfig.pool_fine),
                             pool_rest=getattr(args, "pool_rest", EventLMConfig.pool_rest),
                             pool_rate=getattr(args, "pool_rate", EventLMConfig.pool_rate),
@@ -919,6 +920,10 @@ def main():
     parser.add_argument("--output-cap", type=int, default=EventLMConfig.output_cap, metavar="EIGHTHS",
                         help="most evidence an output neuron fires for or against its byte, in eighths of a bit; "
                              "the default of 128 ends a neuron's say at 16 bits")
+    parser.add_argument("--output-step", type=int, default=EventLMConfig.output_step, metavar="STEPS",
+                        help="a spike of a stack's output neuron stands for this many fine steps of evidence, a "
+                             "power of two: at 8 and a resolution of 16, a sixteenth of a bit in place of a 128th; "
+                             "the output then fires, and a pulse budget counts, that many times fewer spikes")
     parser.add_argument("--pool-fine", type=int, default=EventLMConfig.pool_fine, metavar="TIMES",
                         help="the neurons of state reads and cell layers count their threshold in quanta this many "
                              "times finer (four times this many to a threshold), and each spike of their pool "
