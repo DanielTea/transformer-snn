@@ -242,6 +242,14 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    (`plain_units_with_data.json`). Along the walk's full-size curves the two hard kinds fell further behind as
    training went on (the plain one from 0.008 to 0.027, the gated one from 0.001 to 0.014) and the smooth plain
    unit did not (0.008 to 0.011), one seed with unequal schedules.
+   The second control is pre-registered as well (`full_size_spikes_late.json`): at 3e-4 and 24,000 updates, the
+   full-size stack beside a stand-in whose reads are softmax shares and whose cells answer in real numbers. The
+   stand-in's switches are not wired to the pool of fine quanta, so a spiking arm on the coarse pool trains
+   beside it, and both are read against the model's own pilot at that rate (1.3416) and the Transformer's
+   (1.3057). If the stand-in is less than 0.005 ahead of the model, spikes in reads and cells cost nothing late
+   and the distance is the layout's; if it is 0.015 or more ahead, stand-ins with only the reads or only the
+   cells in floats say which part's learning through spikes to work on. A third arm asks whether the stand-in
+   gains from the Transformer's rate where the spiking stack cannot.
 3. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
    `randomness_at_best_rate.json`): does the charge grid limit late learning?
 4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
