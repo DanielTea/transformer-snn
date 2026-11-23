@@ -100,7 +100,16 @@ def read_run(model, run, args):
     levels = np.stack([quantizer(values[:, sensor]) for sensor, quantizer in enumerate(quantizers)])
     samples = encode(levels, args.encoding, args.levels)
     reader = StreamReader(model, samples.shape[0])
-    bits = [reader.read(samples[:, start:start + args.piece]) for start in range(0, samples.shape[1], args.piece)]
+    if args.reference_piece is None:
+        bits = [reader.read(samples[:, start:start + args.piece]) for start in range(0, samples.shape[1], args.piece)]
+        return np.concatenate(bits, 1), quantizers
+    calibration = args.calibration
+    bits = [reader.read(samples[:, start:min(start + args.piece, calibration)])
+            for start in range(0, calibration, args.piece)]
+    normal = reader.mark()
+    for start in range(calibration, samples.shape[1], args.reference_piece):
+        reader.rewind(normal)
+        bits.append(reader.read(samples[:, start:start + args.reference_piece]))
     return np.concatenate(bits, 1), quantizers
 
 
@@ -123,6 +132,9 @@ def main():
     parser.add_argument("--freeze-after-calibration", action="store_true",
                         help="the fast synapses learn along the calibration samples only and then keep firing with "
                              "what they hold, so that they keep the normal while the rest of the run is read")
+    parser.add_argument("--reference-piece", type=int, metavar="SAMPLES",
+                        help="score every piece of this many samples after calibration from the capsule that the "
+                             "calibration left, not from the state that the stream carried: surprise against normal")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--out", type=Path, required=True, help="path without suffix for the .npz and .json")
     args = parser.parse_args()
@@ -176,7 +188,7 @@ def main():
     record = {"dataset": args.dataset, "checkpoint": str(args.checkpoint), "checkpoint_sha256": sha256(args.checkpoint),
               "run_name": checkpoint.get("run_name"), "encoding": args.encoding, "levels": args.levels,
               "bytes_per_sample": sample_width(args.encoding, args.levels), "calibration_samples": args.calibration,
-              "piece_samples": args.piece,
+              "piece_samples": args.piece, "reference_piece_samples": args.reference_piece,
               "reach": {int(level): read.reach for level, read in model.state_reads.items()},
               "taught": None if args.teach_levels is None else {"levels": sorted(args.teach_levels),
                                                                  "threshold": args.teach_threshold,

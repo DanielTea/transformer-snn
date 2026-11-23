@@ -13,7 +13,10 @@ output synapses, what they have learned from that stream alone. That state is th
 and resumed, and a stream read in pieces, or stopped, saved and resumed, is scored exactly as one pass over all of it.
 
 The reader's measure is the surprise of every sample: the bits that the stack's predictions spent on its bytes, each
-byte predicted before it arrived, from everything that the stream held before it.
+byte predicted before it arrived, from everything that the stream held before it. A stream that carries its state
+adapts to what it reads, and a new state that holds steady soon costs few bits. A reader can therefore also
+``mark`` the capsule of a stretch of normal operation and ``rewind`` to it before every short piece, so that each
+piece is predicted from the normal and its surprise says how far the stream now lies from it.
 """
 
 from __future__ import annotations
@@ -143,6 +146,14 @@ class StreamReader:
         self.last = logp[:, -1]
         self.samples += count
         return bits.view(streams, count, width).sum(-1).cpu().numpy()
+
+    def mark(self):
+        """The reader's place: a later ``rewind`` to it reads on as if nothing had been read since. Reading never
+        changes a state that the stack handed out, so a mark can be rewound to any number of times."""
+        return self.state, self.last, self.samples
+
+    def rewind(self, mark):
+        self.state, self.last, self.samples = mark
 
     def save(self, path):
         """Write every stream's capsule: what the stack carries for it and its last prediction."""

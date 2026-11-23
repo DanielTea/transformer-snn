@@ -171,3 +171,19 @@ def test_the_delta_encoding_writes_changes_and_repeats_a_byte_while_steady():
     # A steady stretch writes one byte again and again; the clipped jumps are the ends of the range.
     assert len(set(written[0, :3, 0].tolist())) == 1 and chr(written[0, 0, 0]) == "O"
     assert ((written >= 33) & (written <= 126)).all()
+
+
+def test_rewinding_to_a_mark_reads_on_as_if_nothing_had_been_read_since():
+    model, samples = _stack(**_TAUGHT), _samples(count=70)
+    reader = StreamReader(model, 3)
+    reader.read(samples[:, :40])
+    normal = reader.mark()
+    first = reader.read(samples[:, 40:55])
+    reader.rewind(normal)
+    again = reader.read(samples[:, 40:55])
+    reader.rewind(normal)
+    later = reader.read(samples[:, 55:70])
+    # The same piece from the mark costs the same bits, and a later piece from the mark differs from reading on.
+    assert np.array_equal(first, again)
+    straight = StreamReader(model, 3).read(samples)
+    assert np.array_equal(first, straight[:, 40:55]) and not np.array_equal(later, straight[:, 55:70])
