@@ -19,7 +19,7 @@
  },
  "result": {
   "recorded_utc": "2026-11-23T07:17:26Z",
-  "state": "The gate arm is read; the self-gated arm's run of 24,000 updates is training and its reading follows.",
+  "state": "Both arms are read.",
   "base": {
    "6,000 updates": 1.62828,
    "24,000 updates": 1.48247,
@@ -111,13 +111,105 @@
    "verdict": "Reported only: the gated cell trails the base at both lengths, by 0.067 at 6,000 updates and 0.108 at 24,000, and by more on new contexts (0.090 and 0.138). It earns no seeds on the server. Its gate dendrites sit at their bound at 9% and 8% of their entries, as at full size (full_size_unit_screen.json); lifted_gates_with_data.json tests the same cell with no bound."
   },
   "arm self": {
+   "recorded_utc": "2026-11-23T10:14:59Z",
    "6,000 updates": 1.62969,
-   "lead over the base at 6,000 updates": -0.00141,
-   "24,000 updates": "training"
+   "24,000 updates": 1.4841,
+   "lead over the base": {
+    "6,000 updates": -0.00141,
+    "24,000 updates": -0.00163
+   },
+   "growth of the lead from 6,000 to 24,000 updates": -0.00022,
+   "pulses a byte at 24,000 updates": 115759,
+   "by context at 6,000 updates, self minus base (near 240, far 8,192)": {
+    "copyable near": {
+     "gap": -0.0578,
+     "interval_95": [
+      -0.0717,
+      -0.0433
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.0293,
+     "interval_95": [
+      0.0123,
+      0.0441
+     ],
+     "share": 0.1102
+    },
+    "seen, other follower": {
+     "gap": -0.056,
+     "interval_95": [
+      -0.1324,
+      0.0243
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": 0.0073,
+     "interval_95": [
+      0.0035,
+      0.0109
+     ],
+     "share": 0.7605
+    }
+   },
+   "by context at 24,000 updates, self minus base": {
+    "copyable near": {
+     "gap": 0.0442,
+     "interval_95": [
+      0.0342,
+      0.0569
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": -0.0312,
+     "interval_95": [
+      -0.0448,
+      -0.0134
+     ],
+     "share": 0.1102
+    },
+    "seen, other follower": {
+     "gap": 0.031,
+     "interval_95": [
+      -0.0562,
+      0.0937
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": 0.0001,
+     "interval_95": [
+      -0.003,
+      0.004
+     ],
+     "share": 0.7605
+    }
+   },
+   "membranes at their bound (experiments/membrane_saturation.py, 65,536 validation bytes)": {
+    "all": {
+     "6,000 updates": 0.0012,
+     "24,000 updates": 0.0012
+    },
+    "cells": {
+     "6,000 updates": 0.0003,
+     "24,000 updates": 0.0027
+    },
+    "reads": {
+     "6,000 updates": 0.0002,
+     "24,000 updates": 0.0012
+    }
+   },
+   "verdict": "Reported only: the self-gated cell is level with the base at both lengths, 0.0014 behind at 6,000 updates and 0.0016 behind at 24,000, and its lead does not grow (-0.0002). On new contexts it is 0.0073 behind at 6,000 updates and level at 24,000 (0.0001, interval -0.003 to 0.004). It earns no seeds on the server."
   },
   "records": [
    "gap_by_piece_laptop_gate-6k-vs-base-6k.json",
-   "gap_by_piece_laptop_gate-24k-vs-base-24k.json"
-  ]
+   "gap_by_piece_laptop_gate-24k-vs-base-24k.json",
+   "gap_by_piece_laptop_self-6k-vs-base-6k.json",
+   "gap_by_piece_laptop_self-24k-vs-base-24k.json"
+  ],
+  "verdict": "Neither cell form earns seeds. The gated cell trails the base by 0.067 at 6,000 updates and 0.108 at 24,000; the self-gated cell is level at both lengths. A gate does not change the stack's slope at its best rate in either form tested here."
  }
 }
