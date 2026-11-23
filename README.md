@@ -173,9 +173,15 @@ the test bed screens both forms by their slope over data.
 **Still running** for v19: the full-size pair, each model at its
 best rate (90,000 updates); the data-scaling curves from 6,000 to
 96,000 updates at each model's best rate; quantal release and
-stochastic firing at two rates; the full size's cell shape at four
-seeds; and the test bed's screens of gated cells and noisy
-thresholds by their slope.
+stochastic firing at two rates; the test bed's screens of gated
+cells and noisy thresholds by their slope; gated cells under the
+lifted ceiling; and depth by recurrence, with the energy it takes
+as an arm of its own.
+
+**In since the release:** the full size's cell shape passes at four
+seeds. After 24,000 updates it is 0.015 ahead of the test bed's own
+shape and 0.020 better on new contexts, at every seed
+(`cell_shape_with_data.json`).
 
 ## v17: the knowledge gap
 

@@ -138,6 +138,27 @@ stack (paired interval 0.0004 to 0.0013), under the 0.003 their record asked (`f
 the best spike-only stack so far, 1.11615 on test and 1.14908 on validation: 0.0095 behind the Transformer as it
 reads, and 0.013 behind the Transformer with taught output synapses. Its gap keeps v17's shape, all of it knowledge.
 
+## The cell's shape holds with data
+
+Recorded after the v18 release. A full-size cell hears every channel's present byte and one delayed copy of it. The
+test bed's own cell hears a narrower fan of the delayed stream. At 6,000 updates the full size's shape was 0.020
+ahead on the laptop's seed, 0.009 of it on new contexts. After 24,000 updates at 3e-4, on four seeds, it still leads
+(`cell_shape_with_data.json`):
+
+| Seed | Test bed's shape | Full size's shape | Lead | Gain on new contexts |
+|---|---:|---:|---:|---:|
+| 20001 | 1.54749 | 1.53518 | 0.01231 | 0.0182 |
+| 20002 | 1.55804 | 1.53519 | 0.02285 | 0.0215 |
+| 20003 | 1.55522 | 1.53326 | 0.02196 | 0.0219 |
+| 20004 | 1.55186 | 1.54734 | 0.00452 | 0.0203 |
+| Mean | | | **0.01541** | **0.0205** |
+
+It passes its mark: 0.010 on average, ahead at three seeds or more. The gain on new contexts is the same at every
+seed, 0.018 to 0.022, while the near copies swing with the seed. On the laptop's seed at 6,000 updates that gain was
+0.009. The devices and seeds differ, so the growth is a pointer and not a result, but this is the first gain on
+knowledge here that did not fade with data. The full-size stack already has this shape. By the rule recorded before
+the runs, the test bed has it too in every study recorded from now on.
+
 ## Still running
 
 | Record | Question |
@@ -145,7 +166,10 @@ reads, and 0.013 behind the Transformer with taught output synapses. Its gap kee
 | `data_scaling_long.json` | The curves: the Transformer, the delayed stack and the plain stack at 6,000 to 96,000 updates, at each model's best rate |
 | `weight_precision_with_data.json` | Finer charge grids and quantal release, at 6,000 and 24,000 updates |
 | `cell_dither_with_data.json` | Stochastic firing of the threshold cells, alone and with quantal release |
-| `cell_shape_with_data.json` | The full size's cell shape at 24,000 updates, four seeds |
+| `full_size_lifted_gate.json` | Gated cells under the pool that lifts the ceiling, at full size, against the lifted plain stack |
+| `lifted_gates_with_data.json` | The same on the test bed at 6,000 and 24,000 updates, a screen on the laptop |
+| `full_size_loop_pilot.json` | Depth by recurrence at full size: levels 2 to 8 run twice with tied synapses, with the energy it takes as an arm of its own |
+| `loop_with_data.json` | A looped test bed at 6,000 and 24,000 updates against a plain bed given the same pulse budget, a screen on the laptop |
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `gated_cells_with_data.json` | Gated and self-gated cells at 6,000 and 24,000 updates at the best rate, a screen on the laptop |
 | `noisy_thresholds_with_data.json` | Noisy thresholds at 6,000 and 24,000 updates at the best rate, a screen on the laptop |

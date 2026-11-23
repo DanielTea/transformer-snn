@@ -132,7 +132,7 @@ stream (`tests/test_myelin.py`, `tests/test_word_heads.py`).
 | v16 stack | 1.1199 | 1.1514 | 34.81M |
 | **Knowledge cells, trained on streams** | **1.1170** | **1.1496** | 36.26M |
 | Trained plasticity (fast synapses trained in the loop) | within 0.001 of its reference | | 34.81M |
-| Word heads with knowledge cells, trained on streams | still training | | 36.26M |
+| Word heads with knowledge cells, trained on streams | 1.1162 (0.0009 ahead of knowledge cells; fails its mark of 0.003) | 1.1491 | 36.26M |
 | Depth 22 (twice the levels, the same pulse budget) | 1.0926 | 1.1230 | 69.36M |
 | Transformer at depth 22 | 1.0704 | 1.0930 | 69.37M |
 
@@ -145,8 +145,10 @@ stack gains 0.027 over depth 11 and the Transformer 0.036: the gap widens with s
 
 ![The best spiking stack so far](../results/figures/event_lm_best_model.png)
 
-The full-size word-head run was still training at the release; its verdict, by the rule recorded before it started
-(`full_size_word_heads.json`), comes with the next release.
+The full-size word-head run finished after this release. It scores 1.11615 on test and 1.14908 on validation, the
+best spiking score so far, and is ahead of knowledge cells alone by 0.0009 on test (paired interval 0.0004 to 0.0013)
+and 0.0006 on validation. The rule recorded before it started asked for 0.003 on test, so word heads fail their mark
+and do not join the design (`full_size_word_heads.json`). The run is the model of the v18 release.
 
 Records: `full_size.json`, `full_size_word_heads.json`, `results/event_lm/trained_plasticity/arms.json`.
 
