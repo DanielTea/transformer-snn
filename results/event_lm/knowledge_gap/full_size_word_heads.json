@@ -1,0 +1,128 @@
+{
+ "study": "full_size_word_heads",
+ "recorded_utc": "2026-11-22T12:03:02Z",
+ "why": "On the test bed one word head a read made the stack 0.023 better over long streams on the laptop, all of it memory: 0.24 bits a byte on copyable bytes, new contexts level (word_rhythm.json); on the server's CPU the same arm stood 0.016 ahead at 4,500 updates on the trainer's streams. At full size memory is where the stack beats the Transformer (0.096 on copyable bytes, 0.397 on bytes copyable only from 2 to 8 KB back, for the best stack, l2048-know-st), and parts that help different kinds of bytes add up. GPU 1 is free for the rest of the window, which closes on Monday at 06:45 UTC.",
+ "arm": "l2048-word-st: the saved state of p-forget at 24,000 updates, forked exactly as l2048-know-st was (ctx 2048, batch 2, reads reaching 2,048 cells, 128 knowledge cells a head grown at the fork, trained on streams with --stream 10 --stream-groups 15), with one word head in every read (--read-word-heads 1 --read-word-span 32: of each read's eight heads, the first reads the present word by places 0 to 31), to 90,000 updates on GPU 1, code with word heads",
+ "reference": "l2048-know-st, the same fork without word heads: test 1.13571 / validation 1.16518 as streams at the trained reach, 1.12097 / 1.15148 reaching 8,192 cells, 1.11702 / 1.14963 with v15's fast synapses at 2^24",
+ "parameters": "l2048-know-st plus 32 offsets a read: 352 more",
+ "measure": "As l2048-know-st was scored (know-st-after.sh): both splits of enwik8 as 16 unbroken streams at the trained reach, the reach chosen on the first validation million (trained or 8,192), and with v15's fast synapses on all 11 levels at 2^24; every scoring paired piece by piece against l2048-know-st's; the gap split by context against tf2048.",
+ "pass_mark": "Word heads join v17 if l2048-word-st is ahead of l2048-know-st on both splits with v15's fast synapses at the chosen reach, by at least 0.003 on test, with the paired 95% intervals above zero. If the window closes before the run ends, the last saved state is scored the same way against l2048-know-st's curve at the same update, and the verdict says so.",
+ "seen_before_recording": "The test bed's word-head run on the laptop (word_rhythm.json) and the server's run to 4,500 updates; no full-size run with word heads exists.",
+ "result": {
+  "recorded_utc": "2026-11-23T04:22:33Z",
+  "parameters": 36264308,
+  "reach chosen on the first validation million": {
+   "trained (2,048)": 1.19275,
+   "8,192": 1.17675,
+   "chosen": "8,192"
+  },
+  "with v15's fast synapses at 2^24, reach 8,192": {
+   "test": 1.11615,
+   "validation": 1.14908
+  },
+  "l2048-know-st the same way": {
+   "test": 1.11702,
+   "validation": 1.14963
+  },
+  "paired, word heads minus know-st": {
+   "test": {
+    "gap": -0.00087,
+    "interval_95": [
+     -0.00132,
+     -0.00042
+    ]
+   },
+   "validation": {
+    "gap": -0.00055,
+    "interval_95": [
+     -0.001,
+     -9e-05
+    ]
+   }
+  },
+  "verdict": "FAIL by the pass mark: word heads are ahead of l2048-know-st on both splits, with both paired intervals clear of zero, but by 0.0009 on test, under the 0.003 the mark asked. They do not join the design. l2048-word-st is the best spiking score so far (1.11615 test, 1.14908 validation).",
+  "gap to tf2048": {
+   "frozen (1.10669 test, 1.13033 validation)": {
+    "test": 0.00946,
+    "validation": 0.01875
+   },
+   "with taught output synapses at 0.07 (1.10321 test, 1.12901 validation)": {
+    "test": 0.01294,
+    "validation": 0.02007
+   }
+  },
+  "gap to tf2048 (frozen) by context (gap_by_piece, near 2,032, far 8,192)": {
+   "test": {
+    "whole": 0.00948,
+    "copyable near": {
+     "gap": -0.1016,
+     "interval_95": [
+      -0.1083,
+      -0.0949
+     ],
+     "share": 0.1659
+    },
+    "copyable far only": {
+     "gap": -0.3957,
+     "interval_95": [
+      -0.4349,
+      -0.3671
+     ],
+     "share": 0.0424
+    },
+    "new": {
+     "gap": 0.0571,
+     "interval_95": [
+      0.0545,
+      0.06
+     ],
+     "share": 0.737
+    },
+    "fourth letter on": {
+     "gap": 0.0515,
+     "interval_95": [
+      0.0375,
+      0.0649
+     ],
+     "share": 0.3166
+    }
+   },
+   "validation": {
+    "whole": 0.01872,
+    "copyable near": {
+     "gap": -0.0896,
+     "interval_95": [
+      -0.1,
+      -0.0784
+     ],
+     "share": 0.1346
+    },
+    "copyable far only": {
+     "gap": -0.3775,
+     "interval_95": [
+      -0.4181,
+      -0.3369
+     ],
+     "share": 0.0427
+    },
+    "new": {
+     "gap": 0.0693,
+     "interval_95": [
+      0.0658,
+      0.0726
+     ],
+     "share": 0.7684
+    },
+    "fourth letter on": {
+     "gap": 0.1071,
+     "interval_95": [
+      0.0885,
+      0.122
+     ],
+     "share": 0.317
+    }
+   }
+  },
+  "reading": "On the test bed word heads gained 0.023 at 6,000 updates and 0.005 at 24,000, all of it memory (word_heads_with_data.json). At full size they add 0.0009: a real gain, too small to matter. The gap to the Transformer keeps v17's shape: the stack is better on bytes it can copy (by 0.10 within 2 KB and 0.40 from 2 to 8 KB on test) and behind on new contexts by 0.057 on test and 0.069 on validation, as before. Scored as trained and at reach only on both splits by word-st-after.sh as well; those scores do not decide the verdict."
+ }
+}

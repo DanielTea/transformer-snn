@@ -28,10 +28,10 @@ Each archive unpacks under `checkpoints/`:
 
 | Archive | File | SHA-256 |
 |---|---|---|
-| `spiking-byte-lm-v16-checkpoints-l2048-forget.tar.gz` | `long_streams/l2048-forget/model.pt.averaged` | `9230b212cbdc8c249b9a026126056972e0d1024f267f2edca341ebf96bfce3af` |
-| `spiking-byte-lm-v16-checkpoints-l2048-flat.tar.gz` | `long_streams/l2048-flat/model.pt.averaged` | `5e9c46e16619fa5c3e9273005d52f70c7a0edc2db79be24946a757a85ac1f5b6` |
-| `spiking-byte-lm-v16-checkpoints-tf2048.tar.gz` | `long_streams/tf2048/model.pt.averaged` | `e72a68257996ce66c6d3bfb1145af1d7265b4c4f5a977cf6e82137369ea2da71` |
-| `spiking-byte-lm-v16-checkpoints-tf1024.tar.gz` | `long_streams/tf1024/model.pt.averaged` | `2b0c4fcff07fdf011f29c35c7a5f4e26a8271adf3051d7ba05da88398bd6e1cc` |
+| `spiking-byte-lm-v16-checkpoints-l2048-forget.tar.gz` | `long_streams/l2048-forget/model.pt.averaged` | `75c4c98b0c4ed3f5f69516b2f5ceb8859b108ea35cafb3bf73118c0798a46b8e` |
+| `spiking-byte-lm-v16-checkpoints-l2048-flat.tar.gz` | `long_streams/l2048-flat/model.pt.averaged` | `9a2898fe68f6e8ddf06cc118557031244cefebb0b4c9f3435809228b37517174` |
+| `spiking-byte-lm-v16-checkpoints-tf2048.tar.gz` | `long_streams/tf2048/model.pt.averaged` | `002771455560da83be426516bed552a079a34518d41086a20a26d9bea466ac34` |
+| `spiking-byte-lm-v16-checkpoints-tf1024.tar.gz` | `long_streams/tf1024/model.pt.averaged` | `652a4c4e422efb3702f29c2d35abffac64844144ccdfd1babce5705a6e13126e` |
 
 ```bash
 for name in l2048-forget l2048-flat tf2048 tf1024; do
@@ -39,6 +39,11 @@ for name in l2048-forget l2048-flat tf2048 tf1024; do
 done
 shasum -a 256 -c results/event_lm/long_streams_checkpoints.sha256
 ```
+
+The archives were replaced on 2026-11-22: each file is the scored file with two training arguments, `results_dir`
+and `checkpoint`, rewritten to repository paths, and its weights are identical. The scored files' hashes are in
+`models/spiking-byte-lm-v16/manifest.json` for `l2048-forget`, and were `5e9c46e1…`, `e72a6825…` and `2b0c4fcf…` for
+`l2048-flat`, `tf2048` and `tf1024`.
 
 `spiking-byte-lm-v16-bits.tar.gz` holds the bits of every piece
 of every published scoring, for paired comparisons without

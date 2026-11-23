@@ -192,3 +192,7 @@ Another machine can draw other bytes, since the races are
 computed in floating point.
 
 [Stack](../../snnformer/event_lm.py) · [Stream generator](../../experiments/generate_stream.py) · [Stream scorer](../../experiments/eval_stream.py) · [Test record](../../results/event_lm/stream_form/scores/test_long_windows_reach.json) · [Training record](../../results/event_lm/stream_form/runs/long-windows.json)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

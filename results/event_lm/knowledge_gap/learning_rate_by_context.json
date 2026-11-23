@@ -1,0 +1,334 @@
+{
+ "study": "learning_rate_by_context",
+ "recorded_utc": "2026-11-22T17:43:26Z",
+ "kind": "A diagnostic made after the fact from finished runs of learning_rate_with_data (seed 20001), not pre-registered.",
+ "question": "Where does the better learning rate help each model: on bytes it can copy, or on new contexts, where the stack's gap is?",
+ "measure": "experiments/gap_by_piece.py on the first 2,000,000 validation bytes as 16 streams, near 240 (the Transformer's history), far 8,192; the gap is the second scoring minus the first",
+ "stack minus Transformer at 3e-4 (gap_by_piece_stack-vs-tf-at-3e-4.json)": {
+  "whole": 0.05466,
+  "copyable near": {
+   "gap": -0.176,
+   "interval_95": [
+    -0.213,
+    -0.1349
+   ],
+   "share": 0.0747
+  },
+  "copyable far only": {
+   "gap": 0.0068,
+   "interval_95": [
+    -0.0341,
+    0.055
+   ],
+   "share": 0.1102
+  },
+  "seen, other follower": {
+   "gap": 0.0154,
+   "interval_95": [
+    -0.2145,
+    0.2013
+   ],
+   "share": 0.0546
+  },
+  "new": {
+   "gap": 0.0871,
+   "interval_95": [
+    0.0794,
+    0.095
+   ],
+   "share": 0.7605
+  }
+ },
+ "stack minus Transformer at 1.2e-3 (gap_by_piece_stack-vs-tf-at-1.2e-3.json)": {
+  "whole": 0.0421,
+  "copyable near": {
+   "gap": -0.0057,
+   "interval_95": [
+    -0.0289,
+    0.0169
+   ],
+   "share": 0.0747
+  },
+  "copyable far only": {
+   "gap": 0.0569,
+   "interval_95": [
+    0.0248,
+    0.0869
+   ],
+   "share": 0.1102
+  },
+  "seen, other follower": {
+   "gap": -0.1841,
+   "interval_95": [
+    -0.321,
+    -0.0447
+   ],
+   "share": 0.0546
+  },
+  "new": {
+   "gap": 0.0609,
+   "interval_95": [
+    0.0563,
+    0.0665
+   ],
+   "share": 0.7605
+  }
+ },
+ "stack at 1.2e-3 minus at 3e-4 (gap_by_piece_stack-1.2e-3-vs-3e-4.json)": {
+  "whole": -0.06106,
+  "copyable near": {
+   "gap": -0.0335,
+   "interval_95": [
+    -0.0453,
+    -0.0226
+   ],
+   "share": 0.0747
+  },
+  "copyable far only": {
+   "gap": -0.088,
+   "interval_95": [
+    -0.1079,
+    -0.0672
+   ],
+   "share": 0.1102
+  },
+  "seen, other follower": {
+   "gap": 0.1229,
+   "interval_95": [
+    0.0416,
+    0.2003
+   ],
+   "share": 0.0546
+  },
+  "new": {
+   "gap": -0.0731,
+   "interval_95": [
+    -0.0766,
+    -0.0689
+   ],
+   "share": 0.7605
+  }
+ },
+ "Transformer at 1.2e-3 minus at 3e-4 (gap_by_piece_tf-1.2e-3-vs-3e-4.json)": {
+  "whole": -0.0485,
+  "copyable near": {
+   "gap": -0.1767,
+   "interval_95": [
+    -0.185,
+    -0.1688
+   ],
+   "share": 0.0747
+  },
+  "copyable far only": {
+   "gap": -0.0599,
+   "interval_95": [
+    -0.0659,
+    -0.0544
+   ],
+   "share": 0.1102
+  },
+  "seen, other follower": {
+   "gap": 0.0181,
+   "interval_95": [
+    0.0015,
+    0.0354
+   ],
+   "share": 0.0546
+  },
+  "new": {
+   "gap": -0.039,
+   "interval_95": [
+    -0.0407,
+    -0.0375
+   ],
+   "share": 0.7605
+  }
+ },
+ "reading": "The better rate helps the stack's knowledge almost twice as much as the Transformer's: on new contexts, three quarters of the bytes, the stack gains 0.073 and the Transformer 0.039. On bytes it can copy from its window, the Transformer gains 0.177 and the stack 0.034. At 3e-4 the stack's knowledge was starved, as it would be if updates smaller than a tick of its charge grid were lost; the Transformer's copying was. At each model's best rate the gap on new contexts falls from 0.087 to 0.061 and is still the whole gap, while the stack's lead on near copies falls from 0.176 to 0.006. One seed.",
+ "extension": {
+  "recorded_utc": "2026-11-22T20:44:40Z",
+  "kind": "The same diagnostic on the neighbouring rates of seed 20001, made after the runs, not pre-registered.",
+  "stack at 1.2e-3 minus at 6e-4 (gap_by_piece_stack-1.2e-3-vs-6e-4.json)": {
+   "whole": -0.01722,
+   "copyable near": {
+    "gap": 0.0481,
+    "interval_95": [
+     0.0358,
+     0.0607
+    ],
+    "share": 0.0747
+   },
+   "copyable far only": {
+    "gap": -0.0262,
+    "interval_95": [
+     -0.0427,
+     -0.0096
+    ],
+    "share": 0.1102
+   },
+   "seen, other follower": {
+    "gap": -0.0874,
+    "interval_95": [
+     -0.1655,
+     -0.007
+    ],
+    "share": 0.0546
+   },
+   "new": {
+    "gap": -0.0173,
+    "interval_95": [
+     -0.0207,
+     -0.014
+    ],
+    "share": 0.7605
+   },
+   "fourth letter on": {
+    "gap": 0.0037,
+    "interval_95": [
+     -0.0108,
+     0.0197
+    ],
+    "share": 0.3109
+   }
+  },
+  "stack at 2.4e-3 minus at 1.2e-3 (gap_by_piece_stack-2.4e-3-vs-1.2e-3.json)": {
+   "whole": 0.00596,
+   "copyable near": {
+    "gap": -0.0003,
+    "interval_95": [
+     -0.0116,
+     0.013
+    ],
+    "share": 0.0747
+   },
+   "copyable far only": {
+    "gap": 0.0225,
+    "interval_95": [
+     0.0064,
+     0.0417
+    ],
+    "share": 0.1102
+   },
+   "seen, other follower": {
+    "gap": -0.1049,
+    "interval_95": [
+     -0.2017,
+     -0.0293
+    ],
+    "share": 0.0546
+   },
+   "new": {
+    "gap": 0.0121,
+    "interval_95": [
+     0.0084,
+     0.0158
+    ],
+    "share": 0.7605
+   },
+   "fourth letter on": {
+    "gap": 0.0306,
+    "interval_95": [
+     0.0142,
+     0.046
+    ],
+    "share": 0.3109
+   }
+  },
+  "Transformer at 1.2e-3 minus at 6e-4 (gap_by_piece_tf-1.2e-3-vs-6e-4.json)": {
+   "whole": -0.01264,
+   "copyable near": {
+    "gap": -0.0331,
+    "interval_95": [
+     -0.0384,
+     -0.0284
+    ],
+    "share": 0.0747
+   },
+   "copyable far only": {
+    "gap": -0.0098,
+    "interval_95": [
+     -0.0141,
+     -0.005
+    ],
+    "share": 0.1102
+   },
+   "seen, other follower": {
+    "gap": -0.0219,
+    "interval_95": [
+     -0.0375,
+     -0.0056
+    ],
+    "share": 0.0546
+   },
+   "new": {
+    "gap": -0.0104,
+    "interval_95": [
+     -0.0118,
+     -0.0092
+    ],
+    "share": 0.7605
+   },
+   "fourth letter on": {
+    "gap": -0.0129,
+    "interval_95": [
+     -0.0179,
+     -0.0089
+    ],
+    "share": 0.3109
+   }
+  },
+  "Transformer at 2.4e-3 minus at 1.2e-3 (gap_by_piece_tf-2.4e-3-vs-1.2e-3.json)": {
+   "whole": 0.00123,
+   "copyable near": {
+    "gap": -0.021,
+    "interval_95": [
+     -0.025,
+     -0.0175
+    ],
+    "share": 0.0747
+   },
+   "copyable far only": {
+    "gap": 0.0021,
+    "interval_95": [
+     -0.0031,
+     0.007
+    ],
+    "share": 0.1102
+   },
+   "seen, other follower": {
+    "gap": -0.0136,
+    "interval_95": [
+     -0.0288,
+     0.0018
+    ],
+    "share": 0.0546
+   },
+   "new": {
+    "gap": 0.0044,
+    "interval_95": [
+     0.0031,
+     0.0057
+    ],
+    "share": 0.7605
+   },
+   "fourth letter on": {
+    "gap": 0.003,
+    "interval_95": [
+     -0.0014,
+     0.0077
+    ],
+    "share": 0.3109
+   }
+  },
+  "reading": "The stack's knowledge has a narrow band of good rates, the Transformer's a wide one. From 6e-4 to 1.2e-3 the stack gains 0.017 on new contexts and loses 0.048 on near copies, where the Transformer gains on both (0.010 and 0.033). From 1.2e-3 to 2.4e-3 the stack loses 0.012 on new contexts and 0.031 on the fourth and later letters of words, the Transformer 0.004 and 0.003 (the latter not apart from zero); the stack's near copies hold, the Transformer's gain 0.021. So above its best rate it is the stack's knowledge that breaks first, below it its knowledge that starves: its knowledge synapses need steps that are neither smaller nor larger than about 1.2e-3 allows. One seed.",
+  "ruled_out_on_the_way": {
+   "the pulse budget": "Its price (the trainer's spike_price, a Lagrange multiplier on pulses above 113,000 a byte) falls from about 0.1 after 750 updates to 0.00-0.02 by the end of every 24,000-update bed run at every rate (bed24-s1, bed24-lr12-s1, bed24-lr24-s1, fan2-24-s1), while the training pulses stay within 2% of the budget: relaxing the budget would be worth almost nothing to the loss.",
+   "weight noise": "The averaged weights gain over the raw ones as much in the stack as in the Transformer, a little more at mid-run (0.069 against 0.054 at 12,000 updates at 1.2e-3) and nothing at the end for either, so the stack's late weights are not noisier in a way averaging could fix.",
+   "a dense code that grows denser": "experiments/cell_activity.py on the finished laptop beds: 35% to 56% of the cells of a level fire at a byte, with a median of 3 to 10 spikes, at 6,000 and at 24,000 updates alike (the delayed bed 0.41-0.52 and 0.39-0.49; the plain bed, which learns late better, 0.35-0.51 and 0.35-0.49; the full size's cell shape 0.43-0.56 and 0.40-0.51). The code is dense, as dense in the plain bed as in the delayed one, and does not grow denser with data."
+  },
+  "calibration_of_the_price": {
+   "recorded_utc": "2026-11-22T21:28:35Z",
+   "text": "Where a budget binds, its price shows it. The 12-level test bed held to the 6-level budget of 113,000 (stack12, server CPU, 6,000 updates, d22b.json's question) ran at a price of 0.24 falling to 0.10, and with the budget doubled (stack12b) at 0.02 and 0.067 better in windows (1.9209 against 1.8543). The 6-level bed ends at 0.00-0.02, and at full size depth 11 and depth 22 run alike (l2048-forget, l2048-flat, l2048-know-st and l2048-d22: at most 0.024 during training, 0.000-0.007 at the end). So at depth 22 the shared budget of 310,000 did not bind harder than at depth 11, and the gap that widens with size (0.022 on test at depth 22 against 0.013 for the 11-level stack it doubles, docs/KNOWLEDGE_GAP.md) is not the budget's. The doubled-budget run that d22b.json pre-registered never ran."
+  }
+ }
+}

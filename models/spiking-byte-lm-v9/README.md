@@ -93,3 +93,7 @@ All eleven added matrices receive next-byte gradients.
 [Warm audit](../../results/event_lm/trace_arrival/warm_unmatched.json) ·
 [Exact training record](../../results/event_lm/trace_arrival/event_correction_code_s9349_trace_arrival_unmatched.json) ·
 [Matched scores](../../docs/LEADERBOARD.md)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

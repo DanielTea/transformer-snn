@@ -1,0 +1,80 @@
+{
+ "study": "attention_sink",
+ "recorded_utc": "2026-11-22T06:17:03Z",
+ "why": "One learned, ageless cell a head (one1-st-mps) brought 140% of the copying gain of 128 knowledge cells on the second showing of random letters (knowledge_and_plasticity.json): the gain looks like the option to answer that nothing here fits, as attention sinks do in Transformers. But how well a test bed copies varies by about a bit a byte from seed to seed (test_bed_with_delays.json), so one seed cannot carry the claim.",
+ "arms": {
+  "sink-sS": "the delayed test bed with one knowledge cell a head (--read-knowledge 1 --granule-cells 1021), seeds 20001 to 20004",
+  "bed-sS": "the delayed test bed, seeds 20002 to 20004; seed 20001 is combo-bed of knowledge_and_plasticity.json"
+ },
+ "training": "On streams (--stream 10 --stream-groups 3), 6,000 updates, on the server's CPU, exactly as combo-bed (code v17d), every pair sharing its seed and data order",
+ "measure": "The copy probe (experiments/copy_probe.py: random letters and random words shown twice) for every arm, and the first 2,000,000 validation bytes as 16 unbroken streams (lead 8,192, pieces of 512) with the bits of every piece kept.",
+ "pass_mark": "The sink is the copying gain if sink-sS copies random letters better than bed-sS on their second showing at all four seeds, by at least 0.3 bits a byte on average. Its effect on the long streams is reported beside it, paired by seed.",
+ "seen_before_recording": "One seed on the laptop's GPU (one1-st-mps against g6d-st-mps and know128-st-mps); no run of these arms exists.",
+ "results": {
+  "recorded_utc": "2026-11-22T16:12:29Z",
+  "copy_probe_letters_second_showing": {
+   "seed 20001": {
+    "bed (combo-bed)": 2.9,
+    "sink": 1.61,
+    "sink better by": 1.29
+   },
+   "seed 20002": {
+    "bed": 4.044,
+    "sink": 1.761,
+    "sink better by": 2.283
+   },
+   "seed 20003": {
+    "bed": 2.598,
+    "sink": 2.444,
+    "sink better by": 0.154
+   },
+   "seed 20004": {
+    "bed": 3.723,
+    "sink": 1.991,
+    "sink better by": 1.732
+   },
+   "mean": 1.365
+  },
+  "copy_probe_words_second_showing": {
+   "seed 20001": [
+    1.507,
+    1.263
+   ],
+   "seed 20002": [
+    2.02,
+    1.416
+   ],
+   "seed 20003": [
+    1.63,
+    1.775
+   ],
+   "seed 20004": [
+    1.812,
+    1.317
+   ],
+   "what": "bed, sink"
+  },
+  "long_streams": {
+   "seed 20001": {
+    "bed": 1.76286,
+    "sink": 1.75599
+   },
+   "seed 20002": {
+    "bed": 1.81013,
+    "sink": 1.76167
+   },
+   "seed 20003": {
+    "bed": 1.76272,
+    "sink": 1.7805
+   },
+   "seed 20004": {
+    "bed": 1.78102,
+    "sink": 1.7501
+   },
+   "mean sink better by": 0.0171,
+   "seeds where the sink is better": 3
+  },
+  "verdict": "Pass: one knowledge cell a head copies random letters better on their second showing at all four seeds, by 1.37 bits a byte on average (0.15 to 2.28). Over long streams it is better by 0.017 on average, at three of four seeds.",
+  "reading": "The sink takes away the seed lottery of copying: the bed's four seeds copy random letters on the second showing at 2.60 to 4.04 bits a byte, the sink's at 1.61 to 2.44. The bed's long streams spread over 0.048 (1.7627 to 1.8101), the sink's over 0.030. A head that may put its spikes on a cell that fits nothing learns to copy reliably."
+ }
+}

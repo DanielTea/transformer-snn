@@ -1,0 +1,91 @@
+{
+ "study": "gap_with_data",
+ "recorded_utc": "2026-11-22T03:10:47Z",
+ "kind": "A diagnostic made after the fact from finished runs, not pre-registered.",
+ "question": "Does the stack's gap to the Transformer, and its split into memory and knowledge, shrink as both see more data?",
+ "test_bed": {
+  "what": "The plain test bed (4,855,844 parameters, reach 256 cells, trained in windows on the server's GPU) and the test bed's Transformer (depth 6, 4,792,320 parameters, windows of 256), seed 20001, at 6,000 and 24,000 updates (24.6M and 98.3M training bytes), on the first 2,000,000 validation bytes as 16 streams: the stack as a stream, the Transformer in windows of 256 with 16 scored after 240 of history (gap_by_piece_bed_6k.json, gap_by_piece_bed_24k.json, near 240, far 8,192)",
+  "6000_updates": {
+   "stack_bpb": 1.96655,
+   "transformer_bpb": 1.81904,
+   "gap": 0.14752,
+   "by_context": {
+    "copyable near": 0.1649,
+    "copyable far only": 0.1909,
+    "seen, other follower": -0.3835,
+    "new": 0.1776
+   }
+  },
+  "24000_updates": {
+   "stack_bpb": 1.56975,
+   "transformer_bpb": 1.49292,
+   "gap": 0.07684,
+   "by_context": {
+    "copyable near": -0.0567,
+    "copyable far only": 0.0392,
+    "seen, other follower": 0.0614,
+    "new": 0.0965
+   }
+  }
+ },
+ "full_size_for_comparison": {
+  "what": "v16: l2048-forget (34.81M, reach 8,192, fast synapses) against tf2048 (34.75M), 90,000 updates (368.6M training bytes), validation split (gap_by_piece_validation.json, near 2,032)",
+  "gap": 0.02103,
+  "by_context": {
+   "copyable near": -0.087,
+   "copyable far only": -0.3071,
+   "seen, other follower": -0.0919,
+   "new": 0.0662
+  }
+ },
+ "reading": "With four times the data the bed's gap halves, from +0.148 to +0.077. On copyable bytes the stack goes from +0.165 behind to 0.057 ahead: it learns to copy better than the Transformer. On new contexts its gap shrinks from +0.178 to +0.097, as the training data to the power -0.44, and stays almost the whole gap. Carried on at that rate to the full size's 3.75 times more data than the bed's 24,000 updates, it would be +0.054; the full-size pair measures +0.066, at seven times the parameters. Two points of one seed: a direction, not a law.",
+ "delayed_stream_trained_bed": {
+  "recorded_utc": "2026-11-22T07:18:22Z",
+  "what": "The delayed test bed trained on streams (g6d-st-mps: --read-delays 4 --granule-delays 4, 5,249,060 parameters, 6,000 updates, seed 20001, the laptop's GPU) against the same 6,000-update Transformer, on the same streams (gap_by_piece_delayed_bed_6k.json, near 240, far 8,192)",
+  "stack_bpb": 1.77242,
+  "transformer_bpb": 1.81904,
+  "gap": -0.04662,
+  "by_context": {
+   "copyable near": -0.8802,
+   "copyable far only": -0.0298,
+   "seen, other follower": 0.2916,
+   "new": 0.0086
+  },
+  "new_context_interval": [
+   -0.0059,
+   0.0231
+  ],
+  "reading": "At the test bed's size and 6,000 updates, the stack with delayed fibres, trained on streams, is ahead of the Transformer of its size by 0.047 bits a byte over long streams: far ahead on copyable bytes and level on new contexts (+0.009, interval -0.006 to +0.023). The plain bed's knowledge gap of 0.178 at the same point closes with delays and training on streams together (the devices differ: GPU windows for the plain bed, the laptop's GPU for the delayed one). Whether it stays closed with four times the data is what the 24,000-update stream-trained run of the delayed bed (knowledge_data_scaling.json) will show against this Transformer at 24,000 updates (1.49270)."
+ },
+ "delayed_stream_trained_bed_at_24000": {
+  "recorded_utc": "2026-11-22T13:11:32Z",
+  "what": "The delayed test bed trained on streams for 24,000 updates on the laptop's GPU (g6d-24k-st-mps, and with 128 knowledge cells a head, know128-24k-st-mps) against the test bed's Transformer at 24,000 updates (tf6-24k-s1, trained in windows on the server's GPU), on the same 2,000,000 validation bytes as streams (gap_by_piece_g6d-24k_vs_tf6-24k.json, gap_by_piece_know128-24k_vs_tf6-24k.json, near 240, far 8,192)",
+  "g6d-24k-st": {
+   "stack_bpb": 1.54687,
+   "transformer_bpb": 1.49292,
+   "gap": 0.05395,
+   "by_context": {
+    "copyable near": -0.1748,
+    "copyable far only": 0.0034,
+    "seen, other follower": 0.0716,
+    "new": 0.0825
+   },
+   "new_context_interval": [
+    0.0755,
+    0.0899
+   ],
+   "fourth_letter_on": 0.1434
+  },
+  "know128-24k-st": {
+   "stack_bpb": 1.53258,
+   "gap": 0.03966,
+   "by_context": {
+    "copyable near": -0.2209,
+    "copyable far only": -0.0038,
+    "seen, other follower": -0.0102,
+    "new": 0.0751
+   }
+  },
+  "reading": "With four times the data the delayed, stream-trained bed goes from 0.047 ahead of its Transformer to 0.054 behind. Its copying stays far better (0.17 bits a byte), and the knowledge gap that it had closed at 6,000 updates opens again: 0.083 on new contexts, 0.14 on the fourth letter of a word on. Its learning curve flattens where the Transformer's keeps falling: from 6,000 to 24,000 updates the Transformer gains 0.326, the plain bed 0.396 and the delayed bed trained on streams 0.225. What made the bed learn fast early, delayed fibres and training on streams, does not keep it learning; knowledge cells keep a lead of about 0.014 and do not change the slope. The knowledge gap is less a part the stack lacks than how it goes on learning."
+ }
+}

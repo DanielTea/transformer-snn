@@ -1,0 +1,139 @@
+{
+ "study": "word_rhythm",
+ "recorded_utc": "2026-11-22T09:40:39Z",
+ "why": "The full-size gap is knowledge (gap_by_piece_*.json), and its one steady part split by place in the word is the fourth letter of a word on: 0.05 bits a byte on test and 0.10 on validation, completing words that did not run in the last 8 KB, from what the stack learned. A read's heads weigh a cell by its age, counted back from the present byte, so a prefix such as 'phenom' is a different pattern at every place it can stand: four letters into the word it is one pattern of ages, eight letters in another. Myelinated fibres, counting back from the present as well, moved toward the present byte (myelin_and_sheet.json). In the brain a word is one cycle of a slow rhythm that every word onset resets, and its letters fall into the cycle's successive slots (theta-gamma coding of sequences), so a word is laid out the same way however far into it the reading stands. Word heads do that in a race read: a letter neuron and an onset neuron with fixed synapses from the byte mark where a word begins, and a word head reaches only the cells of the present word and weighs each by its place in the word, counted from its first letter, with one learned offset a place.",
+ "arms": {
+  "word": "the delayed test bed with one word head in every read (--read-word-heads 1 --read-word-span 32): of each read's four heads, the first reads the present word by places 0 to 31: 5,249,252 parameters (+192)",
+  "fan2": "a check of the cell shape, not of word heads: the delayed test bed with the full-size stack's cells, a fan of two streams so that every channel has a fibre for the present byte and one for a delay of 1 to 3, and 681 cells instead of 1,022 (--granule-fan 512 --granule-cells 681): 5,245,478 parameters (-3,582)"
+ },
+ "devices": {
+  "laptop": "the laptop's GPU against g6d-st-mps (long streams 1.77237)",
+  "server": "the server's CPU against combo-bed (long streams 1.76286), on the code with word heads"
+ },
+ "training": "On streams (--stream 10 --stream-groups 3), 6,000 updates, seed 20001, every flag but the arm's as its device's reference. word starts on both devices at once; fan2 starts on each device when its running screens end.",
+ "measure": "The first 2,000,000 validation bytes as 16 unbroken streams (lead 8,192, pieces of 512) with the bits of every piece kept, split against the device's reference by what the context offers and by place in the word (experiments/gap_by_piece.py, near 256, far 8,192; of the places only those with narrow intervals are read); the trainer's averaged validation on streams; for word, the learned offsets of the places.",
+ "pass_mark": "word earns four seeds if, on both devices, it gains on new contexts with the 95% interval above zero, and is ahead of the reference over the long streams by at least 0.010 on the mean of the two devices. fan2 is a diagnostic: if the bed's own cells beat the full size's shape by at least 0.010 on new contexts on both devices, the full size's cell shape is a suspect for the gap that opens with scale, and a full-size stack with a fan of one stream and about 1,780 cells a level (equal parameters) is proposed for the next GPU window.",
+ "seen_before_recording": "Tests of word heads (tests/test_word_heads.py: exact under any cut, a word head reaching only the present word, causal, learning) and their parameter counts; no training run of either arm.",
+ "results_laptop_word": {
+  "recorded_utc": "2026-11-22T11:39:29Z",
+  "trainer_averaged_stream_validation": {
+   "g6d-st-mps": 1.7584,
+   "word-st-mps": 1.7374
+  },
+  "long_streams": {
+   "g6d-st-mps": 1.77237,
+   "word-st-mps": 1.74945,
+   "gain": 0.0229
+  },
+  "split_against_g6d_st (gap_by_piece_word_laptop_vs_bed.json)": {
+   "copyable near": -0.2386,
+   "copyable near_95": [
+    -0.2595,
+    -0.2193
+   ],
+   "copyable far only": 0.0177,
+   "seen, other follower": -0.093,
+   "new": -0.0021,
+   "new_95": [
+    -0.0065,
+    0.0027
+   ],
+   "fourth letter on": 0.0063
+  },
+  "standing": "Over long streams the word head is 0.023 ahead of the bed on the laptop, the largest gain of any arm on the test bed tonight, and all of it is memory: 0.24 bits a byte on copyable bytes, and new contexts level (interval -0.0065 to +0.0027). So it does not meet its mark, which asks for a gain on new contexts with the interval above zero on both devices: reading the present word by its places helps the stack find and copy a word it has seen, not complete one it has not. The server's run decides whether the memory gain holds on a second device."
+ },
+ "results_laptop_fan2": {
+  "recorded_utc": "2026-11-22T12:08:18Z",
+  "trainer_averaged_stream_validation": {
+   "g6d-st-mps": 1.7584,
+   "fan2-st-mps": 1.74
+  },
+  "long_streams": {
+   "g6d-st-mps": 1.77237,
+   "fan2-st-mps": 1.75243,
+   "gain": 0.0199
+  },
+  "split_against_g6d_st (gap_by_piece_fan2_laptop_vs_bed.json)": {
+   "new": -0.0091,
+   "new_95": [
+    -0.0134,
+    -0.0046
+   ],
+   "copyable near": -0.0993,
+   "copyable far only": -0.0611,
+   "seen, other follower": 0.0213,
+   "fourth letter on": 0.0429
+  },
+  "standing": "The opposite of the suspicion: on the test bed the full size's cell shape, a fibre for every channel's present byte and one for a delay of 1 to 3, with 681 cells, is 0.020 better over long streams than the bed's own 1,022 cells on a quarter share of each delay, and better on new contexts too (0.009, interval 0.005 to 0.013), the first arm of the day with a gain there. So the full size's cells are not the suspect for the gap that opens with scale; the test bed's are the weaker shape. Every channel's present byte matters more than a third more cells, which is also why myelinated fibres on the bed's shape ran back to the present. The server's run of fan2 decides the second device."
+ },
+ "results_server": {
+  "recorded_utc": "2026-11-22T16:12:29Z",
+  "long_streams": {
+   "combo-bed": 1.76286,
+   "word-cpu": 1.74852,
+   "fan2-cpu": 1.74646
+  },
+  "word split (gap_by_piece_word_server_vs_bed.json, arm minus bed)": {
+   "copyable near": {
+    "gap": -0.1665,
+    "interval_95": [
+     -0.186,
+     -0.151
+    ]
+   },
+   "copyable far only": {
+    "gap": 0.0227,
+    "interval_95": [
+     -0.0024,
+     0.0495
+    ]
+   },
+   "seen, other follower": {
+    "gap": -0.2432,
+    "interval_95": [
+     -0.3447,
+     -0.1142
+    ]
+   },
+   "new": {
+    "gap": 0.0121,
+    "interval_95": [
+     0.0065,
+     0.0161
+    ]
+   }
+  },
+  "fan2 split (gap_by_piece_fan2_server_vs_bed.json, arm minus bed)": {
+   "copyable near": {
+    "gap": -0.0117,
+    "interval_95": [
+     -0.0236,
+     0.0002
+    ]
+   },
+   "copyable far only": {
+    "gap": -0.0554,
+    "interval_95": [
+     -0.0754,
+     -0.0396
+    ]
+   },
+   "seen, other follower": {
+    "gap": 0.0564,
+    "interval_95": [
+     -0.0153,
+     0.1421
+    ]
+   },
+   "new": {
+    "gap": -0.0165,
+    "interval_95": [
+     -0.0202,
+     -0.0127
+    ]
+   }
+  },
+  "verdict_word": "Fails its pass mark: ahead over long streams on both devices (0.023 on the laptop, 0.014 on the server, mean 0.019), but the gain is memory: on new contexts it is level on the laptop (-0.002, interval [-0.007, 0.003]) and behind on the server (+0.012, interval [0.007, 0.016]). It earns no four seeds by its own mark; the full-size word-head run (full_size_word_heads.json) was started on the laptop result before the server's.",
+  "verdict_fan2": "The diagnostic comes out the other way on both devices: the full size's cell shape is better than the bed's own cells over long streams (0.020 laptop, 0.016 server) and on new contexts (-0.009 and -0.017, both intervals below zero). The full size's cell shape is not a suspect for the gap."
+ }
+}

@@ -842,7 +842,29 @@ def long_streams_paragraphs(long_streams):
     ]
 
 
-def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=None, streams=None, long_streams=None):
+def knowledge_gap_paragraphs(board):
+    """The section of the knowledge-gap study (v17): knowledge cells trained on streams, and the depth-22 pair."""
+    test, validation = board["paired"]["knowledge cells against tf2048, test"], board["paired"]["validation"]
+    return [
+        "## Knowledge cells trained on streams · 368,640,000 training targets · seed 20001",
+        stream_table(board["rows"]),
+        "![Where the gap is: the stack minus the Transformer by what each byte's context offers]"
+        "(../results/figures/event_lm_gap_by_context.png)",
+        "[Where the gap is, what was tried, and what moves it](KNOWLEDGE_GAP.md) · [Roadmap](ROADMAP.md)",
+        "The knowledge-cell stack is v16's stack with 128 learned, ageless cells in every read head's race. It trained "
+        "on windows of 512 bytes for 24,000 updates and then on unbroken streams of windows of 2,048 bytes, the state "
+        "handed on from window to window. Read at its best, with a reach of 8,192 cells and taught output synapses, "
+        f"it is {test[0]:.4f} bpb behind the Transformer on the enwik8 test (paired 95% interval {test[1][0]:.4f} to "
+        f"{test[1][1]:.4f}) and {validation[0]:.4f} on validation. Every row is one seed.",
+        "### Depth 22 at the same pulse budget",
+        stream_table(board["depth_22_rows"]),
+        "Twice the levels at the same pulse budget gain the stack 0.027 bpb on test and the Transformer 0.036: the gap "
+        "widens with size, at equal energy for the stack.",
+    ]
+
+
+def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=None, streams=None, long_streams=None,
+                       knowledge_gap=None):
     latest = depth["groups"]["depth"]
     paragraphs = [
         "# Spiking byte model leaderboards",
@@ -923,6 +945,8 @@ def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=Non
             "![Generated pulses with identical output counts within each pair](../results/figures/event_lm_residual_emissions.png)",
         ),
     }
+    if knowledge_gap:
+        paragraphs.extend(knowledge_gap_paragraphs(knowledge_gap))
     if long_streams:
         paragraphs.extend(long_streams_paragraphs(long_streams))
     if streams:
@@ -1670,7 +1694,9 @@ def main():
     if long_streams:
         summary = RESULTS / LONG_STREAMS / "leaderboard.json"
         summary.write_text(json.dumps(long_streams, indent=2) + "\n", encoding="utf-8")
-    write_leaderboards(data, depth, research, transfers, warmed, clocks, streams, long_streams)
+    knowledge_board = RESULTS / "event_lm/knowledge_gap/leaderboard.json"
+    knowledge_gap = json.loads(knowledge_board.read_text()) if knowledge_board.is_file() else None
+    write_leaderboards(data, depth, research, transfers, warmed, clocks, streams, long_streams, knowledge_gap)
     output = RESULTS / "figures"
     output.mkdir(parents=True, exist_ok=True)
     plot_loss(data, output)

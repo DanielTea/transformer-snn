@@ -153,3 +153,7 @@ validation intervention.
 [Native audit](../../results/event_lm/trace_read_drive/native_write_rails_share_s8237.json) ·
 [Drive interventions](../../results/event_lm/trace_read_drive/probe_write_rails_share_s8237.json) ·
 [Full leaderboard](../../docs/LEADERBOARD.md)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

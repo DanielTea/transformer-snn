@@ -154,3 +154,7 @@ integer tensor kernels and its timings measure software execution.
 [Exact training record](../../results/event_lm/depth_growth/event_correction_code_s4603_depth_growth_snn.json) ·
 [Native audit](../../results/event_lm/depth_growth/native_depth_s4603.json) ·
 [Scores and pulse counts](../../docs/LEADERBOARD.md)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

@@ -533,3 +533,42 @@ def test_the_oldest_age_of_the_window_learns_for_all_cells_beyond_it():
 def test_a_reach_is_at_least_the_window_and_takes_no_clock(setting):
     with pytest.raises(ValueError):
         _stack(**setting)
+
+
+@pytest.mark.parametrize("flags, asked_at, saved_at", [((), 4, 4), (("--stream", "3"), 7, 9),
+                                                         (("--stream", "3", "--stream-groups", "2"), 2, 6)])
+def test_a_run_asked_to_stop_saves_at_a_stretch_boundary_and_continues_as_if_it_had_not(monkeypatch, tmp_path, flags,
+                                                                                         asked_at, saved_at):
+    import os
+    import signal
+
+    trainer, _ = _trainer(monkeypatch)
+    whole = _train(trainer, monkeypatch, tmp_path / "whole", *flags)
+    lr = trainer.cosine_lr
+
+    def asking(step, *args):
+        # Updates count from one; the schedule is asked for update step + 1.
+        if step + 1 == asked_at:
+            os.kill(os.getpid(), signal.SIGTERM)
+        return lr(step, *args)
+
+    monkeypatch.setattr(trainer, "cosine_lr", asking)
+    try:
+        with pytest.raises(SystemExit) as stopped:
+            _train(trainer, monkeypatch, tmp_path / "parts", *flags)
+    finally:
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        signal.signal(signal.SIGUSR1, signal.SIG_DFL)
+    assert stopped.value.code == 75
+    state = torch.load(tmp_path / "parts" / "model.pt.resume", weights_only=True)
+    assert state["step"] == saved_at
+    monkeypatch.setattr(trainer, "cosine_lr", lr)
+    try:
+        parts = _train(trainer, monkeypatch, tmp_path / "parts", *flags)
+    finally:
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        signal.signal(signal.SIGUSR1, signal.SIG_DFL)
+    assert parts["resumed_at_steps"] == [saved_at]
+    keys = ("train_bpb", "val_bpb", "averaged_val_bpb", "stream_val_bpb", "averaged_stream_val_bpb")
+    assert [[row.get(key) for key in keys] for row in parts["curve"]] == [[row.get(key) for key in keys]
+                                                                           for row in whole["curve"]]

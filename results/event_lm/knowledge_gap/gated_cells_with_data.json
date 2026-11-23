@@ -1,0 +1,123 @@
+{
+ "study": "gated_cells_with_data",
+ "recorded_utc": "2026-11-22T20:42:48Z",
+ "kind": "A screen on the laptop's GPU, one seed: it chooses which cell forms earn two seeds on the server, and decides nothing about the forms by itself.",
+ "why": "v15's walk from the Transformer to the stack priced its steps (docs/STREAM_FORM.md, full size, 9,000 updates): the largest is the unit, +0.0253 for plain rectifying units in place of gated ones, against +0.0008 for whole spikes. The stack's threshold cells are plain rectifying units. The two cell forms that could recover the unit's step, a signed value dendrite times a saturating gate and a cell that gates itself (a square near silence), were judged only at 6,000 updates at 3e-4 (shunt_tied/preregistered.json: the gated cell 0.0105 ahead with one seed and level with a second; the self-gated cell level). Since then every part that helped the stack's knowledge helped early and faded with data, and the stack's gap to the Transformer grows with data (gap_with_data.json); the studies of the gap are now read by their slope over data, at each model's best rate (data_scaling_long.json, learning_rate_with_data.json). A unit's advantage may show only late, where a plain cell's knowledge stops gaining. Does a gated or a self-gated cell change the stack's slope at its best rate?",
+ "arms": {
+  "gate": "--granule-gate 4 --granule-shunt --granule-cells 681: a signed value dendrite collects charge and every spike of a gate dendrite lets in the share k / (k + 4) of it, the spike form of a gated unit; 681 cells a level so that the stack has 5,245,478 parameters, 3,582 fewer than the base",
+  "self": "--granule-gate 4 --granule-self-gate --granule-shunt: the gate dendrite hears the fibres through the cell's own synapses, so a cell fires about k * k / (k + 1) spikes for k thresholds of charge, a square near silence and a line above; 1,022 cells a level, 5,249,060 parameters as the base"
+ },
+ "base": "the delayed test bed trained on streams at peak rate 1.2e-3, seed 20003, on the laptop's GPU: rd-base-6k-s3 and rd-base-24k-s3, the base of randomness_at_best_rate's laptop seed (amendment e3c52ef), trained and scored exactly as these arms",
+ "training": "the base's recipe (arm.sh's KIND stack: 6 levels, 256 channels, reads after every level, four delays on the reads' and cells' fibres, trained on streams of 10 windows in 3 groups, batch 16 of 256 bytes, peak rate 1.2e-3, warmup 300, cosine over the run, rotated optimizer, averaged weights 0.999, pulse budget 113,000), 6,000 and 24,000 updates, seed 20003, the laptop's GPU (MPS) one run at a time, code equal to v17l (072eb90) for training and scoring; runner checkpoints/laptop-loop/run-queue.sh after the randomness study's laptop runs",
+ "measure": "experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams, lead 8,192, averaged weights, bits of every piece kept; each arm paired with the base of the same length; experiments/gap_by_piece.py splits each lead by what the context offers (near 240, far 8,192); the trainer's pulses a byte reported beside",
+ "reading": "A screen with one seed. An arm earns two seeds on the server (s1 and s2, 6,000 and 24,000 updates, read by experiments/read_lead_study.py's shared reading against bed24-lr12 and rd-base-6k) if at 24,000 updates it leads the base by at least 0.005 and its lead at 24,000 updates is at least 0.005 larger than at 6,000. Otherwise it is reported only. If both earn seeds, both go. Recorded either way: every lead, the leads on new contexts, and the pulses a byte at 24,000 updates.",
+ "seen_before_recording": "CPU stress runs of 120 updates at peak rate 1.2e-3 reached after 30 updates (seed 20003, not a measure): gate 3.2463 in windows, self 3.3027, base 3.3006; all finite. The base's laptop runs have started (rd-base-24k-s3: 1.9012 in windows at 4,500 updates); no arm of this screen has trained. Cell activity of the finished laptop beds (experiments/cell_activity.py): 35% to 56% of cells fire at a byte, at 6,000 and at 24,000 updates alike.",
+ "amendment": {
+  "recorded_utc": "2026-11-22T21:08:54Z",
+  "change": "The laptop's runs from rd-both-24k-s3 on run on a frozen copy of commit e5d3a1e (checkpoints/laptop-loop/code-e5d3a1e), so that edits in the worktree cannot change them. It is v17l with the --cell-noise option added, which these runs leave off and which then draws no random number: the same computation as v17l. rd-base-24k-s3 trained on the worktree at e3c52ef, whose training and scoring code equals v17l.",
+  "seen_before_amendment": "rd-base-24k-s3 at 10,500 updates (1.7683 in windows); no other laptop run of either study has trained."
+ },
+ "result": {
+  "recorded_utc": "2026-11-23T07:17:26Z",
+  "state": "The gate arm is read; the self-gated arm's run of 24,000 updates is training and its reading follows.",
+  "base": {
+   "6,000 updates": 1.62828,
+   "24,000 updates": 1.48247,
+   "pulses a byte at 24,000 updates": 116193
+  },
+  "arm gate": {
+   "6,000 updates": 1.69516,
+   "24,000 updates": 1.59059,
+   "lead over the base": {
+    "6,000 updates": -0.06688,
+    "24,000 updates": -0.10812
+   },
+   "pulses a byte at 24,000 updates": 116362,
+   "by context at 6,000 updates, gate minus base (near 240, far 8,192)": {
+    "copyable near": {
+     "gap": 0.0325,
+     "interval_95": [
+      0.0183,
+      0.0498
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.1988,
+     "interval_95": [
+      0.1747,
+      0.2193
+     ],
+     "share": 0.1102
+    },
+    "seen, other follower": {
+     "gap": -0.471,
+     "interval_95": [
+      -0.5569,
+      -0.37
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": 0.0897,
+     "interval_95": [
+      0.0848,
+      0.0937
+     ],
+     "share": 0.7605
+    }
+   },
+   "by context at 24,000 updates, gate minus base": {
+    "copyable near": {
+     "gap": 0.0798,
+     "interval_95": [
+      0.0638,
+      0.0938
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.2182,
+     "interval_95": [
+      0.1947,
+      0.2388
+     ],
+     "share": 0.1102
+    },
+    "seen, other follower": {
+     "gap": -0.4845,
+     "interval_95": [
+      -0.5836,
+      -0.3874
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": 0.1375,
+     "interval_95": [
+      0.132,
+      0.1422
+     ],
+     "share": 0.7605
+    }
+   },
+   "membranes at their bound (experiments/membrane_saturation.py, 65,536 validation bytes)": {
+    "the gate dendrites, counted as other": {
+     "6,000 updates": 0.0921,
+     "24,000 updates": 0.076
+    },
+    "cells and reads": "under 0.1% at both lengths"
+   },
+   "verdict": "Reported only: the gated cell trails the base at both lengths, by 0.067 at 6,000 updates and 0.108 at 24,000, and by more on new contexts (0.090 and 0.138). It earns no seeds on the server. Its gate dendrites sit at their bound at 9% and 8% of their entries, as at full size (full_size_unit_screen.json); lifted_gates_with_data.json tests the same cell with no bound."
+  },
+  "arm self": {
+   "6,000 updates": 1.62969,
+   "lead over the base at 6,000 updates": -0.00141,
+   "24,000 updates": "training"
+  },
+  "records": [
+   "gap_by_piece_laptop_gate-6k-vs-base-6k.json",
+   "gap_by_piece_laptop_gate-24k-vs-base-24k.json"
+  ]
+ }
+}

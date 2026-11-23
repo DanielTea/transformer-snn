@@ -1,0 +1,92 @@
+{
+ "release": "spiking-byte-lm-v18",
+ "model": {
+  "file": null,
+  "note": "The weights are not in the repository. They are in the l2048-word-st archive of the release.",
+  "source_checkpoint": "knowledge_gap/l2048-word-st/model.pt.averaged",
+  "sha256": "935ed2197c7ee1250efdbf2f14271a8c6565f0a9efd2c05628281ed51d44ba57",
+  "bytes": 145351613,
+  "archive": "spiking-byte-lm-v18-checkpoints-l2048-word-st.tar.gz",
+  "archive_sha256": "5d0e028a08c4b39960a61c296e16f91be5226acd6b190e95a0991c2aaa38c7af",
+  "parameters": 36264308,
+  "training_targets": 368640000,
+  "seed": 20001,
+  "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates, the matrices of three-dimensional weights turned as well",
+  "weights": "running average with decay 0.999",
+  "training_windows": "512 bytes in batches of 8 up to 24,000 updates, then unbroken streams: 15 groups of 10 windows of 2,048 bytes that continue each other, in batches of 2, with a read reach of 2,048 cells; 4,096 targets an update throughout",
+  "peak_rate": 0.0003,
+  "forked_at": {
+   "updates": 24000,
+   "from": "p-forget, v15's recipe with --read-forget on windows of 512 bytes"
+  },
+  "architecture": {
+   "stack": "eleven levels, each a state read of 8 heads and then a layer of 1,188 threshold cells, both writing their spikes back into one stream of 512 channels",
+   "forgetting": "every read head learns a slope: a cell beyond the window takes the oldest age's offset plus the slope times the doublings of its age beyond the window",
+   "knowledge_cells": "128 learned cells a head that race beside the stream's own cells and never age",
+   "pulse_budget_per_byte": 310000,
+   "word_heads": "the first of the eight heads of every read reaches only the present word's cells, from its first letter, weighing each by its place in the word (32 learned offsets a level)"
+  },
+  "stream_scores": {
+   "enwik8_test": {
+    "reach_8192_taught": 1.11615,
+    "over_l2048_know_st": [
+     -0.00087,
+     [
+      -0.00132,
+      -0.00042
+     ]
+    ],
+    "over_tf2048": 0.00946,
+    "over_tf2048_taught": 0.01294
+   },
+   "enwik8_validation": {
+    "reach_8192_taught": 1.14908,
+    "over_l2048_know_st": [
+     -0.00055,
+     [
+      -0.001,
+      -9e-05
+     ]
+    ],
+    "over_tf2048": 0.01875,
+    "over_tf2048_taught": 0.02007
+   }
+  },
+  "reach_chosen": {
+   "first_validation_million": {
+    "trained_2048": 1.19275,
+    "8192": 1.17675
+   }
+  },
+  "pulses_per_byte": {
+   "training, last update": 312581,
+   "validation, last evaluation": 311047
+  },
+  "flags": "--variant event_steered --no-carry --stack --dim 512 --hidden 4 --depth 11 --spike-resolution 16 --router-charge-bits 8 --pulse-budget 310000 --read-after 0,1,2,3,4,5,6,7,8,9,10 --read-width 512 --read-heads 8 --read-window 512 --read-mode race --read-budget 256 --read-resolution 4 --read-address-rate 64 --read-delays 4 --read-cap 128 --granule-after 0,1,2,3,4,5,6,7,8,9,10 --granule-clusters 1 --granule-fan 1024 --granule-delays 4 --granule-cells 1188 --granule-slope --granule-cap 128 --pool-fine 16 --pool-rest 4 --pool-rate 32 --output-pool 128 --rotated-adam 50 --rotate-stacks --weight-average 0.999 --read-forget --ctx 2048 --bs 2 --read-reach 2048 --read-knowledge 128 --stream 10 --stream-groups 15 --read-word-heads 1 --read-word-span 32",
+  "scored_file_sha256": "ee7120efa9cd1a68914a0fc0a90954421705c8544faf6a19f62ad9ab109d8631",
+  "paths_note": "The released file is the scored file with the training arguments that name folders (results_dir, checkpoint) rewritten to repository paths; its weights are identical.",
+  "record": "results/event_lm/knowledge_gap/full_size_word_heads.json"
+ },
+ "also_released": {
+  "spiking-byte-lm-v18-checkpoints-fs-st12-lift.tar.gz": {
+   "file": "full_size_pilots/fs-st12-lift/model.pt.averaged",
+   "sha256": "d867c519d85a34879dbcc08069dc0693c355c408417ce334e53315e7b71ebcc8",
+   "bytes": 139525097,
+   "archive_sha256": "ac40f90e4e4db9a9c274bd9f12b5b0bcaeced274dcf657a37bf63fa5bbca8f67",
+   "parameters": 34810900,
+   "training_targets": 98304000,
+   "what": "the full-size stack of the learning-rate pilots with the pool that lifts the ceiling, 24,000 updates at peak rate 1.2e-3",
+   "validation_first_2M_as_streams": 1.31255,
+   "flags": "--variant event_steered --no-carry --stack --dim 512 --hidden 4 --depth 11 --spike-resolution 16 --router-charge-bits 8 --pulse-budget 310000 --read-after 0,1,2,3,4,5,6,7,8,9,10 --read-width 512 --read-heads 8 --read-window 512 --read-mode race --read-budget 256 --read-resolution 4 --read-address-rate 64 --read-delays 4 --read-cap 128 --granule-after 0,1,2,3,4,5,6,7,8,9,10 --granule-clusters 1 --granule-fan 1024 --granule-delays 4 --granule-cells 1188 --granule-slope --granule-cap 128 --pool-fine 16 --pool-rest 4 --pool-rate 32 --output-pool 128 --rotated-adam 50 --rotate-stacks --weight-average 0.999 --read-forget --ctx 512 --bs 8 --steps 24000 --warmup 1000 --lr 1.2e-3 --wd 0.05 --seed 20001 --pool-lifts-ceiling",
+   "scored_file_sha256": "16478930c213a2469292dc51d08db2c4001963c13cb5fe984ba57d91511c2a73",
+   "record": "results/event_lm/knowledge_gap/full_size_lifted_ceiling_pilot.json"
+  },
+  "spiking-byte-lm-v18-bits.tar.gz": {
+   "sha256": "615cdd683f20240cc80bbd890a71dac84fb3aa3f064155c80b444cb651c2f2ea",
+   "what": "per-piece bits and scoring records of the word heads and of every full-size pilot of v18, under results/event_lm/knowledge_gap/bits"
+  }
+ },
+ "license": "AGPL-3.0-only",
+ "copyright": "2026 control-f and Daniel Tremer",
+ "commercial_license": "available from control-f"
+}

@@ -1,0 +1,113 @@
+{
+ "study": "knowledge_and_plasticity",
+ "recorded_utc": "2026-11-21T22:41:45Z",
+ "why": "Knowledge cells pass on the delayed test bed, and silencing them in the trained stacks wrecks both their knowledge of words and their copying. Fast output synapses learn while reading. Two questions follow: what makes knowledge cells copy better, and how do knowledge cells and plasticity behave together? Every run trains on streams and is scored as a stream.",
+ "one_cell": {
+  "question": "Is the copying gain of knowledge cells the option to answer 'nothing here', or what the cells hold?",
+  "arm": "one1-st-mps: one knowledge cell a head (--read-knowledge 1 --granule-cells 1021, 5,249,078 parameters), trained on streams exactly as the second laptop screen, seed 20001, on the laptop's GPU after that screen",
+  "compared_with": "g6d-st-mps (no knowledge cells) and know128-st-mps (128 a head) of the second laptop screen",
+  "measure": "Averaged validation on streams, and the copy probe: the second showing of random letters (copying) and the first showing of random words (knowledge of words).",
+  "reading": "If one cell a head brings at least two thirds of the 128 cells' gain over the bed on the second showing of random letters, the copying gain is mostly the option to answer nothing; below one third, it is mostly what the cells hold. One seed: a screen."
+ },
+ "combination": {
+  "question": "Do knowledge cells and fast synapses trained in the loop add up, get in each other's way, or strengthen each other? And does the decaying rule trained on streams, never tried before (the only stream-trained rule had no decay and ran away), beat v15's rule given after training?",
+  "arms": {
+   "combo-bed": "the delayed test bed",
+   "combo-plastic": "with Rule A on the last level and a decay of 2^-10 a byte (--plastic-levels 5 --plastic-decay-shift 10)",
+   "combo-know": "with 128 knowledge cells a head (--read-knowledge 128 --granule-cells 893)",
+   "combo-both": "with both"
+  },
+  "training": "Every arm trains on streams (--stream 10 --stream-groups 3: stretches of ten windows of 256 bytes, the state of reads, cells and fast synapses handed on), 6,000 updates, seed 20001, on the server's CPU: the fast synapses count in 64-bit whole numbers, which the laptop's GPU does not have.",
+  "measure": "The first 2,000,000 bytes of the enwik8 validation split as 16 unbroken streams (lead 8,192, pieces of 512): every arm as trained, the plastic arms with their own rule; and every arm with v15's rule on all six levels at 2^22, the threshold re-picked for the test bed's b, the plastic arms with their own rule off.",
+  "reading": "As trained, the interaction is (both - know) - (plastic - bed). Within 0.005 of zero the two add; below -0.005 they get in each other's way; above +0.005 each strengthens the other. The decaying rule on streams beats v15's rule if combo-plastic as trained is ahead of combo-bed with v15's rule. One seed per arm: a screen that nominates a combined full-size run and decides none."
+ },
+ "seen_before_recording": "The knowledge-gap verdict, the copy probe with and without silenced knowledge cells, and the knowledge share along streams; no run of these arms exists.",
+ "combination_results": {
+  "recorded_utc": "2026-11-22T02:55:47Z",
+  "long_streams_bpb": {
+   "as_trained": {
+    "combo-bed": 1.76286,
+    "combo-plastic": 1.76482,
+    "combo-know": 1.75389,
+    "combo-both": 1.76727
+   },
+   "with_v15_rule_at_2^22": {
+    "combo-bed": 1.71111,
+    "combo-plastic (own rule off)": 1.72093,
+    "combo-know": 1.70616,
+    "combo-both (own rule off)": 1.72182
+   }
+  },
+  "trainer_averaged_stream_validation": {
+   "combo-bed": 1.7471,
+   "combo-plastic": 1.7566,
+   "combo-know": 1.7448,
+   "combo-both": 1.7561
+  },
+  "interaction": {
+   "as_trained": 0.0114,
+   "with_v15_rule": 0.0058,
+   "how": "(both - know) - (plastic - bed) in bits per byte: as trained, plasticity costs 0.002 beside the bed and 0.013 beside knowledge cells"
+  },
+  "sign_note": "The reading was written as if for gains: in bits per byte, where lower is better, a positive interaction means the two get in each other's way, and that is how it is read here.",
+  "verdict": "Knowledge cells and the decaying rule trained on streams get in each other's way: together they are 0.004 behind the bed as trained, and 0.013 behind knowledge cells alone. The decaying rule trained on streams does not beat v15's rule given after training: combo-plastic as trained scores 1.76482 against combo-bed's 1.71111 with v15's rule, 0.054 behind. Training with the rule also leaves a worse stack: with it switched off and v15's rule given instead, combo-plastic is 0.010 behind combo-bed and combo-both 0.016 behind combo-know. Knowledge cells keep 0.005 of their gain under v15's rule (1.70616 against 1.71111). No combined full-size run is nominated."
+ },
+ "one_cell_results": {
+  "recorded_utc": "2026-11-22T06:14:41Z",
+  "trainer_averaged_stream_validation": {
+   "g6d-st-mps": 1.7584,
+   "one1-st-mps": 1.757,
+   "know128-st-mps": 1.75
+  },
+  "long_streams": {
+   "g6d-st-mps": 1.77237,
+   "one1-st-mps": 1.76711,
+   "know128-st-mps": 1.76253
+  },
+  "copy_probe_bits_a_byte": {
+   "columns": "first showing, second showing, second showing after its first 8 bytes",
+   "letters": {
+    "g6d-st-mps": [
+     7.788,
+     3.268,
+     3.125
+    ],
+    "one1-st-mps": [
+     7.513,
+     2.485,
+     2.357
+    ],
+    "know128-st-mps": [
+     7.51,
+     2.708,
+     2.587
+    ]
+   },
+   "words": {
+    "g6d-st-mps": [
+     3.695,
+     1.578,
+     1.469
+    ],
+    "one1-st-mps": [
+     3.634,
+     1.562,
+     1.442
+    ],
+    "know128-st-mps": [
+     3.636,
+     1.604,
+     1.497
+    ]
+   }
+  },
+  "share_of_the_copying_gain": "one cell a head gains 0.783 bits a byte on the second showing of random letters, 128 cells a head 0.560: 140%",
+  "split_against_g6d_st (gap_by_piece_one1_vs_bed.json)": {
+   "copyable near": -0.0961,
+   "copyable far only": 0.0292,
+   "seen, other follower": -0.0772,
+   "new": 0.0041
+  },
+  "verdict": "One knowledge cell a head brings more than the whole copying gain of 128 (140% on the second showing of random letters), above the two thirds that the reading set: the copying gain is the option to answer that nothing here fits, not what the cells hold. A head that races only the stream's own cells has to give its spikes to one of them even when none matches; a single learned, ageless cell lets it abstain, as attention sinks and registers do in Transformers. On long streams the one cell gains 0.005 over the bed (128 cells: 0.010), all of it on copyable bytes and none on new contexts. Its tags, payloads and offsets are 516 parameters a level (3,096 in all, paid here with one threshold cell a level)."
+ }
+}
