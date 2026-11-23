@@ -1,0 +1,635 @@
+{
+ "study": "proportional_gate_check",
+ "recorded_utc": "2026-11-23T11:21:49Z",
+ "kind": "A design-stage check on the laptop's GPU, not pre-registered: one seed, the first 2,250 updates of the test bed's 24,000-update schedule. It decides which gate laws are stable enough to screen, and nothing about their worth.",
+ "why": "The gated laptop arm of gated_cells_with_data trails the plain bed by 0.108 at 24,000 updates. Two measurements of that arm pointed at causes a cell could change. Its gate dendrites' fine spikes counted as pulses and took 22% of the stack's (23,013 of 103,672 a byte in windows at 24,000 updates), so the state reads lost 30% of their spikes and the output 16% against the plain base. And an open shunting gate let in 80% to 94% of the value dendrite's charge, close to an on/off switch. Commit 26198b3 added two options: --granule-inner-gate, whose gate steps stay inside the cell as dendritic steps that send no pulse, and --granule-ramp T, a proportional gate: the gate fires 4 steps for every threshold of its charge above the rest, and k steps let in k / (4T) of the value's charge, so every step lets in the same share, up to the whole charge at T thresholds and never more. Under the bounded pool a ramp divides by the gate's present largest count instead, which falls as the pool raises the threshold.",
+ "runs": {
+  "si": {
+   "flags": "--granule-gate 4 --granule-shunt --granule-inner-gate --granule-cells 681",
+   "curve": {
+    "750 updates": {
+     "averaged weights on streams": 1.9975,
+     "training batches": 2.1916,
+     "pulses a byte": 116797,
+     "spike price": 0.0536
+    },
+    "1,500 updates": {
+     "averaged weights on streams": 1.8262,
+     "training batches": 1.9878,
+     "pulses a byte": 117210,
+     "spike price": 0.0469
+    },
+    "2,250 updates": {
+     "averaged weights on streams": 1.7734,
+     "training batches": 1.9599,
+     "pulses a byte": 117651,
+     "spike price": 0.0689
+    }
+   }
+  },
+  "r16i": {
+   "flags": "--granule-gate 4 --granule-ramp 16 --granule-inner-gate --granule-cells 681",
+   "curve": {
+    "750 updates": {
+     "averaged weights on streams": 2.0202,
+     "training batches": 2.246,
+     "pulses a byte": 118343,
+     "spike price": 0.1703
+    },
+    "1,500 updates": {
+     "averaged weights on streams": 1.9154,
+     "training batches": 2.0664,
+     "pulses a byte": 117385,
+     "spike price": 0.2936
+    },
+    "2,250 updates": {
+     "averaged weights on streams": 2.3058,
+     "training batches": 2.7304,
+     "pulses a byte": 122192,
+     "spike price": 0.5408
+    }
+   }
+  },
+  "r4i": {
+   "flags": "--granule-gate 4 --granule-ramp 4 --granule-inner-gate --granule-cells 681",
+   "curve": {
+    "750 updates": {
+     "averaged weights on streams": 5.4174,
+     "training batches": 5.9917,
+     "pulses a byte": 247058,
+     "spike price": 16.9671
+    },
+    "1,500 updates": {
+     "averaged weights on streams": 12.5383,
+     "training batches": 15.3685,
+     "pulses a byte": 349326,
+     "spike price": 57.8777
+    },
+    "2,250 updates": {
+     "averaged weights on streams": 11.6233,
+     "training batches": 14.3326,
+     "pulses a byte": 399584,
+     "spike price": 125.5462
+    }
+   }
+  },
+  "lift-base": {
+   "flags": "--pool-lifts-ceiling",
+   "curve": {
+    "750 updates": {
+     "averaged weights on streams": 2.0606,
+     "training batches": 2.1825,
+     "pulses a byte": 117172,
+     "spike price": 0.07
+    },
+    "1,500 updates": {
+     "averaged weights on streams": 1.7889,
+     "training batches": 1.9266,
+     "pulses a byte": 116895,
+     "spike price": 0.0419
+    },
+    "2,250 updates": {
+     "averaged weights on streams": 1.7105,
+     "training batches": 1.8668,
+     "pulses a byte": 117050,
+     "spike price": 0.0489
+    }
+   }
+  },
+  "lift-r16i": {
+   "flags": "--pool-lifts-ceiling --granule-gate 4 --granule-ramp 16 --granule-inner-gate --granule-cells 681",
+   "curve": {
+    "750 updates": {
+     "averaged weights on streams": 1.973,
+     "training batches": 2.1636,
+     "pulses a byte": 116582,
+     "spike price": 0.0725
+    },
+    "1,500 updates": {
+     "averaged weights on streams": 1.7755,
+     "training batches": 1.9244,
+     "pulses a byte": 117336,
+     "spike price": 0.0621
+    },
+    "2,250 updates": {
+     "averaged weights on streams": 1.7072,
+     "training batches": 1.8771,
+     "pulses a byte": 117886,
+     "spike price": 0.0639
+    }
+   }
+  },
+  "lift-r4i": {
+   "flags": "--pool-lifts-ceiling --granule-gate 4 --granule-ramp 4 --granule-inner-gate --granule-cells 681",
+   "curve": {
+    "750 updates": {
+     "averaged weights on streams": 2.3092,
+     "training batches": 2.5424,
+     "pulses a byte": 124497,
+     "spike price": 1.1249
+    },
+    "1,500 updates": {
+     "averaged weights on streams": 2.4374,
+     "training batches": 2.7223,
+     "pulses a byte": 143202,
+     "spike price": 5.4475
+    },
+    "2,250 updates": {
+     "averaged weights on streams": 2.9552,
+     "training batches": 3.0632,
+     "pulses a byte": 130137,
+     "spike price": 11.3744
+    }
+   }
+  },
+  "lift-si": {
+   "flags": "--pool-lifts-ceiling --granule-gate 4 --granule-shunt --granule-inner-gate --granule-cells 681",
+   "curve": {
+    "750 updates": {
+     "averaged weights on streams": 1.989,
+     "training batches": 2.1737,
+     "pulses a byte": 116897,
+     "spike price": 0.0569
+    },
+    "1,500 updates": {
+     "averaged weights on streams": 1.8254,
+     "training batches": 1.9865,
+     "pulses a byte": 117118,
+     "spike price": 0.046
+    },
+    "2,250 updates": {
+     "averaged weights on streams": 1.7736,
+     "training batches": 1.9607,
+     "pulses a byte": 117043,
+     "spike price": 0.0699
+    }
+   }
+  }
+ },
+ "references": {
+  "note": "runs of the same recipe, seed and rate on the 24,000-update schedule, whose first 2,250 updates are these runs' schedule; code e5d3a1e, the same computation for these settings; averaged weights on streams",
+  "rd-base-24k-s3, plain, bounded": {
+   "750 updates": 2.0377,
+   "1,500 updates": 1.7816,
+   "2,250 updates": 1.7071
+  },
+  "gate-24k-s3, shunting gate whose steps fire, bounded": {
+   "750 updates": 2.016,
+   "1,500 updates": 1.8389,
+   "2,250 updates": 1.7869
+  },
+  "self-24k-s3, self-gated, bounded": {
+   "750 updates": 2.0565,
+   "1,500 updates": 1.7755,
+   "2,250 updates": 1.6989
+  }
+ },
+ "training": "the delayed test bed (6 levels, 256 channels, fan 256, reads after every level, four delays, pulse budget 113,000, trained on streams of 10 windows in 3 groups), peak rate 1.2e-3, warmup 300, the 24,000-update cosine stopped at 2,250 updates (--stop-at 2250), seed 20003, the laptop's GPU beside the queue's runs, code 26198b3 (checkpoints/laptop-loop/code-26198b3). Gated arms have 681 cells a level (5,245,478 parameters), the plain base 1,022 (5,249,060).",
+ "measure": "the trainer's evaluations at 750, 1,500 and 2,250 updates: averaged weights scored on 16 streams of 16 validation windows, the pulses a byte and the spike price. A diagnostic of the raw weights at 2,250 updates on 16 x 256 validation bytes in windows (a scratch script, not in the repository): pulses by population, and for each level the share of cell-bytes whose body fires, whose body sits at its bound, whose gate is open and wide open, the gate's mean share when open, and the pool's median quanta.",
+ "diagnosis at 2,250 updates": {
+  "si": {
+   "step": 2250,
+   "price": 0.0689,
+   "pulses_a_byte_in_windows": 103285,
+   "pulses_by_population": {
+    "output_emit": 41019,
+    "state_reads.N.fire": 33055,
+    "granule_layers.N.fire": 11151,
+    "granule_layers.N.emit": 9928,
+    "state_reads.N.emit": 5533,
+    "input_emit": 2549,
+    "granule_layers.N.pool": 26,
+    "state_reads.N.pool": 24
+   },
+   "cells_by_level": {
+    "0": {
+     "firing": 0.3971,
+     "at_limit": 0.0,
+     "mean_count": 2.0823,
+     "open": 0.4308,
+     "wide": 0.0,
+     "share_open": 0.7566,
+     "units": 7.0
+    },
+    "1": {
+     "firing": 0.4003,
+     "at_limit": 0.0,
+     "mean_count": 2.2584,
+     "open": 0.4308,
+     "wide": 0.0,
+     "share_open": 0.7673,
+     "units": 7.0
+    },
+    "2": {
+     "firing": 0.4082,
+     "at_limit": 0.0,
+     "mean_count": 2.5728,
+     "open": 0.4358,
+     "wide": 0.0,
+     "share_open": 0.7788,
+     "units": 8.0
+    },
+    "3": {
+     "firing": 0.3872,
+     "at_limit": 0.0,
+     "mean_count": 2.737,
+     "open": 0.41,
+     "wide": 0.0,
+     "share_open": 0.7819,
+     "units": 9.0
+    },
+    "4": {
+     "firing": 0.3981,
+     "at_limit": 0.0,
+     "mean_count": 3.0647,
+     "open": 0.42,
+     "wide": 0.0,
+     "share_open": 0.7838,
+     "units": 10.0
+    },
+    "5": {
+     "firing": 0.4189,
+     "at_limit": 0.0,
+     "mean_count": 3.6587,
+     "open": 0.4393,
+     "wide": 0.0,
+     "share_open": 0.7858,
+     "units": 11.0
+    }
+   }
+  },
+  "r16i": {
+   "step": 2250,
+   "price": 0.5408,
+   "pulses_a_byte_in_windows": 100891,
+   "pulses_by_population": {
+    "state_reads.N.fire": 36099,
+    "output_emit": 27895,
+    "granule_layers.N.fire": 12925,
+    "granule_layers.N.emit": 12812,
+    "state_reads.N.emit": 8486,
+    "input_emit": 2606,
+    "granule_layers.N.pool": 36,
+    "state_reads.N.pool": 34
+   },
+   "cells_by_level": {
+    "0": {
+     "firing": 0.3342,
+     "at_limit": 0.0,
+     "mean_count": 2.3907,
+     "open": 0.3815,
+     "wide": 0.145,
+     "share_open": 0.6566,
+     "units": 7.0
+    },
+    "1": {
+     "firing": 0.3281,
+     "at_limit": 0.0,
+     "mean_count": 2.8448,
+     "open": 0.3601,
+     "wide": 0.1848,
+     "share_open": 0.7392,
+     "units": 8.0
+    },
+    "2": {
+     "firing": 0.3638,
+     "at_limit": 0.0002,
+     "mean_count": 3.4557,
+     "open": 0.392,
+     "wide": 0.2402,
+     "share_open": 0.7975,
+     "units": 10.0
+    },
+    "3": {
+     "firing": 0.3576,
+     "at_limit": 0.0013,
+     "mean_count": 3.5863,
+     "open": 0.3819,
+     "wide": 0.2549,
+     "share_open": 0.8274,
+     "units": 11.0
+    },
+    "4": {
+     "firing": 0.3507,
+     "at_limit": 0.0024,
+     "mean_count": 3.4164,
+     "open": 0.3758,
+     "wide": 0.2499,
+     "share_open": 0.8261,
+     "units": 12.0
+    },
+    "5": {
+     "firing": 0.3475,
+     "at_limit": 0.0032,
+     "mean_count": 3.2856,
+     "open": 0.3731,
+     "wide": 0.2479,
+     "share_open": 0.8255,
+     "units": 12.0
+    }
+   }
+  },
+  "r4i": {
+   "step": 2250,
+   "price": 125.5462,
+   "pulses_a_byte_in_windows": 329276,
+   "pulses_by_population": {
+    "state_reads.N.emit": 103104,
+    "output_emit": 93754,
+    "granule_layers.N.emit": 51844,
+    "state_reads.N.fire": 42332,
+    "granule_layers.N.fire": 35147,
+    "input_emit": 2651,
+    "granule_layers.N.pool": 244,
+    "state_reads.N.pool": 200
+   },
+   "cells_by_level": {
+    "0": {
+     "firing": 0.6504,
+     "at_limit": 0.5793,
+     "mean_count": 8.7167,
+     "open": 0.653,
+     "wide": 0.6529,
+     "share_open": 0.9999,
+     "units": 36.0
+    },
+    "1": {
+     "firing": 0.7554,
+     "at_limit": 0.7043,
+     "mean_count": 7.8626,
+     "open": 0.7581,
+     "wide": 0.7581,
+     "share_open": 1.0,
+     "units": 45.0
+    },
+    "2": {
+     "firing": 0.8192,
+     "at_limit": 0.7978,
+     "mean_count": 8.6444,
+     "open": 0.8201,
+     "wide": 0.8201,
+     "share_open": 1.0,
+     "units": 46.0
+    },
+    "3": {
+     "firing": 0.8274,
+     "at_limit": 0.7824,
+     "mean_count": 8.5039,
+     "open": 0.8289,
+     "wide": 0.8289,
+     "share_open": 1.0,
+     "units": 46.0
+    },
+    "4": {
+     "firing": 0.9004,
+     "at_limit": 0.8341,
+     "mean_count": 9.0698,
+     "open": 0.9024,
+     "wide": 0.9024,
+     "share_open": 1.0,
+     "units": 47.0
+    },
+    "5": {
+     "firing": 0.9141,
+     "at_limit": 0.7384,
+     "mean_count": 8.8142,
+     "open": 0.9206,
+     "wide": 0.9206,
+     "share_open": 1.0,
+     "units": 46.0
+    }
+   }
+  },
+  "lift-base": {
+   "step": 2250,
+   "price": 0.0489,
+   "pulses_a_byte_in_windows": 101771,
+   "pulses_by_population": {
+    "output_emit": 39975,
+    "state_reads.N.fire": 32152,
+    "granule_layers.N.fire": 12100,
+    "granule_layers.N.emit": 9380,
+    "state_reads.N.emit": 5589,
+    "input_emit": 2526,
+    "granule_layers.N.pool": 25,
+    "state_reads.N.pool": 23
+   },
+   "cells_by_level": {}
+  },
+  "lift-r16i": {
+   "step": 2250,
+   "price": 0.0639,
+   "pulses_a_byte_in_windows": 101924,
+   "pulses_by_population": {
+    "output_emit": 39588,
+    "state_reads.N.fire": 34956,
+    "granule_layers.N.emit": 9849,
+    "granule_layers.N.fire": 8122,
+    "state_reads.N.emit": 6796,
+    "input_emit": 2561,
+    "granule_layers.N.pool": 27,
+    "state_reads.N.pool": 26
+   },
+   "cells_by_level": {
+    "0": {
+     "firing": 0.282,
+     "at_limit": 0.0,
+     "mean_count": 1.3509,
+     "open": 0.3691,
+     "wide": 0.0325,
+     "share_open": 0.4091,
+     "units": 7.0
+    },
+    "1": {
+     "firing": 0.3038,
+     "at_limit": 0.0,
+     "mean_count": 1.5718,
+     "open": 0.3866,
+     "wide": 0.0425,
+     "share_open": 0.4387,
+     "units": 7.0
+    },
+    "2": {
+     "firing": 0.3215,
+     "at_limit": 0.0,
+     "mean_count": 1.8708,
+     "open": 0.3946,
+     "wide": 0.0542,
+     "share_open": 0.4739,
+     "units": 8.0
+    },
+    "3": {
+     "firing": 0.3137,
+     "at_limit": 0.0,
+     "mean_count": 2.0695,
+     "open": 0.3762,
+     "wide": 0.0603,
+     "share_open": 0.4952,
+     "units": 9.0
+    },
+    "4": {
+     "firing": 0.325,
+     "at_limit": 0.0,
+     "mean_count": 2.4095,
+     "open": 0.3841,
+     "wide": 0.0718,
+     "share_open": 0.5191,
+     "units": 10.0
+    },
+    "5": {
+     "firing": 0.3242,
+     "at_limit": 0.0,
+     "mean_count": 2.6533,
+     "open": 0.3801,
+     "wide": 0.0784,
+     "share_open": 0.5328,
+     "units": 11.0
+    }
+   }
+  },
+  "lift-r4i": {
+   "step": 2250,
+   "price": 11.3744,
+   "pulses_a_byte_in_windows": 102344,
+   "pulses_by_population": {
+    "state_reads.N.fire": 29219,
+    "granule_layers.N.fire": 19923,
+    "state_reads.N.emit": 19096,
+    "granule_layers.N.emit": 16863,
+    "output_emit": 14429,
+    "input_emit": 2632,
+    "granule_layers.N.pool": 96,
+    "state_reads.N.pool": 85
+   },
+   "cells_by_level": {
+    "0": {
+     "firing": 0.4993,
+     "at_limit": 0.0007,
+     "mean_count": 9.9858,
+     "open": 0.5138,
+     "wide": 0.4486,
+     "share_open": 0.9358,
+     "units": 13.0
+    },
+    "1": {
+     "firing": 0.4611,
+     "at_limit": 0.0,
+     "mean_count": 7.4828,
+     "open": 0.4754,
+     "wide": 0.4127,
+     "share_open": 0.9332,
+     "units": 19.0
+    },
+    "2": {
+     "firing": 0.3395,
+     "at_limit": 0.0,
+     "mean_count": 4.5133,
+     "open": 0.3527,
+     "wide": 0.2928,
+     "share_open": 0.9132,
+     "units": 21.0
+    },
+    "3": {
+     "firing": 0.2482,
+     "at_limit": 0.0,
+     "mean_count": 2.7448,
+     "open": 0.261,
+     "wide": 0.2068,
+     "share_open": 0.893,
+     "units": 21.0
+    },
+    "4": {
+     "firing": 0.2276,
+     "at_limit": 0.0,
+     "mean_count": 2.0635,
+     "open": 0.2432,
+     "wide": 0.1809,
+     "share_open": 0.8669,
+     "units": 21.0
+    },
+    "5": {
+     "firing": 0.2844,
+     "at_limit": 0.0,
+     "mean_count": 2.4657,
+     "open": 0.3041,
+     "wide": 0.2272,
+     "share_open": 0.8695,
+     "units": 20.0
+    }
+   }
+  },
+  "lift-si": {
+   "step": 2250,
+   "price": 0.0699,
+   "pulses_a_byte_in_windows": 103220,
+   "pulses_by_population": {
+    "output_emit": 41200,
+    "state_reads.N.fire": 32522,
+    "granule_layers.N.fire": 11426,
+    "granule_layers.N.emit": 10146,
+    "state_reads.N.emit": 5326,
+    "input_emit": 2550,
+    "granule_layers.N.pool": 26,
+    "state_reads.N.pool": 25
+   },
+   "cells_by_level": {
+    "0": {
+     "firing": 0.3987,
+     "at_limit": 0.0,
+     "mean_count": 2.0843,
+     "open": 0.4327,
+     "wide": 0.0,
+     "share_open": 0.7597,
+     "units": 6.0
+    },
+    "1": {
+     "firing": 0.4008,
+     "at_limit": 0.0,
+     "mean_count": 2.2524,
+     "open": 0.4313,
+     "wide": 0.0,
+     "share_open": 0.7724,
+     "units": 7.0
+    },
+    "2": {
+     "firing": 0.4012,
+     "at_limit": 0.0,
+     "mean_count": 2.5393,
+     "open": 0.4281,
+     "wide": 0.0,
+     "share_open": 0.7879,
+     "units": 7.0
+    },
+    "3": {
+     "firing": 0.3938,
+     "at_limit": 0.0,
+     "mean_count": 2.8304,
+     "open": 0.4166,
+     "wide": 0.0,
+     "share_open": 0.7996,
+     "units": 9.0
+    },
+    "4": {
+     "firing": 0.4128,
+     "at_limit": 0.0,
+     "mean_count": 3.2815,
+     "open": 0.4343,
+     "wide": 0.0,
+     "share_open": 0.8143,
+     "units": 10.0
+    },
+    "5": {
+     "firing": 0.4234,
+     "at_limit": 0.0,
+     "mean_count": 3.7901,
+     "open": 0.4437,
+     "wide": 0.0,
+     "share_open": 0.8251,
+     "units": 11.0
+    }
+   }
+  }
+ },
+ "reading": "Under the bounded pool both proportional gates fail. The narrow one (4 thresholds) runs away before 750 updates: 247,000 pulses a byte against a budget of 113,000, the price 17 and climbing to 126. The wide one (16) diverges after 1,500 updates, its price rising from 0.17 to 0.54, and scores 2.31 at 2,250. In the narrow run the pool reached 36 to 47 quanta, where a single gate step let in all of the value: the gates turned into on/off switches (wide open at 65% to 92% of cell-bytes) and 58% to 83% of the bodies sat at their bound, where they learn nothing. Under the lifting pool, which divides the gate's charge before any bound so that a loud stream closes gates, the narrow ramp still runs away (2.31, 2.44, 2.96; price 11.4; its open gates let in 87% to 94%). The wide ramp is stable: 0.088 ahead of the lifted plain base at 750 updates, 0.013 at 1,500 and 0.003 at 2,250, at the same pulses and nearly the same price (0.064 against 0.049). Its gates are graded: open at 37% to 39% of cell-bytes, they let in 41% to 53% of the value on average and are wide open at only 3% to 8%. The shunting gate with inner steps, whose open gates let in 76% to 83%, leads at 750 updates and trails by 0.037 at 1,500 and 0.063 at 2,250 under the lifting pool, as under the bounded one (0.045 and 0.066). Inner steps are worth 0.013 to 0.019 against the shunt whose steps fire, at every evaluation, so the energy tax is the smaller part of the shunt's loss. The gated cells that lost acted as switches; the gate that stays graded keeps pace.",
+ "verdict": "Only the wide proportional gate under the lifting pool is stable and level with its plain base at 2,250 updates. It goes to a screen by slope, two seeds on the server and one on the laptop (proportional_gates_with_data.json). The narrow ramp is dropped, the bounded ramp is not used, and the shunting gate is not screened again."
+}

@@ -173,21 +173,30 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    - a gate dendrite as a shunt, where k gate spikes let in the share k / (k + 4) of the value dendrite's charge:
      0.118 behind at full size, with its gate dendrites at the membrane's bound a fifth of the time
      (`full_size_unit_screen.json`). On the laptop's seed of the test bed it is 0.067 behind at 6,000 updates and
-     0.108 behind at 24,000 (`gated_cells_with_data.json`; the self-gated arm of that screen still runs);
+     0.108 behind at 24,000 (`gated_cells_with_data.json`). A fifth of its pulses were the gate's own steps
+     (23,000 of 104,000 a byte): the reads lost 30% of their spikes and the output 16%. A gate whose steps stay
+     inside the cell (`--granule-inner-gate`) spends pulses as the plain stack does, but in a check of 2,250
+     updates it is still 0.066 behind, so that energy tax is the smaller part of the loss
+     (`proportional_gate_check.json`);
    - the same under the pool that lifts the ceiling, so that no gate reaches a bound
      (`full_size_lifted_gate.json` and `lifted_gates_with_data.json`, queued);
-   - self-gated cells: level on the test bed at 6,000 updates; the full-size arm is queued;
+   - self-gated cells: level on the test bed at 6,000 and at 24,000 updates (0.0014 and 0.0016 behind), with no
+     growth, so they earn no seeds (`gated_cells_with_data.json`); the full-size arm is half trained;
    - noisy thresholds, where membrane noise makes a cell smooth on average and it learns from that true slope:
      level at full size (0.004 better, none of it on new contexts); the test bed's screen by slope is queued
      (`noisy_thresholds_with_data.json`).
 
-   Proposed next and not built: **a coincidence cell**. The cell fires once for every gate spike and value spike
-   that meet within the byte, so g gate spikes and v value spikes give v × g / T spikes, where T is the most spikes
-   a dendrite sends in a byte. The shunt's slope fades as its gate opens; this one's does not. v15's product let
-   every gate spike pass the value's charge once more, and its pulses ran to 645,000 a byte; this cell never fires
-   more than its quieter dendrite. With it comes a set point: each gate moves its resting level so that it is open
-   at about half of the bytes, where the Transformer's gates are (`unit_density.json`), as cortical neurons keep
-   their excitability in range. It is tested against the lifted gate once that verdict is in.
+   Built and checked: **a proportional gate** (`--granule-ramp 16 --granule-inner-gate`). The gate dendrite fires
+   four steps for every threshold of its charge above the rest, and k steps let in k / 64 of the value dendrite's
+   charge. Every step lets in the same share, the gate is wide open at 16 thresholds, and it never lets in more than
+   the whole. Its steps stay inside the cell, as a dendritic spike sends nothing down the axon. In a check of 2,250
+   updates (`proportional_gate_check.json`) it is the first gated cell that keeps pace with plain cells: under the
+   lifting pool it leads by 0.088 at 750 updates and is level at 2,250, where the shunting gates trail by 0.063 to
+   0.080. Its gates stay graded, letting in about half of the value when open. The gates that lost acted as
+   switches: a narrow ramp (4 thresholds), or any ramp under the bounded pool, saturates into a switch and runs
+   away. The screen by slope is pre-registered, two seeds on the server's fan2 bed and one on the laptop
+   (`proportional_gates_with_data.json`). A set point, a resting level that keeps each gate open at about half of
+   the bytes as cortical neurons keep their excitability in range, waits for that verdict.
 
    Two controls in floats would say whether the unit also explains the gap late in training, since the walk priced
    it at 9,000 updates: a Transformer with plain units on the test bed at 6,000 and 24,000 updates (does it flatten
