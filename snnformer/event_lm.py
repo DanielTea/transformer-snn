@@ -3189,6 +3189,13 @@ class _GatedFire(_IntegrateFire):
     more than once and a closed gate passes nothing. The collected charge is
     bounded as a plain cell's is, which keeps its product with the gate's
     count within the range of exact sums.
+
+    Under a pool that lifts the ceiling (``lifted``) the collected charge is
+    not bounded: the body counts what the gate lets in at the present threshold
+    up to its largest count, however high the pool has raised the threshold.
+    The product of the charge and the gate's count is then taken in whole
+    numbers of 32 bits, where it is exact (the charge stays below 2 ** 24 ticks
+    and the count below 2 ** 7).
     """
 
     def __init__(self, cap: int, charge_bits: int, unit: int, quanta_per_threshold: int = _PACKET_UNITS,
@@ -3198,6 +3205,8 @@ class _GatedFire(_IntegrateFire):
         self.shunt = shunt
 
     def forward(self, current, quanta=None, *, reference=None, opened=None):
+        if self.lifted:
+            return self._lifted(current, quanta, opened)
         bounded = current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
         passed = bounded * opened
         units = quanta.to(torch.int32)
@@ -3216,6 +3225,20 @@ class _GatedFire(_IntegrateFire):
             return counts
         share = (opened + self.unit) if self.shunt else self.unit
         surrogate = passed / (quanta * quantum * share)
+        return counts.to(current.dtype) + (surrogate - surrogate.detach())
+
+    def _lifted(self, current, quanta, opened):
+        """The body's counts under a pool that lifts the ceiling: no bound on the collected charge."""
+        units = quanta.to(torch.int32)
+        quantum = self.threshold // self.quanta_per_threshold
+        gate = opened.detach().to(torch.int32)
+        threshold = units * quantum * (gate + self.unit) if self.shunt else units * (quantum * self.unit)
+        passed = current.detach().to(torch.int32) * gate
+        counts = ((passed.abs() + threshold // 2) // threshold).clamp(max=self.capped) * passed.sign()
+        if not current.is_floating_point():
+            return counts
+        share = (opened + self.unit) if self.shunt else self.unit
+        surrogate = (current * opened / (quanta * quantum * share)).clamp(-self.capped, self.capped)
         return counts.to(current.dtype) + (surrogate - surrogate.detach())
 
 
@@ -3660,6 +3683,9 @@ class _GranuleLayer(nn.Module):
                                         capped=_GATE_CAP * self.gated)
             self.fire = _GatedFire(cell_cap, self.bits, self.gated, cfg.pool_quanta, shunt=cfg.granule_shunt)
             self.open.price_share = self.fire.price_share = cfg.granule_price
+            # Under a pool that lifts the ceiling neither the gate nor the body is bounded by its membrane: a gate
+            # under a loud stream opens as far as its charge says, where a bounded gate jams at its membrane.
+            self.open.lifted = self.fire.lifted = cfg.pool_lifts_ceiling
             # The gate of a cell that gates itself counts the cell's own charge and sends no spike.
             self.open.dendrite = cfg.granule_self_gate
         elif cfg.granule_veto:
@@ -4178,10 +4204,9 @@ class EventLM(nn.Module):
         if not isinstance(cfg.pool_lifts_ceiling, bool) or (cfg.pool_lifts_ceiling and (
                 (cfg.read_after is None and cfg.granule_after is None)
                 or (cfg.read_after is not None and (cfg.read_mode != "race" or cfg.read_turn))
-                or (cfg.granule_after is not None and (cfg.granule_budget is not None or cfg.granule_gate
-                                                       or cfg.granule_veto)))):
-            raise ValueError("a pool lifts the ceilings of race reads that no pacemaker turns and of plain cells, "
-                             "which neither race nor have a gate or a veto")
+                or (cfg.granule_after is not None and (cfg.granule_budget is not None or cfg.granule_veto)))):
+            raise ValueError("a pool lifts the ceilings of race reads that no pacemaker turns and of plain or gated "
+                             "cells, which neither race nor have a veto")
         if not isinstance(cfg.output_pool, int) or cfg.output_pool < 0 or (cfg.output_pool and not cfg.stack):
             raise ValueError("the output neurons of a stack count their threshold in a whole number of quanta "
                              "under a pool of their own")
