@@ -43,10 +43,11 @@ def figure(points, output):
              "unbroken streams.\nOne line a seed (seed 2 dashed). The dotted line marks 3e-4, the rate of every "
              "earlier run.", size=10, color=MUTED, va="top")
     rates = sorted(RATES.values())
+    names = {1.5e-4: "1.5e-4", 3e-4: "3e-4", 6e-4: "6e-4", 1.2e-3: "1.2e-3", 2.4e-3: "2.4e-3"}
     for ax in (losses, gaps):
         style(ax, grid_axis="both")
         ax.set_xscale("log", base=2)
-        ax.set_xticks(rates, [f"{rate:g}" for rate in rates])
+        ax.set_xticks(rates, [names.get(rate, f"{rate:g}") for rate in rates])
         ax.set_xlabel("Peak learning rate", color=MUTED, labelpad=8)
         ax.axvline(3e-4, color=GRAY, linewidth=0.8, linestyle=":")
     styles = {1: "-", 2: "--", 3: "-.", 4: ":"}
@@ -63,10 +64,16 @@ def figure(points, output):
             gappy = [points[model].get(rate, {}).get(seed, np.nan) for rate in rates]
             losses.plot(rates, gappy, "o" + styles.get(seed, "-"), color=color, linewidth=2 if seed == 1 else 1.4,
                         markersize=5, alpha=1 if seed == 1 else 0.7, label=f"{label}, seed {seed}")
-            best = min(curves[(model, seed)], key=curves[(model, seed)].get)
-            if len(xs) == len(RATES):
-                losses.annotate(f"best {best:g}", (best, curves[(model, seed)][best]), textcoords="offset points",
-                                xytext=(0, -14), ha="center", color=color, size=9)
+        # One label a model: the best rate of the mean over the seeds that have every rate.
+        complete = [seed for seed in seeds if len(curves.get((model, seed), {})) == len(RATES)]
+        if complete:
+            mean = {rate: np.mean([curves[(model, seed)][rate] for seed in complete]) for rate in rates}
+            best = min(mean, key=mean.get)
+            low = min(curves[(model, seed)][best] for seed in complete)
+            last = best == rates[-1]
+            losses.annotate(f"best {names.get(best, f'{best:g}')}" + (" (mean of seeds)" if len(complete) > 1 else ""),
+                            (best, low), textcoords="offset points", xytext=(8 if last else 0, -14),
+                            ha="right" if last else "center", color=color, size=9)
     losses.set_ylabel("Bits per byte", color=MUTED, labelpad=8)
     losses.legend(frameon=False, fontsize=8.5, labelcolor=TEXT, loc="upper right")
     means = {}

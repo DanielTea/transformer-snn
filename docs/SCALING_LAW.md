@@ -13,20 +13,20 @@ rate (`data_scaling_long.json`, analysis `experiments/data_scaling_long.py`).
 ## Both models wanted a higher learning rate
 
 Every run up to v17 trained at a peak rate of 3e-4. On the test bed both models do better at higher rates, and the
-stack gains more (`learning_rate_with_data.json`; seed 20001 complete, seed 20002 running):
+stack gains a little more (`learning_rate_with_data.json`, two seeds):
 
 | 24,000 updates, 2M validation bytes as streams | 1.5e-4 | 3e-4 | 6e-4 | 1.2e-3 | 2.4e-3 |
 |---|---:|---:|---:|---:|---:|
 | Spiking stack, seed 20001 | 1.6329 | 1.5475 | 1.5036 | **1.4864** | 1.4924 |
+| Spiking stack, seed 20002 | 1.6379 | 1.5580 | 1.5130 | **1.4926** | 1.4950 |
 | Transformer, seed 20001 | 1.5917 | 1.4927 | 1.4569 | **1.4442** | 1.4455 |
-| Gap | 0.041 | 0.055 | 0.047 | **0.042** | 0.047 |
-| Spiking stack, seed 20002 | 1.6379 | 1.5580 | 1.5130 | running | 1.4950 |
-| Transformer, seed 20002 | running | 1.4955 | 1.4575 | running | **1.4368** |
+| Transformer, seed 20002 | 1.6066 | 1.4955 | 1.4575 | 1.4460 | **1.4368** |
+| Gap of the two-seed means | 0.036 | 0.059 | 0.051 | 0.044 | 0.053 |
 
-On seed 20001, from 3e-4 to its best rate the stack gains 0.061 and the Transformer 0.048. The difference is 0.013,
-under the 0.020 that the record set for calling the flattening an artefact of the learning rate. Seed 20002 agrees so
-far: from 3e-4 to 6e-4 it gains the stack 0.045 (seed 20001: 0.044) and the Transformer 0.038 (0.036). Its
-Transformer is best at 2.4e-3 of the rates it has finished, so the verdict waits for both seeds at 1.2e-3.
+The stack is best at 1.2e-3 on both seeds, the Transformer at 2.4e-3 on their mean. From 3e-4 to its best rate the
+stack gains 0.063 and the Transformer 0.053. The difference of 0.010 is under the 0.020 that the record set for calling
+the flattening an artefact of the learning rate: **it is not one.** At each model's best rate the gap is 0.048, and it
+is on new contexts on both seeds (+0.056 and +0.075). The data-scaling curves now read the Transformer at 2.4e-3.
 
 ![Both models wanted a higher learning rate](../results/figures/event_lm_learning_rate.png)
 
