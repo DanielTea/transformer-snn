@@ -156,6 +156,8 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 | Word heads at full size | Fail by their mark: 0.0009 ahead where 0.003 was asked; the best spiking score so far | Memory again, not knowledge | `knowledge_gap/full_size_word_heads.json` |
 | Gated cells at full size (a gate dendrite as a shunt) | Fail: 0.118 behind | Their gate dendrites sit at the membrane's bound a fifth of the time | `knowledge_gap/full_size_unit_screen.json` |
 | Noisy thresholds at full size | Level: 0.004 better, none of it on new contexts | A smooth slope alone is not the unit's lead | `knowledge_gap/full_size_unit_screen.json` |
+| Self-gated cells at full size | Level: 0.001 behind, 0.006 behind on new contexts | A cell that gates itself is a plain cell | `knowledge_gap/full_size_unit_screen.json` |
+| Gated cells under the pool that lifts the ceiling, at full size | Fail: 0.113 behind the lifted plain stack | Saturation was not why gated cells lose: with no cell at its cap the loss is the same | `knowledge_gap/full_size_lifted_gate.json` |
 | Noisy thresholds on the test bed, by slope | Reported only: 0.0036 ahead at 6,000 updates, 0.0019 at 24,000 | A true slope for the threshold cell is worth 0.002 to 0.004 and fades with data | `knowledge_gap/noisy_thresholds_with_data.json` |
 | Output spikes of 1/16 bit in place of 1/128 (`--output-step 8`), on trained weights | 34% fewer pulses on the test bed and 21% fewer at full size, for 0.00004 and 0.00002 bits per byte | The output's spike was the one spike whose weight no synapse learns, and it was finer than the score needs: an energy saving, no gain in bits | `knowledge_gap/output_step_on_trained_weights.json` |
 | The pool that lifts the ceiling, at full size | Removes saturation at the same energy; 0.007 ahead of the plain best where 0.010 was asked | The membranes cap the stack's learning rate; lifting frees the rate but adds no knowledge | `knowledge_gap/full_size_lifted_ceiling_pilot.json` |
@@ -190,10 +192,14 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
      lost 30% of their spikes and the output 17%. A gate whose steps stay inside the cell (`--granule-inner-gate`)
      spends pulses as the plain stack does, but in a check of 2,250 updates it is still 0.066 behind, so that
      energy tax is the smaller part of the loss (`proportional_gate_check.json`);
-   - the same under the pool that lifts the ceiling, so that no gate reaches a bound
-     (`full_size_lifted_gate.json` and `lifted_gates_with_data.json`, queued);
+   - the same under the pool that lifts the ceiling: 0.113 behind the lifted plain stack at full size, as far
+     as without the lift, although the cells' bodies no longer reach their cap and the saturated share among
+     the gates' populations falls from 21% to 6.5% (`full_size_lifted_gate.json`). Saturation was not the
+     reason. On the laptop's seed of the test bed it is 0.078 behind at 6,000 updates; its longer run was
+     dropped (`lifted_gates_with_data.json`);
    - self-gated cells: level on the test bed at 6,000 and at 24,000 updates (0.0014 and 0.0016 behind), with no
-     growth, so they earn no seeds (`gated_cells_with_data.json`); the full-size arm is half trained;
+     growth, so they earn no seeds (`gated_cells_with_data.json`), and level at full size (0.001 behind, 0.006
+     behind on new contexts, `full_size_unit_screen.json`);
    - noisy thresholds, where membrane noise makes a cell smooth on average and it learns from that true slope:
      level at full size (0.004 better, none of it on new contexts), and on the test bed 0.0036 ahead at 6,000
      updates and 0.0019 at 24,000, a lead that shrinks with data, so they earn no seeds

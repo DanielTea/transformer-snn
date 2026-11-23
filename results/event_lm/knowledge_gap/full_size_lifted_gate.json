@@ -8,5 +8,94 @@
  "training": "full.sh KIND stack (v16's stack with forgetting slopes, windows of 512 bytes, batch 8, 24,000 updates, warmup 1,000, cosine over the run, seed 20001) at peak rate 6e-4, server GPU 1 after the full-size pair's Transformer arm; code v17n (97a2772): v17m with the lifted gates, which change nothing for the base's populations",
  "measure": "as full_size_unit_screen: the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, averaged weights, bits kept; paired with fs-st6-lift by experiments/gap_by_piece.py (near 496, far 8,192); the pulses a byte, and the share of gate and cell entries at their caps (experiments/membrane_saturation.py)",
  "reading": "The lifted gate earns a place in the next full-size design if fs-gate6-lift scores at least 0.010 below fs-st6-lift and its gain on new contexts has an interval above zero; between 0.005 and 0.010 below, a second seed. Otherwise it is reported only. Recorded either way: the score, the gains by context, the pulses a byte and the saturation of its gates.",
- "seen_before_recording": "fs-st6 1.31985, fs-st6-lift 1.31341, fs-gate6 1.43806 with 21% of its gate entries at the bound, fs-noise6 1.31571; a 4-update CPU check of this arm at full size (finite, 34,783,136 parameters). No lifted gated run has trained."
+ "seen_before_recording": "fs-st6 1.31985, fs-st6-lift 1.31341, fs-gate6 1.43806 with 21% of its gate entries at the bound, fs-noise6 1.31571; a 4-update CPU check of this arm at full size (finite, 34,783,136 parameters). No lifted gated run has trained.",
+ "result": {
+  "recorded_utc": "2026-11-23T19:30:42Z",
+  "bpb": {
+   "fs-st6-lift (base)": 1.31341,
+   "fs-gate6-lift": 1.42647,
+   "beside": {
+    "fs-st6 (plain, unlifted)": 1.31985,
+    "fs-gate6 (gated, unlifted)": 1.43806
+   }
+  },
+  "minus the base": {
+   "fs-gate6-lift": 0.11306
+  },
+  "by context against the base (gap_by_piece, near 496, far 8,192)": {
+   "fs-gate6-lift": {
+    "whole": 0.11301,
+    "copyable near": {
+     "gap": 0.0515,
+     "interval_95": [
+      0.0354,
+      0.0675
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": 0.2547,
+     "interval_95": [
+      0.2235,
+      0.2821
+     ],
+     "share": 0.0862
+    },
+    "seen, other follower": {
+     "gap": -0.5269,
+     "interval_95": [
+      -0.6124,
+      -0.4333
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": 0.1509,
+     "interval_95": [
+      0.1459,
+      0.1553
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0809,
+     "interval_95": [
+      0.0564,
+      0.1066
+     ],
+     "share": 0.3109
+    }
+   }
+  },
+  "stack_pulses_per_byte": {
+   "training, last update": {
+    "fs-gate6-lift": 309058,
+    "fs-st6-lift": 307636
+   },
+   "price at the end": {
+    "fs-gate6-lift": 0.014,
+    "fs-st6-lift": 0.004
+   }
+  },
+  "membrane_saturation (whole stack, the first 65,536 validation bytes: the share of entries whose count reached its cap; the gate dendrites count among 'other')": {
+   "fs-gate6-lift": {
+    "cells": 1e-05,
+    "cells at the top level": 0.00014,
+    "reads": 0.0,
+    "other": 0.0653
+   },
+   "fs-gate6 (unlifted, entries at the membrane's bound)": {
+    "cells": 0.0297,
+    "cells at the top level": 0.1676,
+    "other": 0.2142
+   },
+   "fs-st6-lift (base; from membrane_saturation.json)": {
+    "cells": 0.0,
+    "reads": 0.0,
+    "other": 0.0144
+   }
+  },
+  "verdict": "FAIL: 0.113 worse than the lifted plain stack, where 0.010 better was asked. Worse on new contexts (0.151, interval 0.146 to 0.155), on near copies (0.052) and on far copies (0.255); better only on bytes whose context ran before with another follower (0.527 better, 5.5% of bytes).",
+  "reading": "Saturation was not why gated cells lose. Under the lifting pool the cells' bodies no longer reach their cap, and the share of saturated entries among the populations that hold the gate dendrites falls from 21% to 6.5% (the plain stack has 1.4% there, lifted or not), yet the gated stack is as far behind its plain partner as before (0.113 lifted, 0.118 unlifted). The lift is worth 0.012 to the gated stack and 0.006 to the plain one. A gate dendrite that shunts a value dendrite, at equal parameters, costs the stack about 0.11 bits a byte at full size whether or not it saturates. Not separated here: the gated form trades 1,188 plain cells a level for 712 gated ones, and self-gated cells, which keep all 1,188, score level with plain cells (full_size_unit_screen.json), so the loss may be the fewer cells as much as the gate. The laptop's screen of the same cells on the test bed ended as reported only (lifted_gates_with_data.json, amendment)."
+ }
 }

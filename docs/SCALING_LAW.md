@@ -144,9 +144,16 @@ run each at full size, against the plain stack at 6e-4 (`full_size_unit_screen.j
 | Plain stack | 1.3199 | | |
 | Gated cells, equal parameters | 1.4381 | +0.118 | +0.162 |
 | Noisy thresholds | 1.3157 | −0.004 | level |
+| Self-gated cells | 1.3208 | +0.001 | +0.006 |
 
 Gated cells lose badly: their gate dendrites sit at their bound a fifth of the time. Noisy thresholds train level at
-the same energy, with a small gain on near copies. Neither closes the knowledge gap. The self-gated arm runs next.
+the same energy, with a small gain on near copies. Self-gated cells train level too. None closes the knowledge gap.
+
+The bound is not why gated cells lose. Under the pool that lifts the ceiling no cell's body reaches its cap and the
+saturated share among the gates' populations falls from 21% to 6.5%, and the gated stack is as far behind the
+lifted plain stack as before: 1.4265 against 1.3134, 0.113 behind and 0.151 behind on new contexts
+(`full_size_lifted_gate.json`). The gated form has 712 cells a level where the plain one has 1,188; self-gated
+cells keep all 1,188 and are level, so the loss may be the fewer cells as much as the gate.
 
 Word heads at full size, at 90,000 updates with v15's fast synapses at reach 8,192, gain 0.0009 on test over v17's
 stack (paired interval 0.0004 to 0.0013), under the 0.003 their record asked (`full_size_word_heads.json`). The run is
@@ -274,14 +281,11 @@ rose, and none has let a silent cell pass anything.
 | `data_scaling_long.json` | The curves: the Transformer, the delayed stack and the plain stack at 6,000 to 96,000 updates, at each model's best rate |
 | `weight_precision_with_data.json` | Finer charge grids and quantal release, at 6,000 and 24,000 updates |
 | `cell_dither_with_data.json` | Stochastic firing of the threshold cells, alone and with quantal release |
-| `full_size_lifted_gate.json` | Gated cells under the pool that lifts the ceiling, at full size, against the lifted plain stack |
-| `lifted_gates_with_data.json` | The same on the test bed at 6,000 and 24,000 updates, a screen on the laptop |
 | `full_size_loop_pilot.json` | Depth by recurrence at full size: levels 2 to 8 run twice with tied synapses, with the energy it takes as an arm of its own |
 | `loop_with_data.json` | A looped test bed at 6,000 and 24,000 updates against a plain bed given the same pulse budget, a screen on the laptop |
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `proportional_gates_with_data.json` | The wide proportional gate under the lifting pool at 6,000 and 24,000 updates, two seeds on the server and one on the laptop (pre-registered) |
 | `full_size_proportional_gate.json` | The same gate at full size against the lifted plain stack, released only by a pass of the screen (pre-registered) |
-| `full_size_unit_screen.json` | Its third arm, self-gated cells at full size |
 | `plain_units_with_data.json` | A diagnostic in floats on the server's CPU: the test bed's Transformer with plain or gated units, hard or smooth, at 6,000 and 24,000 updates: which property of the unit falls behind with data (pre-registered) |
 | `output_step_with_data.json` | Output spikes of 1/16 bit in training, at the old budget and at a budget cut by the saving, a screen on the laptop (pre-registered) |
 | `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 next |
