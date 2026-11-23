@@ -73,6 +73,7 @@ the v11 Transformer scores 1.578. Every arm is one seed.
 [Knowledge-gap study](docs/KNOWLEDGE_GAP.md) ·
 [Roadmap](docs/ROADMAP.md) ·
 [Scaling-law study](docs/SCALING_LAW.md) ·
+[Telemetry pilot](docs/TELEMETRY_PILOT.md) ·
 [Model card](models/spiking-byte-lm-v18/README.md) ·
 [Leaderboard](docs/LEADERBOARD.md) ·
 [Research handoff](docs/V18_HANDOFF.md) ·
