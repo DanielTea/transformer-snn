@@ -357,6 +357,7 @@ def build_model(args):
                             stack=getattr(args, "stack", EventLMConfig.stack),
                             stack_loop=(None if getattr(args, "stack_loop", None) is None
                                         else tuple(map(int, args.stack_loop.split(",")))),
+                            stack_skips=getattr(args, "stack_skips", EventLMConfig.stack_skips),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
@@ -699,6 +700,11 @@ def main():
     parser.add_argument("--stack-loop", metavar="FIRST,LAST,PASSES",
                         help="a stack whose levels FIRST to LAST every byte passes PASSES times with the same reads "
                              "and cell layers; every pass keeps its own state in a stream")
+    parser.add_argument("--stack-skips", choices=("level", "parts"),
+                        help="skip fibres: every level's read and cells also hear the stream as it stood at the "
+                             "input and after each earlier level, through a gain for every channel that starts at "
+                             "zero (level), or the read's probes, tags and payloads each through gains of their "
+                             "own (parts); every pass of a loop has its own gains")
     parser.add_argument("--read-after", help="comma-separated byte-rate blocks that a state read follows")
     parser.add_argument("--read-width", type=int, default=EventLMConfig.read_width, help="channels of a state read")
     parser.add_argument("--read-heads", type=int, default=EventLMConfig.read_heads)
