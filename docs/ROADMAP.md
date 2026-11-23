@@ -295,6 +295,21 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    of cells and bytes lie within one threshold below firing at full size, and 63% to 86% lie more than eight
    thresholds below zero, so a threshold soft over one threshold would reach almost nothing. A soft threshold has to
    be as wide as the charge's spread, or the set point has to hold the share.
+
+   Built and pre-registered: **a slope far below the threshold** (`--granule-slope-tail 4`,
+   `subthreshold_slope_with_data.json`). It is a third form, and it changes no spike. A plain cell learns from a
+   smooth threshold one fine spike wide, so a silent cell learns only where it almost fires, and nothing holds its
+   charge at the bytes where it is silent. With the tail its slope is one above zero charge and falls with the
+   square of the distance below it, to a quarter at four whole thresholds, as plasticity in a neuron depends on
+   how far the membrane stands from its threshold and does not wait for a spike. A cell eight thresholds below
+   zero then still learns at a ninth of the full slope. In its local form the slope below zero teaches only the
+   cell's own synapses and its rest, a rule of three factors (the input's spikes, the membrane's distance, the
+   error that the cell's output synapses bring back), and the stream never learns from spikes that were not fired.
+   The smooth threshold a whole threshold wide failed at full size (0.0145 behind after 6,000 updates at 1e-3,
+   0.074 after 15,000): it dies within three thresholds, is negative from 0.75 to 3 thresholds below zero and
+   halves the slope of a cell that has just begun to fire. The tail has none of the three. Both forms are screened
+   by slope on the test bed (the laptop's seed first, two seeds on the server) and run at full size at 6e-4 and at
+   1.2e-3, where the question is whether the stack can then use the Transformer's rate.
 9. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
    in the dentate gyrus, to take up what the old ones cannot.
 10. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,
