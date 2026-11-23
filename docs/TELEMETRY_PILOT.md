@@ -139,11 +139,12 @@ The same happens on SKAB, where the reading of a carried stream is a clear failu
 |---|---:|---:|---:|---:|---:|
 | Volley, learning | 0.341 | 0.030 | 22 of 34 | 30 s | **3.09** |
 | Volley, frozen | 0.410 | 0.067 | 25 of 34 | 34 s | 8.65 |
+| Volley, no fast synapses | 0.365 | 0.037 | 24 of 34 | 21 s | 9.14 |
 | Volley, delta, learning | 0.363 | 0.008 | 15 of 34 | 39 s | 3.87 |
 | Volley, delta, frozen | 0.372 | 0.008 | 14 of 34 | 40 s | 4.02 |
 
-Every carried reading ranks the anomalies below the normal samples. (The reading without fast synapses was still
-running when this was written; its row follows.) Three things in the records explain it.
+Every carried reading ranks the anomalies below the normal samples, the one without fast synapses as well: the reads
+alone, which copy the last 8,192 cells, adapt to a fault that holds steady. Three things in the records explain it.
 
 1. **The stream's surprise falls along every run** as it learns the sensor: 4.95 bits a sample in calibration,
    4.54 on later normal samples. SKAB's anomalies come late in a run.
