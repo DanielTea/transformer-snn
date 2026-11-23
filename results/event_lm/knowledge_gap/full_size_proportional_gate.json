@@ -9,5 +9,10 @@
  "launch": "queued held as fs-pg6-lift (priority 5, GPU_MEM 50, either GPU). sched/bin/pg-decide.sh, a CPU job that starts after the test bed's last run, applies proportional_gates_with_data's reading to its eight scores with experiments/read_lead_study.py, writes sched/scores/pg-decision.json and removes the hold only on a fix for late learning or a constant gain; otherwise the job stays held and is retired.",
  "measure": "as full_size_lifted_gate: the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, averaged weights, bits kept; paired with fs-st6-lift by experiments/gap_by_piece.py (near 496, far 8,192); the pulses a byte, and the share of gate and cell entries at their caps (experiments/membrane_saturation.py)",
  "reading": "The proportional gate earns a place in the next full-size design if fs-pg6-lift scores at least 0.010 below fs-st6-lift and its gain on new contexts has an interval above zero; between 0.005 and 0.010 below, a second seed. Otherwise it is reported only. Recorded either way: the score, the gains by context, the pulses a byte and the gates at their caps.",
- "seen_before_recording": "fs-st6 1.31985, fs-st6-lift 1.31341, fs-gate6 1.43806 with 21% of its gate entries at the bound, fs-noise6 1.31571; everything of proportional_gate_check.json; a 2-update CPU check of this arm at full size (finite, 34,783,136 parameters). No run of proportional_gates_with_data has trained, and no full-size run with a proportional gate."
+ "seen_before_recording": "fs-st6 1.31985, fs-st6-lift 1.31341, fs-gate6 1.43806 with 21% of its gate entries at the bound, fs-noise6 1.31571; everything of proportional_gate_check.json; a 2-update CPU check of this arm at full size (finite, 34,783,136 parameters). No run of proportional_gates_with_data has trained, and no full-size run with a proportional gate.",
+ "amendment": {
+  "recorded_utc": "2026-11-23T11:35:40Z",
+  "change": "fs-pg6-lift is pinned to GPU 1, where it shares with the full-size pair's Transformer run, which needs little memory. On GPU 0 the pair's stack run switches to windows of 2,048 bytes during the night and then needs most of that GPU, so no full-size run may share it. Nothing else changes.",
+  "seen_before_amendment": "No run of proportional_gates_with_data or of this study has started."
+ }
 }
