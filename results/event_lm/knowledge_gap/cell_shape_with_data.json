@@ -9,5 +9,123 @@
  "training": "24,000 updates, peak rate 3e-4, as in learning_rate_with_data, seeds 20001 to 20004, on the server's GPUs.",
  "measure": "The first 2,000,000 validation bytes as 16 unbroken streams (experiments/eval_stream.py, averaged weights), the bits of every piece kept; fan2 against the bed of the same seed split by what the context offers (experiments/gap_by_piece.py, near 256, far 8,192).",
  "reading": "Pass if fan2 leads the bed by at least 0.010 on average over the four seeds and leads at three or more of them. Recorded either way: the mean lead on new contexts and its interval.",
- "seen_before_recording": "fan2 at 6,000 updates (word_rhythm.json, laptop; server CPU arm fan2-cpu trained, its trainer's streams 1.6818 at 6,000). A 24,000-update fan2 run on the laptop (word_heads_with_data.json, seed 20001) had reached 10,500 updates with 1.5767 on the trainer's streams, where the bed run on the laptop had 1.5860 at the same update."
+ "seen_before_recording": "fan2 at 6,000 updates (word_rhythm.json, laptop; server CPU arm fan2-cpu trained, its trainer's streams 1.6818 at 6,000). A 24,000-update fan2 run on the laptop (word_heads_with_data.json, seed 20001) had reached 10,500 updates with 1.5767 on the trainer's streams, where the bed run on the laptop had 1.5860 at the same update.",
+ "result": {
+  "recorded_utc": "2026-11-23T07:09:23Z",
+  "scores, the first 2,000,000 validation bytes as 16 unbroken streams": {
+   "seed 20001": {
+    "bed24": 1.54749,
+    "fan2-24": 1.53518,
+    "lead": 0.01231,
+    "new contexts, fan2 minus bed": {
+     "gap": -0.0182,
+     "interval_95": [
+      -0.021,
+      -0.0149
+     ]
+    }
+   },
+   "seed 20002": {
+    "bed24": 1.55804,
+    "fan2-24": 1.53519,
+    "lead": 0.02285,
+    "new contexts, fan2 minus bed": {
+     "gap": -0.0215,
+     "interval_95": [
+      -0.0261,
+      -0.0177
+     ]
+    }
+   },
+   "seed 20003": {
+    "bed24": 1.55522,
+    "fan2-24": 1.53326,
+    "lead": 0.02196,
+    "new contexts, fan2 minus bed": {
+     "gap": -0.0219,
+     "interval_95": [
+      -0.0251,
+      -0.018
+     ]
+    }
+   },
+   "seed 20004": {
+    "bed24": 1.55186,
+    "fan2-24": 1.54734,
+    "lead": 0.00452,
+    "new contexts, fan2 minus bed": {
+     "gap": -0.0203,
+     "interval_95": [
+      -0.0234,
+      -0.0163
+     ]
+    }
+   }
+  },
+  "mean lead": 0.01541,
+  "seeds ahead": 4,
+  "read by": "experiments/read_lead_study.py --min-lead 0.010 --min-wins 3",
+  "by context, fan2 minus bed (experiments/gap_by_piece.py, near 256, far 8,192; the interval of a mean is the t interval over the four seeds)": {
+   "new contexts (76% of bytes)": {
+    "mean": -0.0205,
+    "interval_95": [
+     -0.0231,
+     -0.0178
+    ],
+    "seeds": [
+     -0.0182,
+     -0.0215,
+     -0.0219,
+     -0.0203
+    ]
+   },
+   "copyable only from 256 to 8,192 bytes back (11%)": {
+    "mean": -0.0571,
+    "interval_95": [
+     -0.1118,
+     -0.0023
+    ],
+    "seeds": [
+     -0.0417,
+     -0.108,
+     -0.0457,
+     -0.0328
+    ]
+   },
+   "copyable near (8%)": {
+    "mean": -0.0381,
+    "interval_95": [
+     -0.1633,
+     0.0871
+    ],
+    "seeds": [
+     -0.0245,
+     -0.0829,
+     -0.1117,
+     0.0667
+    ]
+   },
+   "seen, other follower (5%)": {
+    "mean": 0.1694,
+    "interval_95": [
+     0.1221,
+     0.2168
+    ],
+    "seeds": [
+     0.1454,
+     0.2107,
+     0.1501,
+     0.1716
+    ]
+   }
+  },
+  "verdict": "PASS: fan2 leads the bed at all four seeds, by 0.0154 on average, where 0.010 and three seeds were asked. On new contexts it is 0.0205 better, between 0.018 and 0.022 at every seed. Its near copies swing with the seed, and it is worse by 0.17 where a context ran before with another follower. By the rule recorded before the runs, this cell shape is the test bed's from now on: studies recorded after this result take it as their base, and studies recorded before it keep theirs.",
+  "with data": "At 6,000 updates on the laptop, one seed, the shape's gain on new contexts was 0.009 (word_rhythm.json). At 24,000 updates on the server, four seeds, it is 0.020. The devices and seeds differ, so the growth is a pointer and not a result; it is the first gain on knowledge here that did not fade with data.",
+  "records": [
+   "gap_by_piece_fan2-24k-s1_vs_bed24-s1.json",
+   "gap_by_piece_fan2-24k-s2_vs_bed24-s2.json",
+   "gap_by_piece_fan2-24k-s3_vs_bed24-s3.json",
+   "gap_by_piece_fan2-24k-s4_vs_bed24-s4.json"
+  ]
+ }
 }
