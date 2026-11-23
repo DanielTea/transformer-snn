@@ -1,0 +1,10 @@
+{
+  "study": "d22b",
+  "recorded_utc": "2026-11-21T18:20:58Z",
+  "question": "Does the stack's depth gain need its energy? The full-size stack of 22 levels (l2048-d22, 69.4M parameters) kept the 11-level stack's budget of 310,000 pulses a byte, so each level fired about half as much, and it gained about half of what depth gave the Transformer. On the small test bed, depth 12 with the 6-level budget is 0.130 behind its float stand-in on validation streams and with the budget doubled 0.041 behind (server CPU runs: float12 1.7443, stack12 1.8739, stack12b 1.7851), though the size of the effect is noisy across devices (GPU pair, in windows: 0.021).",
+  "arm": "l2048-d22b: d22-forget's state at 24,000 updates forked onto windows of 2,048 bytes exactly as l2048-d22 was (same code, flags and data order), with --pulse-budget 620,000, about 28,000 pulses a level as in the 11-level stack; trained to 90,000 updates on GPU 1 after l2048-d22 is trained and scored.",
+  "reference": "l2048-d22, the same fork at 310,000.",
+  "measure": "Both enwik8 splits as 16 unbroken streams at the trained reach, at the reach chosen on the first validation million (trained or 8,192), and with v15's fast synapses on all 22 levels; paired piece by piece against l2048-d22, and beside l2048-forget, tf2048 and tf2048-d22 (1.0704 on test).",
+  "pass_mark": "l2048-d22b is ahead of l2048-d22 by at least 0.005 on both splits at the trained reach, with paired intervals above zero: the stack's depth gain needs its energy, and the next full-size design scales its budget with its levels. A null result is reported as one.",
+  "caveat": "One seed. It finishes within the weekend's GPU window only if l2048-d22 and its scoring end by early Sunday; if it cannot finish before the window closes, it stops at its last saved state and is reported as unfinished."
+}

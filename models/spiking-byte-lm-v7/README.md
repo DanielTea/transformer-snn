@@ -158,3 +158,7 @@ on calibrated PG-19. It generates 309,354 pulses per byte on the
 4,096-byte native enwik8 test sample.
 [Native audit](../../results/event_lm/trace_tap_read/native_control_s6899.json) ·
 [Evaluation protocol](../../docs/HANDOFF.md#score-checkpoints)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

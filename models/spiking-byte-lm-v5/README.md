@@ -133,3 +133,7 @@ matched the integer single-byte path.
 | [Redistribution of inhibition](../../docs/INHIBITION_REDISTRIBUTION.md) | Learned relays transfer inhibitory pulses between delay groups while conserving the paired totals. |
 | [Frozen teacher guidance](../../docs/TEACHER_GUIDANCE.md) | Extra supervision during training. The exported model runs the SNN described above. |
 | [v4 finer charge](../spiking-byte-lm-v4/README.md) | Eight fractional router bits with the same firing-count resolution. |
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

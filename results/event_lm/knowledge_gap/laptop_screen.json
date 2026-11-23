@@ -1,0 +1,16 @@
+{
+ "study": "knowledge_gap_laptop_screen",
+ "recorded_utc": "2026-11-21T20:30:18Z",
+ "why": "The server tests each idea at one setting chosen from the parameter budget alone. The laptop's GPU trains the delayed bed in about 25 minutes, so it screens a second setting of each idea at one seed, to show whether the verdict could turn on the setting.",
+ "device": "the laptop's GPU (MPS), which differs from the server's GPUs, so the bed is run there too",
+ "arms": {
+  "g6d-mps": "the delayed bed, seed 20001",
+  "know64-mps": "64 knowledge cells per head, --read-knowledge 64 --granule-cells 958 (5,250,212 parameters)",
+  "branch8-mps": "eight branches, --granule-branches 8 --granule-cells 1006 (5,248,100)",
+  "apical32-mps": "tufts of 32 synapses, --granule-apical 32 --granule-cells 962 (5,249,084)",
+  "experts8-mps": "eight groups of which four speak, --granule-experts 8 --granule-active 4 --granule-cells 1016 (5,242,880)"
+ },
+ "measure": "Averaged validation in windows at 6,000 updates (64 batches), trained exactly as the server runs, seed 20001.",
+ "reading": "A screen, not a verdict: one seed, where seeds of the bed span 0.021. A second setting at least 0.020 ahead of g6d-mps earns four seeds on the server under the four-seed mark; anything less is reported beside the server's verdict and decides nothing.",
+ "seen_before_recording": "No run of any idea has reached its first evaluation on the server."
+}

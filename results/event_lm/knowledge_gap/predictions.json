@@ -1,0 +1,107 @@
+{
+ "study": "predictions",
+ "recorded_utc": "2026-11-22T00:13:11Z",
+ "note": "Guesses of the pending outcomes, written down before any of them is known so that they can be scored against what happens. Probabilities are my own judgement, not measurements.",
+ "guesses": {
+  "l2048-know-st passes its mark (0.005 ahead of l2048-forget on both splits)": 0.3,
+  "l2048-know-st beats tf2048 (1.10669) on test with its best reading": 0.12,
+  "l2048-plastic finishes training before the window closes": 0.55,
+  "l2048-plastic passes its mark (0.005 ahead of l2048-flat with v15's rule, both splits)": 0.35,
+  "kept32 beats the stream-trained bed by 0.010 or more on the long streams": 0.6,
+  "knowkept beats know128 by 0.010 or more on the long streams": 0.35,
+  "lib768 beats know128 by 0.015 or more": 0.25,
+  "know256 beats know128 by 0.015 or more": 0.15,
+  "knowledge cells alone (no threshold cells) beat know128": 0.04,
+  "one cell a head brings at least two thirds of the copying gain": 0.4,
+  "one cell a head brings less than one third of the copying gain": 0.25,
+  "knowledge-keyed synapses pass (ahead at all four seeds by 0.003 on average)": 0.15,
+  "knowledge cells and plasticity add up within 0.005": 0.55,
+  "they strengthen each other by more than 0.005": 0.25,
+  "the decaying rule trained on streams beats v15's rule given after training": 0.25,
+  "v17's spiking model beats the equal-context Transformer": 0.12
+ },
+ "reasons": {
+  "full size": "The test-bed gain of knowledge cells (0.018 to 0.021 trained in windows) fell to 0.008 trained on streams with one seed, the full-size cells start far behind in an already trained stack, and the run is 0.005 behind its reference at 34,500 updates.",
+  "kept cells": "Their lead grew from 0.013 to 0.042 over 2,250 updates, but early leads have closed before (depth at equal parameters led 0.026 early and 0.001 at the end).",
+  "stream training": "Part of the window-trained gain of knowledge cells was likely help at the cold start of every window, which a stream does not have."
+ },
+ "outcomes": {
+  "recorded_utc": "2026-11-22T02:47:13Z",
+  "decided": {
+   "kept32 beats the stream-trained bed by 0.010 or more on the long streams": {
+    "guess": 0.6,
+    "happened": false,
+    "how": "0.012 behind (1.78438 against 1.77237)",
+    "brier": 0.36
+   },
+   "knowkept beats know128 by 0.010 or more on the long streams": {
+    "guess": 0.35,
+    "happened": false,
+    "how": "0.014 behind (1.77671 against 1.76253)",
+    "brier": 0.1225
+   },
+   "knowledge-keyed synapses pass (ahead at all four seeds by 0.003 on average)": {
+    "guess": 0.15,
+    "happened": false,
+    "how": "0.0069 behind at seed 20003, so not ahead at all four",
+    "brier": 0.0225
+   },
+   "knowledge cells and plasticity add up within 0.005": {
+    "guess": 0.55,
+    "happened": false,
+    "how": "interaction +0.011 as trained: the pair is 0.013 worse than knowledge cells alone, plasticity alone 0.002 worse than the bed",
+    "brier": 0.3025
+   },
+   "they strengthen each other by more than 0.005": {
+    "guess": 0.25,
+    "happened": false,
+    "how": "they get in each other's way",
+    "brier": 0.0625
+   },
+   "the decaying rule trained on streams beats v15's rule given after training": {
+    "guess": 0.25,
+    "happened": false,
+    "how": "1.76482 as trained against the bed's 1.71111 with v15's rule",
+    "brier": 0.0625
+   },
+   "lib768 beats know128 by 0.015 or more": {
+    "guess": 0.25,
+    "happened": false,
+    "how": "0.001 ahead (1.7489 against 1.7500)",
+    "brier": 0.0625
+   },
+   "know256 beats know128 by 0.015 or more": {
+    "guess": 0.15,
+    "happened": false,
+    "how": "0.031 behind (1.7811)",
+    "brier": 0.0225
+   },
+   "knowledge cells alone (no threshold cells) beat know128": {
+    "guess": 0.04,
+    "happened": false,
+    "how": "0.128 behind (1.8780)",
+    "brier": 0.0016
+   },
+   "one cell a head brings at least two thirds of the copying gain": {
+    "guess": 0.4,
+    "happened": true,
+    "how": "140% of it on the second showing of random letters",
+    "brier": 0.36
+   },
+   "one cell a head brings less than one third of the copying gain": {
+    "guess": 0.25,
+    "happened": false,
+    "how": "140% of it",
+    "brier": 0.0625
+   },
+   "l2048-know-st passes its mark (0.005 ahead of l2048-forget on both splits)": {
+    "guess": 0.3,
+    "happened": false,
+    "how": "0.0010 and 0.0011 ahead at the trained reach",
+    "brier": 0.09
+   }
+  },
+  "mean_brier_so_far": 0.1276,
+  "updated_utc": "2026-11-22T08:32:55Z"
+ }
+}

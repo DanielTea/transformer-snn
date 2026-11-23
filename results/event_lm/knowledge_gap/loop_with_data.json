@@ -1,0 +1,15 @@
+{
+ "study": "loop_with_data",
+ "recorded_utc": "2026-11-23T06:30:01Z",
+ "kind": "A screen on the laptop's GPU, one seed, by slope over data: whether depth by recurrence holds its gain as the data grows, and how much of it is energy.",
+ "why": "A looped stack runs some of its levels more than once with tied synapses: more computation at equal parameters. On the plain test bed at 3e-4 and 6,000 updates, a loop of levels 1 to 4 run three times gained 0.047 and 0.062 over depth 6 (stack_loop/preregistered.json), with a budget scaled to its 14 level passes; at the old budget it was within the plain seeds. So the gain may be the loop's or the energy's, and it was measured once, early. Every part that helped the stack's knowledge so far helped early and faded with data. This screen asks both questions on the delayed test bed at its best rate, and full_size_loop_pilot.json asks them at full size.",
+ "arms": {
+  "loop": "--stack-loop 1,4,3 --pulse-budget 264000: level 0 once, levels 1 to 4 three times, level 5 once (14 level passes), the budget of 113,000 scaled by 14/6; 5,249,060 parameters, as the base",
+  "b264": "--pulse-budget 264000 alone: the plain delayed bed with the loop's budget, the control for the energy"
+ },
+ "base": "rd-base-6k-s3 and rd-base-24k-s3 (the delayed test bed at 1.2e-3, seed 20003, budget 113,000, on the laptop: 1.62828 and 1.48247)",
+ "training": "the delayed test bed's recipe at peak rate 1.2e-3, warmup 300, cosine over the run, 6,000 and 24,000 updates, seed 20003, the laptop's GPU one run at a time after the queue's earlier runs; code: the frozen copy of e5d3a1e that the runner uses by default",
+ "measure": "experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams, lead 8,192, averaged weights, bits kept; loop paired with b264 and b264 with the base, each at the same length; experiments/gap_by_piece.py (near 240, far 8,192); the trainer's pulses a byte and training time",
+ "reading": "A screen with one seed. The loop's own gain is b264 minus loop at each length; the energy's gain is the base minus b264. The loop earns two seeds on the server (s1 and s2 at 6,000 and 24,000 updates, with b264 controls) if its own gain at 24,000 updates is at least 0.010, or at least 0.005 and larger by 0.005 than at 6,000. Otherwise it is reported only. Recorded either way: both gains at both lengths, their split by context, the pulses a byte and the time a run takes.",
+ "seen_before_recording": "The stack_loop pilot above; on the laptop rd-base-6k-s3 1.62828 and rd-base-24k-s3 1.48247; full_size_loop_pilot.json is queued on the server and has not trained. No looped or raised-budget run on the delayed test bed has trained."
+}

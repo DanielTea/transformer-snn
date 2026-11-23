@@ -133,3 +133,7 @@ python experiments/generate_event_lm.py models/spiking-byte-lm-v2/weights.pt \
 The generator writes raw continuation bytes. Use the handoff for
 checkpoint downloads, exact training replay, a new warm start, and the
 remaining experiments. [Research handoff](../../docs/HANDOFF.md)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

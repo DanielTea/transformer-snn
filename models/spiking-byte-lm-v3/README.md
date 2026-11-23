@@ -128,3 +128,7 @@ The handoff includes exact replay and scoring commands and the
 training checkpoints for the original held-charge control,
 opponent steering, read veto, and spread coincidence.
 [Research handoff](../../docs/HANDOFF.md) · [Leaderboards](../../docs/LEADERBOARD.md)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

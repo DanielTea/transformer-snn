@@ -1,0 +1,150 @@
+{
+  "study": "copy_probe",
+  "recorded_utc": "2026-11-21T19:44:11Z",
+  "probe": "64 sequences of 100 bytes, each shown twice in one window: random lowercase letters, and random words (3 to 9 letters) of the enwik8 training split joined by spaces (experiments/copy_probe.py, seed 7). The first copy cannot be predicted beyond the statistics of letters and words; the second can be by finding the same bytes earlier and reading what followed them. Pairs are bits a byte on the first copy and on the second after its first 8 bytes. Uniformly random bytes were tried first and no model, the Transformer included, copied them: they lie outside the text the models learned.",
+  "results": {
+    "test_bed": {
+      "g6 seed 20001": {
+        "letters": [
+          8.381,
+          8.389
+        ],
+        "words": [
+          3.621,
+          3.628
+        ],
+        "validation": 1.986
+      },
+      "g6 seed 20002": {
+        "letters": [
+          8.244,
+          8.197
+        ],
+        "words": [
+          3.638,
+          3.644
+        ],
+        "validation": 1.9855
+      },
+      "g6 seed 20003": {
+        "letters": [
+          8.188,
+          7.939
+        ],
+        "words": [
+          3.649,
+          3.427
+        ],
+        "validation": 1.9578
+      },
+      "g6 seed 20004": {
+        "letters": [
+          8.608,
+          8.614
+        ],
+        "words": [
+          3.661,
+          3.674
+        ],
+        "validation": 1.9829
+      },
+      "dn12 seed 20001": {
+        "letters": [
+          8.297,
+          8.292
+        ],
+        "words": [
+          3.67,
+          3.678
+        ],
+        "validation": 1.9783
+      },
+      "s12b": {
+        "letters": [
+          8.111,
+          7.195
+        ],
+        "words": [
+          3.596,
+          2.739
+        ],
+        "validation": 1.8344
+      },
+      "tf6": {
+        "letters": [
+          6.865,
+          6.486
+        ],
+        "words": [
+          3.557,
+          3.504
+        ],
+        "validation": 1.8431
+      },
+      "float6": {
+        "letters": [
+          8.819,
+          8.86
+        ],
+        "words": [
+          3.673,
+          3.689
+        ],
+        "validation": 1.9798
+      }
+    },
+    "full_size": {
+      "l2048-forget": {
+        "letters": [
+          6.108,
+          0.307
+        ],
+        "words": [
+          3.271,
+          0.232
+        ]
+      },
+      "l2048-flat": {
+        "letters": [
+          6.208,
+          0.278
+        ],
+        "words": [
+          3.26,
+          0.237
+        ]
+      },
+      "v15 long-windows": {
+        "letters": [
+          6.046,
+          0.37
+        ],
+        "words": [
+          3.276,
+          0.265
+        ]
+      },
+      "tf2048": {
+        "letters": [
+          6.363,
+          0.811
+        ],
+        "words": [
+          3.33,
+          0.362
+        ]
+      },
+      "tf1024": {
+        "letters": [
+          6.38,
+          0.773
+        ],
+        "words": [
+          3.288,
+          0.359
+        ]
+      }
+    }
+  },
+  "reading": "On the small test bed copying is rare and decides the best runs: of four seeds of the plain stack only the best (1.9578) copies, and the 12-level stack with twice the parameters copies most and scores best. At full size the stack copies better than the Transformers trained on the same windows (0.23 to 0.31 bits a byte on the second copy against 0.36 to 0.81), and is no worse on the first copy. Copying is not where the full-size stack loses to the Transformer; it loses on what real text asks beyond it."
+}

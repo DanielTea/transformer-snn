@@ -10,6 +10,8 @@ import json
 import math
 import os
 from pathlib import Path
+import signal
+import sys
 
 import numpy as np
 import torch
@@ -32,6 +34,7 @@ from common import (
 from snnformer import SNNConfig, count_params
 from snnformer.event_lm import (
     EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES, echo_feedback,
+    weight_dither, cell_dither, cell_noise,
 )
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
@@ -346,6 +349,7 @@ def build_model(args):
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
+                            granule_myelin=getattr(args, "granule_myelin", EventLMConfig.granule_myelin),
                             granule_beats=getattr(args, "granule_beats", EventLMConfig.granule_beats),
                             granule_clock=getattr(args, "granule_clock", EventLMConfig.granule_clock),
                             granule_hold=getattr(args, "granule_hold", EventLMConfig.granule_hold),
@@ -373,6 +377,16 @@ def build_model(args):
                             granule_shunt=getattr(args, "granule_shunt", EventLMConfig.granule_shunt),
                             output_tied=getattr(args, "tied_output", EventLMConfig.output_tied),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
+                            granule_branches=getattr(args, "granule_branches", EventLMConfig.granule_branches),
+                            granule_apical=getattr(args, "granule_apical", EventLMConfig.granule_apical),
+                            granule_experts=getattr(args, "granule_experts", EventLMConfig.granule_experts),
+                            granule_active=getattr(args, "granule_active", EventLMConfig.granule_active),
+                            read_knowledge=getattr(args, "read_knowledge", EventLMConfig.read_knowledge),
+                            read_knowledge_shared=getattr(args, "read_knowledge_shared",
+                                                          EventLMConfig.read_knowledge_shared),
+                            read_kept=getattr(args, "read_kept", EventLMConfig.read_kept),
+                            read_word_heads=getattr(args, "read_word_heads", EventLMConfig.read_word_heads),
+                            read_word_span=getattr(args, "read_word_span", EventLMConfig.read_word_span),
                             plastic_after=(None if getattr(args, "plastic_levels", None) is None
                                            else tuple(map(int, args.plastic_levels.split(",")))),
                             plastic_rule=getattr(args, "plastic_rule", EventLMConfig.plastic_rule),
@@ -723,6 +737,22 @@ def main():
     parser.add_argument("--read-forget-rate", type=float, default=EventLMConfig.read_forget_rate,
                         help="the forgetting slope counts this many times on top of the address rate; 0 holds "
                              "it at nothing, as the control of a fork")
+    parser.add_argument("--read-knowledge", type=int, default=EventLMConfig.read_knowledge, metavar="CELLS",
+                        help="every head of a race read with a budget has CELLS knowledge cells beside the stream's "
+                             "own: learned tags, payloads and offsets that race for the same budget, so a read finds "
+                             "what it looks for in the bytes it reaches or in what training stored")
+    parser.add_argument("--read-word-heads", type=int, default=EventLMConfig.read_word_heads, metavar="HEADS",
+                        help="the first heads of every race read reach only the cells of the present word, from its "
+                             "first letter on, and weigh each by its place in that word (a letter neuron and an onset "
+                             "neuron with fixed synapses mark where words begin)")
+    parser.add_argument("--read-word-span", type=int, default=EventLMConfig.read_word_span, metavar="PLACES",
+                        help="places of a word that a word head weighs, each with an offset of its own")
+    parser.add_argument("--read-kept", type=int, default=EventLMConfig.read_kept, metavar="SLOTS",
+                        help="in a stream every head of a race read keeps SLOTS cells that have left its reach, chosen "
+                             "by the spikes they won while it could reach them; kept cells race beside the stream's")
+    parser.add_argument("--read-knowledge-shared", action="store_true",
+                        help="the knowledge cells form one library that the reads of every level reach, each through "
+                             "its own probes and with offsets of its own")
     parser.add_argument("--read-beats", type=int, default=EventLMConfig.read_beats,
                         help="a state read also knows each cell's age in beats of a clock, counted up to this many")
     parser.add_argument("--read-beat-start", type=float, default=EventLMConfig.read_beat_start,
@@ -774,6 +804,19 @@ def main():
                         help="with --granule-gate, the gate is a shunting conductance: k gate spikes let in the share "
                              "k / (k + gate) of the collected charge, so a body never fires more than a plain cell; "
                              "with --granule-self-gate a cell fires about k * k / (k + 1) for k thresholds")
+    parser.add_argument("--granule-branches", type=int, default=EventLMConfig.granule_branches, metavar="BRANCHES",
+                        help="the dendrite of every plain granule cell branches BRANCHES times: each branch sums an "
+                             "equal share of the cell's fibres and passes on only the charge above a threshold of its "
+                             "own, and the body fires for the sum")
+    parser.add_argument("--granule-apical", type=int, default=EventLMConfig.granule_apical, metavar="SYNAPSES",
+                        help="every plain granule cell has an apical tuft of SYNAPSES synapses on what the level's "
+                             "read brought to the stream: each threshold of its charge adds one more copy of the "
+                             "cell's own spikes, up to three, and the tuft alone fires nothing")
+    parser.add_argument("--granule-experts", type=int, default=EventLMConfig.granule_experts, metavar="GROUPS",
+                        help="the plain cells of a granule cluster form GROUPS equal groups, each with a router cell "
+                             "on the cluster's fibres; only the groups whose routers win the race let spikes out")
+    parser.add_argument("--granule-active", type=int, default=EventLMConfig.granule_active, metavar="GROUPS",
+                        help="router cells that win the race of a cluster at every byte")
     parser.add_argument("--granule-veto", type=int, default=EventLMConfig.granule_veto, metavar="STEPS",
                         help="every granule cell has a veto dendrite on the same fibres that does not fire: its "
                              "charge closes the cell in STEPS steps over the charge of one whole spike; no veto "
@@ -797,6 +840,9 @@ def main():
     parser.add_argument("--granule-delays", type=int, default=EventLMConfig.granule_delays,
                         help="conduction delays among a granule cluster's fibres: each brings its channel as it was "
                              "zero to one less than this many bytes ago")
+    parser.add_argument("--granule-myelin", type=int, default=EventLMConfig.granule_myelin, metavar="BYTES",
+                        help="every fibre of a cell layer learns its own conduction delay, up to this many bytes "
+                             "less one, starting from the delay a fixed fibre would have (myelinated fibres)")
     parser.add_argument("--granule-traces", type=int, default=EventLMConfig.granule_traces,
                         help="kinds of slow fibres in a granule cluster: the first passes a quarter of the charge it "
                              "holds on per byte, the second a sixteenth, and so on")
@@ -930,6 +976,17 @@ def main():
     parser.add_argument("--wd", type=float, default=0.05)
     parser.add_argument("--adam-beta2", type=float, default=0.99,
                         help="memory of the optimizer's squared-gradient average")
+    parser.add_argument("--weight-dither", action="store_true",
+                        help="quantal release while training: every synapse rounds to a neighbouring tick of its "
+                             "charge grid at random, so that its expected charge is its stored size; scoring rounds "
+                             "to the nearest tick as always")
+    parser.add_argument("--cell-dither", action="store_true",
+                        help="stochastic firing while training: a threshold cell fires its last spike with the chance "
+                             "of its charge's distance past its last whole threshold; scoring rounds as always")
+    parser.add_argument("--cell-noise", type=float, metavar="THRESHOLDS",
+                        help="noisy thresholds while training: threshold cells add logistic membrane noise of this "
+                             "many whole thresholds at the peak learning rate, falling with the rate, and learn from "
+                             "the slope of the count they fire on average; scoring fires whole counts as always")
     parser.add_argument("--rotated-adam", type=int, metavar="STEPS",
                         help="run Adam in the eigenbasis of each weight matrix's gradient statistics and "
                              "update the bases every this many steps")
@@ -1061,6 +1118,10 @@ def main():
         parser.error("packet thresholds, pulse budgets and delay or output options need a steered spike router")
     if args.pulse_budget is not None and (not math.isfinite(args.pulse_budget) or args.pulse_budget <= 0):
         parser.error("pulse budget must be positive and finite")
+    if args.cell_noise is not None and (not math.isfinite(args.cell_noise) or not 0 < args.cell_noise <= 4):
+        parser.error("--cell-noise takes a width of more than 0 and at most 4 thresholds")
+    if args.cell_noise is not None and args.cell_dither:
+        parser.error("--cell-noise and --cell-dither are two kinds of random firing; choose one")
     if args.resume and (args.checkpoint is None or args.save_every < 1):
         parser.error("--resume needs --checkpoint and --save-every")
     if args.stop_at is not None and (not args.resume or not 0 < args.stop_at < args.steps
@@ -1273,6 +1334,16 @@ def main():
     scaled_neurons = 0
     # The stretch that each group of streams hears and the state that its stack carries through it.
     stretches, carried = {}, {}
+    # A run that can resume and is asked to stop (SIGTERM or SIGUSR1) trains on to the next update after which every
+    # group of streams has ended its stretch, saves its state there and exits with 75, so that a scheduler can carry
+    # it on in a later window from where it stopped.
+    pause = {"asked": False}
+    if resume_path is not None:
+        def ask(signum, frame):
+            pause["asked"] = True
+        for number in (signal.SIGTERM, signal.SIGUSR1):
+            signal.signal(number, ask)
+    cycle = 1 if args.stream is None else args.stream * args.stream_groups
     for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
@@ -1299,22 +1370,25 @@ def main():
             forward_options["bank_read_losses"] = bank_read_losses
         if args.early_readout_weight:
             forward_options["early_readout"] = args.clock_start if args.early_readout is None else args.early_readout
-        if args.code_loss_weight:
-            counts, predicted, observed, *early = model(
-                inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
-            )
-            if args.learn_context_keys:
-                predicted = predicted[..., args.forecast_key_channels:]
-                observed = observed[..., args.forecast_key_channels:]
-            resolution = args.spike_resolution
-            code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
-        elif args.early_readout_weight:
-            counts, *early = model(inputs, **forward_options)
-        elif on_streams:
-            # The state carries no gradient: a window learns from what it fires itself.
-            counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
-        else:
-            counts = model(inputs, **forward_options)
+        # The cells' membrane noise falls with the learning rate, so that training ends on whole counts.
+        share = cosine_lr(step - 1, args.steps, args.warmup, args.lr) / args.lr
+        with weight_dither(args.weight_dither), cell_dither(args.cell_dither), cell_noise(args.cell_noise or 0.0, share):
+            if args.code_loss_weight:
+                counts, predicted, observed, *early = model(
+                    inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
+                )
+                if args.learn_context_keys:
+                    predicted = predicted[..., args.forecast_key_channels:]
+                    observed = observed[..., args.forecast_key_channels:]
+                resolution = args.spike_resolution
+                code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
+            elif args.early_readout_weight:
+                counts, *early = model(inputs, **forward_options)
+            elif on_streams:
+                # The state carries no gradient: a window learns from what it fires itself.
+                counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
+            else:
+                counts = model(inputs, **forward_options)
         logits = scoring_logits(counts, event, args.spike_resolution)
         targets = labels.to(device)
         if teacher is None:
@@ -1392,7 +1466,9 @@ def main():
             print(f"{name} step {step} validation={metrics['bpb']:.4f} bpb "
                   f"accuracy={metrics['argmax_accuracy']:.4f} ({earlier_seconds + timer():.1f}s){activity}", flush=True)
 
-        if args.save_every and checkpoint is not None and step % args.save_every == 0 and step < args.steps:
+        boundary = args.stream is None or step <= args.stream_from or (step - args.stream_from) % cycle == 0
+        pausing = pause["asked"] and boundary and resume_path is not None and step < args.steps
+        if checkpoint is not None and step < args.steps and (args.save_every and step % args.save_every == 0 or pausing):
             # A long run that is stopped early keeps its last weights under another name.
             partial = Path(f"{checkpoint}.partial")
             partial.parent.mkdir(parents=True, exist_ok=True)
@@ -1417,6 +1493,9 @@ def main():
         if step == args.stop_at:
             print(f"{name} stopped after {step} of {args.steps} updates", flush=True)
             return
+        if pausing:
+            print(f"{name} paused after {step} of {args.steps} updates, its state saved", flush=True)
+            sys.exit(75)
 
     val_score = evaluate(model, val, batches=args.final_eval_batches, **evaluate_options)
     test_score = None if args.validation_only else evaluate(model, test, batches=args.final_eval_batches,

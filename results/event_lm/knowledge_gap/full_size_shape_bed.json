@@ -1,0 +1,52 @@
+{
+ "study": "full_size_shape_bed",
+ "recorded_utc": "2026-11-22T12:08:41Z",
+ "why": "The full size's cell shape, a fibre for every channel's present byte and one delayed, is 0.020 better on the test bed than the bed's own and gains on new contexts (word_rhythm.json, fan2). The test bed's earlier screens of myelinated fibres and word heads ran on the weaker shape: on it, three quarters of the channels had no fibre for the present byte, and the learned delays ran back to it (myelin_and_sheet.json). On the full size's shape every channel starts with a fibre for its present byte and one delayed, so learned delays can move either without leaving a channel unheard at the present unless training wants that, and word heads add to cells that already hear the present. The test bed with the full size's shape is the better stand-in for the full-size stack.",
+ "reference": "fan2-st-mps: the delayed test bed with --granule-fan 512 --granule-cells 681, trained on streams on the laptop's GPU (long streams 1.75243)",
+ "arms": {
+  "fan2-myelin": "fan2 with myelinated fibres (--granule-myelin 32): every fibre learns its delay from where it starts, the present fibres from 0 and the delayed ones from 1 to 3: 5,248,550 parameters (+3,072)",
+  "fan2-word": "fan2 with one word head a read (--read-word-heads 1 --read-word-span 32): 5,245,670 parameters (+192)"
+ },
+ "training": "On streams (--stream 10 --stream-groups 3), 6,000 updates, seed 20001, on the laptop's GPU, every flag but the arm's as fan2-st-mps",
+ "measure": "The first 2,000,000 validation bytes as 16 unbroken streams (lead 8,192, pieces of 512) with the bits of every piece kept, split against fan2-st-mps by what the context offers (experiments/gap_by_piece.py, near 256, far 8,192); for fan2-myelin, where the learned delays went.",
+ "reading": "One device and one seed: a screen. An arm that gains on new contexts with the 95% interval above zero and is ahead over the long streams by at least 0.010 earns a second device and four seeds; an arm ahead by at least 0.010 through memory alone is reported as a memory gain.",
+ "seen_before_recording": "fan2-st-mps and the earlier screens of both arms on the bed's own shape; no run of these arms exists.",
+ "correction": "The 'why' first said that a learned delay could move only a channel's second fibre; every fibre learns, as the arm says. Corrected before any run started.",
+ "results": {
+  "recorded_utc": "2026-11-22T13:16:02Z",
+  "trainer_averaged_stream_validation": {
+   "fan2-st-mps": 1.74,
+   "fan2-myelin-st-mps": 1.7554,
+   "fan2-word-st-mps": 1.7215
+  },
+  "long_streams": {
+   "fan2-st-mps": 1.75243,
+   "fan2-myelin-st-mps": 1.76573,
+   "fan2-word-st-mps": 1.73529
+  },
+  "split_against_fan2": {
+   "fan2-myelin (gap_by_piece_fan2-myelin_vs_fan2.json)": {
+    "new": 0.0271,
+    "new_95": [
+     0.0234,
+     0.0303
+    ],
+    "copyable near": -0.0942,
+    "copyable far only": 0.03,
+    "fourth letter on": 0.0466
+   },
+   "fan2-word (gap_by_piece_fan2-word_vs_fan2.json)": {
+    "new": -0.0003,
+    "new_95": [
+     -0.0048,
+     0.0034
+    ],
+    "copyable near": -0.1649,
+    "copyable far only": 0.0315,
+    "seen, other follower": -0.1427,
+    "fourth letter on": 0.0043
+   }
+  },
+  "verdict": "On the full size's cell shape, myelinated fibres are 0.013 behind over long streams and lose on new contexts again (0.027), copying better (0.094): learned delays trade knowledge for memory on both shapes, and are left out. Word heads are 0.017 ahead, all of it memory (0.165 on copyable bytes, new contexts level): a memory gain on both shapes (0.023 on the bed's own), and on the full size's shape too. Neither earns four seeds as a knowledge gain; word heads are reported as a memory gain, and their full-size run (full_size_word_heads.json) decides whether they join v17."
+ }
+}

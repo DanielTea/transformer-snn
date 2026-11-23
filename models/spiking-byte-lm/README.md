@@ -196,3 +196,7 @@ activity separately.
 Run `python -m pytest -q` to test the circuit, streaming state, and
 controls. The pinned score records and the plots are available directly
 from [the results index](../../results/README.md).
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

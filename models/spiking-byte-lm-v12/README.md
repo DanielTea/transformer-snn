@@ -114,3 +114,7 @@ python experiments/probe_coasting_heads.py --enwik8 data/enwik8 --device cuda \
 [Stream record](../../results/event_lm/coasting_heads/v12-scratch/enwik8_heads_s20001.json) ·
 [Replay record](../../results/event_lm/coasting_heads/recall_scratch-heads.json) ·
 [Pulse audit](../../results/event_lm/coasting_heads/v12-scratch/native_heads_s20001.json)
+
+## License
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only), copyright 2026 control-f and Daniel Tremer; commercial licenses without the AGPL's conditions are available from control-f. See the repository's [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).

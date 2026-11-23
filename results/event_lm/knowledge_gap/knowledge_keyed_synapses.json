@@ -1,0 +1,103 @@
+{
+ "study": "knowledge_keyed_synapses",
+ "recorded_utc": "2026-11-21T22:51:40Z",
+ "why": "Knowledge cells hold the stack's knowledge of words, and which of them win a race is a sparse code of what the stack recalls. Fast output synapses learn while reading and work best on stable, sparse keys. Do they learn more when they also hear which knowledge cells won (--teach-knowledge)?",
+ "models": "the four trained knowledge-cell stacks of the knowledge-gap test (know-s1 to know-s4), unchanged",
+ "arms": {
+  "cells": "v15's rule on all six levels, hearing the threshold cells as before",
+  "keyed": "the same, also hearing which knowledge cells won every head's race at those levels"
+ },
+ "measure": "The first 2,000,000 bytes of the enwik8 validation split as 16 unbroken streams (lead 8,192, pieces of 512), on a CPU. Every arm's threshold is picked for every seed from 2^21, 2^22 and 2^23 on the pieces of the first million bytes; the comparison is on the pieces of the second million, which picked nothing.",
+ "pass_mark": "Knowledge keys pass if 'keyed' is ahead of 'cells' at all four seeds on the second million and by at least 0.003 on average. They then key the fast synapses of v17's full-size scoring as well.",
+ "seen_before_recording": "No scoring with knowledge keys exists.",
+ "amendment": {
+  "recorded_utc": "2026-11-22T00:08:32Z",
+  "what": "Where an arm's best threshold for a seed lies at the top of the range (2^23), the range is extended by powers of two until the best has a worse neighbour above it, as the trained-plasticity study extended its ranges. Recorded after seeing seed 20003 at 2^21 and 2^22 (cells 1.74345 and 1.70643, keyed 2.25237 and 1.87213 on the first two million bytes), both falling as the threshold rises; no score at 2^23 exists yet."
+ },
+ "results": {
+  "recorded_utc": "2026-11-22T06:18:24Z",
+  "first_recorded_utc": "2026-11-22T02:47:13Z",
+  "picking_half_bpb_of_seeds_20003_and_20004": {
+   "20003": {
+    "cells": {
+     "2^21": 1.7837,
+     "2^22": 1.7441,
+     "2^23": 1.7392,
+     "2^24": 1.7462
+    },
+    "keyed": {
+     "2^21": 2.3013,
+     "2^22": 1.9124,
+     "2^23": 1.7863,
+     "2^24": 1.7479,
+     "2^25": 1.742,
+     "2^26": 1.7478
+    }
+   },
+   "20004": {
+    "cells": {
+     "2^21": 1.7886,
+     "2^22": 1.7497,
+     "2^23": 1.745,
+     "2^24": 1.7521
+    },
+    "keyed": {
+     "2^21": 2.2427,
+     "2^22": 1.8963,
+     "2^23": 1.7841,
+     "2^24": 1.7508,
+     "2^25": 1.7471,
+     "2^26": 1.7537
+    }
+   }
+  },
+  "by_seed": {
+   "20001": {
+    "picked": {
+     "cells": "2^23",
+     "keyed": "2^25"
+    },
+    "judging_half_bpb": {
+     "cells": 1.6671,
+     "keyed": 1.6738
+    },
+    "keyed_over_cells": -0.0067
+   },
+   "20002": {
+    "picked": {
+     "cells": "2^23",
+     "keyed": "2^25"
+    },
+    "judging_half_bpb": {
+     "cells": 1.6595,
+     "keyed": 1.6652
+    },
+    "keyed_over_cells": -0.0057
+   },
+   "20003": {
+    "picked": {
+     "cells": "2^23",
+     "keyed": "2^25"
+    },
+    "judging_half_bpb": {
+     "cells": 1.6678,
+     "keyed": 1.6747
+    },
+    "keyed_over_cells": -0.0069
+   },
+   "20004": {
+    "picked": {
+     "cells": "2^23",
+     "keyed": "2^25"
+    },
+    "judging_half_bpb": {
+     "cells": 1.67,
+     "keyed": 1.6758
+    },
+    "keyed_over_cells": -0.0058
+   }
+  },
+  "mean_keyed_over_cells": -0.0063,
+  "verdict": "Knowledge keys fail: at each arm's best threshold on the first million, keyed fast synapses are behind on the second million at all four seeds, by 0.0057 to 0.0069, 0.0063 on average. Every seed picks 2^23 for the cells and 2^25 with the keys: the knowledge cells' wins swamp the one pool of fibres that the threshold cells share with them, and even at four times the threshold the pool learns less. They do not key v17's fast synapses."
+ }
+}

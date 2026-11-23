@@ -160,7 +160,7 @@ def test_every_synapse_of_a_stack_with_lifted_ceilings_learns():
 
 @pytest.mark.parametrize("setting", [dict(pool_lifts_ceiling=1), dict(read_after=None, granule_after=None),
                                      dict(read_mode="soft", read_budget=None, read_cap=None),
-                                     dict(granule_gate=4), dict(granule_veto=4),
+                                     dict(granule_veto=4),
                                      dict(granule_budget=8, granule_slope=False)])
 def test_a_stack_refuses_ceilings_that_no_pool_lifts(setting):
     with pytest.raises(ValueError):

@@ -1,0 +1,233 @@
+{
+ "study": "full_size_rate_pilot",
+ "recorded_utc": "2026-11-22T16:44:17Z",
+ "why": "On the test bed both models gain from a higher peak rate than the 3e-4 that every full-size run so far used, and the stack gains more (learning_rate_with_data, seed 20001, 24,000 updates: from 3e-4 to 1.2e-3 the stack 1.54749 to 1.48638, the Transformer 1.49270 to 1.44423). Before two GPU windows go to a full-size pair at a new rate, complete 24,000-update runs at full size measure which rate is best there.",
+ "arms": {
+  "fs-st3, fs-st6, fs-st12": "v16's full-size stack with forgetting slopes (34,810,900 parameters; the recipe of p-forget, jobs gpu.sh with --read-forget) on windows of 512 bytes, at peak rates 3e-4, 6e-4 and 1.2e-3",
+  "fs-tf3, fs-tf6, fs-tf12": "the full-size Transformer (dim 512, 11 layers, 8 heads, 34,752,000 parameters, rotated Adam) on windows of 512 bytes, at the same rates"
+ },
+ "training": "24,000 updates of 8 windows of 512 bytes (98.3M training bytes), 1,000 warmup updates, cosine over 24,000, weight decay 0.05, weights averaged at 0.999, seed 20001, server GPUs (runner sched full.sh, code v17l)",
+ "measure": "averaged weights on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes: the stack as a stream at its trained reach, the Transformer in windows holding 496 bytes of history with 16 scored; the bits of every piece kept",
+ "reading": "A pilot without a pass mark. For each model its best of the three rates. If a model's best rate beats its own 3e-4 by at least 0.010, the next full-size pair (the knowledge-cell stack on streams of 2,048, as l2048-know-st, and the Transformer on windows of 2,048, as tf2048, 90,000 updates) trains at each model's best rate; otherwise at 3e-4. Recorded: the gap at each model's best rate against the gap at 3e-4, the change the higher rates make to it, and the stack's pulses per byte.",
+ "seen_before_recording": "The test bed's learning_rate_with_data arms named above. At full size only 3e-4 has ever been trained: p-forget and tp reached 1.4597 and 1.4250 on the trainer's validation windows at 24,000 of 90,000 updates (a cosine over 90,000, not this pilot's schedule).",
+ "result": {
+  "recorded_utc": "2026-11-22T23:03:58Z",
+  "bpb": {
+   "stack": {
+    "3e-4": 1.34164,
+    "6e-4": 1.31985,
+    "1.2e-3": 1.34753
+   },
+   "transformer": {
+    "3e-4": 1.30572,
+    "6e-4": 1.2837,
+    "1.2e-3": 1.27625
+   }
+  },
+  "best_rates": {
+   "stack": "6e-4, 0.0218 better than its own 3e-4",
+   "transformer": "1.2e-3, 0.0295 better than its own 3e-4"
+  },
+  "gap": {
+   "at 3e-4": 0.0359,
+   "at 6e-4": 0.0362,
+   "at 1.2e-3": 0.0713,
+   "at each model's best rate": 0.0436
+  },
+  "change": "The higher rates widen the gap by 0.0077. At full size the Transformer gains more from its best rate than the stack from its own (0.029 against 0.022), the opposite of the test bed (0.048 against 0.061).",
+  "stack_pulses_per_byte": {
+   "budget": 310000,
+   "training, last update": {
+    "3e-4": 308588,
+    "6e-4": 308110,
+    "1.2e-3": 308156
+   },
+   "validation, last evaluation": {
+    "3e-4": 313820,
+    "6e-4": 314748,
+    "1.2e-3": 313583
+   },
+   "price at the end": {
+    "3e-4": 0.002,
+    "6e-4": 0.004,
+    "1.2e-3": 0.016
+   }
+  },
+  "by_context (gap_by_piece, near 496, far 8,192)": {
+   "stack 6e-4 minus 3e-4": {
+    "whole": -0.02178,
+    "copyable near": {
+     "gap": -0.0149,
+     "interval_95": [
+      -0.0253,
+      -0.0059
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": -0.0458,
+     "interval_95": [
+      -0.0614,
+      -0.0314
+     ],
+     "share": 0.0862
+    },
+    "new": {
+     "gap": -0.0294,
+     "interval_95": [
+      -0.0321,
+      -0.0271
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": -0.0022,
+     "interval_95": [
+      -0.0168,
+      0.0109
+     ],
+     "share": 0.3109
+    }
+   },
+   "Transformer 1.2e-3 minus 3e-4": {
+    "whole": -0.02949,
+    "copyable near": {
+     "gap": -0.063,
+     "interval_95": [
+      -0.0669,
+      -0.0589
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": -0.0295,
+     "interval_95": [
+      -0.0358,
+      -0.0239
+     ],
+     "share": 0.0862
+    },
+    "new": {
+     "gap": -0.0281,
+     "interval_95": [
+      -0.0294,
+      -0.0268
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": -0.0239,
+     "interval_95": [
+      -0.0285,
+      -0.0199
+     ],
+     "share": 0.3109
+    }
+   },
+   "stack minus Transformer at 3e-4": {
+    "whole": 0.0358,
+    "copyable near": {
+     "gap": -0.0792,
+     "interval_95": [
+      -0.1058,
+      -0.0557
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": 0.0448,
+     "interval_95": [
+      0.018,
+      0.0721
+     ],
+     "share": 0.0862
+    },
+    "new": {
+     "gap": 0.0449,
+     "interval_95": [
+      0.0405,
+      0.0507
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0634,
+     "interval_95": [
+      0.0417,
+      0.0852
+     ],
+     "share": 0.3109
+    }
+   },
+   "stack minus Transformer at the best rates": {
+    "whole": 0.04349,
+    "copyable near": {
+     "gap": -0.0247,
+     "interval_95": [
+      -0.0385,
+      -0.0133
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": 0.0644,
+     "interval_95": [
+      0.0433,
+      0.086
+     ],
+     "share": 0.0862
+    },
+    "new": {
+     "gap": 0.0497,
+     "interval_95": [
+      0.0464,
+      0.0537
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0377,
+     "interval_95": [
+      0.02,
+      0.0546
+     ],
+     "share": 0.3109
+    }
+   }
+  },
+  "membrane_saturation (membrane_saturation.json, share of entries at the bound; whole stack and the top level)": {
+   "3e-4": {
+    "reads": [
+     0.0,
+     0.0002
+    ],
+    "cells": [
+     0.0003,
+     0.0031
+    ]
+   },
+   "6e-4": {
+    "reads": [
+     0.003,
+     0.0144
+    ],
+    "cells": [
+     0.0075,
+     0.0594
+    ]
+   },
+   "1.2e-3": {
+    "reads": [
+     0.0271,
+     0.0966
+    ],
+    "cells": [
+     0.02,
+     0.1181
+    ]
+   }
+  },
+  "verdict": "Under the reading both models retrain at their best rates in the next full-size pair: the stack at 6e-4, the Transformer at 1.2e-3 (sched decision file, both queued held). The stack's arm waits for full_size_lifted_ceiling_pilot, which may change its form and rate (amendment_2 of full_size_best_rate_pair.json).",
+  "reading": "At full size the stack's best rate is lower than the Transformer's, and where it is too high its membranes saturate: at 1.2e-3, 2.7% of the reads' entries and 2.0% of the cells' sit at the bound (9.7% and 11.8% at the top level), against almost none at 3e-4 (0.03% of the cells' entries, 0.3% at the top level). On new contexts both models gain alike from their best rates (0.029 and 0.028); the Transformer gains four times as much on near copies (0.063 against 0.015). The gap at the best rates is still on new contexts (+0.050 on 76% of bytes, 0.038 of the 0.044). The test bed's finding that the stack's knowledge is starved by small steps does not carry to full size in this pilot. One seed; 24,000-update runs on windows of 512, scored at the trained reach without fast synapses, so the gaps are not v17's 90,000-update gaps."
+ }
+}

@@ -1,0 +1,182 @@
+{
+ "study": "learning_rate_with_data",
+ "recorded_utc": "2026-11-22T14:31:27Z",
+ "why": "The delayed test bed trained on streams leads its Transformer by 0.047 at 6,000 updates and trails it by 0.054 at 24,000 (gap_with_data.json). Both trained at one peak learning rate, 3e-4 with 300 warmup updates and cosine decay, a recipe that came from the Transformer. If the stack's integer spikes and learned slopes want another rate late in training, the flattening of its learning curve belongs to the recipe, not to the stack. This is checked before any part for late learning is built.",
+ "arms": {
+  "bed24-lr15, bed24, bed24-lr6": "the delayed test bed trained on streams (--read-delays 4 --granule-delays 4 --stream 10 --stream-groups 3, 5,249,060 parameters) at peak learning rates 1.5e-4, 3e-4 and 6e-4",
+  "tf24-lr15, tf24 (tf6-24k-s1 and -s2, trained before), tf24-lr6": "the test bed's Transformer (depth 6, dim 256, 4 heads, 4,792,320 parameters), trained in windows of 256, at the same three peak rates"
+ },
+ "training": "24,000 updates of 16 windows of 256 bytes (98.3M training bytes), 300 warmup updates, cosine over 24,000, weight decay 0.05, rotated Adam, weights averaged at 0.999, seeds 20001 and 20002, each run alone or two to a GPU on the server.",
+ "measure": "The averaged weights on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes: the stack as a stream (experiments/eval_stream.py), the Transformer in windows holding 240 bytes of history with 16 scored (experiments/eval_taught_reference.py --context 16 --history 240), the bits of every piece kept.",
+ "reading": "For each model, the mean of its two seeds at each rate, and its best rate. The flattening is partly a learning-rate artefact if the stack's best rate improves on its own mean at 3e-4 by at least 0.020 more than the Transformer's best rate improves on its own mean at 3e-4. Then every later comparison on the test bed uses each model's best rate, and the full size gets a learning-rate check before its next pair. Otherwise the flattening is not a learning-rate artefact at these rates. Either way the gap at each model's best rate is recorded, split by what the context offers.",
+ "seen_before_recording": "The Transformer at 3e-4, seed 20001, on these streams: 1.49270 (gap_with_data.json); seed 20002 trained, not yet scored on them. The stack at 3e-4 trained on the laptop's GPU, seed 20001: 1.54687 (not one of this study's arms; its arms at 3e-4 are trained on the server like the rest). No run of either model at another peak rate for 24,000 updates.",
+ "amendment": {
+  "recorded_utc": "2026-11-22T15:21:20Z",
+  "arms": {
+   "bed24-lr12, tf24-lr12": "both models at peak rate 1.2e-3, seeds 20001 and 20002, as the other arms"
+  },
+  "why": "Both models gained from doubling the rate on seed 20001 (the stack 1.50363 against 1.54749, the Transformer 1.45690 against 1.49270), so each model's best rate may lie above the three recorded. The reading takes each model's best of the four rates; it is otherwise unchanged.",
+  "seen_before_amendment": "bed24-s1 1.54749, bed24-lr6-s1 1.50363, tf24-lr6-s1 1.45690 on the 2M streams; tf24-s1 1.49270 from gap_with_data.json. No other arm of this study has finished."
+ },
+ "amendment_2": {
+  "recorded_utc": "2026-11-22T16:36:59Z",
+  "arms": {
+   "bed24-lr24, tf24-lr24": "both models at peak rate 2.4e-3, seeds 20001 and 20002"
+  },
+  "why": "On seed 20001 both models still gained from 6e-4 to 1.2e-3 (the stack 1.50363 to 1.48638, the Transformer 1.45690 to 1.44423), so the best rate may lie above 1.2e-3. The reading takes each model's best of the five rates; it is otherwise unchanged.",
+  "seen_before_amendment": "Seed 20001 at 1.5e-4, 3e-4, 6e-4 and 1.2e-3 for both models: the stack 1.63293, 1.54749, 1.50363, 1.48638; the Transformer 1.59167, 1.49270, 1.45690, 1.44423. Seed 20002 at 3e-4: the stack 1.55804, the Transformer 1.49545. No run at 2.4e-3."
+ },
+ "result": {
+  "recorded_utc": "2026-11-23T02:37:04Z",
+  "bpb, seeds 20001 and 20002": {
+   "stack": {
+    "1.5e-4": [
+     1.63293,
+     1.63785
+    ],
+    "3e-4": [
+     1.54749,
+     1.55804
+    ],
+    "6e-4": [
+     1.50363,
+     1.51303
+    ],
+    "1.2e-3": [
+     1.48638,
+     1.49256
+    ],
+    "2.4e-3": [
+     1.49237,
+     1.49501
+    ]
+   },
+   "transformer": {
+    "1.5e-4": [
+     1.59167,
+     1.60659
+    ],
+    "3e-4": [
+     1.4927,
+     1.49545
+    ],
+    "6e-4": [
+     1.4569,
+     1.4575
+    ],
+    "1.2e-3": [
+     1.44423,
+     1.44598
+    ],
+    "2.4e-3": [
+     1.44553,
+     1.43679
+    ]
+   }
+  },
+  "two-seed means": {
+   "stack": {
+    "1.5e-4": 1.63539,
+    "3e-4": 1.55276,
+    "6e-4": 1.50833,
+    "1.2e-3": 1.48947,
+    "2.4e-3": 1.49369
+   },
+   "transformer": {
+    "1.5e-4": 1.59913,
+    "3e-4": 1.49408,
+    "6e-4": 1.4572,
+    "1.2e-3": 1.4451,
+    "2.4e-3": 1.44116
+   }
+  },
+  "best_rates": {
+   "stack": "1.2e-3",
+   "transformer": "2.4e-3"
+  },
+  "gain from 3e-4 to the best rate": {
+   "stack": 0.06329,
+   "transformer": 0.05292,
+   "difference": 0.01037
+  },
+  "gap": {
+   "at 3e-4": 0.05868,
+   "at each model's best rate": 0.04831,
+   "at 1.2e-3 for both": 0.04437
+  },
+  "gap at each model's best rate by context (gap_by_piece, near 240, far 8,192)": {
+   "seed 20001": {
+    "whole": 0.04086,
+    "copyable near": {
+     "gap": 0.0065,
+     "interval_95": [
+      -0.015,
+      0.0315
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.0622,
+     "interval_95": [
+      0.027,
+      0.0898
+     ],
+     "share": 0.1102
+    },
+    "new": {
+     "gap": 0.0558,
+     "interval_95": [
+      0.0505,
+      0.061
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0585,
+     "interval_95": [
+      0.0364,
+      0.083
+     ],
+     "share": 0.3109
+    }
+   },
+   "seed 20002": {
+    "whole": 0.05572,
+    "copyable near": {
+     "gap": -0.0195,
+     "interval_95": [
+      -0.0445,
+      0.0082
+     ],
+     "share": 0.0747
+    },
+    "copyable far only": {
+     "gap": 0.0754,
+     "interval_95": [
+      0.0472,
+      0.1066
+     ],
+     "share": 0.1102
+    },
+    "new": {
+     "gap": 0.075,
+     "interval_95": [
+      0.0699,
+      0.0807
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0613,
+     "interval_95": [
+      0.0406,
+      0.089
+     ],
+     "share": 0.3109
+    }
+   }
+  },
+  "verdict": "Not a learning-rate artefact at these rates: from its own 3e-4 to its best rate the stack gains 0.0633 and the Transformer 0.0529, a difference of 0.0104, under the 0.020 the reading set. The stack is best at 1.2e-3 on both seeds; the Transformer at 2.4e-3 on the two-seed mean (1.2e-3 on seed 20001, 2.4e-3 on seed 20002).",
+  "reading": "Both models wanted a higher rate than the 3e-4 of every earlier run, and the stack a little more, but not enough to call the flattening an artefact of the rate. At each model's best rate the test bed's gap is 0.0483 against 0.0587 at 3e-4, and it is on new contexts on both seeds (+0.056 and +0.075 on 76% of bytes). By data_scaling_long's amendment_2 the Transformer's curve at 2.4e-3 is now read in place of its curve at 1.2e-3. At full size the higher rate did not favour the stack (full_size_rate_pilot.json)."
+ }
+}
