@@ -250,6 +250,16 @@ size), which alone would let it fire more often, while its input synapses grow (
 2.46). The cells become detectors that large synapses hold silent at most bytes. The pool that lifts the ceiling and
 noisy thresholds leave the density as it is.
 
+The silent cells are far from firing, and further at a higher rate (the record's two amendments). A cell fires from
+half a threshold of charge on, and its resting charge takes a third to a half of one threshold. On the test bed 6%,
+12%, 27%, 57% and 84% of cells and bytes lie more than eight thresholds below zero over the five rates, and at full
+size 34%, 63% and 86%. Between one threshold below zero and the firing point lie 3.5% on the test bed at 1.2e-3 and
+2.8% at full size at 6e-4. So neither a lower rest nor a threshold that is soft over one threshold would reach the
+silent cells. The spikes that remain weigh more. For every spike of a cell, the neurons that put the cells back on
+the stream send 0.33, 0.44, 0.66, 1.36 and 3.49 pulses over the five rates on the test bed and 0.73, 1.55 and 3.09
+at full size: fewer events, each heavier. The pulses that the cells give up go to the reads' own cells and to the
+neurons that put the cells back on the stream at both sizes, and to the output on the test bed alone.
+
 The stack stops gaining from a higher rate where its code is thin. On the test bed it is 0.004 worse at 2.4e-3 than
 at 1.2e-3, where the Transformer is 0.004 better, and at full size under the lifting pool it gains 0.001 from 6e-4 to
 1.2e-3, where the Transformer gains 0.007. But the gap to the Transformer is no smaller at 3e-4, where as many cells
