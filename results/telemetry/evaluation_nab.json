@@ -1,0 +1,298 @@
+{
+  "dataset": "nab",
+  "span": 12,
+  "window": 100,
+  "order": 8,
+  "warm": 100,
+  "runs": {
+    "volley_learning": "results/telemetry/nab_digits_taught",
+    "volley_frozen": "results/telemetry/nab_digits_frozen",
+    "volley_no_fast": "results/telemetry/nab_digits_untaught",
+    "volley_printable": "results/telemetry/nab_printable_taught",
+    "volley_delta": "results/telemetry/nab_delta_taught",
+    "volley_reference": "results/telemetry/nab_digits_reference"
+  },
+  "summary": {
+    "volley_learning": {
+      "runs": 1,
+      "mean_auc": 0.6170384037915377,
+      "mean_f1": 0.005277044854881266,
+      "caught": 1,
+      "anomalies": 4,
+      "median_delay_samples": 39.0,
+      "mean_false_alarms_per_1000_normal": 0.0
+    },
+    "volley_frozen": {
+      "runs": 1,
+      "mean_auc": 0.594453766705535,
+      "mean_f1": 0.05387205387205387,
+      "caught": 4,
+      "anomalies": 4,
+      "median_delay_samples": 120.5,
+      "mean_false_alarms_per_1000_normal": 0.43414554729473054
+    },
+    "volley_no_fast": {
+      "runs": 1,
+      "mean_auc": 0.5317616805107986,
+      "mean_f1": 0.008532423208191127,
+      "caught": 1,
+      "anomalies": 4,
+      "median_delay_samples": 41.0,
+      "mean_false_alarms_per_1000_normal": 0.7597547077657785
+    },
+    "volley_printable": {
+      "runs": 1,
+      "mean_auc": 0.6133556560330679,
+      "mean_f1": 0.010471204188481674,
+      "caught": 2,
+      "anomalies": 4,
+      "median_delay_samples": 222.5,
+      "mean_false_alarms_per_1000_normal": 0.21707277364736527
+    },
+    "volley_delta": {
+      "runs": 1,
+      "mean_auc": 0.5002635405124506,
+      "mean_f1": 0.03899721448467966,
+      "caught": 3,
+      "anomalies": 4,
+      "median_delay_samples": 352.0,
+      "mean_false_alarms_per_1000_normal": 3.3103597981223207
+    },
+    "volley_reference": {
+      "runs": 1,
+      "mean_auc": 0.48045299393411767,
+      "mean_f1": 0.14467120181405893,
+      "caught": 4,
+      "anomalies": 4,
+      "median_delay_samples": 37.5,
+      "mean_false_alarms_per_1000_normal": 11.50485700331036
+    },
+    "zscore": {
+      "runs": 1,
+      "mean_auc": 0.5780460368474334,
+      "mean_f1": 0.060485475527258255,
+      "caught": 3,
+      "anomalies": 4,
+      "median_delay_samples": 193.0,
+      "mean_false_alarms_per_1000_normal": 0.7597547077657785
+    },
+    "ewma": {
+      "runs": 1,
+      "mean_auc": 0.6299612207338189,
+      "mean_f1": 0.08897058823529412,
+      "caught": 3,
+      "anomalies": 4,
+      "median_delay_samples": 196.0,
+      "mean_false_alarms_per_1000_normal": 1.1939002550605091
+    },
+    "ar": {
+      "runs": 1,
+      "mean_auc": 0.577064734872119,
+      "mean_f1": 0.0942684766214178,
+      "caught": 4,
+      "anomalies": 4,
+      "median_delay_samples": 227.5,
+      "mean_false_alarms_per_1000_normal": 1.6280458023552395
+    }
+  },
+  "paired_with_best_baseline": {
+    "volley_learning": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.012922816942281146,
+      "runs_ahead": 0
+    },
+    "volley_frozen": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.035507454028283925,
+      "runs_ahead": 0
+    },
+    "volley_no_fast": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.09819954022302024,
+      "runs_ahead": 0
+    },
+    "volley_printable": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.01660556470075103,
+      "runs_ahead": 0
+    },
+    "volley_delta": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.1296976802213683,
+      "runs_ahead": 0
+    },
+    "volley_reference": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.14950822679970122,
+      "runs_ahead": 0
+    }
+  },
+  "per_run": {
+    "volley_learning": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.6170384037915377,
+        "threshold": 2.913734327866839,
+        "precision": 1.0,
+        "recall": 0.0026455026455026454,
+        "f1": 0.005277044854881266,
+        "anomalies": 4,
+        "caught": 1,
+        "delays": [
+          39
+        ],
+        "false_alarms_per_1000_normal": 0.0
+      }
+    ],
+    "volley_frozen": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.594453766705535,
+        "threshold": 2.913734327866839,
+        "precision": 0.5925925925925926,
+        "recall": 0.02821869488536155,
+        "f1": 0.05387205387205387,
+        "anomalies": 4,
+        "caught": 4,
+        "delays": [
+          35,
+          169,
+          272,
+          72
+        ],
+        "false_alarms_per_1000_normal": 0.43414554729473054
+      }
+    ],
+    "volley_no_fast": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.5317616805107986,
+        "threshold": 2.2678896152739862,
+        "precision": 0.13157894736842105,
+        "recall": 0.004409171075837742,
+        "f1": 0.008532423208191127,
+        "anomalies": 4,
+        "caught": 1,
+        "delays": [
+          41
+        ],
+        "false_alarms_per_1000_normal": 0.7597547077657785
+      }
+    ],
+    "volley_printable": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.6133556560330679,
+        "threshold": 1.5613792812171665,
+        "precision": 0.5,
+        "recall": 0.005291005291005291,
+        "f1": 0.010471204188481674,
+        "anomalies": 4,
+        "caught": 2,
+        "delays": [
+          272,
+          173
+        ],
+        "false_alarms_per_1000_normal": 0.21707277364736527
+      }
+    ],
+    "volley_delta": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.5002635405124506,
+        "threshold": 0.8252492538963799,
+        "precision": 0.2,
+        "recall": 0.021604938271604937,
+        "f1": 0.03899721448467966,
+        "anomalies": 4,
+        "caught": 3,
+        "delays": [
+          30,
+          352,
+          546
+        ],
+        "false_alarms_per_1000_normal": 3.3103597981223207
+      }
+    ],
+    "volley_reference": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.48045299393411767,
+        "threshold": 2.913734327866839,
+        "precision": 0.14892623716153128,
+        "recall": 0.140652557319224,
+        "f1": 0.14467120181405893,
+        "anomalies": 4,
+        "caught": 4,
+        "delays": [
+          19,
+          26,
+          300,
+          49
+        ],
+        "false_alarms_per_1000_normal": 11.50485700331036
+      }
+    ],
+    "zscore": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.5780460368474334,
+        "threshold": 2.554866031432067,
+        "precision": 0.31020408163265306,
+        "recall": 0.03350970017636684,
+        "f1": 0.060485475527258255,
+        "anomalies": 4,
+        "caught": 3,
+        "delays": [
+          193,
+          34,
+          541
+        ],
+        "false_alarms_per_1000_normal": 0.7597547077657785
+      }
+    ],
+    "ewma": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.6299612207338189,
+        "threshold": 20.320753330024257,
+        "precision": 0.2676991150442478,
+        "recall": 0.05335097001763668,
+        "f1": 0.08897058823529412,
+        "anomalies": 4,
+        "caught": 3,
+        "delays": [
+          196,
+          39,
+          541
+        ],
+        "false_alarms_per_1000_normal": 1.1939002550605091
+      }
+    ],
+    "ar": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.577064734872119,
+        "threshold": 4.718007059720473,
+        "precision": 0.3255208333333333,
+        "recall": 0.05511463844797178,
+        "f1": 0.0942684766214178,
+        "anomalies": 4,
+        "caught": 4,
+        "delays": [
+          193,
+          262,
+          41,
+          540
+        ],
+        "false_alarms_per_1000_normal": 1.6280458023552395
+      }
+    ]
+  }
+}

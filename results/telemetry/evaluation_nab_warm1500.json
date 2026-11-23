@@ -1,0 +1,304 @@
+{
+  "dataset": "nab",
+  "span": 12,
+  "window": 100,
+  "order": 8,
+  "warm": 1500,
+  "runs": {
+    "volley_learning": "results/telemetry/nab_digits_taught",
+    "volley_frozen": "results/telemetry/nab_digits_frozen",
+    "volley_no_fast": "results/telemetry/nab_digits_untaught",
+    "volley_printable": "results/telemetry/nab_printable_taught",
+    "volley_delta": "results/telemetry/nab_delta_taught",
+    "volley_reference": "results/telemetry/nab_digits_reference"
+  },
+  "summary": {
+    "volley_learning": {
+      "runs": 1,
+      "mean_auc": 0.6170384037915377,
+      "mean_f1": 0.06618582944420874,
+      "caught": 3,
+      "anomalies": 4,
+      "median_delay_samples": 34.0,
+      "mean_false_alarms_per_1000_normal": 0.16280458023552397
+    },
+    "volley_frozen": {
+      "runs": 1,
+      "mean_auc": 0.594453766705535,
+      "mean_f1": 0.29938570966698996,
+      "caught": 4,
+      "anomalies": 4,
+      "median_delay_samples": 16.5,
+      "mean_false_alarms_per_1000_normal": 3.039018831063114
+    },
+    "volley_no_fast": {
+      "runs": 1,
+      "mean_auc": 0.5317616805107986,
+      "mean_f1": 0.006855184233076263,
+      "caught": 1,
+      "anomalies": 4,
+      "median_delay_samples": 42.0,
+      "mean_false_alarms_per_1000_normal": 0.7054865143539372
+    },
+    "volley_printable": {
+      "runs": 1,
+      "mean_auc": 0.6133556560330679,
+      "mean_f1": 0.1675392670157068,
+      "caught": 4,
+      "anomalies": 4,
+      "median_delay_samples": 19.0,
+      "mean_false_alarms_per_1000_normal": 7.706083464481467
+    },
+    "volley_delta": {
+      "runs": 1,
+      "mean_auc": 0.5002635405124506,
+      "mean_f1": 0.06442058496853016,
+      "caught": 4,
+      "anomalies": 4,
+      "median_delay_samples": 275.5,
+      "mean_false_alarms_per_1000_normal": 5.698160308243339
+    },
+    "volley_reference": {
+      "runs": 1,
+      "mean_auc": 0.48045299393411767,
+      "mean_f1": 0.17566201738427328,
+      "caught": 4,
+      "anomalies": 4,
+      "median_delay_samples": 0.0,
+      "mean_false_alarms_per_1000_normal": 24.420687035328594
+    },
+    "zscore": {
+      "runs": 1,
+      "mean_auc": 0.5780460368474334,
+      "mean_f1": 0.08120497707924035,
+      "caught": 4,
+      "anomalies": 4,
+      "median_delay_samples": 236.5,
+      "mean_false_alarms_per_1000_normal": 2.4963368969447006
+    },
+    "ewma": {
+      "runs": 1,
+      "mean_auc": 0.6299612207338189,
+      "mean_f1": 0.09613299602457534,
+      "caught": 3,
+      "anomalies": 4,
+      "median_delay_samples": 196.0,
+      "mean_false_alarms_per_1000_normal": 1.3024366418841917
+    },
+    "ar": {
+      "runs": 1,
+      "mean_auc": 0.577064734872119,
+      "mean_f1": 0.07630057803468208,
+      "caught": 4,
+      "anomalies": 4,
+      "median_delay_samples": 235.5,
+      "mean_false_alarms_per_1000_normal": 1.4652412221197155
+    }
+  },
+  "paired_with_best_baseline": {
+    "volley_learning": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.012922816942281146,
+      "runs_ahead": 0
+    },
+    "volley_frozen": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.035507454028283925,
+      "runs_ahead": 0
+    },
+    "volley_no_fast": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.09819954022302024,
+      "runs_ahead": 0
+    },
+    "volley_printable": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.01660556470075103,
+      "runs_ahead": 0
+    },
+    "volley_delta": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.1296976802213683,
+      "runs_ahead": 0
+    },
+    "volley_reference": {
+      "against": "ewma",
+      "runs": 1,
+      "mean_auc_difference": -0.14950822679970122,
+      "runs_ahead": 0
+    }
+  },
+  "per_run": {
+    "volley_learning": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.6170384037915377,
+        "threshold": 1.5961783533824503,
+        "precision": 0.8764044943820225,
+        "recall": 0.03439153439153439,
+        "f1": 0.06618582944420874,
+        "anomalies": 4,
+        "caught": 3,
+        "delays": [
+          34,
+          32,
+          133
+        ],
+        "false_alarms_per_1000_normal": 0.16280458023552397
+      }
+    ],
+    "volley_frozen": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.594453766705535,
+        "threshold": 1.5961783533824503,
+        "precision": 0.5612121212121212,
+        "recall": 0.20414462081128748,
+        "f1": 0.29938570966698996,
+        "anomalies": 4,
+        "caught": 4,
+        "delays": [
+          0,
+          33,
+          269,
+          0
+        ],
+        "false_alarms_per_1000_normal": 3.039018831063114
+      }
+    ],
+    "volley_no_fast": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.5317616805107986,
+        "threshold": 1.600146681996654,
+        "precision": 0.12121212121212122,
+        "recall": 0.003527336860670194,
+        "f1": 0.006855184233076263,
+        "anomalies": 4,
+        "caught": 1,
+        "delays": [
+          42
+        ],
+        "false_alarms_per_1000_normal": 0.7054865143539372
+      }
+    ],
+    "volley_printable": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.6133556560330679,
+        "threshold": 0.7194792719064574,
+        "precision": 0.3248730964467005,
+        "recall": 0.1128747795414462,
+        "f1": 0.1675392670157068,
+        "anomalies": 4,
+        "caught": 4,
+        "delays": [
+          0,
+          38,
+          135,
+          0
+        ],
+        "false_alarms_per_1000_normal": 7.706083464481467
+      }
+    ],
+    "volley_delta": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.5002635405124506,
+        "threshold": 0.8297613753282288,
+        "precision": 0.20092378752886836,
+        "recall": 0.03835978835978836,
+        "f1": 0.06442058496853016,
+        "anomalies": 4,
+        "caught": 4,
+        "delays": [
+          385,
+          26,
+          166,
+          546
+        ],
+        "false_alarms_per_1000_normal": 5.698160308243339
+      }
+    ],
+    "volley_reference": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.48045299393411767,
+        "threshold": 1.5961783533824503,
+        "precision": 0.11395226855494361,
+        "recall": 0.38315696649029984,
+        "f1": 0.17566201738427328,
+        "anomalies": 4,
+        "caught": 4,
+        "delays": [
+          0,
+          0,
+          269,
+          0
+        ],
+        "false_alarms_per_1000_normal": 24.420687035328594
+      }
+    ],
+    "zscore": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.5780460368474334,
+        "threshold": 1.595869976218907,
+        "precision": 0.15776081424936386,
+        "recall": 0.054673721340388004,
+        "f1": 0.08120497707924035,
+        "anomalies": 4,
+        "caught": 4,
+        "delays": [
+          192,
+          21,
+          281,
+          541
+        ],
+        "false_alarms_per_1000_normal": 2.4963368969447006
+      }
+    ],
+    "ewma": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.6299612207338189,
+        "threshold": 18.75505466569413,
+        "precision": 0.2665330661322645,
+        "recall": 0.05864197530864197,
+        "f1": 0.09613299602457534,
+        "anomalies": 4,
+        "caught": 3,
+        "delays": [
+          196,
+          38,
+          541
+        ],
+        "false_alarms_per_1000_normal": 1.3024366418841917
+      }
+    ],
+    "ar": [
+      {
+        "run": "machine_temperature",
+        "auc": 0.577064734872119,
+        "threshold": 4.304820955694979,
+        "precision": 0.30275229357798167,
+        "recall": 0.04365079365079365,
+        "f1": 0.07630057803468208,
+        "anomalies": 4,
+        "caught": 4,
+        "delays": [
+          193,
+          278,
+          41,
+          540
+        ],
+        "false_alarms_per_1000_normal": 1.4652412221197155
+      }
+    ]
+  }
+}
