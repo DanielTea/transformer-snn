@@ -50,6 +50,7 @@ def test_names_sort_into_populations():
     assert population_of("granule_layers.10.open") == "gate dendrites"
     assert population_of("granule_layers.2.emit") == "stream after cells"
     assert population_of("granule_layers.2.pool") == population_of("state_reads.0.pool") == "pools"
+    assert population_of("output_pool") == "pools"
     assert population_of("output_emit") == "output"
     # An unknown population keeps its name, with its level folded so that the levels add up.
     assert population_of("new_part.4.fire") == population_of("new_part.7.fire") == "new_part.N.fire"

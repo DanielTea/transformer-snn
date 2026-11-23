@@ -43,7 +43,7 @@ _NAMES = (
     (r"^granule_layers\.\d+\.fire$", "cells"),
     (r"^granule_layers\.\d+\.open$", "gate dendrites"),
     (r"^granule_layers\.\d+\.emit$", "stream after cells"),
-    (r"\.pool$", "pools"),
+    (r"(\.|^output_)pool$", "pools"),
     (r"^output_emit$", "output"),
     (r"^input_emit$", "input"),
     (r"^forecast_emit$", "forecast"),
