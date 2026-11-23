@@ -172,6 +172,43 @@ seed, 0.018 to 0.022, while the near copies swing with the seed. On the laptop's
 knowledge here that did not fade with data. The full-size stack already has this shape. By the rule recorded before
 the runs, the test bed has it too in every study recorded from now on.
 
+## The output's spikes were finer than the score needs
+
+Recorded after the v18 release. `experiments/gate_state.py` counts a stack's pulses by population, as the pulse budget
+counts them. On the test bed the output neurons fire more of them than any other population: 43,281 of 112,659 a byte
+after 24,000 updates, against 32,164 for the reads' cells. At full size they fire 72,956 of 310,073. An output neuron
+fires one spike for every 1/128 bit of evidence for its byte. Every other population's spikes are weighed by synapses
+that learn, so the budget's price already trades their precision against the loss. The output's spike alone has a
+weight that the scoring rule fixes.
+
+`--output-step` lets one output spike stand for several fine steps. The output neurons' threshold rises by that
+factor, the counts they return stay in fine steps, and the budget counts the coarse spikes. On trained weights, with
+no weight changed (`output_step_on_trained_weights.json`):
+
+| One output spike stands for | 24,000 updates: bits per byte | Pulses a byte | 6,000 updates: bits per byte | Pulses a byte |
+|---|---:|---:|---:|---:|
+| 1/128 bit, as trained | 1.482439 | 112,659 | 1.628291 | 111,330 |
+| 1/32 bit | +0.000005 | 80,198 | +0.000012 | 82,296 |
+| 1/16 bit | **+0.000042** | **74,787** | +0.000039 | 77,456 |
+| 1/8 bit | +0.000156 | 72,081 | +0.000187 | 75,035 |
+
+The scores are the test bed's first 2,000,000 validation bytes as streams, each paired piece by piece with the same
+weights' fine scoring. Spikes of 1/16 bit cost 0.00004 bits per byte (interval 0.00003 to 0.00006) and save 34% of
+the bed's pulses. From 1/16 to 1/8 bit the cost grows about fourfold, as the variance of a rounding does when its
+step doubles.
+
+![Output spikes of 1/16 bit: the same score for a fifth to a third fewer pulses](../results/figures/event_lm_pulse_populations.png)
+
+At full size, v18's best stack fires 246,237 pulses a byte with spikes of 1/16 bit in place of 310,073, 21% fewer. On
+the first 131,072 bytes of the test split, scored as the headline was, they cost 0.00002 bits per byte (interval
+−0.00003 to 0.00007, which holds zero). The complete splits are queued.
+
+This is a saving in energy and no gain in bits. Whether a stack that trains with coarse output spikes turns the freed
+pulses into bits is not shown. The budget's price says little would come of it late in training: at the end one e-fold
+more pulses is worth 0.0045 nats a byte on the test bed and 0.0043 at full size. No training arm is queued.
+`full_size_loop_pilot.json` has an arm with a larger budget, which measures what more pulses are worth. If they are
+worth something, a coarse output gives part of them at no energy.
+
 ## Still running
 
 | Record | Question |
