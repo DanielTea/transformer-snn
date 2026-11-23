@@ -246,11 +246,23 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    The raised budget alone makes the plain stack 0.009 worse, because its membranes saturate. The loop has earned
    a run of 90,000 updates beside the pair. Open before it: whether the loop needs the raised budget at full size,
    and whether the pool that lifts the ceiling adds to it.
-6. **A learned normalization pool**: divisive normalization with learned weights per channel, as cortical
+6. **Skip fibres** (`skip_fibres_with_data.json`, pre-registered): every part of the stack hears one stream, the
+   running sum of all that came before, fired again as whole counts after every read and cell layer.
+   DeepCrossAttention (arXiv 2502.06785) finds that a Transformer gains when each layer hears the earlier layers
+   through learned weights for every channel, and gains more when queries, keys and values have their own. In
+   spikes those weights are skip fibres (`--stack-skips`): a read or a cell layer also hears the stream as it stood
+   at the input and after every earlier level, through a gain for every channel, as cortical areas receive
+   projections that skip levels. A fibre fires nothing, so the pulse budget is untouched. The gains are whole
+   sixteenths, start at zero, where the stack trains bit for bit as before, and add 0.2% to 0.3% parameters; the
+   charge stays exact. The screen runs the plain test bed with one set of fibres for a level's read and cells, and
+   with fibres of their own for the read's probes, tags and payloads, on two seeds; and the looped bed with gains
+   that every pass has for itself, on the laptop's seed. The same idea helps a Transformer, which any comparison
+   that uses it will say.
+7. **A learned normalization pool**: divisive normalization with learned weights per channel, as cortical
    normalization weighs its pool, in place of one global sum. The pool in place of LayerNorm was v15's second
    largest step (0.012), but that step was an effect of the learning rate: at 3e-4 the fine pool is ahead of
    LayerNorm (`docs/STREAM_FORM.md`). It ranks below the unit.
-7. **Homeostatic synaptic scaling and intrinsic plasticity**: neurons keep their synapses and thresholds in the range
+8. **Homeostatic synaptic scaling and intrinsic plasticity**: neurons keep their synapses and thresholds in the range
    where they still learn, as cortical neurons do. The census by rate (`unit_density_by_rate.json`) says what there
    is to keep: no cell is dead, so there is none to revive, but the share of cells in use falls from 30% to 7% at
    full size as the rate rises from 3e-4 to 1.2e-3, and the stack stops gaining from the rate there. A cell's
@@ -262,15 +274,15 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    of cells and bytes lie within one threshold below firing at full size, and 63% to 86% lie more than eight
    thresholds below zero, so a threshold soft over one threshold would reach almost nothing. A soft threshold has to
    be as wide as the charge's spread, or the set point has to hold the share.
-8. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
+9. **Neurogenesis**: fresh, more plastic cells join during training at equal final parameters, as new granule cells do
    in the dentate gyrus, to take up what the old ones cannot.
-9. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,
+10. **Capacity that pays late**: designs that lost at 6,000 updates because they start slowly (the cerebellar sheet,
    more cells, narrower reads), tested by their slope.
-10. **Surprise-gated fast synapses**, learning while reading only when the prediction was wrong.
-11. **More data at full size**, once a design's slope is negative on the test bed.
+11. **Surprise-gated fast synapses**, learning while reading only when the prediction was wrong.
+12. **More data at full size**, once a design's slope is negative on the test bed.
 
 Myelinated fibres and the cerebellar sheet failed at 6,000 updates (`myelin_and_sheet.json`); the sheet is re-tested
-by slope under 9. Ruled out as causes of the flattening: the pulse budget, noisy late weights and a code that grows
+by slope under 10. Ruled out as causes of the flattening: the pulse budget, noisy late weights and a code that grows
 denser with data (`learning_rate_by_context.json`), and the learning rate (`learning_rate_with_data.json`).
 
 ## How to continue

@@ -306,5 +306,6 @@ rose, and none has let a silent cell pass anything.
 | `proportional_gates_with_data.json` | The wide proportional gate under the lifting pool at 6,000 and 24,000 updates, two seeds on the server and one on the laptop (pre-registered) |
 | `full_size_proportional_gate.json` | The same gate at full size against the lifted plain stack, released only by a pass of the screen (pre-registered) |
 | `plain_units_with_data.json` | A diagnostic in floats on the server's CPU: the test bed's Transformer with plain or gated units, hard or smooth, at 6,000 and 24,000 updates: which property of the unit falls behind with data (pre-registered) |
+| `skip_fibres_with_data.json` | Skip fibres (`--stack-skips`): a level's read and cells also hear the stream of earlier levels through gains of their own, at 6,000 and 24,000 updates on two seeds; on the looped bed a screen on the laptop (pre-registered) |
 | `output_step_with_data.json` | Output spikes of 1/16 bit in training, at the old budget and at a budget cut by the saving, a screen on the laptop (pre-registered) |
 | `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 next |
