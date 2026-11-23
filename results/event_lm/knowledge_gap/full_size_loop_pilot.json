@@ -1,0 +1,15 @@
+{
+ "study": "full_size_loop_pilot",
+ "recorded_utc": "2026-11-23T06:28:24Z",
+ "kind": "A pilot at full size, one seed: depth by recurrence at equal parameters, with the energy it takes as an arm of its own.",
+ "why": "The full-size gap is knowledge (full_size_word_heads.json, full_size_rate_pilot.json), and every part added beside the cells has failed to change it. Depth helps both models, but real levels cost parameters: depth 22 gains the stack 0.027 at twice the parameters. A looped stack runs some of its levels more than once with the same synapses (--stack-loop, results/event_lm/stack_loop/preregistered.json): more computation per parameter, as cortex computes by recurrence. On the test bed a loop of four middle levels run three times gained 0.047 over depth 6 at 6,000 updates (0.062 with a second seed), at equal parameters; a tied pass was worth about a third of a real level. That gain came with a pulse budget scaled with the passes; at the old budget the loop gained nothing, so the budget is a confound there. Daniel allowed a raised budget if it is what wins, as an arm of its own (docs/ROADMAP.md, rule 2), so this pilot separates the two.",
+ "arms": {
+  "fs-loop6": "--stack-loop 2,8,2 --pulse-budget 507000: levels 2 to 8 run twice with tied synapses, 18 level passes in all, and the budget scaled with the passes (310,000 times 18 / 11); 34,810,900 parameters, as the base",
+  "fs-b507": "--pulse-budget 507000 alone: the plain stack with the loop's budget and no loop, the control for the energy"
+ },
+ "base": "fs-st6 of full_size_rate_pilot: the same recipe and seed at the budget of 310,000, 1.31985 on the first 2,000,000 validation bytes as streams",
+ "training": "full.sh KIND stack (v16's stack with forgetting slopes, windows of 512 bytes, batch 8, 24,000 updates, warmup 1,000, cosine over the run, seed 20001) at peak rate 6e-4, the plain pool, server GPU 0 after the full-size pair's stack arm; code v17n (97a2772)",
+ "measure": "as full_size_rate_pilot: the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, averaged weights, bits kept; fs-loop6 paired with fs-b507 and fs-b507 with fs-st6 by experiments/gap_by_piece.py (near 496, far 8,192); the pulses a byte and the price of the budget",
+ "reading": "The loop's own gain is fs-b507 minus fs-loop6, at equal energy; the budget's gain is fs-st6 minus fs-b507. The loop earns a full-size run of 90,000 updates beside the pair if its own gain is at least 0.010 with its gain on new contexts above zero. The budget earns a place in the design if its gain is at least 0.010. Otherwise each is reported only. Recorded either way: every score, the gains by context, the pulses a byte, the training time of each arm, and how the energy compares with the plain stack's.",
+ "seen_before_recording": "fs-st6 1.31985 and the rest of the full-size pilots; a 4-update CPU check of fs-loop6 at full size (finite, 34,810,900 parameters, about 500,000 pulses a byte). The test bed's loop pilot is the evidence above. No looped or raised-budget full-size run has trained."
+}
