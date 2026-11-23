@@ -13,5 +13,119 @@
  "measure": "as full_size_rate_pilot: the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, averaged weights, bits kept; each arm paired with fs-st6 by experiments/gap_by_piece.py (near 496, far 8,192); the pulses a byte and the share of entries at the membrane bound (experiments/membrane_saturation.py)",
  "reading": "An arm earns a place in the next full-size design if it scores at least 0.010 below fs-st6 and its gain on new contexts has an interval above zero. An arm between 0.005 and 0.010 below fs-st6 earns a second seed before that. Otherwise it is reported only. Recorded either way: every score, the gains by context, the pulses a byte and the saturation.",
  "schedule": "Three jobs pinned to GPU 1 at priority 3: after the full-size word-heads run frees GPU 1 this night, behind the full-size pair's arms (priorities 1 and 2) in later windows; paused and resumed across windows like every job.",
- "seen_before_recording": "fs-st6 1.31985 and the rest of full_size_rate_pilot; full_size_lifted_ceiling_pilot (lifted 1.31341 and 1.31255); CPU checks of 4 updates at full size for each arm (finite; the parameters above). The test bed's screens of these forms have not trained."
+ "seen_before_recording": "fs-st6 1.31985 and the rest of full_size_rate_pilot; full_size_lifted_ceiling_pilot (lifted 1.31341 and 1.31255); CPU checks of 4 updates at full size for each arm (finite; the parameters above). The test bed's screens of these forms have not trained.",
+ "result": {
+  "recorded_utc": "2026-11-23T05:07:34Z",
+  "state": "two of three arms; fs-self6 trains in the next window and is recorded then",
+  "bpb": {
+   "fs-st6 (base)": 1.31985,
+   "fs-gate6": 1.43806,
+   "fs-noise6": 1.31571
+  },
+  "minus the base": {
+   "fs-gate6": 0.11821,
+   "fs-noise6": -0.00414
+  },
+  "by context against the base (gap_by_piece, near 496, far 8,192)": {
+   "fs-gate6": {
+    "whole": 0.1181,
+    "copyable near": {
+     "gap": 0.0708,
+     "interval_95": [
+      0.0588,
+      0.0849
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": 0.264,
+     "interval_95": [
+      0.2303,
+      0.2897
+     ],
+     "share": 0.0862
+    },
+    "new": {
+     "gap": 0.162,
+     "interval_95": [
+      0.1565,
+      0.1675
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.1183,
+     "interval_95": [
+      0.0931,
+      0.1427
+     ],
+     "share": 0.3109
+    }
+   },
+   "fs-noise6": {
+    "whole": -0.00418,
+    "copyable near": {
+     "gap": -0.0196,
+     "interval_95": [
+      -0.0282,
+      -0.0111
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": 0.0147,
+     "interval_95": [
+      0.0011,
+      0.0283
+     ],
+     "share": 0.0862
+    },
+    "new": {
+     "gap": -0.0004,
+     "interval_95": [
+      -0.0035,
+      0.0023
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": -0.0052,
+     "interval_95": [
+      -0.015,
+      0.0087
+     ],
+     "share": 0.3109
+    }
+   }
+  },
+  "stack_pulses_per_byte": {
+   "training, last update": {
+    "fs-gate6": 308394,
+    "fs-noise6": 308273,
+    "fs-st6": 308110
+   },
+   "price at the end": {
+    "fs-gate6": 0.025,
+    "fs-noise6": 0.005,
+    "fs-st6": 0.004
+   }
+  },
+  "membrane_saturation (whole stack; the gated cells' gate dendrites count among 'other')": {
+   "fs-gate6": {
+    "cells": 0.0297,
+    "cells at the top level": 0.1676,
+    "other": 0.2142
+   },
+   "fs-noise6": {
+    "cells": 0.0073,
+    "cells at the top level": 0.0576,
+    "other": 0.0141
+   }
+  },
+  "verdict": {
+   "fs-gate6": "FAIL: 0.118 worse than the base, and worse on every kind of context (new contexts +0.162).",
+   "fs-noise6": "Reported only: 0.0041 better than the base, under the 0.005 that a second seed needs; its gain is on near copies (-0.020) and none is on new contexts (-0.0004, interval spanning zero)."
+  },
+  "reading": "Neither form of the unit closes the knowledge gap at full size. Gated cells at equal parameters (712 a level) lose badly; their gate dendrites sit at their bound for 21% of entries, so at full size the gate opens fully most of the time and the cell loses its plain unit's range. Noisy thresholds train level with plain cells at the same energy and help near copies a little, not knowledge. The unit that v15's walk priced at 0.025 in floats is not recovered by these spike-only forms at 24,000 updates, one seed."
+ }
 }
