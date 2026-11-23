@@ -220,7 +220,11 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    Two controls in floats would say whether the unit also explains the gap late in training, since the walk priced
    it at 9,000 updates: a Transformer with plain units on the test bed at 6,000 and 24,000 updates (does it flatten
    as the stack does?), and the stack in floats at full size at 24,000 updates (do spikes cost anything late, on a
-   charge grid 16 times finer than the test bed's?). They are diagnostics and never a path.
+   charge grid 16 times finer than the test bed's?). They are diagnostics and never a path. The first is
+   pre-registered and runs on the server's CPU with all four kinds of unit, plain or gated, hard or smooth
+   (`plain_units_with_data.json`). Along the walk's full-size curves the two hard kinds fell further behind as
+   training went on (the plain one from 0.008 to 0.027, the gated one from 0.001 to 0.014) and the smooth plain
+   unit did not (0.008 to 0.011), one seed with unequal schedules.
 3. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
    `randomness_at_best_rate.json`): does the charge grid limit late learning?
 4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
