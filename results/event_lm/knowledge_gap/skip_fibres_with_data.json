@@ -265,5 +265,67 @@
   },
   "verdict": "Both plain arms fail on the bed by the shared reading. Each is ahead at both seeds and both lengths, but by about 0.005: skip-level by 0.0054 on the mean of the seeds at 24,000 updates (0.0045 and 0.0063) and 0.0052 at 6,000, skip-parts by 0.0051 and 0.0034. The mark is 0.010, so neither goes to a full-size pilot. The looped arms are read when their runs are scored.",
   "reading": "Skip fibres give the plain bed a small, steady gain that does not grow with data, most of it outside new contexts at one seed and spread over all contexts at the other. Their price is small: 0.18% and 0.32% more parameters and no more pulses. The learned gains, by part and by the level they reach back to, and the neurons that the range rule shrank are not measured yet and will be appended with the looped arms."
+ },
+ "result_laptop_screen": {
+  "recorded_utc": "2026-11-24T15:42:31Z",
+  "what": "The looped bed with skip fibres on the laptop, one seed (20003), against the laptop's looped bed of the same seed and length (loop_with_data.json's runs), scored on the first 2,000,000 validation bytes as 16 unbroken streams.",
+  "bpb": {
+   "loop-6k-s3": 1.604914,
+   "loop-skip-6k-s3": 1.592895,
+   "loop-24k-s3": 1.468458,
+   "loop-skip-24k-s3": 1.460946
+  },
+  "gain of skip fibres (loop minus loop-skip, paired over 512-byte pieces, compare_stream_scores)": {
+   "6,000 updates": {
+    "gain": 0.01202,
+    "interval_95": [
+     0.0111,
+     0.01295
+    ]
+   },
+   "24,000 updates": {
+    "gain": 0.00751,
+    "interval_95": [
+     0.00657,
+     0.00848
+    ]
+   }
+  },
+  "by context at 24,000 updates (gap_by_piece, near 240, far 8,192; above zero favours skip fibres)": {
+   "copyable near": {
+    "share_of_bytes": 0.0747,
+    "gap": -0.0177,
+    "interval_95": [
+     -0.0287,
+     -0.0055
+    ]
+   },
+   "copyable far only": {
+    "share_of_bytes": 0.1102,
+    "gap": 0.0241,
+    "interval_95": [
+     0.0088,
+     0.0391
+    ]
+   },
+   "seen, other follower": {
+    "share_of_bytes": 0.0546,
+    "gap": -0.0351,
+    "interval_95": [
+     -0.1137,
+     0.044
+    ]
+   },
+   "new": {
+    "share_of_bytes": 0.7605,
+    "gap": 0.0106,
+    "interval_95": [
+     0.0068,
+     0.0141
+    ]
+   }
+  },
+  "verdict by the screen's own reading": "Reported only, earns nothing by itself. The gain at 24,000 updates is 0.0075: under 0.010, and although at least 0.005 it is not larger by 0.005 than at 6,000 (0.0120); it shrinks with data by 0.0045. By amendment 1 the server's two looped seeds (lp-skip-24k-s1 done, lp-skip-24k-s2 paused, lp-skip-6k-s1/s2 queued) decide the arm in the loop-variants pilot by the shared reading; this seed is reported beside them as a third seed.",
+  "note": "Most of the 24,000-update gain sits in new contexts (about 1.08 of the whole gap); near copies go slightly the other way. Pulses a byte and the learned gains are not measured here (skip_gains.py waits for the server's looped arms)."
  }
 }
