@@ -290,6 +290,18 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    test and validation. Still open, and piloted beside it (`full_size_loop_variants.json`, pre-registered): whether
    the loop needs the raised budget at full size, and whether the pool that lifts the ceiling adds to it. The
    pilot picks the form of the loop's next full-length run.
+
+   Built and pre-registered beside it: **sleep** (`--stack-sleep 64`, 79cf0a4, `sleep_with_data.json`), depth
+   for the memory instead of for every byte. After every 64 bytes of a stream the stack replays the window that
+   has just ended, as the hippocampus replays recent experience at rest: the stream as it left the top of the stack
+   enters the first level again, every level runs once more over the window, and the replay's reads reach the
+   whole window, the later bytes too, since the window is over. Gate cells in every read then decide, cell by cell
+   and in quarters, how much of each stored cell the replay rewrites, so the bytes after a window read it as the
+   replay saw it. It follows Lee et al. 2026 ("Sample-Efficient In-Context Adaptation via Sleep"), which reached a
+   Transformer's loss with 2.1 to 2.4 times fewer context tokens. Integer spikes, exact under any cut, and with
+   gates that keep every cell it is the stack without sleep. The screen runs sleep alone and on top of the loop,
+   two seeds at 6,000 and 24,000 updates, against the plain and looped beds; the replay doubles the pulses a byte,
+   which the budget is scaled for, and costs 2.3 times the training time.
 6. **Skip fibres** (`skip_fibres_with_data.json`, pre-registered): every part of the stack hears one stream, the
    running sum of all that came before, fired again as whole counts after every read and cell layer.
    DeepCrossAttention (arXiv 2502.06785) finds that a Transformer gains when each layer hears the earlier layers
