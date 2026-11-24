@@ -327,5 +327,77 @@
   },
   "verdict by the screen's own reading": "Reported only, earns nothing by itself. The gain at 24,000 updates is 0.0075: under 0.010, and although at least 0.005 it is not larger by 0.005 than at 6,000 (0.0120); it shrinks with data by 0.0045. By amendment 1 the server's two looped seeds (lp-skip-24k-s1 done, lp-skip-24k-s2 paused, lp-skip-6k-s1/s2 queued) decide the arm in the loop-variants pilot by the shared reading; this seed is reported beside them as a third seed.",
   "note": "Most of the 24,000-update gain sits in new contexts (about 1.08 of the whole gap); near copies go slightly the other way. Pulses a byte and the learned gains are not measured here (skip_gains.py waits for the server's looped arms)."
+ },
+ "result_server_looped": {
+  "recorded_utc": "2026-11-24T21:48:03Z",
+  "bpb": {
+   "lp-6k-s1": 1.60573,
+   "lp-6k-s2": 1.605468,
+   "lp-24k-s1": 1.466405,
+   "lp-24k-s2": 1.467507,
+   "lp-skip-6k-s1": 1.594344,
+   "lp-skip-6k-s2": 1.596763,
+   "lp-skip-24k-s1": 1.459828,
+   "lp-skip-24k-s2": 1.461304
+  },
+  "the shared reading (experiments/read_lead_study.py against the looped base of the same seed and length)": {
+   "loop-skip": {
+    "long_leads": [
+     0.00658,
+     0.0062
+    ],
+    "long_mean_lead": 0.00639,
+    "seeds_ahead": 2,
+    "a_lead": false,
+    "short_leads": [
+     0.01139,
+     0.0087
+    ],
+    "short_mean_lead": 0.01005,
+    "growth": -0.00366,
+    "b_growth": false,
+    "verdict": "fail"
+   }
+  },
+  "paired leads (compare_stream_scores, lp minus lp-skip)": {
+   "24k s1": {
+    "lead": 0.00658,
+    "interval_95": [
+     0.00566,
+     0.00753
+    ]
+   },
+   "24k s2": {
+    "lead": 0.0062,
+    "interval_95": [
+     0.00529,
+     0.00714
+    ]
+   },
+   "6k s1": {
+    "lead": 0.01139,
+    "interval_95": [
+     0.01044,
+     0.01239
+    ]
+   },
+   "6k s2": {
+    "lead": 0.0087,
+    "interval_95": [
+     0.00783,
+     0.00963
+    ]
+   }
+  },
+  "pulses_a_byte_at_24k_s2": {
+   "lp-skip": 267566,
+   "lp": 269750
+  },
+  "seconds_for_24k_updates_s2": {
+   "lp-skip": 3532,
+   "lp": 2739,
+   "note": "with neighbours on the GPU under MPS; not a clean timing"
+  },
+  "verdict": "FAIL by the amendment's reading. Looped skip fibres lead the looped bed on both seeds at both lengths with intervals clear of zero, but by 0.0064 at 24,000 updates against 0.0100 at 6,000: below the 0.010 mark, and the lead shrinks with data (growth -0.0037). The laptop's third seed showed the same (0.0120 at 6k, 0.0075 at 24k). Skip fibres are therefore not built into the full-size pilot of loop variants. Like the plain arms, they are an early-learning aid that fades with data."
  }
 }
