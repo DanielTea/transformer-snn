@@ -89,6 +89,9 @@ _GATE_CAP = 16
 # The rate of a homeostatic gate's local rule: at every update its rest moves by this share of the ramp's width for
 # every unit by which the mean share that the gate let in stands from its set point.
 _HOME_RATE = 0.01
+# The most spikes that a sleeping read's gate cell fires for a cell of a replayed window: each keeps that share of
+# the stored cell.
+_SLEEP_QUARTERS = 4
 # The most copies of its spikes that an apical tuft adds to a cell's own: a cell bursts up to four times its count.
 _BURST_LIMIT = 3
 # A skip fibre's gain is a whole number of sixteenths, and the stored gains of the fibres that bring one channel to
@@ -263,6 +266,13 @@ class EventLMConfig:
     # the stack is the one without them. "level": one set of fibres for a level's read and one for its cells.
     # "parts": the read's probes, tags and payloads each have their own. Every pass of a loop has its own gains.
     stack_skips: str | None = None
+    # Sleep: after every this many bytes of a stream, counted from its first byte, the stack replays the window of
+    # bytes that has just ended. The replay runs every level that a byte passes once more over the window, starting
+    # from the stream as it left the top of the stack, and its reads reach every cell of the window, the later ones
+    # too, beside the cells before it. Each read then writes the cells that the replay made into the window's cells
+    # on its tape, through gate cells that hear both, so the bytes after the window read it as the replay saw it.
+    # 0: the stack never sleeps.
+    stack_sleep: int = 0
     granule_cap: int | None = None
     granule_gate: int = 0
     # A gated cell whose gate dendrite hears its fibres through the cell's own synapses: it fires about the square
@@ -2242,6 +2252,9 @@ class ReadTape:
     kept_score: torch.Tensor | None = None
     onset: torch.Tensor | None = None
     letter: torch.Tensor | None = None
+    # Within a piece of a sleeping stack the tape keeps the gradient of what it holds, so that the bytes after a
+    # window learn through the cells that its replay wrote.
+    attached: bool = False
 
 
 @dataclass
@@ -2250,6 +2263,7 @@ class FibreState:
     that its slow synapses hold."""
     late: torch.Tensor | None = None
     held: list[torch.Tensor] | None = None
+    attached: bool = False
 
 
 @dataclass
@@ -2309,11 +2323,21 @@ def echo_feedback(seed, name, width):
 @dataclass
 class StreamState:
     """The state of a stack after some bytes of a stream: how many have gone by, what every read and every cell
-    layer keeps of them, and what the fast output synapses have learned from them."""
+    layer keeps of them, and what the fast output synapses have learned from them. A sleeping stack also keeps the
+    stream as it left the top of the stack at the bytes of the window that has not ended yet, and those bytes, as
+    [batch, bytes, channels] and [batch, bytes], for the window's replay."""
     position: int = 0
     reads: dict[str, ReadTape] = field(default_factory=dict)
     cells: dict[str, FibreState] = field(default_factory=dict)
     taught: TaughtState | None = None
+    awake: torch.Tensor | None = None
+    awake_tokens: torch.Tensor | None = None
+
+
+def _carry(state, value):
+    """``value`` as a stream's state keeps it: without its gradient, unless the state is attached, as it is within a
+    piece of a sleeping stack."""
+    return value if state.attached else value.detach()
 
 
 def _late(present, before, delay):
@@ -2507,6 +2531,19 @@ class _StateRead(nn.Module):
     looks up how such bytes went on, which takes two reads in a row without
     the delays. With ``read_delay_probes`` the probe neurons hear the late
     fibres too, and a probe tells the last few bytes where it told one.
+
+    With ``stack_sleep`` the read takes part in the replays of a sleeping
+    stack. A replay runs over a window of bytes that has ended, so nothing in
+    it is hidden: every byte of the replay reaches all the window's cells as
+    the replay makes them, a later cell by a learned offset for how far ahead
+    it stands, and the cells that the tape holds before the window by their
+    ages. Two gate cells of every head then decide for every cell of the
+    window, one for its tag and one for its payload, how much of it to keep.
+    Each hears the cell's pulses of its kind as the replay made them and as
+    the tape holds them, and fires up to four spikes, each a quarter of the
+    stored cell that stays. The cell takes the rest from the replay, rounded
+    to whole pulses, so the tape keeps whole pulses within the counts that
+    its neurons fire. The gates start deaf and halfway open.
     """
 
     def __init__(self, cfg: EventLMConfig):
@@ -2641,6 +2678,20 @@ class _StateRead(nn.Module):
             self.register_buffer("letters", letters, persistent=False)
             # A word head's offset for every place in a word, stored at the address rate as the ages are.
             self.word_age = nn.Parameter(torch.zeros(self.word_heads, self.word_span))
+        self.sleep = cfg.stack_sleep
+        if self.sleep:
+            # In a replay a cell later in the window takes an offset for how far ahead of the byte it stands, stored
+            # at the address rate as the ages are.
+            self.ahead = nn.Parameter(torch.zeros(self.heads, self.sleep))
+            # Every head's gate cells for the tags and for the payloads of a replayed window, each with a synapse
+            # from every channel of the cell as the replay made it and as the tape holds it, and a rest.
+            width = cfg.read_width // cfg.read_heads
+            self.sleep_gate = nn.Parameter(torch.zeros(2, self.heads, 2 * width))
+            self.sleep_rest = nn.Parameter(torch.zeros(2, self.heads))
+            self.sleep_bits = bits
+            # A gate synapse saturates where the sum of all of a gate cell's synapses at the largest pulses of a
+            # cell would leave the range of exact sums.
+            self.sleep_limit = min(_WEIGHT_LIMIT << (bits - _CHARGE_BITS), _FP32_EXACT // (2 * width * self.fire.capped))
 
     def known(self):
         """The knowledge cells' tags and payloads in whole pulses as [heads, cells, channels], within the pulses that
@@ -2747,7 +2798,7 @@ class _StateRead(nn.Module):
 
         def last(before, present):
             late = present if before is None else torch.cat((before, present), 1)
-            return late[:, max(0, late.shape[1] - self.delays + 1):].detach()
+            return _carry(tape, late[:, max(0, late.shape[1] - self.delays + 1):])
 
         if heard is None:
             tape.late = last(tape.late, spikes)
@@ -3024,8 +3075,8 @@ class _StateRead(nn.Module):
                 tag = tag if tag is None else torch.cat((tape.tag, tag), 2)
             # A later byte reaches the cells of the last ``window`` bytes, its own among them.
             oldest = max(0, payload.shape[2] - self.reach + 1)
-            tape.payload = payload[:, :, oldest:].detach()
-            tape.tag = tag if tag is None else tag[:, :, oldest:].detach()
+            tape.payload = _carry(tape, payload[:, :, oldest:])
+            tape.tag = tag if tag is None else _carry(tape, tag[:, :, oldest:])
             self._keep_late(tape, spikes, heard)
         cells = kept + steps
         place = torch.arange(cells, device=spikes.device)
@@ -3097,6 +3148,98 @@ class _StateRead(nn.Module):
         if fibres is not None:
             # The fast output synapses hear which knowledge cells won, as [batch, bytes, heads, cells].
             fibres.append(fired[..., -self.knowledge:].detach().transpose(1, 2))
+        return self._emit(spikes, fired, total, payload, cell_spikes, pulse_counts)
+
+    def replay(self, spikes, tape, position, pulse_counts=None, *, race=True):
+        """The stream after the read in a replay of the window of bytes that ends at ``position``, whose cells it
+        then writes into ``tape``.
+
+        ``spikes`` is the replay's stream at this read at every byte of the window, and the last cells of ``tape``
+        are the window's own. The replay hears the window alone: its late fibres are silent before the window's
+        first byte. Its race is the stream's, with every cell of the window in reach. Without ``race`` the read
+        only makes and writes its cells, where nothing would hear what its race passed on.
+        """
+        steps = spikes.shape[1]
+        probe, tag, payload = self.packets(spikes)
+        if not race:
+            self._blend(tape, tag, payload, pulse_counts)
+            return spikes
+        before = tape.payload.shape[2] - steps
+        tags = torch.cat((tape.tag[:, :, :before], tag), 2)
+        payloads = torch.cat((tape.payload[:, :, :before], payload), 2)
+        cells = before + steps
+        place = torch.arange(cells, device=spikes.device)
+        distance = (before + torch.arange(steps, device=spikes.device))[:, None] - place
+        visible = (distance < self.reach) & ((distance >= 0) | (place >= before))
+        aged, ahead = self.aged() * self.rate, self.ahead * self.rate
+        offset = torch.where(distance >= 0, aged[:, distance.clamp(0, aged.shape[1] - 1)],
+                             ahead[:, (-1 - distance).clamp(0, ahead.shape[1] - 1)])
+        unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
+        scale = (self.gain * self.rate).exp() / unit
+        charge = (probe @ tags.transpose(2, 3) * scale + offset).masked_fill(~visible, -torch.inf)
+        if self.budget is None:
+            spacing = (self.spacing * self.rate).exp()
+            behind = (charge.amax(-1, keepdim=True) - charge) / spacing
+            fired = (integer_spike(1 - behind / self.levels, self.levels) * self.levels).masked_fill(~visible, 0)
+        else:
+            peak = charge.amax(-1, keepdim=True)
+            if self.knowledge:
+                known_tag, known_payload, known_offset = self.known()
+                known = probe @ known_tag.transpose(1, 2) * scale + known_offset[:, None]
+                peak = torch.maximum(peak, known.amax(-1, keepdim=True))
+            grown = (charge - peak).exp()
+            total = grown.sum(-1, keepdim=True)
+            if self.knowledge:
+                known_grown = (known - peak).exp()
+                total = total + known_grown.sum(-1, keepdim=True)
+            # Every cell keeps the phase that it has in the stream.
+            heads = torch.arange(self.heads, device=spikes.device)[:, None, None]
+            phase = (_spread_phases(position - cells, cells, spikes.device, charge.dtype) + heads / self.heads) % 1
+            rate = grown / total * self.budget
+            fired = (rate + phase).floor().detach() + (rate - rate.detach())
+            if self.knowledge:
+                known_rate = known_grown / total * self.budget
+                known_phase = (_spread_phases(-self.knowledge - 1, self.knowledge, spikes.device, rate.dtype)
+                               + heads / self.heads) % 1
+                known_fired = (known_rate + known_phase).floor().detach() + (known_rate - known_rate.detach())
+                fired = torch.cat((fired, known_fired), -1)
+                payloads = torch.cat((payloads, known_payload.expand(payloads.shape[0], -1, -1, -1)), 2)
+        replayed = self._emit(spikes, fired, fired.sum(-1, keepdim=True).clamp_min(1), payloads, fired.sum(),
+                              pulse_counts)
+        self._blend(tape, tag, payload, pulse_counts)
+        return replayed
+
+    def sleep_ticks(self):
+        """The gate cells' synapses in weight ticks as [tag or payload, heads, channels], each within the limit that
+        keeps their sums exact."""
+        return _weight_ticks(self.sleep_gate, charge_bits=self.sleep_bits).clamp(-self.sleep_limit, self.sleep_limit)
+
+    def _blend(self, tape, tag, payload, pulse_counts=None):
+        """Write the cells that a replay made of the window that ends the tape into the tape. Every cell's gate cell
+        of its kind fires the quarters of the stored cell that stay, and the cell takes the rest from the replay, in
+        whole pulses. The gates learn from the logistic of their charge, of which their spikes are the rounded
+        quarters."""
+        steps = tag.shape[2]
+        ticks, rests = self.sleep_ticks(), self.sleep_rest * self.rate
+        unit = (1 << self.sleep_bits) * self.resolution
+        blended = []
+        for kind, (made, stored) in enumerate(((tag, tape.tag), (payload, tape.payload))):
+            old = stored[:, :, -steps:]
+            # A sum of whole ticks times whole pulses, exact in any order.
+            charge = torch.einsum("bhsc,hc->bhs", torch.cat((made, old), -1), ticks[kind])
+            share = (charge / unit + rests[kind][:, None]).sigmoid()
+            kept = (share * _SLEEP_QUARTERS).round()
+            kept = kept.detach() + (share - share.detach()) * _SLEEP_QUARTERS
+            mixed = made + (old - made) * (kept / _SLEEP_QUARTERS)[..., None]
+            mixed = _round_away(mixed.detach()) + (mixed - mixed.detach())
+            blended.append(torch.cat((stored[:, :, :-steps], mixed), 2))
+            if pulse_counts is not None:
+                pulse_counts.append(kept.detach().sum())
+        tape.tag, tape.payload = blended
+
+    def _emit(self, spikes, fired, total, payload, cell_spikes, pulse_counts=None):
+        """The stream after the read: the payloads that the cells' spikes pass on, counted by the read neurons and
+        sent to the stream through the read's output synapses."""
         # Whole cell spikes pass whole payload pulses on, and their sum is the same in any order.
         packet = fired @ payload
         if total is not None:
@@ -3154,6 +3297,10 @@ class _StateRead(nn.Module):
         if self.clock is not None:
             # With a clock cell's largest resting charge, in ticks per unit of the largest tag.
             bounds.append(self.clock_ticks().abs().sum(-1).amax() + self.clock_rest_ticks)
+        if self.sleep:
+            # A gate cell hears a cell's pulses, up to a tag or payload neuron's largest count, in ticks per unit of a
+            # stream neuron's.
+            bounds.append((self.sleep_ticks().abs().sum(-1) * self.fire.capped / self.emit.cap).ceil().amax())
         return tuple(bounds)
 
     @torch.no_grad()
@@ -4008,7 +4155,7 @@ class _GranuleLayer(nn.Module):
                 parts.append(((part / shrink).cumsum(1) + charge) * shrink)
                 charge = parts[-1][:, -1:]
             passed.append((torch.cat(parts, 1) * share).to(spikes.dtype))
-            charges.append(charge.detach())
+            charges.append(charge.detach() if carried is None else _carry(carried, charge))
         if carried is not None and charges:
             carried.held = charges
         return passed
@@ -4049,7 +4196,7 @@ class _GranuleLayer(nn.Module):
         before = None if carried is None else carried.late
         joined = spikes if before is None else torch.cat((before, spikes), 1)
         if carried is not None:
-            carried.late = joined[:, max(0, joined.shape[1] - lead):].detach()
+            carried.late = _carry(carried, joined[:, max(0, joined.shape[1] - lead):])
         padded = F.pad(joined, (0, 0, max(0, lead + length - joined.shape[1]), 0))[:, -(lead + length):]
         channels = padded[..., self.inputs]
         delay = self.delay_bytes()
@@ -4078,7 +4225,7 @@ class _GranuleLayer(nn.Module):
         views += self.held(spikes, carried)
         if carried is not None and self.delays > 1:
             late = spikes if before is None else torch.cat((before, spikes), 1)
-            carried.late = late[:, max(0, late.shape[1] - self.delays + 1):].detach()
+            carried.late = _carry(carried, late[:, max(0, late.shape[1] - self.delays + 1):])
         taps = self.plain_taps if self.orders else self.taps
         heard = torch.stack(views, dim=-1).flatten(-2)[..., self.inputs * len(views) + taps]
         if not self.orders:
@@ -4342,6 +4489,16 @@ class EventLM(nn.Module):
                           or (cfg.read_after is None and cfg.granule_after is None)):
             raise ValueError("a stack has no blocks: its levels are state reads and cell layers on a "
                              "reset-per-byte stream, with no clock and no option of a block")
+        sleep = cfg.stack_sleep
+        if not isinstance(sleep, int) or isinstance(sleep, bool) or sleep < 0:
+            raise ValueError("a stack sleeps after every whole number of bytes, or never (0)")
+        reach = cfg.read_window if cfg.read_reach is None else cfg.read_reach
+        if sleep and (not cfg.stack or not cfg.read_after or cfg.read_mode != "race" or not 2 <= sleep < reach
+                      or cfg.read_kept or cfg.read_word_heads or cfg.read_beats or cfg.read_phases or cfg.read_turn
+                      or cfg.stack_skips is not None or cfg.plastic_after is not None):
+            raise ValueError("a stack sleeps after windows of at least two bytes and shorter than the reach of its "
+                             "race reads, without kept cells, word heads, clocks, pacemakers, skip fibres or trained "
+                             "fast synapses")
         if cfg.route in _PREDICTION_ROUTES and cfg.carry:
             raise ValueError("prediction memory requires reset-per-byte local neurons (--no-carry)")
         if (cfg.forecast_key_channels or cfg.match_forecast_key) and cfg.route != "steered_correction_code":
@@ -5590,9 +5747,72 @@ class EventLM(nn.Module):
         cap = self.input_emit.cap
         return (spikes + correction).clamp(-cap, cap)
 
-    def forward(self, tokens, *, delay_limit=None, shuffle_phase=False, correction_access=None,
-                return_prediction=False, corrected_prediction=False, memory_pulses=None, bank_read_losses=None,
-                early_readout=None, stream=None, echo=None):
+    def forward(self, tokens, *, stream=None, memory_pulses=None, **options):
+        if not self.cfg.stack_sleep:
+            return self._awake(tokens, stream=stream, memory_pulses=memory_pulses, **options)
+        if any(value is not None and value is not False for value in options.values()):
+            raise ValueError("a sleeping stack takes its bytes as a stream, in windows or in pieces")
+        return self._sleeping(tokens, stream, memory_pulses)
+
+    def _sleeping(self, tokens, stream=None, memory_pulses=None):
+        """A sleeping stack's counts for some bytes: it hears them in stretches that end where a window of the
+        stream ends, and replays every window that ends. A window of bytes is a stream from an empty state. Within
+        the bytes the state keeps its gradient, so later windows learn through the cells that the replays wrote;
+        the state that is handed on keeps none."""
+        if tokens.ndim != 2 or tokens.shape[1] == 0:
+            raise ValueError("expected a nonempty [batch, bytes] tensor")
+        if stream is None and self.teach_after is not None:
+            raise ValueError("fast output synapses learn along a stream")
+        state = StreamState() if stream is None else stream
+        window, counts, start = self.cfg.stack_sleep, [], 0
+        while start < tokens.shape[1]:
+            end = min(tokens.shape[1], start + window - state.position % window)
+            counts.append(self._awake(tokens[:, start:end], stream=state, memory_pulses=memory_pulses))
+            if state.position % window == 0:
+                self._sleep(state, memory_pulses)
+            start = end
+        self._rested(state)
+        return torch.cat(counts, 1)
+
+    def _sleep(self, stream, memory_pulses=None):
+        """Replay the window of bytes that has just ended. The stream as it left the top of the stack at the
+        window's bytes enters the first level again, and every level that a byte passes runs once more over the
+        whole window, its reads with every cell of the window in reach. Each read writes the cells that the replay
+        made into its tape. The cell layers hear the window alone. What the replay would pass on from the last
+        read reaches nothing, so that read only writes its cells."""
+        spikes, tokens = stream.awake, stream.awake_tokens
+        stream.awake = stream.awake_tokens = None
+        last = max(int(index) for index in self.state_reads)
+        for index in range(last + 1):
+            unread = spikes
+            if str(index) in self.state_reads:
+                spikes = self.state_reads[str(index)].replay(spikes, stream.reads[str(index)], stream.position,
+                                                             memory_pulses, race=index < last)
+            if index < last and self.granule_layers is not None and str(index) in self.granule_layers:
+                apical = spikes - unread if self.cfg.granule_apical else None
+                spikes = self.granule_layers[str(index)](spikes, tokens, None, None, apical)
+
+    @staticmethod
+    def _rested(stream):
+        """The state as a stream hands it on: without the gradient of the bytes that left it."""
+        for tape in stream.reads.values():
+            for name in ("tag", "payload", "late", "late_probe"):
+                value = getattr(tape, name)
+                if value is not None:
+                    setattr(tape, name, value.detach())
+            tape.attached = False
+        for fibres in stream.cells.values():
+            if fibres.late is not None:
+                fibres.late = fibres.late.detach()
+            if fibres.held is not None:
+                fibres.held = [charge.detach() for charge in fibres.held]
+            fibres.attached = False
+        if stream.awake is not None:
+            stream.awake = stream.awake.detach()
+
+    def _awake(self, tokens, *, delay_limit=None, shuffle_phase=False, correction_access=None,
+               return_prediction=False, corrected_prediction=False, memory_pulses=None, bank_read_losses=None,
+               early_readout=None, stream=None, echo=None):
         if tokens.ndim != 2 or tokens.shape[1] == 0:
             raise ValueError("expected a nonempty [batch, bytes] tensor")
         if echo is not None and (not self.cfg.stack or stream is not None or correction_access is not None
@@ -5672,9 +5892,10 @@ class EventLM(nn.Module):
                 else:
                     known = (fibres if self.cfg.teach_knowledge and fibres is not None and index in heard_levels
                              else None)
+                    tape = stream.reads.setdefault(str(index), ReadTape())
+                    tape.attached = bool(self.cfg.stack_sleep)
                     spikes = self.state_reads[str(index)](
-                        spikes, memory_pulses, tokens, stream.reads.setdefault(str(index), ReadTape()),
-                        stream.position, known,
+                        spikes, memory_pulses, tokens, tape, stream.position, known,
                         None if passed is None else self._heard(f"read{index}", spikes, passed[:-1]))
             if self.granule_layers is not None and str(index) in self.granule_layers:
                 if local_layers is not None:
@@ -5686,12 +5907,19 @@ class EventLM(nn.Module):
                                           lambda heard, cells=self.granule_layers[str(index)], apical=apical:
                                           cells(heard, tokens, apical=apical))
                 else:
+                    carried = None if stream is None else stream.cells.setdefault(str(index), FibreState())
+                    if carried is not None:
+                        carried.attached = bool(self.cfg.stack_sleep)
                     spikes = self.granule_layers[str(index)](
-                        spikes, tokens, None if stream is None else stream.cells.setdefault(str(index), FibreState()),
+                        spikes, tokens, carried,
                         fibres if fibres is not None and index in heard_levels else None, apical,
                         None if passed is None else self._heard(f"cells{index}", spikes, passed))
             if passed is not None:
                 passed.append(spikes)
+        if stream is not None and self.cfg.stack_sleep:
+            # The stream as it leaves the top of the stack, and the bytes, wait for their window's replay.
+            stream.awake = spikes if stream.awake is None else torch.cat((stream.awake, spikes), 1)
+            stream.awake_tokens = tokens if stream.awake_tokens is None else torch.cat((stream.awake_tokens, tokens), 1)
         if tap == len(self.blocks):
             early = self._forecast_counts(spikes)
             surprise = self._surprise(early, tokens, correction_access)
@@ -5817,7 +6045,8 @@ class EventLM(nn.Module):
                                  norm=None if taught.norm is None else taught.norm.clone(),
                                  deep=None if taught.deep is None else taught.deep.clone())
             state = StreamState(state.position, {key: copy.copy(tape) for key, tape in state.reads.items()},
-                                {key: copy.copy(fibres) for key, fibres in state.cells.items()}, taught)
+                                {key: copy.copy(fibres) for key, fibres in state.cells.items()}, taught,
+                                state.awake, state.awake_tokens)
         return self(tokens, memory_pulses=memory_pulses, stream=state), state
 
     def forward_chunk(self, tokens, state=None, *, hide_age=None, stats=None, shuffle_keys=False):

@@ -362,6 +362,7 @@ def build_model(args):
                             stack_loop=(None if getattr(args, "stack_loop", None) is None
                                         else tuple(map(int, args.stack_loop.split(",")))),
                             stack_skips=getattr(args, "stack_skips", EventLMConfig.stack_skips),
+                            stack_sleep=getattr(args, "stack_sleep", EventLMConfig.stack_sleep),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
@@ -711,6 +712,10 @@ def main():
                              "input and after each earlier level, through a gain for every channel that starts at "
                              "zero (level), or the read's probes, tags and payloads each through gains of their "
                              "own (parts); every pass of a loop has its own gains")
+    parser.add_argument("--stack-sleep", type=int, default=EventLMConfig.stack_sleep, metavar="WINDOW",
+                        help="sleep: after every WINDOW bytes of a stream the stack replays the window, every level "
+                             "once more from the stream at its top, its reads reaching the whole window, and each "
+                             "read writes the replay's cells into its tape through gate cells (0: never)")
     parser.add_argument("--read-after", help="comma-separated byte-rate blocks that a state read follows")
     parser.add_argument("--read-width", type=int, default=EventLMConfig.read_width, help="channels of a state read")
     parser.add_argument("--read-heads", type=int, default=EventLMConfig.read_heads)
