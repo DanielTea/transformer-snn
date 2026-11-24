@@ -15,5 +15,159 @@
   "recorded_utc": "2026-11-24T22:12:21Z",
   "change": "Before any run has a score. A third seed on the laptop's bed, which stood idle: sg-6k-s3 and sg-24k-s3, seed 20003, the laptop runner's recipe with --lr 1.2e-3 (and --steps 6000), --granule-gate 4 --granule-inner-gate --granule-gate-signed --granule-cells 681 --pool-lifts-ceiling, on a frozen copy of 819b545, paired with lift-6k-s3 (1.620623) and lift-24k-s3 (1.483491), the lifted plain bed of the laptop's shape. It is reported beside the server's two seeds and does not change the verdict.",
   "seen_before_amendment": "The server's sg-24k-s1 and sg-24k-s2 had begun training (about 200 updates); no run has a score."
+ },
+ "result": {
+  "recorded_utc": "2026-11-24T22:36:24Z",
+  "bpb": {
+   "sg-6k-s1": 1.633184,
+   "sg-6k-s2": 1.63123,
+   "sg-24k-s1": 1.500357,
+   "sg-24k-s2": 1.500606
+  },
+  "the shared reading (experiments/read_lead_study.py)": {
+   "long_leads": [
+    -0.02626,
+    -0.01847
+   ],
+   "long_mean_lead": -0.02236,
+   "seeds_ahead": 0,
+   "a_lead": false,
+   "short_leads": [
+    -0.01974,
+    -0.01541
+   ],
+   "short_mean_lead": -0.01758,
+   "growth": -0.00479,
+   "b_growth": false,
+   "verdict": "fail"
+  },
+  "paired with the base, signed minus the base (new contexts by gap_by_piece, near 240, far 8,192)": {
+   "6,000 updates, seed 20001": {
+    "gap": 0.01974,
+    "interval_95": [
+     0.01853,
+     0.02098
+    ],
+    "new contexts": 0.0179
+   },
+   "6,000 updates, seed 20002": {
+    "gap": 0.01541,
+    "interval_95": [
+     0.01422,
+     0.01659
+    ],
+    "new contexts": 0.0134
+   },
+   "24,000 updates, seed 20001": {
+    "gap": 0.02626,
+    "interval_95": [
+     0.02522,
+     0.02733
+    ],
+    "new contexts": 0.0279
+   },
+   "24,000 updates, seed 20002": {
+    "gap": 0.01847,
+    "interval_95": [
+     0.01742,
+     0.01953
+    ],
+    "new contexts": 0.0228
+   }
+  },
+  "paired with home16, signed minus home16": {
+   "24,000 updates, seed 20001": {
+    "gap": 0.0203,
+    "interval_95": [
+     0.01925,
+     0.02133
+    ],
+    "new contexts": 0.0216
+   },
+   "24,000 updates, seed 20002": {
+    "gap": 0.01501,
+    "interval_95": [
+     0.01393,
+     0.01606
+    ],
+    "new contexts": 0.0228
+   }
+  },
+  "the gates after 24,000 updates (experiments/gate_state.py)": {
+   "sg-24k-s1": {
+    "pulses a byte": 111545.07646639385,
+    "pulses by population": {
+     "output": 36499.55679563492,
+     "cells": 22192.380006820436,
+     "reads": 17292.57517981151,
+     "stream after cells": 17228.096416170636,
+     "stream after reads": 7444.105422247024,
+     "racing cells": 6144.094184027777,
+     "read pulses": 3375.3729693700398,
+     "input": 1290.1543588789682,
+     "pools": 78.74113343253968,
+     "gate dendrites": 0.0
+    },
+    "share of the value that an open gate lets in, by level": [
+     0.689,
+     0.814,
+     0.935,
+     1.082,
+     1.346,
+     2.208
+    ]
+   },
+   "sg-24k-s2": {
+    "pulses a byte": 112189.49438864087,
+    "pulses by population": {
+     "output": 37386.49528769841,
+     "cells": 22410.101360987104,
+     "stream after cells": 17377.186197916668,
+     "reads": 16566.73367745536,
+     "stream after reads": 7548.136005704365,
+     "racing cells": 6143.968874007936,
+     "read pulses": 3382.3306516617063,
+     "input": 1296.3000062003969,
+     "pools": 78.24232700892857,
+     "gate dendrites": 0.0
+    },
+    "share of the value that an open gate lets in, by level": [
+     0.681,
+     0.809,
+     0.932,
+     1.103,
+     1.391,
+     2.215
+    ]
+   }
+  },
+  "home16's pulses by population after 24,000 updates, beside": {
+   "hg-24k-s1": {
+    "reads": 34918.127433655754,
+    "output": 34652.48065476191,
+    "stream after cells": 12077.571955605159,
+    "cells": 9026.932415674602,
+    "stream after reads": 8260.61328125,
+    "racing cells": 6144.023251488095,
+    "read pulses": 5477.8598555307535,
+    "input": 1479.456814236111,
+    "pools": 54.03448970734127,
+    "gate dendrites": 0.0
+   },
+   "hg-24k-s2": {
+    "reads": 34701.615559895836,
+    "output": 34353.0339781746,
+    "stream after cells": 12131.92224702381,
+    "cells": 9007.77959139385,
+    "stream after reads": 8528.65693204365,
+    "racing cells": 6143.9565507192465,
+    "read pulses": 5699.939112103175,
+    "input": 1501.0269562251983,
+    "pools": 55.064778645833336,
+    "gate dendrites": 0.0
+   }
+  },
+  "verdict": "Fails by the shared reading, and does not catch up: the signed gate is 0.0197 and 0.0154 behind the base after 6,000 updates and 0.0263 and 0.0185 behind after 24,000 (mean 0.0176 and 0.0224), so its distance grows with data (by 0.0048). No pair at 96,000 updates follows. After 24,000 updates it is 0.0203 and 0.0150 behind home16.",
+  "reading": "The product of two signed drives, the gate nearest the Transformer's unit in floats, does not carry over to spikes in this form, and the census names why. A signed gate's open states let in 0.69 to 2.21 times the value by level, so its cells fire about 22,200 pulses a byte where home16's fire about 9,000; under the budget of 113,000 the reads are left with about 17,000 pulses a byte where home16's keep about 35,000. The cells' product takes the pulses that the reads need, and the loss falls on new contexts (0.023 to 0.028 behind the base after 24,000 updates). A gate that never lets in more than its value, as the homeostatic ramp does, keeps the reads' share. The cell that multiplies has to pay for its product inside the cell's own range, or it starves the rest of the stack; ramp gates held in range stay the candidate, and their pair at 96,000 updates (homeostatic_gate_at_length.json) decides whether they pass the plain cell."
  }
 }
