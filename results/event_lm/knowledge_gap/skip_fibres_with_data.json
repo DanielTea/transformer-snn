@@ -1,0 +1,269 @@
+{
+ "study": "skip_fibres_with_data",
+ "recorded_utc": "2026-11-23T20:59:34Z",
+ "kind": "A screen by slope over data on the test bed: skip fibres on the plain stack with two seeds on the server, and skip fibres on the looped stack with one seed on the laptop.",
+ "why": "Every part of the stack hears one stream: the running sum of all that the input and the earlier reads and cells have fired, taken with equal weight and fired again as whole counts after every read and cell layer. DeepCrossAttention (Heddes, Javanmard, Axiotis, Fu, Bateni and Mirrokni, arXiv 2502.06785) finds that a Transformer gains when each layer hears the earlier layers' outputs through learned weights instead of their plain sum: on LM1B with 6 layers of width 512 the perplexity falls from 18.98 to 18.43 with one weight per earlier layer and channel, and to 18.06 when the queries, keys and values of attention each have their own weights, with 0.16% more parameters; weights that depend on the input add almost nothing (18.41), and the gain shrinks with width and holds with depth. The stack has the same parts: a read's probes, tags and payloads are its queries, keys and values, each with synapses of its own from the stream. In spikes the paper's weights are skip fibres (4ddd867, --stack-skips): a read or a cell layer hears, beside the stream as it reaches it, the stream as it stood at the input and after every earlier level, through a gain for every channel, as cortical areas receive projections that skip levels. A fibre fires nothing: the spikes that the stream's neurons fired arrive at more synapses, so the pulse budget is untouched; the gains are whole sixteenths, start at zero, where the stack is the one without them bit for bit, and the charge stays exact. Two reasons to expect more of it here than in a Transformer: the stream is bounded and re-fired at every part, so what an early level wrote is not what a late level still hears, and the top levels are where the membranes saturate (membrane_saturation.json); and the passes of a loop share all their synapses (full_size_loop_pilot.json), where a tied pass is worth about a third of a level, so gains that every pass has for itself are the cheapest way to let the passes differ. The input-dependent weights of the paper are left out: they are a multiplying gate, every spike form of which has failed here, and the paper's own ablation gives them 0.02 of perplexity.",
+ "arms": {
+  "skip-level": "--stack-skips level: one set of skip fibres for every level's read and one for its cells; 5,258,276 parameters, 9,216 of them gains (0.18% more than the base)",
+  "skip-parts": "--stack-skips parts: the read's probes, tags and payloads each have their own skip fibres, and the cells theirs; 5,265,956 parameters, 16,896 of them gains (0.32% more)",
+  "loop-skip": "--stack-loop 1,4,3 --pulse-budget 264000 --stack-skips level: the looped bed of loop_with_data (level 0 once, levels 1 to 4 three times, level 5 once, 14 passes) with skip fibres whose gains every pass has for itself; 5,299,236 parameters, 50,176 of them gains (0.96% more than the loop)"
+ },
+ "base": {
+  "server": "the delayed test bed at 1.2e-3 with the same seeds and lengths: bed24-lr12-s1 and bed24-lr12-s2 (learning_rate_with_data; 1.48638 and 1.49256) at 24,000 updates, rd-base-6k-s1 and rd-base-6k-s2 (randomness_at_best_rate, queued) at 6,000; 5,249,060 parameters",
+  "laptop": "loop-6k-s3 (1.60491) and loop-24k-s3 (queued) of loop_with_data: the looped bed without skip fibres, seed 20003, 5,249,060 parameters"
+ },
+ "runs": {
+  "server": "sk-level-6k-s1, sk-level-6k-s2, sk-level-24k-s1, sk-level-24k-s2, sk-parts-6k-s1, sk-parts-6k-s2, sk-parts-24k-s1, sk-parts-24k-s2: seeds 20001 and 20002, through sched/bin/arm.sh stack with --lr 1.2e-3 (and --steps 6000 for the short runs), on a code copy of 4ddd867; on GPU 0 after the full-size run there has ended",
+  "laptop": "loop-skip-6k-s3 and loop-skip-24k-s3: seed 20003, the laptop runner's recipe with --lr 1.2e-3 (and --steps 6000), on a frozen copy of 4ddd867"
+ },
+ "training": "the delayed test bed's recipe (6 levels, 256 channels, reads after every level, four delays on the reads' and cells' fibres, trained on streams of 10 windows in 3 groups, batch 16 of 256 bytes, warmup 300, cosine over the run, rotated optimizer, averaged weights 0.999, pulse budget 113,000, or 264,000 for the loop), peak rate 1.2e-3, 6,000 and 24,000 updates. The gains step with the plain optimizer at the same rate and without decay.",
+ "measure": "experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights, bits of every piece kept; each arm paired with the base of its seed and length; experiments/gap_by_piece.py splits each lead by what the context offers (near 240, far 8,192); the trainer's pulses a byte and time for 750 updates; the neurons that the range rule shrank; from the averaged weights the gains that are not zero and their mean size, by part and by the level they reach back to.",
+ "reading": "skip-level and skip-parts are read on the server's two seeds by experiments/read_lead_study.py's shared reading: an arm is a fix for late learning if at 24,000 updates its mean lead over the base is at least 0.010 with both seeds ahead and its mean lead at 24,000 updates is at least 0.005 larger than at 6,000; a lead at 24,000 without that growth is a constant gain; anything else fails. A fix or a constant gain sends the better arm to a full-size pilot of 24,000 updates against the plain stack (fs-st6, 1.31985), in a record of its own written before that run. loop-skip is a screen with one seed: its gain is the loop's bits a byte minus its own at each length, and it earns an arm in the full-size pilot of loop variants if that gain at 24,000 updates is at least 0.010, or at least 0.005 and larger by 0.005 than at 6,000; otherwise it is reported only. Recorded either way: every lead, the leads on new contexts, the pulses a byte, the time, and the learned gains. If an arm passes at full size, the comparison with the Transformer names that the same idea also helps a Transformer, and a Transformer with the paper's weights becomes a second reference.",
+ "seen_before_recording": "No trained run of any arm. Launch checks on the laptop's CPU through the trainer, 20 updates each: skip-parts and the looped bed with skip-level run and score finite numbers (4.66 and 4.77 bits a byte on the trainer's windows after 20 updates, which says nothing yet). A training step of the bed on the CPU at batch 8 takes 0.25 s without fibres and 0.29 to 0.31 s with them. The plain stack trains bit for bit as before the change (6 updates of three recipes compared). The bases that exist: bed24-lr12-s1 1.48638, bed24-lr12-s2 1.49256, and on the laptop loop-6k-s3 1.60491 beside b264-6k-s3 1.63019 and rd-base-6k-s3 1.62828. The paper's results as quoted above.",
+ "amendment": {
+  "recorded_utc": "2026-11-23T21:18:59Z",
+  "change": "Before any run of an arm has started. (1) The server's runs go to GPU 1 instead of GPU 0: the Transformer of the full-size pair ends its training there tonight, hours before the stack on GPU 0 has been scored, and the bed's queue goes where the room is. Nothing else about those runs changes. (2) The looped bed with skip fibres is also screened on the server with two seeds, because the loop is the stack's best lead at full size (full_size_loop_pilot.json) and one seed on the laptop cannot tell a gain of 0.005 from the noise between seeds: lp-6k-s1, lp-6k-s2, lp-24k-s1 and lp-24k-s2 are the looped bed (--stack-loop 1,4,3 --pulse-budget 264000), lp-skip-6k-s1, lp-skip-6k-s2, lp-skip-24k-s1 and lp-skip-24k-s2 the same with --stack-skips level; seeds 20001 and 20002, through sched/bin/arm.sh stack with --lr 1.2e-3 (and --steps 6000), bases and arms alike on the code copy of 4ddd867. They are read as the plain arms are, by the shared reading against the looped base of the same seed and length: a fix for late learning or a constant gain earns skip fibres an arm in the full-size pilot of loop variants; anything else fails, and then that arm is not built into the pilot whatever the laptop's seed says. The laptop's two runs stay as written and are reported as a third seed. (3) The server's four looped bases are also two more seeds of the loop itself. loop_with_data.json is read on the laptop's seed and does not change; the server's leads over the bed at the old budget (bed24-lr12-s1, bed24-lr12-s2, rd-base-6k-s1, rd-base-6k-s2) are reported there as a replication without the energy control, which exists on the laptop's seed only.",
+  "seen_before_amendment": "No trained run of any arm and none of the server's looped bases. Launch checks on the server's CPU of the code copy, 30 updates at batch 4 each: skip-level and skip-parts run and are scored. The laptop's energy control of loop_with_data (b264-24k-s3) is at 18,000 of 24,000 updates."
+ },
+ "amendment_2": {
+  "recorded_utc": "2026-11-23T21:48:53Z",
+  "change": "The server's runs of this screen, plain and looped, train on GPU 0 after the full-size pair's stack arm (fsp-st) has been scored, and no longer on GPU 1 after its Transformer arm: GPU 1 trains the loop's full-length run from tonight (full_size_loop_run.json), which the loop's pilot earned. On GPU 0 the screen starts at about 03:50 UTC, so the plain arms are scored this night and the looped arms in the next window. Arms, code, seeds, measure and reading are unchanged.",
+  "seen_before_amendment": "No run of this screen on the server has started. The laptop's first run, the looped bed with skip fibres at 6,000 updates (loop-skip-6k-s3), began at 21:47 UTC and has no score."
+ },
+ "result": {
+  "recorded_utc": "2026-11-24T06:29:05Z",
+  "bpb": {
+   "rd-base-6k-s1": 1.621562,
+   "rd-base-6k-s2": 1.628309,
+   "bed24-lr12-s1": 1.486381,
+   "bed24-lr12-s2": 1.492556,
+   "sk-level-6k-s1": 1.617223,
+   "sk-level-6k-s2": 1.62226,
+   "sk-level-24k-s1": 1.481901,
+   "sk-level-24k-s2": 1.486231,
+   "sk-parts-6k-s1": 1.622199,
+   "sk-parts-6k-s2": 1.620871,
+   "sk-parts-24k-s1": 1.4824,
+   "sk-parts-24k-s2": 1.486325
+  },
+  "the shared reading (experiments/read_lead_study.py, lead at least 0.010 at every seed, growth at least 0.005)": {
+   "skip-level": {
+    "long_leads": [
+     0.00448,
+     0.00633
+    ],
+    "long_mean_lead": 0.0054,
+    "seeds_ahead": 2,
+    "a_lead": false,
+    "short_leads": [
+     0.00434,
+     0.00605
+    ],
+    "short_mean_lead": 0.00519,
+    "growth": 0.00021,
+    "b_growth": false,
+    "verdict": "fail"
+   },
+   "skip-parts": {
+    "long_leads": [
+     0.00398,
+     0.00623
+    ],
+    "long_mean_lead": 0.00511,
+    "seeds_ahead": 2,
+    "a_lead": false,
+    "short_leads": [
+     -0.00064,
+     0.00744
+    ],
+    "short_mean_lead": 0.0034,
+    "growth": 0.00171,
+    "b_growth": false,
+    "verdict": "fail"
+   }
+  },
+  "paired leads at 24,000 updates (compare_stream_scores)": {
+   "skip-level s1": {
+    "lead": 0.00448,
+    "interval_95": [
+     0.00358,
+     0.00538
+    ]
+   },
+   "skip-level s2": {
+    "lead": 0.00633,
+    "interval_95": [
+     0.00544,
+     0.00729
+    ]
+   },
+   "skip-parts s1": {
+    "lead": 0.00398,
+    "interval_95": [
+     0.00301,
+     0.00489
+    ]
+   },
+   "skip-parts s2": {
+    "lead": 0.00623,
+    "interval_95": [
+     0.00532,
+     0.00716
+    ]
+   }
+  },
+  "by context at 24,000 updates (gap_by_piece, near 240, far 8,192; below zero favours the arm)": {
+   "skip-level s1": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.0135,
+     "interval_95": [
+      -0.024,
+      -0.0007
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0059,
+     "interval_95": [
+      -0.0197,
+      0.0108
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0101,
+     "interval_95": [
+      -0.0946,
+      0.055
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.003,
+     "interval_95": [
+      -0.0061,
+      0.0003
+     ]
+    }
+   },
+   "skip-level s2": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.0074,
+     "interval_95": [
+      -0.0198,
+      0.0042
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0108,
+     "interval_95": [
+      -0.0065,
+      0.0279
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0679,
+     "interval_95": [
+      -0.1409,
+      0.0072
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0042,
+     "interval_95": [
+      -0.0075,
+      -0.0005
+     ]
+    }
+   },
+   "skip-parts s1": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.0305,
+     "interval_95": [
+      -0.0408,
+      -0.0212
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0019,
+     "interval_95": [
+      -0.0141,
+      0.0139
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.0193,
+     "interval_95": [
+      -0.0481,
+      0.0798
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0034,
+     "interval_95": [
+      -0.0065,
+      -0.0003
+     ]
+    }
+   },
+   "skip-parts s2": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0116,
+     "interval_95": [
+      0.0008,
+      0.0225
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0104,
+     "interval_95": [
+      -0.0069,
+      0.0266
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0327,
+     "interval_95": [
+      -0.1087,
+      0.0448
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0085,
+     "interval_95": [
+      -0.0117,
+      -0.0053
+     ]
+    }
+   }
+  },
+  "pulses a byte at 24,000 updates (trainer)": {
+   "sk-level-24k-s1": 115570,
+   "sk-parts-24k-s1": 115591,
+   "the base at 6,000 (rd-base-6k-s1)": 116078
+  },
+  "time for 750 updates (trainer, two runs sharing GPU 0)": {
+   "sk-level-6k-s1": 52.9,
+   "rd-base-6k-s1": 45.4
+  },
+  "the looped arms, not yet read": {
+   "laptop": "loop-skip-6k-s3 1.592895, 0.0120 ahead of loop-6k-s3 (1.604914); loop-skip-24k-s3 is queued on the laptop after the slope's runs",
+   "server": "lp-skip-24k-s1 1.459828 is 0.0066 ahead of lp-24k-s1 (paired 0.0057 to 0.0075; 0.012 on new contexts); lp-skip-24k-s2 was saved at the window's close and resumes in the next one; lp-6k-s1, lp-6k-s2, lp-skip-6k-s1 and lp-skip-6k-s2 are queued for it. They are read by the amendment's shared reading against the looped base of the same seed when all eight are scored."
+  },
+  "verdict": "Both plain arms fail on the bed by the shared reading. Each is ahead at both seeds and both lengths, but by about 0.005: skip-level by 0.0054 on the mean of the seeds at 24,000 updates (0.0045 and 0.0063) and 0.0052 at 6,000, skip-parts by 0.0051 and 0.0034. The mark is 0.010, so neither goes to a full-size pilot. The looped arms are read when their runs are scored.",
+  "reading": "Skip fibres give the plain bed a small, steady gain that does not grow with data, most of it outside new contexts at one seed and spread over all contexts at the other. Their price is small: 0.18% and 0.32% more parameters and no more pulses. The learned gains, by part and by the level they reach back to, and the neurons that the range rule shrank are not measured yet and will be appended with the looped arms."
+ }
+}

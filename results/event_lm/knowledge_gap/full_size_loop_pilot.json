@@ -11,5 +11,260 @@
  "training": "full.sh KIND stack (v16's stack with forgetting slopes, windows of 512 bytes, batch 8, 24,000 updates, warmup 1,000, cosine over the run, seed 20001) at peak rate 6e-4, the plain pool, server GPU 0 after the full-size pair's stack arm; code v17n (97a2772)",
  "measure": "as full_size_rate_pilot: the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, averaged weights, bits kept; fs-loop6 paired with fs-b507 and fs-b507 with fs-st6 by experiments/gap_by_piece.py (near 496, far 8,192); the pulses a byte and the price of the budget",
  "reading": "The loop's own gain is fs-b507 minus fs-loop6, at equal energy; the budget's gain is fs-st6 minus fs-b507. The loop earns a full-size run of 90,000 updates beside the pair if its own gain is at least 0.010 with its gain on new contexts above zero. The budget earns a place in the design if its gain is at least 0.010. Otherwise each is reported only. Recorded either way: every score, the gains by context, the pulses a byte, the training time of each arm, and how the energy compares with the plain stack's.",
- "seen_before_recording": "fs-st6 1.31985 and the rest of the full-size pilots; a 4-update CPU check of fs-loop6 at full size (finite, 34,810,900 parameters, about 500,000 pulses a byte). The test bed's loop pilot is the evidence above. No looped or raised-budget full-size run has trained."
+ "seen_before_recording": "fs-st6 1.31985 and the rest of the full-size pilots; a 4-update CPU check of fs-loop6 at full size (finite, 34,810,900 parameters, about 500,000 pulses a byte). The test bed's loop pilot is the evidence above. No looped or raised-budget full-size run has trained.",
+ "amendment": {
+  "recorded_utc": "2026-11-23T12:39:53Z",
+  "change": "fs-loop6 and fs-b507 train on GPU 1 in the night of 2026-11-23, after the two unit arms that are half trained there and before the full-size pair's Transformer arm, and no longer on GPU 0 after the pair's stack arm. Arms, recipe, code, seed, measure and reading are unchanged.",
+  "why": "On GPU 0 the pilot would have started at about 02:15 UTC and been cut by the window's close, so its verdict would have come a day later. The loop is the largest gain that the test bed has measured for any part at equal parameters, so its full-size verdict is worth more this night than the pair's, which now comes about 15 hours later.",
+  "seen_before_amendment": "No run of this pilot or of loop_with_data has started. Seen since the record: the laptop's gated and noisy arms and the proportional gate's check (proportional_gate_check.json); none bears on the loop."
+ },
+ "result": {
+  "recorded_utc": "2026-11-23T19:59:45Z",
+  "bpb": {
+   "fs-st6 (base, budget 310,000)": 1.31985,
+   "fs-b507 (budget 507,000, no loop)": 1.32913,
+   "fs-loop6 (loop, budget 507,000)": 1.31024,
+   "beside": {
+    "fs-st6-lift (plain, lifting pool, budget 310,000)": 1.31341
+   }
+  },
+  "gains (positive is better)": {
+   "the loop's own, at equal energy (fs-b507 minus fs-loop6)": 0.01889,
+   "the budget's (fs-st6 minus fs-b507)": -0.00928,
+   "the loop with its budget over the plain stack at the old budget (fs-st6 minus fs-loop6)": 0.00961
+  },
+  "by context, second minus first (gap_by_piece, near 496, far 8,192; negative is a gain of the second)": {
+   "fs-loop6 against fs-b507": {
+    "whole": -0.01891,
+    "copyable near": {
+     "gap": -0.0195,
+     "interval_95": [
+      -0.0297,
+      -0.0106
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": -0.0431,
+     "interval_95": [
+      -0.0583,
+      -0.0279
+     ],
+     "share": 0.0862
+    },
+    "seen, other follower": {
+     "gap": 0.1116,
+     "interval_95": [
+      0.0531,
+      0.1827
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": -0.0255,
+     "interval_95": [
+      -0.0283,
+      -0.0227
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0178,
+     "interval_95": [
+      0.0049,
+      0.0306
+     ],
+     "share": 0.3109
+    }
+   },
+   "fs-b507 against fs-st6": {
+    "whole": 0.00927,
+    "copyable near": {
+     "gap": 0.0063,
+     "interval_95": [
+      -0.0019,
+      0.0152
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": 0.0246,
+     "interval_95": [
+      0.0107,
+      0.0372
+     ],
+     "share": 0.0862
+    },
+    "seen, other follower": {
+     "gap": -0.102,
+     "interval_95": [
+      -0.1609,
+      -0.0462
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": 0.0159,
+     "interval_95": [
+      0.0133,
+      0.019
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.001,
+     "interval_95": [
+      -0.0122,
+      0.0129
+     ],
+     "share": 0.3109
+    }
+   },
+   "fs-loop6 against fs-st6": {
+    "whole": -0.00964,
+    "copyable near": {
+     "gap": -0.0132,
+     "interval_95": [
+      -0.0195,
+      -0.0059
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": -0.0186,
+     "interval_95": [
+      -0.0332,
+      -0.0042
+     ],
+     "share": 0.0862
+    },
+    "seen, other follower": {
+     "gap": 0.0096,
+     "interval_95": [
+      -0.0408,
+      0.0669
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": -0.0096,
+     "interval_95": [
+      -0.0123,
+      -0.0069
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0188,
+     "interval_95": [
+      0.0061,
+      0.0319
+     ],
+     "share": 0.3109
+    }
+   },
+   "fs-loop6 against fs-st6-lift": {
+    "whole": -0.00318,
+    "copyable near": {
+     "gap": 0.0027,
+     "interval_95": [
+      -0.0053,
+      0.0112
+     ],
+     "share": 0.0987
+    },
+    "copyable far only": {
+     "gap": 0.0054,
+     "interval_95": [
+      -0.0082,
+      0.0195
+     ],
+     "share": 0.0862
+    },
+    "seen, other follower": {
+     "gap": -0.0178,
+     "interval_95": [
+      -0.0738,
+      0.0375
+     ],
+     "share": 0.0546
+    },
+    "new": {
+     "gap": -0.0039,
+     "interval_95": [
+      -0.0073,
+      -0.0013
+     ],
+     "share": 0.7605
+    },
+    "fourth letter on": {
+     "gap": 0.0009,
+     "interval_95": [
+      -0.0119,
+      0.0172
+     ],
+     "share": 0.3109
+    }
+   }
+  },
+  "stack_pulses_per_byte": {
+   "training, last update": {
+    "fs-loop6": 503592,
+    "fs-b507": 505803,
+    "fs-st6": 308110
+   },
+   "scoring of the trainer's validation streams, last update": {
+    "fs-loop6": 513025,
+    "fs-b507": 507985,
+    "fs-st6": 314748
+   },
+   "price at the end": {
+    "fs-loop6": 0.003,
+    "fs-b507": 0.003,
+    "fs-st6": 0.004
+   },
+   "energy": "the loop and its control spend 1.63 times the plain stack's pulses a byte"
+  },
+  "training time, seconds for 1,500 updates on one GPU": {
+   "both arms side by side, time-sliced": {
+    "fs-loop6": 575,
+    "fs-b507": 393
+   },
+   "both arms side by side under NVIDIA's multi-process service": {
+    "fs-loop6": 464,
+    "fs-b507": 334
+   },
+   "fs-b507 alone under the service": 193,
+   "note": "the loop takes 1.39 to 1.46 times the plain stack's time for 18 level passes in place of 11"
+  },
+  "membrane_saturation (whole stack, the first 65,536 validation bytes: the share of entries at the membrane's bound; fs-st6 from membrane_saturation.json)": {
+   "fs-loop6": {
+    "cells": 0.0141,
+    "cells at the top level": 0.1495,
+    "reads": 0.0159,
+    "reads at the top level": 0.0822,
+    "other": 0.0221
+   },
+   "fs-b507": {
+    "cells": 0.0297,
+    "cells at the top level": 0.176,
+    "reads": 0.0287,
+    "reads at the top level": 0.1159,
+    "other": 0.114
+   },
+   "fs-st6": {
+    "cells": 0.0075,
+    "cells at the top level": 0.0594,
+    "reads": 0.003,
+    "reads at the top level": 0.0144,
+    "other": 0.0146
+   }
+  },
+  "how the arms trained": "On GPU 1 on 2026-11-23 from 18:20 UTC, side by side. From 18:50 UTC (fs-loop6 from update 15,000, fs-b507 from update 7,500) both ran as programs of NVIDIA's multi-process service, a trial of sharing one GPU between two jobs; each was paused and resumed once for the switch. The service changes the pace, not the computation.",
+  "verdict": {
+   "the loop": "PASS: its own gain is 0.0189 where 0.010 was asked, and on new contexts it gains 0.0255 (interval 0.0227 to 0.0283). It earns a full-size run of 90,000 updates beside the pair.",
+   "the budget": "FAIL: the plain stack with 507,000 pulses a byte is 0.0093 worse than with 310,000, where 0.010 better was asked; worse on new contexts by 0.0159 (interval 0.0133 to 0.0190). Reported only."
+  },
+  "reading": "Depth by recurrence is the first part at equal parameters that adds knowledge at full size. Against the plain stack at the old budget, which is the design it would replace, the looped stack is 0.0096 better on the whole and 0.0096 better on new contexts (interval 0.0069 to 0.0123), for 1.63 times the pulses and about 1.4 times the training time; against the lifted plain stack it is 0.0032 better. Its own gain at equal energy, 0.0189, is larger because the raised budget harms the control: the plain stack puts the added pulses into the same eleven levels, and its membranes saturate (3.0% of the cells' entries at their bound against 0.8%, 2.9% of the reads' against 0.3%, 11.4% of the other populations' against 1.5%). The loop spreads them over eighteen passes (1.4%, 1.6% and 2.2%). Open, and not separated by this pilot: whether the loop needs the raised budget at full size (on the test bed it gained nothing at the old budget), and whether the pool that lifts the ceiling adds to it, since the loop's reads saturate five times as often as the plain stack's."
+ }
 }

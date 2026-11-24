@@ -1,0 +1,360 @@
+{
+ "study": "plain_units_with_data",
+ "recorded_utc": "2026-11-23T16:39:58Z",
+ "kind": "A diagnostic in floats on the Transformer reference, by slope over data, on the server's CPU. No spiking network trains here, no arm joins any design, and nothing in it is a result of the stack. It asks which property of the unit, if any, makes a model fall behind with data. Recorded before any run of it started.",
+ "why": "The stack's gap to its Transformer grows with data. The delayed test bed trained on streams is 0.047 ahead after 6,000 updates and 0.054 behind after 24,000 (gap_with_data.json), and at each model's best rate it is 0.048 behind after 24,000 (learning_rate_with_data.json). The largest priced difference between the two models is the unit: the Transformer's units are gated and open smoothly, the stack's cells add and are shut below a threshold. docs/STREAM_FORM.md priced that at one length, 9,000 updates at full size, and the roadmap's second bet names the control that is missing: the same comparison at 6,000 and at 24,000 updates on the test bed. The full-size controls of that walk point to one property. Along their 12,000 updates the plain rectifying unit's gap to the gated Transformer grew from 0.008 at 4,500 updates to 0.027, the hard gate's from 0.001 to 0.014, and the smooth plain unit's stayed at 0.008 to 0.011 (results/event_lm/stream_form/arms.json). The units that are shut below a threshold fell behind as training went on, gated or not, and the smooth plain unit did not. Those curves are one seed, and their gated Transformer ran its cosine over 45,000 updates where the controls ran theirs over 12,000, so the comparison along the curve is not clean. If the pattern holds in separate runs at two lengths, the stack's flattening has a named cause in floats: a unit that passes nothing and learns nothing where it is shut. The census of the stack's cells says how much of the stack that would touch: at its best rates four fifths of cells and bytes lie more than a threshold below zero (0.80 at full size at 6e-4, 0.81 on the test bed at 1.2e-3; unit_density_by_rate.json and its amendments).",
+ "arms": {
+  "relu": "--feed-forward relu: plain rectifying units, one row of input weights each, shut below zero. The stack's threshold cell in floats.",
+  "gelu": "--feed-forward gelu: plain units that open smoothly.",
+  "reglu": "--feed-forward reglu: gated units whose gate is shut below zero and passes its drive above it.",
+  "swiglu": "--feed-forward swiglu: the reference's own units, gated and opening smoothly. The base of every pair.",
+  "relu at 2.4e-3": "the relu arm at twice the peak rate, 24,000 updates: whether a unit that is shut below its threshold gains from the rate, as the gated Transformer does (0.004 from 1.2e-3 to 2.4e-3 over two seeds) and the stack does not (0.004 worse), and whether its code thins as the stack's does."
+ },
+ "parameters": "4,790,784 with plain units and 4,792,320 with gated ones: the same number of weights within 1,536",
+ "training": "The test bed's Transformer as the scheduler trains it (--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 4; windows of 256 bytes in batches of 16; warmup 300 and a cosine over the run; weight decay 0.05; rotated Adam 50; averaged weights 0.999; the training mixture), at a peak rate of 1.2e-3, as separate runs of 6,000 and 24,000 updates, seed 20001 and then seed 20002. On the server's CPU, 8 threads a run and three runs side by side (0.35 s an update in a timing run), with the code at 85f4133. Every arm trains on the CPU, the base included, so that every pair shares its device. The base's GPU runs at 24,000 updates (tf24-lr12-s1 1.44423, tf24-lr12-s2 1.44598) are reported beside the CPU ones.",
+ "measure": "experiments/eval_taught_reference.py on the first 2,000,000 validation bytes, in windows that hold 240 bytes of history and score 16, averaged weights, bits kept, as the scheduler scores a Transformer, on the CPU. Pairs by experiments/compare_stream_scores.py, and experiments/gap_by_piece.py (near 240, far 8,192) for the bytes in new contexts. experiments/unit_density.py on the first 65,536 validation bytes for every arm at both lengths: the share of units open at a byte and the share that passes nine tenths of a block's output.",
+ "reading": "An arm's gap is its bits minus the base's at the same length, rate and seed, and its growth is its gap at 24,000 updates less its gap at 6,000. The base's two seeds differ by 0.002 at 24,000 updates on the GPU. A growth is read over the mean of both seeds: it counts as growth from 0.015 on, as none below 0.005, and as unclear between. (1) If relu and reglu grow and gelu does not, a unit that is shut below its threshold falls behind with data and one that opens smoothly keeps pace. The next spiking screen is then a threshold cell that opens smoothly over the spread of its charge, and a gate that is not shut below its rest. (2) If relu and gelu grow and reglu does not, gating is what keeps a unit learning, and the cell that multiplies stays the target as it is. (3) If no arm grows, the unit is a fixed cost at this size and the stack's flattening is not the unit's: the charge grid and the float stand-in of the stack move up. Any other pattern is reported as it falls. Reported beside it: each arm's gap at both lengths on new contexts, the relu arm at 2.4e-3 against 1.2e-3, and the census. The stack's own growth over the same lengths is about 0.10 at 3e-4 (gap_with_data.json); at the best rates its points at 6,000 updates are still queued (data_scaling_long.json).",
+ "seen_before_recording": "The full-size controls named above (one seed, 12,000 updates at 1e-3: at 12,000 updates relu is 0.0267 behind the gated Transformer, gelu 0.0099 and reglu 0.0144). results/event_lm/stream_form/small_test_bed.json, where a Transformer with plain rectifying units and age offsets is ahead of the plain Transformer after 6,000 updates at each of three rates: two changes at once, at one length. The base's scores at 24,000 updates on the GPU. Timing and dry runs on the server's CPU with a warmup of 10: the relu arm for 30 and 90 updates and the other three kinds for 30 updates each (validation 3.9 to 5.0 bits per byte), and the scorer and the census on the 90-update weights. No run of this study has started.",
+ "result": {
+  "recorded_utc": "2026-11-24T07:04:16Z",
+  "bpb (fast_output_synapses row 0, the first 2,000,000 validation bytes)": {
+   "pu-relu-6k-s1": 1.634478,
+   "pu-gelu-6k-s1": 1.642148,
+   "pu-reglu-6k-s1": 1.659656,
+   "pu-swiglu-6k-s1": 1.666476,
+   "pu-relu-24k-s1": 1.457303,
+   "pu-gelu-24k-s1": 1.449175,
+   "pu-reglu-24k-s1": 1.445502,
+   "pu-swiglu-24k-s1": 1.446081,
+   "pu-relu-lr24-24k-s1": 1.452757,
+   "pu-relu-6k-s2": 1.636921,
+   "pu-gelu-6k-s2": 1.64761,
+   "pu-reglu-6k-s2": 1.633857,
+   "pu-swiglu-6k-s2": 1.633798,
+   "pu-relu-24k-s2": 1.457365,
+   "pu-gelu-24k-s2": 1.439817,
+   "pu-reglu-24k-s2": 1.449066,
+   "pu-swiglu-24k-s2": 1.438885,
+   "pu-relu-lr24-24k-s2": 1.456495
+  },
+  "gaps to swiglu, the arm minus the reference (compare_stream_scores; new contexts by gap_by_piece, near 240, far 8,192)": {
+   "relu s1": {
+    "6k": {
+     "gap": -0.032,
+     "interval_95": [
+      -0.03319,
+      -0.03081
+     ],
+     "new contexts": {
+      "gap": -0.0061,
+      "interval_95": [
+       -0.0076,
+       -0.0042
+      ],
+      "share": 0.7605
+     }
+    },
+    "24k": {
+     "gap": 0.01122,
+     "interval_95": [
+      0.01031,
+      0.0121
+     ],
+     "new contexts": {
+      "gap": 0.0138,
+      "interval_95": [
+       0.0124,
+       0.0151
+      ],
+      "share": 0.7605
+     }
+    }
+   },
+   "relu s2": {
+    "6k": {
+     "gap": 0.00312,
+     "interval_95": [
+      0.00213,
+      0.00411
+     ],
+     "new contexts": {
+      "gap": 0.0204,
+      "interval_95": [
+       0.0191,
+       0.0217
+      ],
+      "share": 0.7605
+     }
+    },
+    "24k": {
+     "gap": 0.01848,
+     "interval_95": [
+      0.01756,
+      0.01941
+     ],
+     "new contexts": {
+      "gap": 0.0246,
+      "interval_95": [
+       0.0234,
+       0.0258
+      ],
+      "share": 0.7605
+     }
+    }
+   },
+   "gelu s1": {
+    "6k": {
+     "gap": -0.02433,
+     "interval_95": [
+      -0.02546,
+      -0.02319
+     ],
+     "new contexts": {
+      "gap": -0.0134,
+      "interval_95": [
+       -0.0149,
+       -0.0118
+      ],
+      "share": 0.7605
+     }
+    },
+    "24k": {
+     "gap": 0.00309,
+     "interval_95": [
+      0.00218,
+      0.00402
+     ],
+     "new contexts": {
+      "gap": 0.0027,
+      "interval_95": [
+       0.0013,
+       0.0045
+      ],
+      "share": 0.7605
+     }
+    }
+   },
+   "gelu s2": {
+    "6k": {
+     "gap": 0.01381,
+     "interval_95": [
+      0.01285,
+      0.01478
+     ],
+     "new contexts": {
+      "gap": 0.0163,
+      "interval_95": [
+       0.015,
+       0.018
+      ],
+      "share": 0.7605
+     }
+    },
+    "24k": {
+     "gap": 0.00093,
+     "interval_95": [
+      3e-05,
+      0.00179
+     ],
+     "new contexts": {
+      "gap": 0.0049,
+      "interval_95": [
+       0.0034,
+       0.0063
+      ],
+      "share": 0.7605
+     }
+    }
+   },
+   "reglu s1": {
+    "6k": {
+     "gap": -0.00682,
+     "interval_95": [
+      -0.00774,
+      -0.0059
+     ],
+     "new contexts": {
+      "gap": -0.0042,
+      "interval_95": [
+       -0.0054,
+       -0.0027
+      ],
+      "share": 0.7605
+     }
+    },
+    "24k": {
+     "gap": -0.00058,
+     "interval_95": [
+      -0.00147,
+      0.00031
+     ],
+     "new contexts": {
+      "gap": -0.0014,
+      "interval_95": [
+       -0.0028,
+       0.0
+      ],
+      "share": 0.7605
+     }
+    }
+   },
+   "reglu s2": {
+    "6k": {
+     "gap": 6e-05,
+     "interval_95": [
+      -0.00092,
+      0.00102
+     ],
+     "new contexts": {
+      "gap": 0.0136,
+      "interval_95": [
+       0.0123,
+       0.0151
+      ],
+      "share": 0.7605
+     }
+    },
+    "24k": {
+     "gap": 0.01018,
+     "interval_95": [
+      0.00933,
+      0.01104
+     ],
+     "new contexts": {
+      "gap": 0.0127,
+      "interval_95": [
+       0.0114,
+       0.0139
+      ],
+      "share": 0.7605
+     }
+    }
+   }
+  },
+  "growth, the gap at 24,000 updates less the gap at 6,000": {
+   "relu s1": 0.04322,
+   "relu s2": 0.01536,
+   "relu, mean of both seeds": 0.02929,
+   "relu, reads as": "growth",
+   "gelu s1": 0.02742,
+   "gelu s2": -0.01288,
+   "gelu, mean of both seeds": 0.00727,
+   "gelu, reads as": "unclear",
+   "reglu s1": 0.00624,
+   "reglu s2": 0.01012,
+   "reglu, mean of both seeds": 0.00818,
+   "reglu, reads as": "unclear"
+  },
+  "the rate arm, relu at 2.4e-3 minus relu at 1.2e-3 after 24,000 updates": {
+   "relu at 2.4e-3 minus relu at 1.2e-3, s1": {
+    "gap": -0.00455,
+    "interval_95": [
+     -0.0054,
+     -0.00368
+    ],
+    "new contexts": {
+     "gap": -0.0011,
+     "interval_95": [
+      -0.0022,
+      0.0004
+     ],
+     "share": 0.7605
+    }
+   },
+   "relu at 2.4e-3 minus relu at 1.2e-3, s2": {
+    "gap": -0.00087,
+    "interval_95": [
+     -0.00173,
+     -3e-05
+    ],
+    "new contexts": {
+     "gap": -0.0004,
+     "interval_95": [
+      -0.0017,
+      0.0009
+     ],
+     "share": 0.7605
+    }
+   }
+  },
+  "verdict": "No reading fits; the pattern is reported as it falls. The plain rectifying unit falls behind with data on both seeds: its gap to the gated reference grows by 0.0432 and 0.0154, 0.0293 on the mean (growth). The plain smooth unit and the hard gated unit are both unclear: the smooth one grows by 0.0274 on the first seed and by -0.0129 on the second, 0.0073 on the mean; the hard gated one by 0.0062 and 0.0101, 0.0082 on the mean.",
+  "reading": "After 24,000 updates the plain rectifying unit is 0.0112 and 0.0185 behind the reference (0.0138 and 0.0246 on new contexts), the smooth plain unit 0.0031 and 0.0009, and the hard gated unit -0.0006 and +0.0102. Of the three kinds only the unit that is both hard and plain, the stack's threshold cell in floats, falls behind clearly as data grows (0.0149 behind on the mean of the seeds). A smooth opening or a multiplying gate each brings it most of the way back on the mean (0.0020 and 0.0048 behind), and the reference, smooth and gated, is the best. After 6,000 updates the seeds disagree by up to 0.033 (the reference itself scores 1.6665 and 1.6338), and after 24,000 the reference's two seeds differ by 0.0072 on the CPU, more than the 0.002 that the record expected from the GPU, so differences under about 0.01 between kinds are within the noise of two seeds. For the spiking work: the stack's cell is the kind that falls behind; a smoother cell and a cell that multiplies both remain candidates, and bounded_gates_in_floats.json asks which gate. The rate arm, relu at 2.4e-3 against relu at 1.2e-3 after 24,000 updates: s1: -0.00455 (-0.00540 to -0.00368); s2: -0.00087 (-0.00173 to -0.00003) (below zero: better at the higher rate). The gated Transformer gains 0.004 from that step over two seeds and the spiking stack loses 0.004, so a plain unit shut below its threshold gains from the rate in floats where the stack does not: the stack's flat response to the rate is not its unit's shape. The census of open units: the plain hard unit thins with data and with the rate, open at 22% of bytes after 6,000 updates, 16% after 24,000 and 11% at 2.4e-3, with nine tenths of its output from 14%, 10% and 7% of its units, as the stack's cells thin with the rate. The hard gated unit is as thin (nine tenths from 13% and 11%) and ends closer to the reference, and the plain unit at the higher rate is thinner and better, so a thin code alone does not decide whether a unit falls behind. The smooth units pass nine tenths through half or more of their units (59% plain, 45% gated, after 24,000 updates), because a closed smooth unit still lets a share through.",
+  "census of open units": {
+   "measure": "experiments/unit_density.py on the first 65,536 validation bytes in windows of 256, the second half of every window counted; the mean over the six blocks",
+   "runs": {
+    "relu-6k-s1": {
+     "share of units open at a byte": 0.2183,
+     "share of units passing nine tenths": 0.1371
+    },
+    "gelu-6k-s1": {
+     "share of units open at a byte": 0.1925,
+     "share of units passing nine tenths": 0.6682
+    },
+    "reglu-6k-s1": {
+     "share of units open at a byte": 0.286,
+     "share of units passing nine tenths": 0.1332
+    },
+    "swiglu-6k-s1": {
+     "share of units open at a byte": 0.3586,
+     "share of units passing nine tenths": 0.4679
+    },
+    "relu-24k-s1": {
+     "share of units open at a byte": 0.1642,
+     "share of units passing nine tenths": 0.102
+    },
+    "gelu-24k-s1": {
+     "share of units open at a byte": 0.1447,
+     "share of units passing nine tenths": 0.5867
+    },
+    "reglu-24k-s1": {
+     "share of units open at a byte": 0.2383,
+     "share of units passing nine tenths": 0.1109
+    },
+    "swiglu-24k-s1": {
+     "share of units open at a byte": 0.3269,
+     "share of units passing nine tenths": 0.4538
+    },
+    "relu-lr24-24k-s1": {
+     "share of units open at a byte": 0.1102,
+     "share of units passing nine tenths": 0.0683
+    },
+    "relu-6k-s2": {
+     "share of units open at a byte": 0.2197,
+     "share of units passing nine tenths": 0.1384
+    },
+    "gelu-6k-s2": {
+     "share of units open at a byte": 0.1959,
+     "share of units passing nine tenths": 0.6675
+    },
+    "reglu-6k-s2": {
+     "share of units open at a byte": 0.2867,
+     "share of units passing nine tenths": 0.1337
+    },
+    "swiglu-6k-s2": {
+     "share of units open at a byte": 0.3623,
+     "share of units passing nine tenths": 0.4669
+    },
+    "relu-24k-s2": {
+     "share of units open at a byte": 0.1626,
+     "share of units passing nine tenths": 0.1014
+    },
+    "gelu-24k-s2": {
+     "share of units open at a byte": 0.1454,
+     "share of units passing nine tenths": 0.5883
+    },
+    "reglu-24k-s2": {
+     "share of units open at a byte": 0.2407,
+     "share of units passing nine tenths": 0.113
+    },
+    "swiglu-24k-s2": {
+     "share of units open at a byte": 0.3313,
+     "share of units passing nine tenths": 0.4527
+    },
+    "relu-lr24-24k-s2": {
+     "share of units open at a byte": 0.1135,
+     "share of units passing nine tenths": 0.0699
+    }
+   }
+  }
+ }
+}

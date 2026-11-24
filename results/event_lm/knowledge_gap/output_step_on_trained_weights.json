@@ -1,0 +1,146 @@
+{
+ "study": "output_step_on_trained_weights",
+ "recorded_utc": "2026-11-23T13:26:52Z",
+ "kind": "A measurement on trained weights, with no training and no pass mark: how many fine steps of evidence one spike of an output neuron can stand for before the score moves, and how many pulses that saves. Its first numbers were seen before this record (below), so it is a measurement and not a test.",
+ "why": "experiments/gate_state.py counts a stack's pulses by population as the budget counts them. On the test bed the output neurons spend more than any other population: 43,281 of 112,659 pulses a byte after 24,000 updates, against 32,164 for the reads and 8,312 for the cells. An output neuron fires one spike for every 1/128 bit of evidence for its byte (a count is scored as count * ln 2 / (8 * resolution), resolution 16). Every other population's spikes are weighed by synapses that learn, so the price of the pulse budget already trades their precision against the loss. The output's spike alone has a weight that the scoring rule fixes, and nothing had asked whether that weight is right.",
+ "part": "--output-step STEPS (85f4133, tests/test_output_step.py): one output spike stands for STEPS fine steps, a power of two. The output neurons' threshold is STEPS times higher and their cap STEPS times lower, so they round the same charge to a coarser grid. The counts they return stay in fine steps, so the scoring rule, the fast synapses and every reader of the output are unchanged, and the budget counts the coarse spikes. experiments/eval_stream.py and experiments/gate_state.py take the same flag for weights that trained with fine spikes; no weight changes, and a stream stays exact under any cut.",
+ "measure": "Bits per byte: experiments/eval_stream.py with --output-step, each scoring paired piece by piece with the same weights' scoring at fine spikes; the interval resamples the pieces. Pulses a byte by population: experiments/gate_state.py with --output-step on the first 65,536 validation bytes as 16 streams, the lead of every stream left out. Test bed: the laptop's seed 20003 at 6,000 and 24,000 updates (rd-base-6k-s3, rd-base-24k-s3; the delayed bed at 1.2e-3, 5,249,060 parameters), the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, on the laptop's CPU. Full size: v18's best stack (l2048-word-st, 36,264,308 parameters) as its headline was scored (reach 8,192, pieces of 256 bytes, fast output synapses taught from all 11 levels), on the server.",
+ "seen_before_recording": "A scratch pass that rounded the fired output counts of the two bed runs after the fact, on the first 262,143 validation bytes: at 8 fine steps a spike +0.00002 (24,000 updates) and +0.00005 (6,000), at 16 steps +0.00013 and +0.00019, at 64 steps +0.0028 and +0.0029. The option was built after it. Every number below was measured with the option and the repository's tools.",
+ "result": {
+  "test bed, 24,000 updates (rd-base-24k-s3)": {
+   "1 fine step a spike (1/128 bit)": {
+    "bits per byte": 1.482439,
+    "pulses a byte": 112659,
+    "of them the output's": 43281
+   },
+   "4 fine steps a spike (1/32 bit)": {
+    "bits per byte": 1.482444,
+    "above fine spikes": 5e-06,
+    "95% interval over resampled pieces": [
+     -3e-06,
+     1.3e-05
+    ],
+    "pulses a byte": 80198,
+    "of them the output's": 10820
+   },
+   "8 fine steps a spike (1/16 bit)": {
+    "bits per byte": 1.48248,
+    "above fine spikes": 4.2e-05,
+    "95% interval over resampled pieces": [
+     2.7e-05,
+     5.7e-05
+    ],
+    "pulses a byte": 74787,
+    "of them the output's": 5409
+   },
+   "16 fine steps a spike (1/8 bit)": {
+    "bits per byte": 1.482594,
+    "above fine spikes": 0.000156,
+    "95% interval over resampled pieces": [
+     0.000126,
+     0.000186
+    ],
+    "pulses a byte": 72081,
+    "of them the output's": 2704
+   }
+  },
+  "test bed, 6,000 updates (rd-base-6k-s3)": {
+   "1 fine step a spike (1/128 bit)": {
+    "bits per byte": 1.628291,
+    "pulses a byte": 111330,
+    "of them the output's": 38711
+   },
+   "4 fine steps a spike (1/32 bit)": {
+    "bits per byte": 1.628303,
+    "above fine spikes": 1.2e-05,
+    "95% interval over resampled pieces": [
+     4e-06,
+     2.1e-05
+    ],
+    "pulses a byte": 82296,
+    "of them the output's": 9677
+   },
+   "8 fine steps a spike (1/16 bit)": {
+    "bits per byte": 1.62833,
+    "above fine spikes": 3.9e-05,
+    "95% interval over resampled pieces": [
+     2.4e-05,
+     5.5e-05
+    ],
+    "pulses a byte": 77456,
+    "of them the output's": 4837
+   },
+   "16 fine steps a spike (1/8 bit)": {
+    "bits per byte": 1.628478,
+    "above fine spikes": 0.000187,
+    "95% interval over resampled pieces": [
+     0.000156,
+     0.000219
+    ],
+    "pulses a byte": 75035,
+    "of them the output's": 2416
+   }
+  },
+  "test bed, pulses a byte by population at fine spikes": {
+   "24,000 updates": {
+    "output": 43281,
+    "reads": 32164,
+    "stream after cells": 11211,
+    "cells": 8312,
+    "racing cells": 6144,
+    "stream after reads": 5949,
+    "read pulses": 4164,
+    "input": 1391,
+    "pools": 42
+   },
+   "6,000 updates": {
+    "output": 38711,
+    "reads": 30573,
+    "cells": 12878,
+    "stream after cells": 9700,
+    "racing cells": 6144,
+    "read pulses": 5663,
+    "stream after reads": 5226,
+    "input": 2390,
+    "pools": 45
+   }
+  },
+  "full size (l2048-word-st)": {
+   "pulses a byte": {
+    "1 fine step a spike (1/128 bit)": 310073,
+    "8 fine steps a spike (1/16 bit)": 246237
+   },
+   "of them the output's": {
+    "1 fine step a spike (1/128 bit)": 72956,
+    "8 fine steps a spike (1/16 bit)": 9120
+   },
+   "pulses a byte by population at fine spikes": {
+    "reads": 108352,
+    "output": 72956,
+    "stream after cells": 28838,
+    "stream after reads": 24441,
+    "cells": 23581,
+    "read pulses": 23214,
+    "racing cells": 22530,
+    "pools": 3101,
+    "input": 3061
+   },
+   "how the pulses were counted": "at the trained reach of 2,048 cells and without the fast output synapses, which change no spike of the stack's neurons; the first 65,536 validation bytes, on the server's CPU",
+   "sample of the test split": {
+    "first bytes of the test split": 131072,
+    "targets": 131071,
+    "1 fine step a spike": 1.134518,
+    "8 fine steps a spike": 1.134534,
+    "above fine spikes": 1.6e-05,
+    "95% interval over resampled pieces": [
+     -3.3e-05,
+     6.7e-05
+    ],
+    "scored": "as the headline (reach 8,192, pieces of 256 bytes, fast output synapses taught from all 11 levels), 16 streams of 8,192 bytes after their lead, on the server's CPU"
+   },
+   "complete test and validation splits": "queued on the server as the GPU job word-out8, scored as the headline was and paired with its kept bits; added to this record as an amendment once scored"
+  }
+ },
+ "reading": "On the test bed, output spikes of 8 fine steps (1/16 bit) cost 0.00004 bits per byte after 24,000 updates and 0.00004 after 6,000, and save a third of the stack's pulses: 112,659 to 74,787 a byte (34%) and 111,330 to 77,456 (30%). Four steps cost 0.000005 and 0.000012, 16 steps 0.00016 and 0.00019: from 8 steps to 16 the cost grows 3.7 and 4.8 times, near the fourfold by which the variance of a rounding grows when its step doubles. At full size the output neurons of v18's best stack fire 72,956 of its 310,073 pulses a byte, and spikes of 1/16 bit bring it to 246,237 a byte, 21% fewer; on the first 131,072 bytes of the test split, scored as the headline, they cost 0.00002 bits per byte (interval -0.00003 to 0.00007, which holds zero). The output's spike was the one spike of the stack whose weight no synapse learns. A stack can fire it at 1/16 bit, with no weight changed: the score moves in its fifth decimal, for a third fewer pulses on the test bed and a fifth fewer at full size.",
+ "what it does not show": "Whether a stack that trains with coarse output spikes at the old budget, and so has 55% more pulses for its other populations on the test bed and 27% more at full size, predicts better. The price of the budget says little would come of it late in training: it falls from 0.047 at 1,500 updates to 0.010 at 12,000 and 0.0045 at 24,000 on the bed (rd-base-24k-s3), and to 0.0043 at full size (fs-st6), where one e-fold more pulses is worth that many nats a byte. No training arm is queued. loop_with_data's arm b264 and full_size_loop_pilot's arm fs-b507 measure what more pulses are worth; if they are worth something, a coarse output is the way to have part of them at no energy, and earns a pre-registered arm."
+}

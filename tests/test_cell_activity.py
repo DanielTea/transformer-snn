@@ -40,6 +40,8 @@ def test_every_level_reports_shares_and_counts():
     for level in levels:
         assert level["cells"] == 96
         assert 0 < level["share_of_cells_firing_at_a_byte"] <= 1
+        # Nine tenths of a level's spikes come from some of the cells that fire, and from no more than fire.
+        assert 0 < level["share_of_cells_sending_nine_tenths"] <= level["share_of_cells_firing_at_a_byte"]
         spread = level["share_of_bytes_a_cell_fires_at"]
         assert 0 <= spread["p10"] <= spread["median"] <= spread["p90"] <= 1
         assert level["spikes_of_a_firing_cell"]["median"] >= 1
@@ -56,3 +58,37 @@ def test_pieces_do_not_change_the_measure_and_skipped_bytes_are_left_out():
     alone = activity(model, data, 96, torch.device("cpu"), skip=40)
     assert later == alone
     assert later != whole
+
+
+def test_nine_tenths_of_the_spikes_come_from_the_strongest_cells():
+    model, data = _stack(), _bytes()
+    counts = []
+    layer = next(iter(model.granule_layers.values()))
+    handle = layer.fire.register_forward_hook(lambda _module, _inputs, fired: counts.append(fired.detach()))
+    try:
+        with torch.no_grad():
+            model.stream(data)
+    finally:
+        handle.remove()
+    fired = torch.cat(counts, dim=1).flatten(0, 1).flatten(1).float()
+    needed = 0
+    for row in fired:
+        largest, total, sent = row.sort(descending=True).values, row.sum(), 0.0
+        for cells, spikes in enumerate(largest, start=1):
+            sent += float(spikes)
+            if total > 0 and sent >= 0.9 * float(total) - 1e-6:
+                needed += cells
+                break
+    level = activity(model, data, 96, torch.device("cpu"))[0]
+    assert level["share_of_cells_sending_nine_tenths"] == needed / fired.numel()
+
+
+def test_a_cell_fires_from_half_a_threshold_of_charge_on():
+    for level in activity(_stack(), _bytes(), 32, torch.device("cpu")):
+        by_charge = level["share_of_cells_and_bytes_by_charge_in_thresholds"]
+        assert list(by_charge) == ["below -8", "-8 to -4", "-4 to -2", "-2 to -1", "-1 to 0", "0 to 0.5",
+                                   "0.5 and above"]
+        assert abs(sum(by_charge.values()) - 1) < 1e-12
+        # The cells with half a threshold of charge or more are the cells that fire.
+        assert by_charge["0.5 and above"] == level["share_of_cells_firing_at_a_byte"]
+        assert sum(by_charge[name] for name in ("below -8", "-8 to -4", "-4 to -2", "-2 to -1", "-1 to 0")) > 0

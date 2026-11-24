@@ -31,6 +31,23 @@ COLORS = {
 CORPORA = (("enwik8", "enwik8", 4_999_999), ("pg19_full", "16 complete PG-19 books", 8_404_368))
 READ_ME_START = "<!-- event-lm-leaderboard:start -->"
 READ_ME_END = "<!-- event-lm-leaderboard:end -->"
+# Sections of docs/LEADERBOARD.md written by hand for a release, between these markers, are carried over as they
+# are: they stand before the knowledge-gap section, newest first.
+KEPT_START, KEPT_END = "<!-- hand-written:start -->", "<!-- hand-written:end -->"
+
+
+def kept_sections(board_path):
+    """The hand-written sections of an existing leaderboard, each with its markers, in their order."""
+    if not board_path.exists():
+        return []
+    sections, rest = [], board_path.read_text(encoding="utf-8")
+    while KEPT_START in rest:
+        _, _, rest = rest.partition(KEPT_START)
+        body, found, rest = rest.partition(KEPT_END)
+        if not found:
+            raise ValueError("a hand-written leaderboard section has no end marker")
+        sections.append(f"{KEPT_START}\n{body.strip()}\n{KEPT_END}")
+    return sections
 DEPTH = "event_lm/depth_inhibition"
 WIDTH = "event_lm/scale_1630k"
 OPPONENT = "event_lm/opponent_steering"
@@ -945,6 +962,7 @@ def write_leaderboards(data, depth, research, transfers, warmed=None, clocks=Non
             "![Generated pulses with identical output counts within each pair](../results/figures/event_lm_residual_emissions.png)",
         ),
     }
+    paragraphs.extend(kept_sections(ROOT / "docs/LEADERBOARD.md"))
     if knowledge_gap:
         paragraphs.extend(knowledge_gap_paragraphs(knowledge_gap))
     if long_streams:

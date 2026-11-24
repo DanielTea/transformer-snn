@@ -346,6 +346,10 @@ def build_model(args):
                             granule_slope=getattr(args, "granule_slope", EventLMConfig.granule_slope),
                             granule_slope_width=getattr(args, "granule_slope_width",
                                                         EventLMConfig.granule_slope_width),
+                            granule_slope_tail=getattr(args, "granule_slope_tail",
+                                                       EventLMConfig.granule_slope_tail),
+                            granule_slope_tail_local=getattr(args, "granule_slope_tail_local",
+                                                             EventLMConfig.granule_slope_tail_local),
                             granule_delays=getattr(args, "granule_delays", EventLMConfig.granule_delays),
                             granule_relays=getattr(args, "granule_relays", EventLMConfig.granule_relays),
                             granule_traces=getattr(args, "granule_traces", EventLMConfig.granule_traces),
@@ -357,6 +361,7 @@ def build_model(args):
                             stack=getattr(args, "stack", EventLMConfig.stack),
                             stack_loop=(None if getattr(args, "stack_loop", None) is None
                                         else tuple(map(int, args.stack_loop.split(",")))),
+                            stack_skips=getattr(args, "stack_skips", EventLMConfig.stack_skips),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
@@ -367,6 +372,7 @@ def build_model(args):
                             read_forget=getattr(args, "read_forget", EventLMConfig.read_forget),
                             read_forget_rate=getattr(args, "read_forget_rate", EventLMConfig.read_forget_rate),
                             output_cap=getattr(args, "output_cap", EventLMConfig.output_cap),
+                            output_step=getattr(args, "output_step", EventLMConfig.output_step),
                             pool_fine=getattr(args, "pool_fine", EventLMConfig.pool_fine),
                             pool_rest=getattr(args, "pool_rest", EventLMConfig.pool_rest),
                             pool_rate=getattr(args, "pool_rate", EventLMConfig.pool_rate),
@@ -375,6 +381,9 @@ def build_model(args):
                             granule_gate=getattr(args, "granule_gate", EventLMConfig.granule_gate),
                             granule_self_gate=getattr(args, "granule_self_gate", EventLMConfig.granule_self_gate),
                             granule_shunt=getattr(args, "granule_shunt", EventLMConfig.granule_shunt),
+                            granule_ramp=getattr(args, "granule_ramp", EventLMConfig.granule_ramp),
+                            granule_inner_gate=getattr(args, "granule_inner_gate",
+                                                       EventLMConfig.granule_inner_gate),
                             output_tied=getattr(args, "tied_output", EventLMConfig.output_tied),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
                             granule_branches=getattr(args, "granule_branches", EventLMConfig.granule_branches),
@@ -695,6 +704,11 @@ def main():
     parser.add_argument("--stack-loop", metavar="FIRST,LAST,PASSES",
                         help="a stack whose levels FIRST to LAST every byte passes PASSES times with the same reads "
                              "and cell layers; every pass keeps its own state in a stream")
+    parser.add_argument("--stack-skips", choices=("level", "parts"),
+                        help="skip fibres: every level's read and cells also hear the stream as it stood at the "
+                             "input and after each earlier level, through a gain for every channel that starts at "
+                             "zero (level), or the read's probes, tags and payloads each through gains of their "
+                             "own (parts); every pass of a loop has its own gains")
     parser.add_argument("--read-after", help="comma-separated byte-rate blocks that a state read follows")
     parser.add_argument("--read-width", type=int, default=EventLMConfig.read_width, help="channels of a state read")
     parser.add_argument("--read-heads", type=int, default=EventLMConfig.read_heads)
@@ -804,6 +818,14 @@ def main():
                         help="with --granule-gate, the gate is a shunting conductance: k gate spikes let in the share "
                              "k / (k + gate) of the collected charge, so a body never fires more than a plain cell; "
                              "with --granule-self-gate a cell fires about k * k / (k + 1) for k thresholds")
+    parser.add_argument("--granule-ramp", type=int, default=EventLMConfig.granule_ramp, metavar="THRESHOLDS",
+                        help="with --granule-gate, the gate opens in proportion to its count and is wide open at "
+                             "THRESHOLDS of its charge (1 to 16): k gate spikes let in k parts of the collected "
+                             "charge in the most spikes the gate fires, so a body never fires more than a plain "
+                             "cell and every gate spike lets in as much as the one before")
+    parser.add_argument("--granule-inner-gate", action="store_true",
+                        help="with --granule-gate, the gate dendrite sends no spike: its steps stay inside the "
+                             "cell, as a veto's do, and only the body's spikes count as pulses")
     parser.add_argument("--granule-branches", type=int, default=EventLMConfig.granule_branches, metavar="BRANCHES",
                         help="the dendrite of every plain granule cell branches BRANCHES times: each branch sums an "
                              "equal share of the cell's fibres and passes on only the charge above a threshold of its "
@@ -829,6 +851,15 @@ def main():
                         help="the smooth threshold that cells learn from is as wide as SPIKES of a cell's spikes "
                              "(1 when omitted); with a fine pool its number of fine spikes keeps the slope as "
                              "wide as it is for whole spikes")
+    parser.add_argument("--granule-slope-tail", type=float, default=EventLMConfig.granule_slope_tail,
+                        metavar="THRESHOLDS",
+                        help="a silent threshold cell learns from how far its membrane stands below its threshold: "
+                             "the slope is one for a cell that fires and falls with the square of the distance "
+                             "below zero, to a quarter at THRESHOLDS whole thresholds; the spikes are unchanged; "
+                             "off when omitted or 0")
+    parser.add_argument("--granule-slope-tail-local", action="store_true",
+                        help="the slope far below the threshold teaches only the cell's own synapses and its rest; "
+                             "the stream and the pool learn from the cells' spikes alone")
     parser.add_argument("--granule-races", type=int, default=EventLMConfig.granule_races,
                         help="equal groups in which the cells of a granule cluster race, each for the budget")
     parser.add_argument("--granule-soften", type=float, default=EventLMConfig.granule_soften,
@@ -908,6 +939,10 @@ def main():
     parser.add_argument("--output-cap", type=int, default=EventLMConfig.output_cap, metavar="EIGHTHS",
                         help="most evidence an output neuron fires for or against its byte, in eighths of a bit; "
                              "the default of 128 ends a neuron's say at 16 bits")
+    parser.add_argument("--output-step", type=int, default=EventLMConfig.output_step, metavar="STEPS",
+                        help="a spike of a stack's output neuron stands for this many fine steps of evidence, a "
+                             "power of two: at 8 and a resolution of 16, a sixteenth of a bit in place of a 128th; "
+                             "the output then fires, and a pulse budget counts, that many times fewer spikes")
     parser.add_argument("--pool-fine", type=int, default=EventLMConfig.pool_fine, metavar="TIMES",
                         help="the neurons of state reads and cell layers count their threshold in quanta this many "
                              "times finer (four times this many to a threshold), and each spike of their pool "
@@ -954,11 +989,16 @@ def main():
     parser.add_argument("--no-carry", action="store_true", help="reset event membrane before each token")
     parser.add_argument("--heads", type=int, default=4, help="Transformer attention heads")
     parser.add_argument("--mlp-ratio", type=float, default=4.4, help="Transformer feed-forward expansion")
-    parser.add_argument("--feed-forward", choices=("swiglu", "reglu", "gelu", "relu"), default=SNNConfig.feed_forward,
+    parser.add_argument("--feed-forward", default=SNNConfig.feed_forward,
+                        choices=("swiglu", "reglu", "gelu", "relu", "rampglu", "shuntglu", "sigglu", "bilinear"),
                         help="the Transformer's feed-forward units: gated (swiglu), or as controls at the same "
                              "number of weights gated units that open only above zero (reglu), as the gated cells "
                              "of a stack do, plain smooth units (gelu), or plain units with a threshold (relu), as "
-                             "the plain cells of a stack are")
+                             "the plain cells of a stack are. Further controls of the gate: one that opens in "
+                             "proportion and is wide open at a drive of one (rampglu), a conductance that lets in "
+                             "g / (1 + g) (shuntglu), the logistic gate (sigglu), all three bounded as the gates "
+                             "of a stack's gated cells are, and the product of the two drives with no gate "
+                             "(bilinear)")
     parser.add_argument("--age-offsets", type=float, default=SNNConfig.age_offsets, metavar="RATE",
                         help="as a control the Transformer's heads address by an offset per head and distance "
                              "that moves RATE times as fast as a weight, in place of rotary phases, as the heads "
@@ -1122,6 +1162,8 @@ def main():
         parser.error("--cell-noise takes a width of more than 0 and at most 4 thresholds")
     if args.cell_noise is not None and args.cell_dither:
         parser.error("--cell-noise and --cell-dither are two kinds of random firing; choose one")
+    if args.cell_noise is not None and args.granule_slope_tail:
+        parser.error("--cell-noise teaches a cell the slope of its noise; --granule-slope-tail is another slope")
     if args.resume and (args.checkpoint is None or args.save_every < 1):
         parser.error("--resume needs --checkpoint and --save-every")
     if args.stop_at is not None and (not args.resume or not 0 < args.stop_at < args.steps

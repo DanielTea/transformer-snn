@@ -11,7 +11,7 @@ from snnformer.config import SNNConfig
 from snnformer.transformer_reference import TransformerLM, _TransformerBlock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "experiments"))
-from unit_density import density, passed_on, units_for  # noqa: E402
+from unit_density import QUARTERS, density, gate_quarters, passed_on, units_for  # noqa: E402
 
 _CFG = SNNConfig(neuron="ann", attn="transformer", position_embeddings=True)
 
@@ -38,6 +38,17 @@ def test_a_gated_unit_is_open_where_its_gate_is_above_zero():
     is_open, hard = passed_on(drive, plain=0, smooth=False)
     assert is_open.tolist() == [True, False, True, False]
     assert hard.tolist() == [1.0, 0.0, -2.0, 0.0]
+
+
+def test_a_control_gate_is_open_where_its_drive_is_above_zero():
+    gate, value = torch.tensor([0.5, -1.0, 3.0, -3.0]), torch.tensor([2.0, 2.0, -1.0, 1.0])
+    drive = torch.cat([gate, value])
+    is_open, ramp = passed_on(drive, plain=0, smooth=False, control="rampglu")
+    assert is_open.tolist() == [True, False, True, False]
+    assert ramp.tolist() == [1.0, 0.0, -1.0, 0.0]
+    torch.testing.assert_close(passed_on(drive, plain=0, smooth=False, control="shuntglu")[1],
+                               torch.tensor([2 / 3, 0.0, -0.75, 0.0]))
+    assert passed_on(drive, plain=0, smooth=True, control="bilinear")[1].tolist() == [1.0, -2.0, -3.0, -3.0]
 
 
 def test_a_plain_unit_is_open_where_its_own_drive_is_above_zero():
@@ -93,7 +104,8 @@ def test_a_block_with_silent_gates_has_no_open_unit():
     assert 0 < second["share_of_units_open_at_a_byte"] < 1
 
 
-@pytest.mark.parametrize("units, name", [("gelu", "plain, smooth"), ("relu", "plain, hard"), ("reglu", "gated, hard")])
+@pytest.mark.parametrize("units, name", [("gelu", "plain, smooth"), ("relu", "plain, hard"), ("reglu", "gated, hard"),
+                                         ("rampglu", "rampglu"), ("sigglu", "sigglu")])
 def test_other_units_are_named_and_counted(units, name):
     model = _transformer(replace(_CFG, feed_forward=units))
     rows = density(model, _windows())
@@ -110,3 +122,23 @@ def test_the_model_is_left_as_it_was():
     assert model.training
     assert all(not block.mlp_in._forward_hooks for block in _blocks(model))
     assert all(torch.equal(before[name], value) for name, value in model.state_dict().items())
+
+
+def test_open_control_gates_are_sorted_by_the_share_of_their_value_they_let_in():
+    # Gate drives against a ramp, which lets in its drive up to the whole: shut, a tenth, two fifths, 0.6, 0.9 and 3.
+    drive = torch.cat([torch.tensor([-1.0, 0.1, 0.4, 0.6, 0.9, 3.0]), torch.ones(6)])
+    assert gate_quarters(drive, "rampglu").tolist() == [1, 1, 1, 2]
+    # A shunt lets in g / (1 + g): 0.09, 0.29, 0.38, 0.47 and 0.75 of the value, never more than three quarters here.
+    assert gate_quarters(drive, "shuntglu").tolist() == [1, 3, 1, 0]
+    # The plain product lets in its drive, so a drive of 3 counts as more than three quarters.
+    assert gate_quarters(drive, "bilinear").tolist() == [1, 1, 1, 2]
+
+
+def test_the_census_reports_gate_quarters_only_for_control_gates():
+    rows = density(_transformer(replace(_CFG, feed_forward="shuntglu")), _windows())
+    for row in rows:
+        quarters = row["open_gate_states_by_the_share_let_in"]
+        assert list(quarters) == list(QUARTERS) and abs(sum(quarters.values()) - 1) < 1e-9
+        # A shunt never lets in the whole of its value.
+        assert quarters["more"] < 1
+    assert all("open_gate_states_by_the_share_let_in" not in row for row in density(_transformer(), _windows()))

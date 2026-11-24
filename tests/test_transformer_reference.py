@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 
 from snnformer.config import SNNConfig
-from snnformer.transformer_reference import TransformerLM, _sliding_window_attention
+from snnformer.transformer_reference import _GATES, TransformerLM, _sliding_window_attention
 
 
 def test_feed_forward_growth_preserves_logits_and_new_outputs_can_learn():
@@ -153,6 +153,36 @@ def test_a_unit_is_gated_or_plain_and_opens_smoothly_or_above_a_threshold():
     torch.testing.assert_close(block._feed_forward(x), x)
 
 
+def test_a_control_gate_is_bounded_or_a_plain_product():
+    torch.manual_seed(7)
+    count = lambda model: sum(parameter.numel() for parameter in model.parameters())  # noqa: E731
+    gated = TransformerLM(_FULL, **_SMALL)
+    x, tokens = torch.randn(2, 5, 16), torch.randint(32, (2, 23))
+    drive = torch.tensor([-3.0, -0.5, 0.0, 0.25, 1.0, 4.0])
+    # A proportional gate is wide open at a drive of one, a shunting gate half open there, and a product has no gate.
+    shares = {"rampglu": [0, 0, 0, 0.25, 1, 1], "shuntglu": [0, 0, 0, 0.2, 0.5, 0.8], "bilinear": drive.tolist()}
+    for name in ("rampglu", "shuntglu", "sigglu", "bilinear"):
+        model = TransformerLM(replace(_FULL, feed_forward=name), **_SMALL)
+        # A control gate has the weights of the gated unit.
+        assert count(model) == count(gated) and set(model.state_dict()) == set(gated.state_dict())
+        block = model.blocks[0]
+        assert block.gate == name and not block.plain
+        gate, value = block.mlp_in(block.mlp_norm(x)).chunk(2, dim=-1)
+        torch.testing.assert_close(block._feed_forward(x), x + block.mlp_out(_GATES[name](gate) * value))
+        if name in shares:
+            torch.testing.assert_close(_GATES[name](drive), torch.tensor(shares[name]))
+        model(tokens).square().mean().backward()
+        assert all(bool(each.mlp_in.weight.grad.any()) and bool(each.mlp_out.weight.grad.any()) for each in model.blocks)
+    # The logistic gate is half open at rest, and the three bounded gates never pass more than the value.
+    assert _GATES["sigglu"](torch.zeros(())) == 0.5
+    wide = torch.linspace(-50, 50, 401)
+    for name in ("rampglu", "shuntglu", "sigglu"):
+        opened = _GATES[name](wide)
+        assert opened.min() >= 0 and opened.max() <= 1 and (opened.diff() >= 0).all()
+    # The units of the reference keep their own gates.
+    assert all(each.gate is None for each in gated.blocks)
+
+
 def test_an_output_layer_of_its_own_learns_apart_from_the_embedding():
     torch.manual_seed(6)
     count = lambda model: sum(parameter.numel() for parameter in model.parameters())  # noqa: E731
@@ -176,6 +206,7 @@ def test_an_output_layer_of_its_own_learns_apart_from_the_embedding():
 @pytest.mark.parametrize("setting", [dict(feed_forward="tanh"), dict(age_offsets=-1.0),
                                      dict(attn="transformer_local", feed_forward="relu"),
                                      dict(attn="transformer_local", feed_forward="reglu"),
+                                     dict(attn="transformer_local", feed_forward="bilinear"),
                                      dict(attn="transformer_local", age_offsets=8.0),
                                      dict(attn="transformer_local", untied_output=True)])
 def test_the_controls_belong_to_the_full_transformer(setting):
