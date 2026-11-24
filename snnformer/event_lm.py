@@ -285,6 +285,11 @@ class EventLMConfig:
     # mean it lets in this share of the collected charge (intrinsic plasticity). The gate can then only be graded:
     # it cannot become a switch that is wide open at every byte. 0 is off.
     granule_gate_home: float = 0.0
+    # A gated cell that multiplies two drives of either sign: its gate dendrite has no rest and fires on both rails,
+    # so that the body fires the product of the gate's signed count and the value's signed charge, on the rail of the
+    # product's sign. The gate has no side on which it is shut. Its synapses keep the total strength they start with,
+    # as a homeostatic gate's do, so that the product stays in the range in which the cell learns.
+    granule_gate_signed: bool = False
     granule_veto: int = 0
     # Granule cells whose dendrite branches this many times: each branch sums an equal share of the cell's fibres and
     # passes on only the charge above a threshold of its own, and the body fires for the sum of what its branches
@@ -3721,6 +3726,14 @@ class _GranuleLayer(nn.Module):
     ramp gate that was trained without them grew its synapses until it was wide
     open at most bytes and worked as a switch; with them it can only be graded.
 
+    With ``granule_gate_signed`` as well, the gate multiplies two drives of
+    either sign: the gate dendrite has no rest and fires on both rails, so the
+    body fires the product of the gate's signed count and the value's signed
+    charge on the rail of the product's sign, and no side of the gate is shut.
+    Its synapses keep the total strength they had at the first byte, as a
+    homeostatic gate's do. In floats this product kept pace with the gated
+    unit of the Transformer as data grew, nearer to it than any bounded gate.
+
     With ``granule_inner_gate`` as well, the gate dendrite sends no spike. Its
     steps stay inside the cell, as a veto's do, and only the body's spikes
     count as pulses. A gate that fires spends ``granule_gate`` fine spikes for
@@ -3871,6 +3884,9 @@ class _GranuleLayer(nn.Module):
         cell_cap = cap if cfg.granule_cap is None else cfg.granule_cap
         self.gated, self.vetoed = cfg.granule_gate, cfg.granule_veto
         self.home = cfg.granule_gate_home if cfg.granule_gate else 0
+        self.signed = bool(cfg.granule_gate_signed and cfg.granule_gate)
+        # Gates whose synapses keep the total strength they start with: homeostatic and signed gates.
+        self.scaled = bool(self.home or self.signed)
         if self.gated:
             # ``receive`` holds the synapses of the value dendrite and ``gate`` those of the gate dendrite. A cell
             # that gates itself has none of its own: both dendrites hear through ``receive``.
@@ -3892,11 +3908,12 @@ class _GranuleLayer(nn.Module):
             # The gate of a cell that gates itself counts the cell's own charge and sends no spike, and neither
             # does an inner gate.
             self.open.dendrite = cfg.granule_self_gate or cfg.granule_inner_gate
-            if self.home:
-                # A homeostatic gate: the total strength of each gate's synapses, taken from them at the first byte
-                # the layer hears and held from then on, and how far the local rule has moved each gate's rest, in
-                # thresholds.
+            if self.scaled:
+                # The total strength of each gate's synapses, taken from them at the first byte the layer hears and
+                # held from then on.
                 self.register_buffer("gate_total", torch.zeros(clusters, cells))
+            if self.home:
+                # How far the local rule of a homeostatic gate has moved each gate's rest, in thresholds.
                 self.register_buffer("gate_shift", torch.zeros(clusters, cells))
         elif cfg.granule_veto:
             # ``veto`` holds the synapses of the veto dendrite. They start silent.
@@ -3944,7 +3961,7 @@ class _GranuleLayer(nn.Module):
     def gate_ticks(self):
         """The synapses of the gate dendrites in charge ticks. A homeostatic gate's are scaled to the total strength
         that they had at the first byte, so that learning changes what a gate hears and not how much it hears."""
-        if not self.home:
+        if not self.scaled:
             return _weight_ticks(self.gate, charge_bits=self.bits)
         total = self.gate.abs().sum(-1)
         if not self.gate_total.any():
@@ -4157,7 +4174,12 @@ class _GranuleLayer(nn.Module):
             if self.home:
                 # The local rule's shift of the rest, in quarter spikes as the rest is counted.
                 rest = rest + (self.gate_shift * _PACKET_UNITS).round() * quanta * self.quarter()
-            opened = self.open(opening - rest, quanta, smooth=self.gated * self.slope_width)
+            if self.signed:
+                # A signed gate has no rest and fires on the rail of its charge's sign: the body then fires the
+                # product of two signed numbers on the rail of the product's sign.
+                opened = opening.sign() * self.open(opening.abs(), quanta, smooth=self.gated * self.slope_width)
+            else:
+                opened = self.open(opening - rest, quanta, smooth=self.gated * self.slope_width)
             if self.home and self.training and torch.is_grad_enabled():
                 self.settle(opened, quanta)
             return self.fire(charge, quanta, opened=opened)
@@ -4686,7 +4708,7 @@ class EventLM(nn.Module):
                     object.__setattr__(read, "library", self.library)
         self.granule_layers = None
         if ((cfg.granule_self_gate or cfg.granule_shunt or cfg.granule_ramp or cfg.granule_inner_gate
-             or cfg.granule_gate_home) and cfg.granule_after is None):
+             or cfg.granule_gate_home or cfg.granule_gate_signed) and cfg.granule_after is None):
             raise ValueError("granule_self_gate, granule_shunt, granule_ramp and granule_inner_gate gate the cells of "
                              "granule layers, and there are none")
         if cfg.granule_after is not None:
@@ -4757,6 +4779,12 @@ class EventLM(nn.Module):
                 raise ValueError("a homeostatic gate is a ramp gate with synapses of its own, held open by a share "
                                  "from 0 to 1 on the mean: granule_gate_home needs granule_ramp without "
                                  "granule_self_gate")
+            if not isinstance(cfg.granule_gate_signed, bool) or cfg.granule_gate_signed and (
+                    not cfg.granule_gate or not cfg.granule_inner_gate or cfg.granule_shunt or cfg.granule_ramp
+                    or cfg.granule_self_gate):
+                raise ValueError("a signed gate multiplies: it is the inner gate of a gated cell with synapses of its "
+                                 "own, with neither a shunt nor a ramp: granule_gate_signed needs granule_gate and "
+                                 "granule_inner_gate without granule_shunt, granule_ramp or granule_self_gate")
             if cfg.granule_gate:
                 # The largest charge a body collects, times the most spikes of its gate.
                 collected = (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution) << (

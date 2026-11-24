@@ -385,6 +385,7 @@ def build_model(args):
                             granule_inner_gate=getattr(args, "granule_inner_gate",
                                                        EventLMConfig.granule_inner_gate),
                             granule_gate_home=getattr(args, "granule_gate_home", EventLMConfig.granule_gate_home),
+                            granule_gate_signed=getattr(args, "granule_gate_signed", EventLMConfig.granule_gate_signed),
                             output_tied=getattr(args, "tied_output", EventLMConfig.output_tied),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
                             granule_branches=getattr(args, "granule_branches", EventLMConfig.granule_branches),
@@ -831,6 +832,9 @@ def main():
                         help="with --granule-ramp, a homeostatic gate: its synapses keep their first total strength "
                              "and a local rule moves its rest while training until on the mean it lets in SHARE of "
                              "the collected charge (0 to 1; 0 is off)")
+    parser.add_argument("--granule-gate-signed", action="store_true",
+                        help="with --granule-gate and --granule-inner-gate, a gate that multiplies two drives of "
+                             "either sign: no rest, spikes on both rails, synapses that keep their first total")
     parser.add_argument("--granule-branches", type=int, default=EventLMConfig.granule_branches, metavar="BRANCHES",
                         help="the dendrite of every plain granule cell branches BRANCHES times: each branch sums an "
                              "equal share of the cell's fibres and passes on only the charge above a threshold of its "
