@@ -40,6 +40,19 @@ def passed_on(drive, plain, smooth, control=None):
     return gate > 0, (F.silu(gate) if smooth else F.relu(gate)) * value
 
 
+# The shares of its value that an open gate lets in, in quarters, as experiments/gate_state.py sorts a spiking gate's.
+QUARTERS = ("up to a quarter", "up to a half", "up to three quarters", "more")
+
+
+def gate_quarters(drive, control):
+    """How many open gate states of a block with a control gate let in up to a quarter, a half, three quarters, or more
+    of their value, from the drive of its units [..., 2 units]."""
+    gate = drive.chunk(2, dim=-1)[0]
+    share = _GATES[control](gate)[gate > 0]
+    edges = torch.tensor([0.25, 0.5, 0.75], dtype=share.dtype, device=share.device)
+    return torch.bincount(torch.bucketize(share, edges), minlength=len(QUARTERS)).cpu()
+
+
 def units_for(passed, share=0.9):
     """Per byte, the share of units whose largest outputs add up to ``share`` of what all units pass on."""
     size = passed.abs().sort(dim=-1, descending=True).values
@@ -52,7 +65,7 @@ def units_for(passed, share=0.9):
 def density(model, windows, batch=16):
     """Per block: how many units are open, over the second half of every window of ``windows`` [windows, bytes]."""
     blocks = [module for module in model.modules() if isinstance(module, _TransformerBlock)]
-    tallies = [{"bytes": 0, "open": 0.0, "per_unit": None, "needed": 0.0} for _ in blocks]
+    tallies = [{"bytes": 0, "open": 0.0, "per_unit": None, "needed": 0.0, "quarters": None} for _ in blocks]
 
     def hook(block, tally):
         def record(_module, _inputs, drive):
@@ -64,6 +77,9 @@ def density(model, windows, batch=16):
             per_unit = is_open.sum(0).cpu()
             tally["per_unit"] = per_unit if tally["per_unit"] is None else tally["per_unit"] + per_unit
             tally["needed"] += units_for(passed.reshape(-1, passed.shape[-1])).sum().item()
+            if block.gate:
+                quarters = gate_quarters(drive.detach()[:, drive.shape[1] // 2:], block.gate)
+                tally["quarters"] = quarters if tally["quarters"] is None else tally["quarters"] + quarters
         return record
 
     handles = [block.mlp_in.register_forward_hook(hook(block, tally)) for block, tally in zip(blocks, tallies)]
@@ -89,6 +105,10 @@ def density(model, windows, batch=16):
                                                  "p90": float(np.quantile(share, 0.9))},
             "share_of_units_passing_nine_tenths": tally["needed"] / tally["bytes"],
         })
+        if tally["quarters"] is not None:
+            counts = tally["quarters"].double()
+            rows[-1]["open_gate_states_by_the_share_let_in"] = {
+                name: float(count / counts.sum().clamp_min(1)) for name, count in zip(QUARTERS, counts)}
     return rows
 
 
