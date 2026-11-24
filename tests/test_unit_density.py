@@ -40,6 +40,17 @@ def test_a_gated_unit_is_open_where_its_gate_is_above_zero():
     assert hard.tolist() == [1.0, 0.0, -2.0, 0.0]
 
 
+def test_a_control_gate_is_open_where_its_drive_is_above_zero():
+    gate, value = torch.tensor([0.5, -1.0, 3.0, -3.0]), torch.tensor([2.0, 2.0, -1.0, 1.0])
+    drive = torch.cat([gate, value])
+    is_open, ramp = passed_on(drive, plain=0, smooth=False, control="rampglu")
+    assert is_open.tolist() == [True, False, True, False]
+    assert ramp.tolist() == [1.0, 0.0, -1.0, 0.0]
+    torch.testing.assert_close(passed_on(drive, plain=0, smooth=False, control="shuntglu")[1],
+                               torch.tensor([2 / 3, 0.0, -0.75, 0.0]))
+    assert passed_on(drive, plain=0, smooth=True, control="bilinear")[1].tolist() == [1.0, -2.0, -3.0, -3.0]
+
+
 def test_a_plain_unit_is_open_where_its_own_drive_is_above_zero():
     drive = torch.tensor([1.0, -1.0, 0.5])
     is_open, hard = passed_on(drive, plain=3, smooth=False)
@@ -93,7 +104,8 @@ def test_a_block_with_silent_gates_has_no_open_unit():
     assert 0 < second["share_of_units_open_at_a_byte"] < 1
 
 
-@pytest.mark.parametrize("units, name", [("gelu", "plain, smooth"), ("relu", "plain, hard"), ("reglu", "gated, hard")])
+@pytest.mark.parametrize("units, name", [("gelu", "plain, smooth"), ("relu", "plain, hard"), ("reglu", "gated, hard"),
+                                         ("rampglu", "rampglu"), ("sigglu", "sigglu")])
 def test_other_units_are_named_and_counted(units, name):
     model = _transformer(replace(_CFG, feed_forward=units))
     rows = density(model, _windows())

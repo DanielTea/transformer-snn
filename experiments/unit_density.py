@@ -24,16 +24,19 @@ from torch.nn import functional as F
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import _atomic_output, resolve_device  # noqa: E402
 from snnformer.event_lm import EventLM  # noqa: E402
-from snnformer.transformer_reference import _TransformerBlock  # noqa: E402
+from snnformer.transformer_reference import _GATES, _TransformerBlock  # noqa: E402
 from train_event_lm import load_checkpoint  # noqa: E402
 from train_lm import load_splits  # noqa: E402
 
 
-def passed_on(drive, plain, smooth):
-    """Which units are open, and what each passes on, from the drive of a block's units as [..., units or 2 units]."""
+def passed_on(drive, plain, smooth, control=None):
+    """Which units are open, and what each passes on, from the drive of a block's units as [..., units or 2 units].
+    A unit counts as open while the drive of its gate is above zero, under a control gate (``control``) as well."""
     if plain:
         return drive > 0, F.gelu(drive) if smooth else F.relu(drive)
     gate, value = drive.chunk(2, dim=-1)
+    if control:
+        return gate > 0, _GATES[control](gate) * value
     return gate > 0, (F.silu(gate) if smooth else F.relu(gate)) * value
 
 
@@ -53,7 +56,8 @@ def density(model, windows, batch=16):
 
     def hook(block, tally):
         def record(_module, _inputs, drive):
-            is_open, passed = passed_on(drive.detach()[:, drive.shape[1] // 2:], block.plain, block.smooth)
+            is_open, passed = passed_on(drive.detach()[:, drive.shape[1] // 2:], block.plain, block.smooth,
+                                        block.gate)
             is_open = is_open.reshape(-1, is_open.shape[-1]).to(drive.dtype)
             tally["bytes"] += is_open.shape[0]
             tally["open"] += is_open.sum().item()
@@ -79,7 +83,7 @@ def density(model, windows, batch=16):
         share = (tally["per_unit"] / tally["bytes"]).numpy()
         rows.append({
             "units": units,
-            "unit": ("plain" if block.plain else "gated") + (", smooth" if block.smooth else ", hard"),
+            "unit": block.gate or ("plain" if block.plain else "gated") + (", smooth" if block.smooth else ", hard"),
             "share_of_units_open_at_a_byte": tally["open"] / (tally["bytes"] * units),
             "share_of_bytes_a_unit_is_open_at": {"median": float(np.median(share)), "p10": float(np.quantile(share, 0.1)),
                                                  "p90": float(np.quantile(share, 0.9))},

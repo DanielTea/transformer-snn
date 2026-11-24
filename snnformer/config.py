@@ -53,7 +53,8 @@ class SNNConfig:
     mlp: str = "cdglu"
     mlp_ratio: float = 4.0
     # The reference Transformer's units: gated "swiglu", and as controls at the same number of weights "reglu" (gated,
-    # open only above zero), "gelu" (plain and smooth) and "relu" (plain with a threshold).
+    # open only above zero), "gelu" (plain and smooth) and "relu" (plain with a threshold). Further controls of the
+    # gate: "rampglu", "shuntglu" and "sigglu" are bounded gates, "bilinear" is the product of the two drives.
     feed_forward: str = "swiglu"
     age_offsets: float = 0.0  # above 0 the reference addresses by an offset per head and distance at this rate, without RoPE
     untied_output: bool = False  # the reference's output layer has weights of its own, not the embedding's

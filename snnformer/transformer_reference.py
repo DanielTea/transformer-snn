@@ -138,12 +138,20 @@ class _CausalAttention(nn.Module):
 
 
 # The feed-forward units by name: whether a unit is gated, and whether it opens smoothly.
-_UNITS = {"swiglu": (True, True), "reglu": (True, False), "gelu": (False, True), "relu": (False, False)}
+_UNITS = {"swiglu": (True, True), "reglu": (True, False), "gelu": (False, True), "relu": (False, False),
+          "rampglu": (True, False), "shuntglu": (True, False), "sigglu": (True, True), "bilinear": (True, True)}
+# Further controls of the gated unit, by what the gate does with its drive. Three gates are bounded and never pass
+# more than their value: one opens in proportion and is wide open at a drive of one ("rampglu"), one is a
+# conductance that lets in g / (1 + g) of the value ("shuntglu"), as the gates of a stack's gated cells do, and
+# one is the logistic gate, half open at rest ("sigglu"). The last is no gate at all: the product of the two
+# drives, of either sign ("bilinear").
+_GATES = {"rampglu": lambda drive: drive.clamp(0, 1), "shuntglu": lambda drive: F.relu(drive) / (1 + F.relu(drive)),
+          "sigglu": torch.sigmoid, "bilinear": lambda drive: drive}
 
 
 class _TransformerBlock(nn.Module):
     def __init__(self, dim: int, heads: int, hidden: int, window: int | None, *, plain: int = 0, smooth: bool = True,
-                 ages: int = 0, age_rate: float = 1.0) -> None:
+                 ages: int = 0, age_rate: float = 1.0, gate: str | None = None) -> None:
         super().__init__()
         self.attn_norm = nn.LayerNorm(dim)
         self.attn = _CausalAttention(dim, heads, window, ages, age_rate)
@@ -151,6 +159,8 @@ class _TransformerBlock(nn.Module):
         # ``plain`` units each have one row of input weights. A gated unit has two rows: one opens the unit and
         # the other is what it passes on. A unit opens smoothly, or not at all below a threshold at zero.
         self.plain, self.smooth = plain, smooth
+        # The name of a control gate in ``_GATES``, in place of the gate that ``smooth`` picks.
+        self.gate = gate
         self.mlp_in = nn.Linear(dim, plain or 2 * hidden, bias=False)
         self.mlp_out = nn.Linear(plain or hidden, dim, bias=False)
 
@@ -162,6 +172,8 @@ class _TransformerBlock(nn.Module):
             drive = self.mlp_in(self.mlp_norm(x))
             return x + self.mlp_out(F.gelu(drive) if self.smooth else F.relu(drive))
         gate, value = self.mlp_in(self.mlp_norm(x)).chunk(2, dim=-1)
+        if self.gate:
+            return x + self.mlp_out(_GATES[self.gate](gate) * value)
         return x + self.mlp_out((F.silu(gate) if self.smooth else F.relu(gate)) * value)
 
     def forward(self, x: torch.Tensor, rope: tuple[torch.Tensor, torch.Tensor] | None) -> torch.Tensor:
@@ -222,8 +234,8 @@ class TransformerLM(nn.Module):
         self.cfg = cfg
         self.ctx = ctx
         if cfg.feed_forward not in _UNITS or cfg.age_offsets < 0:
-            raise ValueError("the feed-forward units are swiglu, reglu, gelu or relu and the rate of the age offsets "
-                             "is not negative")
+            raise ValueError("the feed-forward units are swiglu, reglu, gelu or relu, or a control gate (rampglu, "
+                             "shuntglu, sigglu, bilinear), and the rate of the age offsets is not negative")
         if (cfg.feed_forward != "swiglu" or cfg.age_offsets or cfg.untied_output) and cfg.attn != "transformer":
             raise ValueError("other units, age offsets and an output layer of its own are controls of the full "
                              "Transformer")
@@ -232,7 +244,8 @@ class TransformerLM(nn.Module):
         hidden = max(1, round(2 * cfg.mlp_ratio * dim / 3))
         gated, smooth = _UNITS[cfg.feed_forward]
         options = dict(plain=0 if gated else max(1, round(cfg.mlp_ratio * dim)), smooth=smooth,
-                       ages=ctx if cfg.age_offsets else 0, age_rate=cfg.age_offsets or 1.0)
+                       ages=ctx if cfg.age_offsets else 0, age_rate=cfg.age_offsets or 1.0,
+                       gate=cfg.feed_forward if cfg.feed_forward in _GATES else None)
         self.tok = nn.Embedding(vocab, dim)
         window = cfg.local_window if cfg.attn in ("transformer_local", "transformer_event", "transformer_successor") else None
         if window is not None and window < 1:
