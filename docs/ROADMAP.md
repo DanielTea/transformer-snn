@@ -235,7 +235,15 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    the laptop's seed was not run. Untried: a lower rate or a decay on the gate's drive, and a set point, a resting
    level that keeps each gate open at about half of the bytes as cortical neurons keep their excitability in
    range. They wait for the float diagnostic below: if a gated unit earns nothing at this size in floats, no spike
-   form of it can.
+   form of it can. A design for that step, written down for v20 and not yet built: homeostatic gates. The
+   proportional gate failed because its synapses grew until the range rule shrank 9,000 to 14,000 neurons, so a set
+   point on the rest alone would chase that growth. Cortex holds a neuron in range by two mechanisms at once:
+   synaptic scaling, which keeps the total strength of its synapses fixed, and intrinsic plasticity, which moves
+   its excitability toward a target rate. Here that is a gate whose synapses keep their initial total and whose
+   rest a local rule moves, outside the gradient and only while training, toward an open share of one half on
+   the mean, so that a gate can only be graded. It is built if the full-size unit diagnostic prices the unit at
+   half of the distance or more (`full_size_units_in_floats.json`) and `bounded_gates_in_floats.json` does not
+   rule out bounded gates.
 
    Two controls in floats would say whether the unit also explains the gap late in training, since the walk priced
    it at 9,000 updates: a Transformer with plain units on the test bed at 6,000 and 24,000 updates (does it flatten
