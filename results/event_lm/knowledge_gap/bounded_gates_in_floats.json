@@ -14,5 +14,378 @@
  "training": "As plain_units_with_data: the test bed's Transformer (--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 4; windows of 256 bytes in batches of 16; warmup 300 and a cosine over the run; weight decay 0.05; rotated Adam 50; averaged weights 0.999; the training mixture) at a peak rate of 1.2e-3, as separate runs of 6,000 and 24,000 updates, seed 20001 and then seed 20002, on the server's CPU with 8 threads a run and three runs side by side, after that study's remaining runs. Code: 175cf0a, in which the reference's own units compute what they did.",
  "measure": "As plain_units_with_data: experiments/eval_taught_reference.py on the first 2,000,000 validation bytes, in windows that hold 240 bytes of history and score 16, averaged weights, bits kept, on the CPU. Pairs by experiments/compare_stream_scores.py, and experiments/gap_by_piece.py (near 240, far 8,192) for the bytes in new contexts. On the first 65,536 validation bytes of every arm at both lengths: experiments/unit_density.py (the share of units whose gate's drive is above zero, and the share that passes nine tenths of a block's output), and for the three bounded gates how far an open gate stands open: the share of open gate states that let in more than three quarters of the value, the measure by which the stack's gates were found to work as switches.",
  "reading": "An arm's gap is its bits minus swiglu's at the same length and seed, and its growth is its gap at 24,000 updates less its gap at 6,000, read over the mean of both seeds with the marks of plain_units_with_data: growth from 0.015 on, none below 0.005, unclear between. On the first seed plain rectifying units grew by 0.043, plain smooth units by 0.027 and reglu by 0.006. (A) If all three bounded gates grow and reglu does not, a bound on the gate loses the gated unit's lead with data in floats as in the stack: the stack's gated cells failed for what they compute, the next spiking gate multiplies without a bound (the multiplying gate under the pool that lifts the ceiling, with no shunt and no ramp), and a shunt, a ramp or a set point is not tried again. (B) If no bounded gate grows, a bound costs nothing in floats: the stack's gated cells failed for how a gate learns through spikes, bounded gates stay candidates, and the work goes to the gate's learning (what turns a graded gate into a switch, the range rule, a decay or a set point on the gate's drive). (C) If the bounded gates differ, each is read by itself, and a gate that does not grow names the spiking form to try: the logistic gate a gate with a set point at half open, the shunt or the ramp the stack's own forms with another way to learn. The product is read by itself: if it does not grow, a cell may multiply two drives of either sign and needs no side on which its gate is shut; if it grows, the gate must be shut on one side. How far the open gates of a bounded arm stand open says whether a gate turns into a switch in floats as it does in spikes; it is reported and decides nothing. Reported beside all of it: each arm's gap at both lengths on new contexts, and the census.",
- "seen_before_recording": "The first seed of plain_units_with_data, complete: after 6,000 updates relu 1.634478, gelu 1.642148, reglu 1.659656, swiglu 1.666476; after 24,000 updates relu 1.457303, gelu 1.449175, reglu 1.445502, swiglu 1.446081, and relu at 2.4e-3 1.452757; of the second seed relu after 6,000 updates, 1.636921. The stack's gated-cell verdicts and the table of the paper named above. Dry runs of 60 updates with a warmup of 10 on a laptop CPU (validation on 8 batches of windows: swiglu 4.2052, reglu 4.2061, rampglu 4.2001, shuntglu 4.2430, sigglu 4.3283, bilinear 4.1654). A check of the stack's own multiplying gate under the lifting pool had started on the laptop and had shown nothing yet. No run of this study has started."
+ "seen_before_recording": "The first seed of plain_units_with_data, complete: after 6,000 updates relu 1.634478, gelu 1.642148, reglu 1.659656, swiglu 1.666476; after 24,000 updates relu 1.457303, gelu 1.449175, reglu 1.445502, swiglu 1.446081, and relu at 2.4e-3 1.452757; of the second seed relu after 6,000 updates, 1.636921. The stack's gated-cell verdicts and the table of the paper named above. Dry runs of 60 updates with a warmup of 10 on a laptop CPU (validation on 8 batches of windows: swiglu 4.2052, reglu 4.2061, rampglu 4.2001, shuntglu 4.2430, sigglu 4.3283, bilinear 4.1654). A check of the stack's own multiplying gate under the lifting pool had started on the laptop and had shown nothing yet. No run of this study has started.",
+ "result": {
+  "recorded_utc": "2026-11-24T19:35:10Z",
+  "bpb (fast_output_synapses row 0, the first 2,000,000 validation bytes)": {
+   "bg-rampglu-6k-s1": 1.68985,
+   "bg-rampglu-24k-s1": 1.46941,
+   "bg-rampglu-6k-s2": 1.655831,
+   "bg-rampglu-24k-s2": 1.465268,
+   "bg-shuntglu-6k-s1": 1.705528,
+   "bg-shuntglu-24k-s1": 1.475268,
+   "bg-shuntglu-6k-s2": 1.66419,
+   "bg-shuntglu-24k-s2": 1.471669,
+   "bg-sigglu-6k-s1": 1.666244,
+   "bg-sigglu-24k-s1": 1.456247,
+   "bg-sigglu-6k-s2": 1.678054,
+   "bg-sigglu-24k-s2": 1.450787,
+   "bg-bilinear-6k-s1": 1.670496,
+   "bg-bilinear-24k-s1": 1.446678,
+   "bg-bilinear-6k-s2": 1.695459,
+   "bg-bilinear-24k-s2": 1.450766
+  },
+  "gaps to swiglu, the arm minus the reference (compare_stream_scores; new contexts by gap_by_piece, near 240, far 8,192)": {
+   "rampglu s1": {
+    "6k": {
+     "gap": 0.02337,
+     "interval_95": [
+      0.02247,
+      0.0243
+     ],
+     "new contexts": 0.0181
+    },
+    "24k": {
+     "gap": 0.02333,
+     "interval_95": [
+      0.02241,
+      0.02427
+     ],
+     "new contexts": 0.0243
+    }
+   },
+   "rampglu s2": {
+    "6k": {
+     "gap": 0.02203,
+     "interval_95": [
+      0.02112,
+      0.02295
+     ],
+     "new contexts": 0.0227
+    },
+    "24k": {
+     "gap": 0.02638,
+     "interval_95": [
+      0.02551,
+      0.02728
+     ],
+     "new contexts": 0.0285
+    }
+   },
+   "shuntglu s1": {
+    "6k": {
+     "gap": 0.03905,
+     "interval_95": [
+      0.03803,
+      0.04008
+     ],
+     "new contexts": 0.0305
+    },
+    "24k": {
+     "gap": 0.02919,
+     "interval_95": [
+      0.02826,
+      0.03009
+     ],
+     "new contexts": 0.0353
+    }
+   },
+   "shuntglu s2": {
+    "6k": {
+     "gap": 0.03039,
+     "interval_95": [
+      0.02934,
+      0.0314
+     ],
+     "new contexts": 0.0398
+    },
+    "24k": {
+     "gap": 0.03278,
+     "interval_95": [
+      0.03186,
+      0.03368
+     ],
+     "new contexts": 0.0401
+    }
+   },
+   "sigglu s1": {
+    "6k": {
+     "gap": -0.00023,
+     "interval_95": [
+      -0.00148,
+      0.00096
+     ],
+     "new contexts": 0.0151
+    },
+    "24k": {
+     "gap": 0.01017,
+     "interval_95": [
+      0.0092,
+      0.01105
+     ],
+     "new contexts": 0.0107
+    }
+   },
+   "sigglu s2": {
+    "6k": {
+     "gap": 0.04426,
+     "interval_95": [
+      0.04322,
+      0.04523
+     ],
+     "new contexts": 0.0439
+    },
+    "24k": {
+     "gap": 0.0119,
+     "interval_95": [
+      0.01098,
+      0.01282
+     ],
+     "new contexts": 0.0136
+    }
+   },
+   "bilinear s1": {
+    "6k": {
+     "gap": 0.00402,
+     "interval_95": [
+      0.00307,
+      0.00496
+     ],
+     "new contexts": 0.0003
+    },
+    "24k": {
+     "gap": 0.0006,
+     "interval_95": [
+      -0.0003,
+      0.00148
+     ],
+     "new contexts": 0.0006
+    }
+   },
+   "bilinear s2": {
+    "6k": {
+     "gap": 0.06166,
+     "interval_95": [
+      0.0603,
+      0.06299
+     ],
+     "new contexts": 0.0455
+    },
+    "24k": {
+     "gap": 0.01188,
+     "interval_95": [
+      0.01093,
+      0.01278
+     ],
+     "new contexts": 0.0121
+    }
+   }
+  },
+  "growth, the gap at 24,000 updates less the gap at 6,000 (sched/bin/bg-decide.sh)": {
+   "rampglu": {
+    "per seed": [
+     -5e-05,
+     0.00435
+    ],
+    "mean": 0.00215,
+    "reads as": "none"
+   },
+   "shuntglu": {
+    "per seed": [
+     -0.00986,
+     0.00239
+    ],
+    "mean": -0.00374,
+    "reads as": "none"
+   },
+   "sigglu": {
+    "per seed": [
+     0.0104,
+     -0.03235
+    ],
+    "mean": -0.01098,
+    "reads as": "none"
+   },
+   "bilinear": {
+    "per seed": [
+     -0.00342,
+     -0.04978
+    ],
+    "mean": -0.0266,
+    "reads as": "none"
+   },
+   "reglu": {
+    "per seed": [
+     0.00624,
+     0.01012
+    ],
+    "mean": 0.00818,
+    "reads as": "unclear"
+   }
+  },
+  "census of open units and gate states (experiments/unit_density.py from 1de9142, the first 65,536 validation bytes)": {
+   "rampglu-6k-s1": {
+    "share of units open at a byte": 0.2506,
+    "share of units passing nine tenths": 0.1244,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.3183,
+     "up to a half": 0.2159,
+     "up to three quarters": 0.148,
+     "more": 0.3179
+    }
+   },
+   "rampglu-24k-s1": {
+    "share of units open at a byte": 0.2064,
+    "share of units passing nine tenths": 0.106,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.2638,
+     "up to a half": 0.1843,
+     "up to three quarters": 0.1354,
+     "more": 0.4166
+    }
+   },
+   "shuntglu-6k-s1": {
+    "share of units open at a byte": 0.2984,
+    "share of units passing nine tenths": 0.1632,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.3242,
+     "up to a half": 0.4301,
+     "up to three quarters": 0.2411,
+     "more": 0.0046
+    }
+   },
+   "shuntglu-24k-s1": {
+    "share of units open at a byte": 0.2468,
+    "share of units passing nine tenths": 0.1373,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.2471,
+     "up to a half": 0.3731,
+     "up to three quarters": 0.3494,
+     "more": 0.0305
+    }
+   },
+   "sigglu-6k-s1": {
+    "share of units open at a byte": 0.1391,
+    "share of units passing nine tenths": 0.5316,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.0,
+     "up to a half": 0.0,
+     "up to three quarters": 0.7778,
+     "more": 0.2222
+    }
+   },
+   "sigglu-24k-s1": {
+    "share of units open at a byte": 0.1042,
+    "share of units passing nine tenths": 0.4221,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.0,
+     "up to a half": 0.0,
+     "up to three quarters": 0.6161,
+     "more": 0.3839
+    }
+   },
+   "bilinear-6k-s1": {
+    "share of units open at a byte": 0.4973,
+    "share of units passing nine tenths": 0.4594,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.3479,
+     "up to a half": 0.2229,
+     "up to three quarters": 0.1525,
+     "more": 0.2767
+    }
+   },
+   "bilinear-24k-s1": {
+    "share of units open at a byte": 0.4985,
+    "share of units passing nine tenths": 0.4465,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.3453,
+     "up to a half": 0.1963,
+     "up to three quarters": 0.1373,
+     "more": 0.3211
+    }
+   },
+   "rampglu-6k-s2": {
+    "share of units open at a byte": 0.2535,
+    "share of units passing nine tenths": 0.1259,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.3204,
+     "up to a half": 0.2142,
+     "up to three quarters": 0.1477,
+     "more": 0.3178
+    }
+   },
+   "rampglu-24k-s2": {
+    "share of units open at a byte": 0.2119,
+    "share of units passing nine tenths": 0.1094,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.2626,
+     "up to a half": 0.1799,
+     "up to three quarters": 0.1352,
+     "more": 0.4223
+    }
+   },
+   "shuntglu-6k-s2": {
+    "share of units open at a byte": 0.3103,
+    "share of units passing nine tenths": 0.1703,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.3178,
+     "up to a half": 0.4273,
+     "up to three quarters": 0.2506,
+     "more": 0.0043
+    }
+   },
+   "shuntglu-24k-s2": {
+    "share of units open at a byte": 0.2544,
+    "share of units passing nine tenths": 0.1419,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.2443,
+     "up to a half": 0.3644,
+     "up to three quarters": 0.36,
+     "more": 0.0313
+    }
+   },
+   "sigglu-6k-s2": {
+    "share of units open at a byte": 0.1303,
+    "share of units passing nine tenths": 0.5244,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.0,
+     "up to a half": 0.0,
+     "up to three quarters": 0.7789,
+     "more": 0.2211
+    }
+   },
+   "sigglu-24k-s2": {
+    "share of units open at a byte": 0.0989,
+    "share of units passing nine tenths": 0.4101,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.0,
+     "up to a half": 0.0,
+     "up to three quarters": 0.6181,
+     "more": 0.3819
+    }
+   },
+   "bilinear-6k-s2": {
+    "share of units open at a byte": 0.5021,
+    "share of units passing nine tenths": 0.4638,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.3408,
+     "up to a half": 0.2292,
+     "up to three quarters": 0.1517,
+     "more": 0.2782
+    }
+   },
+   "bilinear-24k-s2": {
+    "share of units open at a byte": 0.5013,
+    "share of units passing nine tenths": 0.4549,
+    "open gate states by the share let in, mean of the six blocks": {
+     "up to a quarter": 0.3452,
+     "up to a half": 0.2081,
+     "up to three quarters": 0.1375,
+     "more": 0.3092
+    }
+   }
+  },
+  "verdict": "Reading (B) holds: no bounded gate grows. On the mean of both seeds the ramp gate's gap to the gated reference grows by +0.0022, the shunt's by -0.0037 and the logistic gate's by -0.0110, all under the mark of 0.005; reglu grows by +0.0082 (unclear). The product of the two drives does not grow either (-0.0266).",
+  "reading": "A bound on the gate costs nothing as data grows in floats, so by this record's reading the stack's gated cells failed for how a gate learns through spikes, not for what a bounded gate computes: bounded gates stay candidates, and the work goes to the gate's learning. The homeostatic gate built for v20 is that work (synaptic scaling and a set point at half open), and sched/bin/bg-decide.sh released its screen (homeostatic_gates_with_data.json) under this reading at 19:30 UTC. A bound is not free in level, though: after 24,000 updates on the mean of the seeds the ramp gate is 0.0249 behind the gated reference, the shunt 0.0310, the logistic gate 0.0110 and the product 0.0062 (the plain rectifying unit 0.0149 and growing, reglu 0.0048, the plain smooth unit 0.0020, plain_units_with_data.json): a constant cost that does not grow. The product does not grow, so by the reading a cell may multiply two drives of either sign and needs no side on which its gate is shut; it is the nearest of the four to the reference. The census sorts open gate states by the share of the value that they let in: the ramp's open states in the last quarter go from 32% after 6,000 updates to 42% after 24,000, so in floats too a ramp drifts toward a switch with data, yet it does not fall behind; the spiking ramp drifted further (three quarters and more) as its synapses grew into the range rule, which is a failure of learning through spikes. The logistic gate's open states lie in the upper half by construction, 38% in the last quarter after 24,000 updates; the shunt's almost never reach it (3%)."
+ }
 }
