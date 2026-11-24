@@ -18,5 +18,251 @@
  "training": "As full.sh trains a full-size pilot: 24,000 updates of 8 windows of 512 bytes (98.3M training bytes), 1,000 warmup updates, cosine over the run, peak rate 3e-4 (1.2e-3 for fs-float12), weight decay 0.05, rotated Adam, weights averaged at 0.999, seed 20001. Code: the copy of 4ddd867, in which the plain stack trains bit for bit as in the pilots' copy. Server GPU 0 in the window of 2026-11-23/24 after the pair's stack is scored, fs-coarse3 and fs-float3 side by side on the one GPU (two full-size pilots share a GPU at the throughput of one after the other); the second night's arms in the window of 2026-11-24/25.",
  "measure": "As every full-size pilot: averaged weights on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, each arm as a stream at its trained reach, the bits of every piece kept (experiments/eval_stream.py). Pairs by experiments/gap_by_piece.py (near 496, far 8,192): fs-float3 against fs-coarse3, and each of them against fs-st3 and fs-tf3. Also recorded: the pulses a byte, the training time, and the trainer's validation of both arms at 6,000, 12,000, 18,000 and 24,000 updates (16 windows a reading, so noisy).",
  "reading": "One seed each: these readings direct the next experiments and are not findings about the parts. Two differences are read. The clean one, on one pool, is fs-coarse3 minus fs-float3: what spikes in reads and cells cost late on the coarse pool. The one that decides is fs-st3 minus fs-float3: what the model itself would gain if its reads and cells answered in real numbers. The model counts the thresholds of reads and cells in quanta 16 times finer than the coarse pool's and has an output pool, which no stand-in can have, so this difference is not clean, and both are reported. If fs-float3 is less than 0.005 ahead of fs-st3, spikes in reads and cells cost the model nothing after 24,000 updates at full size, as after 9,000: the distance that is left, fs-float3 minus fs-tf3, is the layout's, the half stand-ins are not run, and the next diagnostic walks the layout in floats at 24,000 updates (the unit, the output's own weights). If it is 0.015 or more ahead, spikes cost the model late: fs-softreads3 and fs-softcells3 split the cost between reads and cells on the second night, and the next spiking work goes to the learning rule of the part that carries more of it. Between the two marks the cost is unclear at one seed; the half stand-ins are run and reported. fs-float12 asks a second question: the stand-in gains from the rate if it is at least 0.015 better than fs-float3 (the Transformer gains 0.0295 from 3e-4 to 1.2e-3, the spiking stack 0.0218 at 6e-4 and nothing at 1.2e-3); if it does, spike rules cap the rate at which the stack can learn. Reported either way: fs-st3 minus fs-coarse3 (what the pool of fine quanta is worth after 24,000 updates; v15 measured 0.0126 after 12,000), the splits by context, and whether the stand-in's lead grows along the run as it did on the test bed.",
- "seen_before_recording": "v15's walk at 9,000 updates and the test bed's stand-in at 6,000 and 24,000 updates, as cited above; full_size_rate_pilot's results; the plain-units diagnostic's first seed. Dry runs of two updates of 2 x 64 bytes on a laptop CPU for all four arms: the parameter counts above, and at the start the spiking arm fires 256,881 pulses a byte, the arm with soft reads 32,127, the arm with soft cells 249,442 and the stand-in with both 24,651 (a soft read and a soft cell fire nothing, so the budget of 310,000 does not bind a stand-in). The stand-in was scored as a stream on 20,000 bytes to see that the scorer takes it. A launch check of the runner on the server's CPU. No arm has trained."
+ "seen_before_recording": "v15's walk at 9,000 updates and the test bed's stand-in at 6,000 and 24,000 updates, as cited above; full_size_rate_pilot's results; the plain-units diagnostic's first seed. Dry runs of two updates of 2 x 64 bytes on a laptop CPU for all four arms: the parameter counts above, and at the start the spiking arm fires 256,881 pulses a byte, the arm with soft reads 32,127, the arm with soft cells 249,442 and the stand-in with both 24,651 (a soft read and a soft cell fire nothing, so the budget of 310,000 does not bind a stand-in). The stand-in was scored as a stream on 20,000 bytes to see that the scorer takes it. A launch check of the runner on the server's CPU. No arm has trained.",
+ "result": {
+  "recorded_utc": "2026-11-24T06:29:05Z",
+  "bpb": {
+   "fs-coarse3": 1.347508,
+   "fs-float3": 1.334706,
+   "fs-st3": 1.34164,
+   "fs-tf3": 1.30572
+  },
+  "paired, the second minus the first (compare_stream_scores)": {
+   "fs-float3 minus fs-coarse3 (the clean difference)": {
+    "gap": -0.0128,
+    "interval_95": [
+     -0.01364,
+     -0.01195
+    ]
+   },
+   "fs-float3 minus fs-st3 (the one that decides)": {
+    "gap": -0.00694,
+    "interval_95": [
+     -0.00781,
+     -0.00609
+    ]
+   },
+   "fs-float3 minus fs-tf3 (what is left)": {
+    "gap": 0.02899,
+    "interval_95": [
+     0.02749,
+     0.03046
+    ]
+   },
+   "fs-coarse3 minus fs-st3 (the pool of fine quanta)": {
+    "gap": 0.00587,
+    "interval_95": [
+     0.005,
+     0.00667
+    ]
+   },
+   "fs-coarse3 minus fs-tf3": {
+    "gap": 0.04179,
+    "interval_95": [
+     0.0403,
+     0.04324
+    ]
+   }
+  },
+  "by context (gap_by_piece, near 496, far 8,192; below zero favours the second)": {
+   "fs-float3 minus fs-coarse3": {
+    "copyable near": {
+     "share_of_bytes": 0.0987,
+     "gap": -0.0309,
+     "interval_95": [
+      -0.0409,
+      -0.0225
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0862,
+     "gap": -0.0356,
+     "interval_95": [
+      -0.0491,
+      -0.0222
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.1331,
+     "interval_95": [
+      0.0685,
+      0.1969
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0183,
+     "interval_95": [
+      -0.0215,
+      -0.0155
+     ]
+    }
+   },
+   "fs-float3 minus fs-st3": {
+    "copyable near": {
+     "share_of_bytes": 0.0987,
+     "gap": -0.0208,
+     "interval_95": [
+      -0.0311,
+      -0.0105
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0862,
+     "gap": -0.0287,
+     "interval_95": [
+      -0.0437,
+      -0.0152
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.1235,
+     "interval_95": [
+      0.0588,
+      0.1936
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.012,
+     "interval_95": [
+      -0.0152,
+      -0.009
+     ]
+    }
+   },
+   "fs-float3 minus fs-tf3": {
+    "copyable near": {
+     "share_of_bytes": 0.0987,
+     "gap": -0.1,
+     "interval_95": [
+      -0.1269,
+      -0.0738
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0862,
+     "gap": 0.0161,
+     "interval_95": [
+      -0.0116,
+      0.043
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.2269,
+     "interval_95": [
+      0.0896,
+      0.3377
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.0328,
+     "interval_95": [
+      0.0276,
+      0.0385
+     ]
+    }
+   },
+   "fs-coarse3 minus fs-st3": {
+    "copyable near": {
+     "share_of_bytes": 0.0987,
+     "gap": 0.0101,
+     "interval_95": [
+      0.0013,
+      0.0187
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0862,
+     "gap": 0.0069,
+     "interval_95": [
+      -0.0073,
+      0.0216
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0096,
+     "interval_95": [
+      -0.0626,
+      0.0413
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.0063,
+     "interval_95": [
+      0.0036,
+      0.0087
+     ]
+    }
+   },
+   "fs-coarse3 minus fs-tf3": {
+    "copyable near": {
+     "share_of_bytes": 0.0987,
+     "gap": -0.0691,
+     "interval_95": [
+      -0.0967,
+      -0.0454
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0862,
+     "gap": 0.0517,
+     "interval_95": [
+      0.023,
+      0.077
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.0938,
+     "interval_95": [
+      -0.0343,
+      0.1938
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.0512,
+     "interval_95": [
+      0.0469,
+      0.0568
+     ]
+    }
+   }
+  },
+  "the trainer's validation along the run (16 windows a reading)": {
+   "6,000": {
+    "fs-coarse3": 1.6482,
+    "fs-float3": 1.6349
+   },
+   "12,000": {
+    "fs-coarse3": 1.5198,
+    "fs-float3": 1.5117
+   },
+   "18,000": {
+    "fs-coarse3": 1.4426,
+    "fs-float3": 1.4314
+   },
+   "24,000": {
+    "fs-coarse3": 1.4146,
+    "fs-float3": 1.4033
+   }
+  },
+  "pulses a byte (trainer at 24,000 updates; the stand-in's count holds only what still fires)": {
+   "fs-coarse3": 316361,
+   "fs-float3": 296132
+  },
+  "training time for 24,000 updates, side by side on one GPU, seconds": {
+   "fs-coarse3": 4657,
+   "fs-float3": 3872
+  },
+  "verdict": "Unclear at one seed. Reads and cells that answer in real numbers would gain the model 0.0069 after 24,000 updates at full size (fs-st3 minus fs-float3; paired 0.0061 to 0.0078), between the marks of 0.005 and 0.015. On one pool the clean difference is larger: spikes in reads and cells cost 0.0128 (0.0120 to 0.0136) on the coarse pool. So the half stand-ins fs-softreads3 and fs-softcells3 are released for the window of 2026-11-24/25, and fs-float12 runs as written.",
+  "reading": "Most of the distance to the Transformer is not in the spikes. The spiking stack is 0.0359 behind the Transformer's pilot (fs-st3 against fs-tf3); the float stand-in closes 0.0069 of it and is still 0.0290 behind (0.0275 to 0.0305), 0.033 of it on new contexts: four fifths of the distance belongs to the layout, which the next diagnostic walks in floats (the unit, the output's own weights), as the reading says for a stand-in that closes little. The stand-in's lead in the trainer's readings does not grow along the run (0.013, 0.008, 0.011 and 0.011 at 6,000, 12,000, 18,000 and 24,000 updates). The pool of fine quanta is worth 0.0059 after 24,000 updates (fs-coarse3 minus fs-st3, 0.0050 to 0.0067; v15 measured 0.0126 after 12,000)."
+ }
 }

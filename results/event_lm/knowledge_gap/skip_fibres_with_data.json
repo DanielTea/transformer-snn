@@ -29,5 +29,241 @@
   "recorded_utc": "2026-11-23T21:48:53Z",
   "change": "The server's runs of this screen, plain and looped, train on GPU 0 after the full-size pair's stack arm (fsp-st) has been scored, and no longer on GPU 1 after its Transformer arm: GPU 1 trains the loop's full-length run from tonight (full_size_loop_run.json), which the loop's pilot earned. On GPU 0 the screen starts at about 03:50 UTC, so the plain arms are scored this night and the looped arms in the next window. Arms, code, seeds, measure and reading are unchanged.",
   "seen_before_amendment": "No run of this screen on the server has started. The laptop's first run, the looped bed with skip fibres at 6,000 updates (loop-skip-6k-s3), began at 21:47 UTC and has no score."
+ },
+ "result": {
+  "recorded_utc": "2026-11-24T06:29:05Z",
+  "bpb": {
+   "rd-base-6k-s1": 1.621562,
+   "rd-base-6k-s2": 1.628309,
+   "bed24-lr12-s1": 1.486381,
+   "bed24-lr12-s2": 1.492556,
+   "sk-level-6k-s1": 1.617223,
+   "sk-level-6k-s2": 1.62226,
+   "sk-level-24k-s1": 1.481901,
+   "sk-level-24k-s2": 1.486231,
+   "sk-parts-6k-s1": 1.622199,
+   "sk-parts-6k-s2": 1.620871,
+   "sk-parts-24k-s1": 1.4824,
+   "sk-parts-24k-s2": 1.486325
+  },
+  "the shared reading (experiments/read_lead_study.py, lead at least 0.010 at every seed, growth at least 0.005)": {
+   "skip-level": {
+    "long_leads": [
+     0.00448,
+     0.00633
+    ],
+    "long_mean_lead": 0.0054,
+    "seeds_ahead": 2,
+    "a_lead": false,
+    "short_leads": [
+     0.00434,
+     0.00605
+    ],
+    "short_mean_lead": 0.00519,
+    "growth": 0.00021,
+    "b_growth": false,
+    "verdict": "fail"
+   },
+   "skip-parts": {
+    "long_leads": [
+     0.00398,
+     0.00623
+    ],
+    "long_mean_lead": 0.00511,
+    "seeds_ahead": 2,
+    "a_lead": false,
+    "short_leads": [
+     -0.00064,
+     0.00744
+    ],
+    "short_mean_lead": 0.0034,
+    "growth": 0.00171,
+    "b_growth": false,
+    "verdict": "fail"
+   }
+  },
+  "paired leads at 24,000 updates (compare_stream_scores)": {
+   "skip-level s1": {
+    "lead": 0.00448,
+    "interval_95": [
+     0.00358,
+     0.00538
+    ]
+   },
+   "skip-level s2": {
+    "lead": 0.00633,
+    "interval_95": [
+     0.00544,
+     0.00729
+    ]
+   },
+   "skip-parts s1": {
+    "lead": 0.00398,
+    "interval_95": [
+     0.00301,
+     0.00489
+    ]
+   },
+   "skip-parts s2": {
+    "lead": 0.00623,
+    "interval_95": [
+     0.00532,
+     0.00716
+    ]
+   }
+  },
+  "by context at 24,000 updates (gap_by_piece, near 240, far 8,192; below zero favours the arm)": {
+   "skip-level s1": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.0135,
+     "interval_95": [
+      -0.024,
+      -0.0007
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0059,
+     "interval_95": [
+      -0.0197,
+      0.0108
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0101,
+     "interval_95": [
+      -0.0946,
+      0.055
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.003,
+     "interval_95": [
+      -0.0061,
+      0.0003
+     ]
+    }
+   },
+   "skip-level s2": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.0074,
+     "interval_95": [
+      -0.0198,
+      0.0042
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0108,
+     "interval_95": [
+      -0.0065,
+      0.0279
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0679,
+     "interval_95": [
+      -0.1409,
+      0.0072
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0042,
+     "interval_95": [
+      -0.0075,
+      -0.0005
+     ]
+    }
+   },
+   "skip-parts s1": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.0305,
+     "interval_95": [
+      -0.0408,
+      -0.0212
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0019,
+     "interval_95": [
+      -0.0141,
+      0.0139
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.0193,
+     "interval_95": [
+      -0.0481,
+      0.0798
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0034,
+     "interval_95": [
+      -0.0065,
+      -0.0003
+     ]
+    }
+   },
+   "skip-parts s2": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0116,
+     "interval_95": [
+      0.0008,
+      0.0225
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0104,
+     "interval_95": [
+      -0.0069,
+      0.0266
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0327,
+     "interval_95": [
+      -0.1087,
+      0.0448
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0085,
+     "interval_95": [
+      -0.0117,
+      -0.0053
+     ]
+    }
+   }
+  },
+  "pulses a byte at 24,000 updates (trainer)": {
+   "sk-level-24k-s1": 115570,
+   "sk-parts-24k-s1": 115591,
+   "the base at 6,000 (rd-base-6k-s1)": 116078
+  },
+  "time for 750 updates (trainer, two runs sharing GPU 0)": {
+   "sk-level-6k-s1": 52.9,
+   "rd-base-6k-s1": 45.4
+  },
+  "the looped arms, not yet read": {
+   "laptop": "loop-skip-6k-s3 1.592895, 0.0120 ahead of loop-6k-s3 (1.604914); loop-skip-24k-s3 is queued on the laptop after the slope's runs",
+   "server": "lp-skip-24k-s1 1.459828 is 0.0066 ahead of lp-24k-s1 (paired 0.0057 to 0.0075; 0.012 on new contexts); lp-skip-24k-s2 was saved at the window's close and resumes in the next one; lp-6k-s1, lp-6k-s2, lp-skip-6k-s1 and lp-skip-6k-s2 are queued for it. They are read by the amendment's shared reading against the looped base of the same seed when all eight are scored."
+  },
+  "verdict": "Both plain arms fail on the bed by the shared reading. Each is ahead at both seeds and both lengths, but by about 0.005: skip-level by 0.0054 on the mean of the seeds at 24,000 updates (0.0045 and 0.0063) and 0.0052 at 6,000, skip-parts by 0.0051 and 0.0034. The mark is 0.010, so neither goes to a full-size pilot. The looped arms are read when their runs are scored.",
+  "reading": "Skip fibres give the plain bed a small, steady gain that does not grow with data, most of it outside new contexts at one seed and spread over all contexts at the other. Their price is small: 0.18% and 0.32% more parameters and no more pulses. The learned gains, by part and by the level they reach back to, and the neurons that the range rule shrank are not measured yet and will be appended with the looped arms."
  }
 }
