@@ -16,7 +16,9 @@ claims are made, and what to try next. Every number links to a record in
 
 | Scale | Stack | Transformer | Gap (bits per byte) |
 |---|---|---|---|
-| Full size, best so far (v18: l2048-word-st, 36.3M parameters), enwik8 test | 1.1162 | 1.1067 (34.75M) | **0.0095 behind** |
+| Full size, each model at its best rate (v19: fsp-st at 6e-4, 36.3M parameters), enwik8 test | 1.1129 | 1.0790 (34.75M, at 1.2e-3) | **0.034 behind** |
+| The same pair against the Transformer with output synapses that learn while it reads | 1.1129 | 1.0771 | 0.036 behind |
+| Full size, both at 3e-4 (v18: l2048-word-st, 36.3M), enwik8 test | 1.1162 | 1.1067 (34.75M) | 0.0095 behind |
 | The same stack against the Transformer with output synapses that learn while it reads | 1.1162 | 1.1032 | 0.013 behind |
 | Full size, v17 (l2048-know-st, 36.3M), enwik8 test | 1.1170 | 1.1067 | 0.010 behind |
 | Full size, v16 (34.8M), enwik8 test | 1.1199 | 1.1067 | 0.013 behind |
@@ -25,10 +27,11 @@ claims are made, and what to try next. Every number links to a record in
 | Test bed, 98.3M training bytes, each model at its best learning rate, mean of two seeds | 1.4895 | 1.4412 | 0.048 behind |
 
 The full-size stacks read up to 8,192 cells back and have fast synapses that
-learn while they read; the best one has 128 knowledge cells and a word head in
-every read and trained on streams. The full-size Transformer reads windows of
+learn while they read; the best one has 128 knowledge cells in every read and
+trained on streams at its best rate, 6e-4. The full-size Transformer reads windows of
 2,048 bytes. The test-bed stack has delayed fibres and trained on streams.
-Sources: `results/event_lm/long_streams/leaderboard.json`,
+Sources: `results/event_lm/knowledge_gap/full_size_best_rate_pair.json`,
+`results/event_lm/long_streams/leaderboard.json`,
 `results/event_lm/knowledge_gap/full_size.json`,
 `results/event_lm/knowledge_gap/full_size_word_heads.json`,
 `results/event_lm/knowledge_gap/gap_with_data.json` and
@@ -170,15 +173,15 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 
 ## Open bets, in order
 
-1. **The full-size pair, each model at its best learning rate** (`full_size_best_rate_pair.json`, running): the plain
-   stack at 6e-4 and the Transformer at 1.2e-3, 90,000 updates each. The pilot behind it
-   (`full_size_rate_pilot.json`): after 24,000 updates the stack is best at 6e-4 (1.3199) and the Transformer at
-   1.2e-3 (1.2762). The gap at the best rates is 0.044 against 0.036 at 3e-4, and both gain alike on new contexts.
-   The stack's membranes saturate at the higher rate: at 1.2e-3, 2.7% of the reads' entries and 2.0% of the cells'
-   sit at their bound, up to 11.8% at the top level, where a neuron learns nothing through its charge
-   (`experiments/membrane_saturation.py`). The pool that lifts the ceiling removes that bound at the same energy and
-   is worth 0.035 at 1.2e-3. Its best arm was 0.007 ahead of the plain best where 0.010 was asked, so the pair's
-   stack trains plain (`full_size_lifted_ceiling_pilot.json`).
+1. **The full-size pair, each model at its best learning rate** (`full_size_best_rate_pair.json`, read): after
+   90,000 updates the plain stack at 6e-4 scores 1.1129 on test, the best spike-only score so far, and the
+   Transformer at 1.2e-3 scores 1.0790. The gap at each model's best rate is 0.034 on test and 0.042 on
+   validation, against 0.010 and 0.019 at 3e-4: the faster rate pays the Transformer 0.028 and the stack 0.004
+   once both have seen all their data, where after 24,000 updates the two gains were alike. The stack stays ahead
+   on every copy and is 0.09 behind on new contexts. A float stand-in at full size closes a fifth of the distance
+   and leaves four fifths (`full_size_spikes_late.json`), so what closes the gap must change what the blocks
+   compute and how they keep learning with data, not only their spikes. Next at full size: the loop's run of
+   90,000 updates (bet 5), the part that adds knowledge at equal parameters.
 2. **The unit, in spikes: a cell that multiplies.** The Transformer's unit multiplies a gate by a value; the stack's
    cells add and threshold. v15's priced walk put plain units in place of gated ones as the largest step from the
    Transformer to the stack (0.025, against 0.001 for whole spikes). Of that, a hard gate recovers 0.013 and a
@@ -250,6 +253,14 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    and the distance is the layout's; if it is 0.015 or more ahead, stand-ins with only the reads or only the
    cells in floats say which part's learning through spikes to work on. A third arm asks whether the stand-in
    gains from the Transformer's rate where the spiking stack cannot.
+   Read for v19: the stand-in is 0.0069 ahead of the model after 24,000 updates, between the marks, and 0.0290
+   behind the Transformer (0.033 on new contexts); on one pool spikes in reads and cells cost 0.0128. Four
+   fifths of the distance belong to the layout. The half stand-ins and the third arm run next.
+   Read for v19 (`plain_units_with_data.json`): the plain hard unit, the stack's cell in floats, falls behind the
+   gated reference as data grows (growth 0.029 on the mean of two seeds); a smooth plain unit
+   and a hard gated unit each end within about 0.005 on the mean, with seeds that disagree (growth
+   0.007 and 0.008, unclear). A smoother cell and a cell that multiplies both
+   remain candidates; `bounded_gates_in_floats.json` asks whether a gate may be bounded.
 3. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
    `randomness_at_best_rate.json`): does the charge grid limit late learning?
 4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
@@ -260,6 +271,10 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    updates, the looped stack scores 1.3102: 0.019 ahead of the plain stack given the same pulses (0.026 on new
    contexts) and 0.010 ahead of the plain stack at the old budget (0.010 on new contexts), the first part at equal
    parameters that adds knowledge at full size. It spends 1.63 times the pulses and 1.4 times the training time.
+   On the test bed the loop holds with data (`loop_with_data.json`): 0.025 ahead of the plain bed given the same
+   pulses after 6,000 updates and 0.017 after 24,000 (0.013 on new contexts), and on two more seeds 0.020 and
+   0.025 ahead of the plain bed. Its run of 90,000 updates at full size is at half length
+   (`full_size_loop_run.json`).
    The raised budget alone makes the plain stack 0.009 worse, because its membranes saturate. The loop has earned
    a run of 90,000 updates beside the pair, and that run is pre-registered (`full_size_loop_run.json`): the
    pair's stack arm with the loop and its budget, queued for the night of 2026-11-23 and read against the pair's
@@ -323,7 +338,7 @@ denser with data (`learning_rate_by_context.json`), and the learning rate (`lear
 
 ## How to continue
 
-- The newest handoff (`docs/V18_HANDOFF.md`) says how to restore checkpoints,
+- The newest handoff (`docs/V19_HANDOFF.md`) says how to restore checkpoints,
   rescore and retrain.
 - `experiments/train_event_lm.py` trains every arm; `experiments/eval_stream.py`
   scores streams, and `experiments/gap_by_piece.py` splits two scorings.

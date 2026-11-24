@@ -1,0 +1,138 @@
+{
+ "release": "spiking-byte-lm-v19",
+ "model": {
+  "file": null,
+  "note": "The weights are not in the repository. They are in the fsp-st archive of the release.",
+  "source_checkpoint": "full_size_pair/fsp-st/model.pt.averaged",
+  "sha256": "fc570db8e401e3fb7c7883da3be9be6628b880fe21b4c7c515398d3e6992492d",
+  "bytes": 145347976,
+  "archive": "spiking-byte-lm-v19-checkpoints-fsp-st.tar.gz",
+  "archive_sha256": "5c177532d655102d0b27de99ede86d93d769ec472d19a6fd33fd649f4aadb7b8",
+  "parameters": 36263956,
+  "training_targets": 368640000,
+  "seed": 20001,
+  "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates, the matrices of three-dimensional weights turned as well",
+  "weights": "running average with decay 0.999",
+  "training_windows": "512 bytes in batches of 8 up to 24,000 updates, then unbroken streams: 15 groups of 10 windows of 2,048 bytes that continue each other, in batches of 2, with a read reach of 2,048 cells; 4,096 targets an update throughout",
+  "peak_rate": 0.0006,
+  "schedule": "1,000 warmup updates, then cosine decay over the 90,000 updates",
+  "forked_at": {
+   "updates": 24000,
+   "from": "fsp-st-p, v15's recipe with --read-forget on windows of 512 bytes, at the same peak rate and schedule"
+  },
+  "architecture": {
+   "stack": "eleven levels, each a state read of 8 heads and then a layer of 1,188 threshold cells, both writing their spikes back into one stream of 512 channels",
+   "forgetting": "every read head learns a slope: a cell beyond the window takes the oldest age's offset plus the slope times the doublings of its age beyond the window",
+   "knowledge_cells": "128 learned cells a head that race beside the stream's own cells and never age",
+   "pulse_budget_per_byte": 310000
+  },
+  "stream_scores": {
+   "enwik8_test": {
+    "reach_8192_taught": 1.11287,
+    "reach_8192": 1.1146,
+    "as_trained": 1.13021,
+    "over_l2048_know_st": [
+     -0.00415,
+     [
+      -0.00474,
+      -0.00356
+     ]
+    ],
+    "over_fsp_tf": [
+     0.03388,
+     [
+      0.03279,
+      0.03506
+     ]
+    ],
+    "over_fsp_tf_taught": [
+     0.03573,
+     [
+      0.03471,
+      0.03679
+     ]
+    ]
+   },
+   "enwik8_validation": {
+    "reach_8192_taught": 1.14726,
+    "reach_8192": 1.14686,
+    "as_trained": 1.16117,
+    "over_l2048_know_st": [
+     -0.00237,
+     [
+      -0.00298,
+      -0.00178
+     ]
+    ],
+    "over_fsp_tf": [
+     0.04247,
+     [
+      0.04139,
+      0.04361
+     ]
+    ],
+    "over_fsp_tf_taught": [
+     0.04285,
+     [
+      0.04182,
+      0.04391
+     ]
+    ]
+   }
+  },
+  "reach_chosen": {
+   "first_validation_million": {
+    "trained_2048": 1.19049,
+    "8192": 1.17391
+   }
+  },
+  "pulses_per_byte": {
+   "validation, last evaluation": 311820
+  },
+  "flags": "--variant event_steered --no-carry --stack --dim 512 --hidden 4 --depth 11 --spike-resolution 16 --router-charge-bits 8 --pulse-budget 310000 --read-after 0,1,2,3,4,5,6,7,8,9,10 --read-width 512 --read-heads 8 --read-window 512 --read-mode race --read-budget 256 --read-resolution 4 --read-address-rate 64 --read-delays 4 --read-cap 128 --granule-after 0,1,2,3,4,5,6,7,8,9,10 --granule-clusters 1 --granule-fan 1024 --granule-delays 4 --granule-cells 1188 --granule-slope --granule-cap 128 --pool-fine 16 --pool-rest 4 --pool-rate 32 --output-pool 128 --rotated-adam 50 --rotate-stacks --weight-average 0.999 --read-forget --ctx 2048 --bs 2 --read-reach 2048 --read-knowledge 128 --stream 10 --stream-groups 15 --steps 90000 --warmup 1000 --lr 6e-4 --wd 0.05 --seed 20001",
+  "scored_file_sha256": "ec59dd1455c5d7c41f7bdb39b4229f254c5daf7fa9b21f8eb9d6d971bd11221e",
+  "paths_note": "The released file is the scored file with the training arguments that name folders rewritten to repository paths; its weights are identical.",
+  "record": "results/event_lm/knowledge_gap/full_size_best_rate_pair.json"
+ },
+ "also_released": {
+  "spiking-byte-lm-v19-checkpoints-fsp-tf.tar.gz": {
+   "file": "full_size_pair/fsp-tf/model.pt.averaged",
+   "sha256": "4f915879339fcf9d77f7f07c39ec3f4b7b299913d4706d731b6f5ff909545f56",
+   "bytes": 139568753,
+   "archive_sha256": "13e820ece64d5937b1911f7d5e61aada123c1e4dc154e7b2d3b0e0e9baa65a0f",
+   "parameters": 34752000,
+   "training_targets": 368640000,
+   "what": "the pair's Transformer: 11 blocks of width 512 with 8 heads and gated units, windows of 512 bytes for 24,000 updates and then of 2,048 bytes for 66,000, at its best full-size peak rate, 1.2e-3",
+   "windows_of_2048_test": {
+    "frozen": 1.07899,
+    "taught_output_synapses_0.07": 1.07714
+   },
+   "windows_of_2048_validation": {
+    "frozen": 1.1048,
+    "taught_output_synapses_0.07": 1.10442
+   },
+   "scored_file_sha256": "fae788ddf1ff9e835e136e0b859476ce9e275b0350d07795f471e0f85ca25f1f",
+   "record": "results/event_lm/knowledge_gap/full_size_best_rate_pair.json"
+  },
+  "spiking-byte-lm-v19-checkpoints-fs-loop6.tar.gz": {
+   "file": "full_size_pilots/fs-loop6/model.pt.averaged",
+   "sha256": "668e54f2a978dbf40d158dc3c64b3f3566803d827f16f04516a6494141261c23",
+   "bytes": 227641415,
+   "archive_sha256": "bafd42803af746cf603fcfc750986489bd72b69e8dd265e8b3fc4a4d5c1e6a43",
+   "parameters": 34810900,
+   "training_targets": 98304000,
+   "what": "the full-size looped stack of the loop pilot: levels 2 to 8 run twice with the same synapses, the pulse budget scaled with the passes to 507,000, 24,000 updates at peak rate 6e-4",
+   "validation_first_2M_as_streams": 1.31024,
+   "flags": "--variant event_steered --no-carry --stack --dim 512 --hidden 4 --depth 11 --spike-resolution 16 --router-charge-bits 8 --pulse-budget 310000 --read-after 0,1,2,3,4,5,6,7,8,9,10 --read-width 512 --read-heads 8 --read-window 512 --read-mode race --read-budget 256 --read-resolution 4 --read-address-rate 64 --read-delays 4 --read-cap 128 --granule-after 0,1,2,3,4,5,6,7,8,9,10 --granule-clusters 1 --granule-fan 1024 --granule-delays 4 --granule-cells 1188 --granule-slope --granule-cap 128 --pool-fine 16 --pool-rest 4 --pool-rate 32 --output-pool 128 --rotated-adam 50 --rotate-stacks --weight-average 0.999 --read-forget --ctx 512 --bs 8 --steps 24000 --warmup 1000 --lr 6e-4 --wd 0.05 --seed 20001 --stack-loop 2,8,2 --pulse-budget 507000",
+   "scored_file_sha256": "53c3e79ce3b1007e1e267d3e36ffdb37e6acadd98d79caa4097367b9c8407697",
+   "record": "results/event_lm/knowledge_gap/full_size_loop_pilot.json"
+  },
+  "spiking-byte-lm-v19-bits.tar.gz": {
+   "sha256": "5df3e8c93a300140864a44b4b4b8d7ecabf622c3a5950e357dfd83c232e550b4",
+   "what": "per-piece bits and scoring records of every scoring in this release, under results/event_lm/knowledge_gap/bits: full_size_pair (the pair), full_size_pilots (the loop pilot and its budget control, the unit screen's third arm, the lifted gate, and the arms and bases of full_size_spikes_late), test_bed (the loop, skip-fibre and slope screens, server and laptop seeds) and plain_units (the float unit diagnostic)"
+  }
+ },
+ "license": "AGPL-3.0-only",
+ "copyright": "2026 control-f and Daniel Tremer",
+ "commercial_license": "available from control-f"
+}

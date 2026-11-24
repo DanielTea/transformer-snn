@@ -1,6 +1,6 @@
 # A scaling law the other way around
 
-*The study of Volley v18. Every number here is from a finished run. The verdicts are those of the records in
+*The study of Volley v18 and v19. Every number here is from a finished run. The verdicts are those of the records in
 `results/event_lm/knowledge_gap/`, which were committed before their runs. What still runs is listed at the end.*
 
 v17 found that the stack's gap to the Transformer is knowledge, and that on the test bed it reopens with more data:
@@ -299,6 +299,148 @@ fire as units are open (0.036 at full size, as at the best rates). So this is a 
 that grows with the rate and with data, and it is not shown to cost bits. No run has held the density while the rate
 rose, and none has let a silent cell pass anything.
 
+## At each model's best rate the gap widens
+
+The full-size pair trained the stack and its Transformer for 90,000 updates, each at the rate where it trained best
+in the 24,000-update pilot: the plain stack at 6e-4, the Transformer at 1.2e-3 (`full_size_best_rate_pair.json`).
+The stack scores 1.1129 on the enwik8 test and 1.1473 on validation, read as unbroken streams with fast output
+synapses at the reach of 8,192 that the first validation million chose. That is the best spike-only score so far.
+The Transformer scores 1.0790 and 1.1048, so the stack is 0.0339 behind on test (paired 95% interval 0.0328 to
+0.0351) and 0.0425 on validation. At v17's shared rate of 3e-4 the gaps were 0.0103 and 0.0193.
+
+| Paired with its own run at 3e-4 | Test | Validation |
+|---|---:|---:|
+| The Transformer at 1.2e-3 | 0.0277 better (0.0271 to 0.0283) | 0.0255 better |
+| The stack at 6e-4 | 0.0042 better (0.0036 to 0.0047) | 0.0024 better |
+
+In the pilot, after 24,000 updates, the two gains were alike: 0.0295 for the Transformer, 0.0218 for the stack.
+After 90,000 the Transformer keeps its gain and the stack keeps a fifth of it. With data, the stack's gain from a
+faster rate fades, which is the flattening of the test bed seen at full size. By context the stack remains ahead
+wherever the text it has read offers a copy: 0.074 bits per byte on copies from the last 2,032 bytes, 0.411 on
+copies that only its reach finds. It is 0.0895 behind on new contexts (0.0861 to 0.0930), 73.7% of the bytes,
+1.95 times the whole gap; 0.0997 on validation. The pair's split by place in the word is not read: it is a
+least-squares fit over pieces of 256 bytes, and for this pair the shares of a word's first letters and of the
+spaces after words rise and fall together from piece to piece.
+
+![At each model's best rate the gap is still knowledge, and wider](../results/figures/event_lm_gap_by_context_v19.png)
+
+## Four fifths of the distance is the layout, not the spikes
+
+`full_size_spikes_late.json` asked whether spikes in reads and cells cost anything late in training at full size,
+or whether the distance belongs to the layout. A float stand-in, a diagnostic and never a path, replaced the
+stack's racing reads by softmax reads and its threshold cells by real-valued cells; the stream's own neurons still
+fire whole counts. Its spiking twin used the same coarse pool, because the stand-in's switches do not reach the
+pool of fine quanta. After 24,000 updates at 3e-4, on the first 2M validation bytes:
+
+| Run | Bits per byte | Against the spiking stack (fs-st3) |
+|---|---:|---:|
+| Spiking stack, pool of fine quanta (fs-st3) | 1.3416 | |
+| Spiking stack, coarse pool (fs-coarse3) | 1.3475 | 0.0059 worse |
+| Float stand-in, coarse pool (fs-float3) | 1.3347 | 0.0069 better (0.0061 to 0.0078) |
+| Transformer (fs-tf3) | 1.3057 | 0.0359 better |
+
+On one pool, spikes in reads and cells cost 0.0128 (0.0120 to 0.0136). Against the model itself the stand-in's lead
+is 0.0069, between the record's marks of 0.005 and 0.015, so the cost is unclear at one seed and two half stand-ins
+split it next. The stand-in is still 0.0290 behind the Transformer (0.0275 to 0.0305), and 0.033 behind on new contexts.
+Four fifths of the distance lies in what the blocks compute, not in their spikes. In the trainer's readings the
+stand-in's lead does not grow along the run (0.013, 0.008, 0.011 and 0.011 at 6,000 to 24,000 updates). The pool of
+fine quanta is worth 0.0059 after 24,000 updates; v15 measured 0.0126 after 12,000.
+
+![81% of the distance to the Transformer is the layout, not the spikes](../results/figures/event_lm_distance_split.png)
+
+## In floats, the stack's kind of unit falls behind with data
+
+`plain_units_with_data.json` trained the test bed's Transformer (4.8M parameters, 1.2e-3) with four kinds of
+feed-forward unit for 6,000 and 24,000 updates on two seeds, on the server's CPU: a diagnostic in floats, never a
+path. Each unit's gap is its bits per byte minus the reference's gated units (SwiGLU) at the same length and seed;
+its growth is the gap at 24,000 updates less the gap at 6,000, read on the mean of the seeds (growth from 0.015,
+none below 0.005).
+
+| Unit | Gap at 6,000 (two seeds) | Gap at 24,000 | On new contexts at 24,000 | Growth |
+|---|---:|---:|---:|---:|
+| Plain, shut below zero (relu) | -0.0320, +0.0031 | +0.0112, +0.0185 | +0.0138, +0.0246 | +0.0293 (growth) |
+| Plain, opening smoothly (gelu) | -0.0243, +0.0138 | +0.0031, +0.0009 | +0.0027, +0.0049 | +0.0073 (unclear) |
+| Gated, shut below zero (reglu) | -0.0068, +0.0001 | -0.0006, +0.0102 | -0.0014, +0.0127 | +0.0082 (unclear) |
+
+No pre-registered reading fits, so the record reports the pattern as it falls. Only the unit that is both hard and
+plain, the stack's threshold cell in floats, falls behind clearly as data grows (0.0149 behind on the mean
+after 24,000 updates). A smooth opening or a multiplying gate each brings it most of the way back (0.0020
+and 0.0048), with seeds that disagree, and the reference, smooth and gated, is the best. The reference's
+own seeds differ by 0.0072 after 24,000 updates on the CPU, so differences under about 0.01 between kinds are within
+the noise of two seeds. A census of open units finds the plain hard unit thinning with data and with the rate, as
+the stack's cells do, but the hard gated unit is as thin and ends closer to the reference, and the plain unit at
+2.4e-3 is thinner and better: a thin code alone does not decide whether a unit falls behind. The relu arm at 2.4e-3
+is 0.0046 and 0.0009 better than at 1.2e-3 after 24,000 updates on the two seeds; the gated Transformer gains 0.004 from
+that step and the spiking stack loses 0.004, so the stack's flat response to the rate is not its unit's shape. A
+smoother cell and a cell that multiplies both remain candidates; `bounded_gates_in_floats.json` asks whether a gate
+may be bounded.
+
+![In floats, the plain hard unit falls behind as data grows](../results/figures/event_lm_plain_units.png)
+
+
+## Depth by recurrence holds with data
+
+On the test bed, the loop runs level 0 once, levels 1 to 4 three times and level 5 once: 14 level passes on the
+synapses of 6, with the pulse budget scaled to 264,000 (`loop_with_data.json`). Its control is the plain bed given
+the same budget.
+
+| Updates | The loop over the same pulses | The same pulses over the base |
+|---|---:|---:|
+| 6,000 | 0.0253 better (0.0242 to 0.0264) | 0.0019 worse |
+| 24,000 | 0.0175 better (0.0165 to 0.0184) | 0.0034 worse |
+
+The loop's gain fades by a third with four times the data but stays well above the mark of 0.010, so it earned two
+more seeds on the server. Its looped bases, trained there for the skip-fibre screen, lead the plain bed by 0.0200
+and 0.0251 after 24,000 updates (0.017 and 0.026 on new contexts); their energy controls are queued. The loop
+costs 2.3 times the pulses and about twice the training time. At full size it is the one part at equal parameters
+that adds knowledge (above), and its run of 90,000 updates is at half length.
+
+## Skip fibres: a small, steady gain under the mark
+
+Skip fibres (`--stack-skips`) let a level's read and cells hear the streams of earlier levels through gains of
+their own (`skip_fibres_with_data.json`). On the server's two seeds:
+
+| Arm | Lead at 6,000 updates | Lead at 24,000 updates | Verdict |
+|---|---:|---:|---|
+| skip-level, one set of fibres for a level's read and one for its cells | 0.0043, 0.0061 | 0.0045, 0.0063 | fails |
+| skip-parts, fibres for each part of the read and for the cells | -0.0006, 0.0074 | 0.0040, 0.0062 | fails |
+
+Every lead at 24,000 updates is above zero with a narrow interval, but the mean is 0.005 where the shared reading
+asks 0.010, and it does not grow. The fibres cost 0.18% and 0.32% more parameters and no pulses. On the looped bed
+they lead by 0.0066 on the first seed (0.0057 to 0.0075, 0.012 on new contexts) and by 0.012 on the laptop's seed at
+6,000 updates; that screen is read when its eight runs are scored.
+
+## A slope far below the threshold (built for v20)
+
+The census found the stack's silent cells far below their thresholds, where a cell's slope is zero. The slope far
+below the threshold (`--granule-slope-tail T`, `subthreshold_slope_with_data.json`) leaves every spike as it is and
+lets a cell learn from its distance below zero: a slope of one above zero and 1 / (1 + d / T)^2 at d whole thresholds
+below it, as voltage-dependent plasticity changes a synapse by how far its membrane stands from threshold. One form
+teaches everything the charge depends on; the local one teaches only the cell's own synapses and rest. On the
+laptop's seed of the delayed test bed at 1.2e-3:
+
+| Form | 6,000 updates | 24,000 updates |
+|---|---:|---:|
+| The slope, teaching all (T = 4) | 0.0002 behind (-0.0009 to 0.0014) | 0.0095 behind (0.0085 to 0.0104) |
+| The local slope (T = 4) | 0.0013 behind (0.0003 to 0.0024) | training |
+
+On the bed the base already learns down to three quarters of a threshold below zero (the bed's smooth threshold is a
+whole threshold wide), so the screen there asks whether a far slope beats a near one. The record's stop rule holds a
+form's full-size pilots if it is 0.010 or more behind at 24,000 updates on this seed; the first form is 0.0095 behind,
+so its pilots stay queued. The server's two seeds, with a knee arm that learns almost nowhere below zero, decide the
+bed.
+
+
+## The one gate that was never bounded
+
+Every gated cell that trained with data had a bounded gate: the shunt's share k / (k + 4), a ramp that is wide open
+at 16 thresholds, or a cell that gates itself. The float diagnostic's gate that keeps pace is unbounded above zero.
+Its spiking twin is a plain multiplying gate under the pool that lifts the ceiling (`--pool-lifts-ceiling
+--granule-gate 4 --granule-inner-gate`, no shunt and no ramp: k gate steps let in k / 4 of the value). In a check
+of 2,250 updates on the laptop's GPU, at the design stage and not pre-registered, it trains stably (about 117,000
+pulses a byte, no runaway) but reads 1.7776 on streams with averaged weights where the plain lifted stack reads
+1.7105, and 1.7863 with gate steps that fire: 0.067 and 0.076 behind. It earned no run.
+
 ## Still running
 
 | Record | Question |
@@ -306,12 +448,13 @@ rose, and none has let a silent cell pass anything.
 | `data_scaling_long.json` | The curves: the Transformer, the delayed stack and the plain stack at 6,000 to 96,000 updates, at each model's best rate |
 | `weight_precision_with_data.json` | Finer charge grids and quantal release, at 6,000 and 24,000 updates |
 | `cell_dither_with_data.json` | Stochastic firing of the threshold cells, alone and with quantal release |
-| `loop_with_data.json` | A looped test bed at 6,000 and 24,000 updates against a plain bed given the same pulse budget, a screen on the laptop |
+| `loop_with_data.json` | The loop's energy controls on the server's two seeds (b264 at 6,000 and 24,000 updates), beside the looped bases of the skip-fibre screen |
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `plain_units_with_data.json` | A diagnostic in floats on the server's CPU: the test bed's Transformer with plain or gated units, hard or smooth, at 6,000 and 24,000 updates: which property of the unit falls behind with data (pre-registered) |
-| `skip_fibres_with_data.json` | Skip fibres (`--stack-skips`): a level's read and cells also hear the stream of earlier levels through gains of their own, at 6,000 and 24,000 updates on two seeds; on the looped bed with two seeds on the server and a third on the laptop (pre-registered) |
+| `skip_fibres_with_data.json` | The looped bed with skip fibres against the looped bed on the server's two seeds at 6,000 and 24,000 updates, and the laptop's third seed at 24,000 (the plain arms failed) |
 | `output_step_with_data.json` | Output spikes of 1/16 bit in training, at the old budget and at a budget cut by the saving, a screen on the laptop (pre-registered) |
-| `full_size_best_rate_pair.json` | The stack and its Transformer at full size, each at its best full-size rate, 90,000 updates: the plain stack at 6e-4 training since 2026-11-23 00:35 UTC, the Transformer at 1.2e-3 since 20:20 UTC |
-| `full_size_loop_run.json` | The looped stack at full size and full length: the pair's stack arm with levels 2 to 8 run twice and the pulse budget scaled with the passes, 90,000 updates, read against the pair's plain stack and its Transformer; queued for the night of 2026-11-23 behind the pair's Transformer (pre-registered) |
+| `full_size_loop_run.json` | The looped stack at full size and full length: the pair's stack arm with levels 2 to 8 run twice and the pulse budget scaled with the passes, 90,000 updates, read against the pair's plain stack and its Transformer; training on GPU 1, at 49,500 of 90,000 updates on 2026-11-24 at 06:00 UTC (pre-registered) |
 | `full_size_loop_variants.json` | Two full-size pilots of 24,000 updates against the loop as piloted: the loop at the plain stack's pulse budget, and the loop under the pool that lifts the ceiling; they pick the form of the loop's next full-length run (pre-registered) |
-| `full_size_spikes_late.json` | A diagnostic in floats at full size, 24,000 updates at 3e-4: the stack on the coarse pool beside a stand-in with softmax reads and real-valued cells, read against the model's own pilot and the Transformer's: do spikes in reads and cells cost anything late in training, or is the distance the layout's (pre-registered; stand-ins are no spiking networks and never a path) |
+| `full_size_spikes_late.json` | The second night: half stand-ins with softmax reads only and with real-valued cells only, and the stand-in at the Transformer's rate, 1.2e-3 (diagnostics, never a path) |
+| `bounded_gates_in_floats.json` | A diagnostic in floats on the server's CPU: the test bed's Transformer with three bounded gates and a plain product in place of its gated units, at 6,000 and 24,000 updates on two seeds: is a bound on the gate what loses the gated unit's lead with data (pre-registered) |
+| `subthreshold_slope_with_data.json` | The slope far below the threshold (`--granule-slope-tail`): the server's two seeds of the bed at 6,000 and 24,000 updates with a knee arm, and full-size pilots at 6e-4 and 1.2e-3 (pre-registered) |

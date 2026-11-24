@@ -150,7 +150,15 @@ best spiking score so far, and is ahead of knowledge cells alone by 0.0009 on te
 and 0.0006 on validation. The rule recorded before it started asked for 0.003 on test, so word heads fail their mark
 and do not join the design (`full_size_word_heads.json`). The run is the model of the v18 release.
 
-Records: `full_size.json`, `full_size_word_heads.json`, `results/event_lm/trained_plasticity/arms.json`.
+v19 trained the pair again, each model at the learning rate where it trains best at full size
+(`full_size_best_rate_pair.json`). The knowledge-cell stack at 6e-4 scores 1.1129 on test and 1.1473 on validation,
+the best spiking score so far, and the Transformer at 1.2e-3 scores 1.0790 and 1.1048. The faster rate pays the
+Transformer 0.028 and the stack 0.004, so the gap grows to 0.034 on test. It is still knowledge: the stack is 0.074
+ahead on near copies and 0.41 ahead on copies only its reach finds, and 0.090 behind on new contexts, three quarters
+of the bytes. The study of that release is [SCALING_LAW.md](SCALING_LAW.md).
+
+Records: `full_size.json`, `full_size_word_heads.json`, `full_size_best_rate_pair.json`,
+`results/event_lm/trained_plasticity/arms.json`.
 
 ## What this means
 
