@@ -86,6 +86,9 @@ _TRACE_STRETCH = 512
 _GRANULE_REST_LIMIT = 16
 # The most thresholds of charge that the gate dendrite of a gated cell answers with spikes, before inhibition.
 _GATE_CAP = 16
+# The rate of a homeostatic gate's local rule: at every update its rest moves by this share of the ramp's width for
+# every unit by which the mean share that the gate let in stands from its set point.
+_HOME_RATE = 0.01
 # The most copies of its spikes that an apical tuft adds to a cell's own: a cell bursts up to four times its count.
 _BURST_LIMIT = 3
 # A skip fibre's gain is a whole number of sixteenths, and the stored gains of the fibres that bring one channel to
@@ -277,6 +280,11 @@ class EventLMConfig:
     # A gated cell whose gate dendrite sends no spike: its steps stay inside the cell, as a veto's do, so only the
     # body's spikes count as pulses. A gate that fires spends several fine spikes for every threshold of its charge.
     granule_inner_gate: bool = False
+    # A ramp gate held in range as cortex holds a neuron: its synapses keep the total strength they start with
+    # (synaptic scaling), and a local rule moves its rest, outside the gradient and only while training, until on the
+    # mean it lets in this share of the collected charge (intrinsic plasticity). The gate can then only be graded:
+    # it cannot become a switch that is wide open at every byte. 0 is off.
+    granule_gate_home: float = 0.0
     granule_veto: int = 0
     # Granule cells whose dendrite branches this many times: each branch sums an equal share of the cell's fibres and
     # passes on only the charge above a threshold of its own, and the body fires for the sum of what its branches
@@ -3704,6 +3712,15 @@ class _GranuleLayer(nn.Module):
     and less. A cell that gates itself fires about k * k / ``granule_ramp``
     spikes for k thresholds of charge up to the ramp's width and k above it.
 
+    With ``granule_gate_home`` as well, a ramp gate is held in range as cortex
+    holds a neuron, by synaptic scaling and intrinsic plasticity together: its
+    synapses keep the total strength they had at the first byte the layer
+    heard, so that learning moves what the gate hears and not how much, and a
+    local rule moves its rest, outside the gradient and only while training,
+    until on the mean the gate lets in that share of the collected charge. A
+    ramp gate that was trained without them grew its synapses until it was wide
+    open at most bytes and worked as a switch; with them it can only be graded.
+
     With ``granule_inner_gate`` as well, the gate dendrite sends no spike. Its
     steps stay inside the cell, as a veto's do, and only the body's spikes
     count as pulses. A gate that fires spends ``granule_gate`` fine spikes for
@@ -3853,6 +3870,7 @@ class _GranuleLayer(nn.Module):
         # The most spikes of a cell at a byte with no inhibition from the pool.
         cell_cap = cap if cfg.granule_cap is None else cfg.granule_cap
         self.gated, self.vetoed = cfg.granule_gate, cfg.granule_veto
+        self.home = cfg.granule_gate_home if cfg.granule_gate else 0
         if self.gated:
             # ``receive`` holds the synapses of the value dendrite and ``gate`` those of the gate dendrite. A cell
             # that gates itself has none of its own: both dendrites hear through ``receive``.
@@ -3874,6 +3892,12 @@ class _GranuleLayer(nn.Module):
             # The gate of a cell that gates itself counts the cell's own charge and sends no spike, and neither
             # does an inner gate.
             self.open.dendrite = cfg.granule_self_gate or cfg.granule_inner_gate
+            if self.home:
+                # A homeostatic gate: the total strength of each gate's synapses, taken from them at the first byte
+                # the layer hears and held from then on, and how far the local rule has moved each gate's rest, in
+                # thresholds.
+                self.register_buffer("gate_total", torch.zeros(clusters, cells))
+                self.register_buffer("gate_shift", torch.zeros(clusters, cells))
         elif cfg.granule_veto:
             # ``veto`` holds the synapses of the veto dendrite. They start silent.
             self.veto = nn.Parameter(torch.zeros(clusters, cells, fan))
@@ -3916,6 +3940,33 @@ class _GranuleLayer(nn.Module):
     def rest_quarters(self):
         quarters = self.rest.clamp(0, _GRANULE_REST_LIMIT) * _PACKET_UNITS
         return quarters.detach().round() + (quarters - quarters.detach())
+
+    def gate_ticks(self):
+        """The synapses of the gate dendrites in charge ticks. A homeostatic gate's are scaled to the total strength
+        that they had at the first byte, so that learning changes what a gate hears and not how much it hears."""
+        if not self.home:
+            return _weight_ticks(self.gate, charge_bits=self.bits)
+        total = self.gate.abs().sum(-1)
+        if not self.gate_total.any():
+            # The first byte the layer hears: the totals are taken as they are, on the device and in the precision
+            # of the pass, so that the scale is exactly one and the gate starts as a ramp gate without the rule.
+            self.gate_total.copy_(total.detach())
+        scale = self.gate_total / total.clamp_min(torch.finfo(total.dtype).tiny)
+        return _weight_ticks(self.gate * scale[..., None], charge_bits=self.bits)
+
+    def settle(self, opened, quanta):
+        """The local rule of a homeostatic gate, outside the gradient: each gate's rest moves toward the set point,
+        up while on the mean the gate lets in more than the share ``home`` of the collected charge and down while it
+        lets in less, at most the ramp's width either way."""
+        with torch.no_grad():
+            counts = opened.detach()
+            # The most spikes of the gate at the present threshold: a number under a lifting pool, a tensor of the
+            # pool's thresholds under a bounded one.
+            parts = torch.as_tensor(self.fire.parts(quanta.to(torch.int32), counts.to(torch.int32)),
+                                    dtype=counts.dtype, device=counts.device)
+            share = (counts / parts).clamp(0, 1).mean(dim=(0, 1))
+            ramp = self.fire.ramp
+            self.gate_shift.add_(_HOME_RATE * ramp * (share - self.home)).clamp_(-ramp, ramp)
 
     def fibres(self, spikes):
         """The spikes that the fibres carry: the stream's own, or those of the relays that hear the whole stream."""
@@ -4102,10 +4153,14 @@ class _GranuleLayer(nn.Module):
         if self.gated:
             # The gate dendrite fires above the rest, and its spikes let the value dendrite's charge into the body.
             # A cell that gates itself opens by its own charge.
-            opening = charge if self.gate is None else torch.einsum(
-                "btgk,gnk->btgn", heard, _weight_ticks(self.gate, charge_bits=self.bits))
-            return self.fire(charge, quanta,
-                             opened=self.open(opening - rest, quanta, smooth=self.gated * self.slope_width))
+            opening = charge if self.gate is None else torch.einsum("btgk,gnk->btgn", heard, self.gate_ticks())
+            if self.home:
+                # The local rule's shift of the rest, in quarter spikes as the rest is counted.
+                rest = rest + (self.gate_shift * _PACKET_UNITS).round() * quanta * self.quarter()
+            opened = self.open(opening - rest, quanta, smooth=self.gated * self.slope_width)
+            if self.home and self.training and torch.is_grad_enabled():
+                self.settle(opened, quanta)
+            return self.fire(charge, quanta, opened=opened)
         charge = charge - rest
         if self.vetoed:
             # The veto dendrite's steps keep that many shares of the cell's charge from its body.
@@ -4155,7 +4210,10 @@ class _GranuleLayer(nn.Module):
             rest = rest * (1 + self.branches)
         if self.gated:
             # The rest belongs to the gate dendrite. The value dendrite collects without it.
-            gate = receive if self.gate is None else _weight_ticks(self.gate, charge_bits=self.bits).abs().sum(-1).amax()
+            gate = receive if self.gate is None else self.gate_ticks().abs().sum(-1).amax()
+            if self.home:
+                # The local rule moves a gate's rest by up to the ramp's width either way.
+                rest = rest - (-self.fire.ramp * _PACKET_UNITS * most_quanta * self.quarter() // self.emit.cap)
             receive, rest = torch.maximum(receive, gate + rest), 0
         if self.vetoed:
             # The veto dendrite has no rest.
@@ -4627,8 +4685,8 @@ class EventLM(nn.Module):
                 for read in self.state_reads.values():
                     object.__setattr__(read, "library", self.library)
         self.granule_layers = None
-        if ((cfg.granule_self_gate or cfg.granule_shunt or cfg.granule_ramp or cfg.granule_inner_gate)
-                and cfg.granule_after is None):
+        if ((cfg.granule_self_gate or cfg.granule_shunt or cfg.granule_ramp or cfg.granule_inner_gate
+             or cfg.granule_gate_home) and cfg.granule_after is None):
             raise ValueError("granule_self_gate, granule_shunt, granule_ramp and granule_inner_gate gate the cells of "
                              "granule layers, and there are none")
         if cfg.granule_after is not None:
@@ -4693,6 +4751,12 @@ class EventLM(nn.Module):
                     not cfg.granule_gate or cfg.granule_self_gate):
                 raise ValueError("an inner gate is the gate dendrite of a gated cell with synapses of its own: "
                                  "granule_inner_gate needs granule_gate without granule_self_gate")
+            home = cfg.granule_gate_home
+            if (isinstance(home, bool) or not isinstance(home, (int, float)) or not 0 <= home < 1
+                    or home and (not cfg.granule_ramp or cfg.granule_self_gate)):
+                raise ValueError("a homeostatic gate is a ramp gate with synapses of its own, held open by a share "
+                                 "from 0 to 1 on the mean: granule_gate_home needs granule_ramp without "
+                                 "granule_self_gate")
             if cfg.granule_gate:
                 # The largest charge a body collects, times the most spikes of its gate.
                 collected = (cfg.granule_cap or _HIDDEN_CAP * cfg.resolution) << (
