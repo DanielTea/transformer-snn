@@ -169,5 +169,33 @@
   },
   "verdict": "Fails by the shared reading, and does not catch up: the signed gate is 0.0197 and 0.0154 behind the base after 6,000 updates and 0.0263 and 0.0185 behind after 24,000 (mean 0.0176 and 0.0224), so its distance grows with data (by 0.0048). No pair at 96,000 updates follows. After 24,000 updates it is 0.0203 and 0.0150 behind home16.",
   "reading": "The product of two signed drives, the gate nearest the Transformer's unit in floats, does not carry over to spikes in this form, and the census names why. A signed gate's open states let in 0.69 to 2.21 times the value by level, so its cells fire about 22,200 pulses a byte where home16's fire about 9,000; under the budget of 113,000 the reads are left with about 17,000 pulses a byte where home16's keep about 35,000. The cells' product takes the pulses that the reads need, and the loss falls on new contexts (0.023 to 0.028 behind the base after 24,000 updates). A gate that never lets in more than its value, as the homeostatic ramp does, keeps the reads' share. The cell that multiplies has to pay for its product inside the cell's own range, or it starves the rest of the stack; ramp gates held in range stay the candidate, and their pair at 96,000 updates (homeostatic_gate_at_length.json) decides whether they pass the plain cell."
+ },
+ "result_laptop_seed": {
+  "recorded_utc": "2026-11-25T02:39:17Z",
+  "bpb": {
+   "sg-6k-s3": 1.637183,
+   "sg-24k-s3": 1.507551,
+   "lift-6k-s3": 1.620623,
+   "lift-24k-s3": 1.483491
+  },
+  "paired with the lifted plain bed, signed minus base (compare_stream_scores; new contexts by gap_by_piece, near 240, far 8,192)": {
+   "6,000 updates": {
+    "gap": 0.0166,
+    "interval_95": [
+     0.0154,
+     0.0178
+    ],
+    "new contexts": 0.0209
+   },
+   "24,000 updates": {
+    "gap": 0.0241,
+    "interval_95": [
+     0.0231,
+     0.0251
+    ],
+    "new contexts": 0.0239
+   }
+  },
+  "reading": "As on the server's two seeds: the signed gate is behind the plain cell at both lengths and falls further behind with data (by 0.0075 from 6,000 to 24,000 updates, where the server's seeds fell by 0.0048). The third seed, on the laptop's shape of the bed, does not change the verdict (fail)."
  }
 }
