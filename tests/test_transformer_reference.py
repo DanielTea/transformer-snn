@@ -235,6 +235,22 @@ def test_a_pool_in_place_of_the_norm_divides_by_mean_activity_without_centring()
     assert count(layer) - count(pooled) == (2 * len(pooled.blocks) + 1) * (16 - 1)
 
 
+def test_a_centred_pool_takes_out_the_mean_before_it_divides():
+    torch.manual_seed(6)
+    centred = TransformerLM(replace(_FULL, norm="cpool"), **_SMALL)
+    norms = [module for module in centred.modules() if type(module).__name__ == "_CentredPoolNorm"]
+    assert len(norms) == 2 * len(centred.blocks) + 1
+    x = torch.randn(2, 5, 16) + 3.0
+    norm = centred.blocks[0].attn_norm
+    shifted = x - x.mean(-1, keepdim=True)
+    torch.testing.assert_close(norm(x), shifted / (1e-3 + shifted.abs().mean(-1, keepdim=True)))
+    # A level added to every channel changes nothing, and the output has no mean.
+    torch.testing.assert_close(norm(x + 7.0), norm(x), rtol=1e-4, atol=1e-4)
+    assert norm(x).mean(-1).abs().max() < 1e-5
+    centred(torch.randint(0, 32, (2, 12))).square().mean().backward()
+    assert centred.blocks[0].mlp_norm.weight.grad.abs().sum() > 0
+
+
 def test_the_pool_is_a_control_of_the_full_transformer_only():
     with pytest.raises(ValueError, match="pool"):
         TransformerLM(replace(_FULL, norm="batch"), **_SMALL)

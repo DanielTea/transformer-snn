@@ -60,7 +60,7 @@ class SNNConfig:
     untied_output: bool = False  # the reference's output layer has weights of its own, not the embedding's
     # The reference's normalization: "layer" (LayerNorm), or as a control "pool": the stream divided by its mean
     # absolute activity and a learned rest, with a gain per channel and no centring, as a stack's inhibitory pool
-    # raises every threshold with the stream's activity.
+    # raises every threshold with the stream's activity; or "cpool": that pool after the stream's mean is subtracted.
     norm: str = "layer"
     qk_levels: int | None = None  # spike levels of Q/K neurons (None -> same as levels; 1 -> binary)
     softmax_temp_init: float = 1.0  # initial inverse temperature of softmax attention

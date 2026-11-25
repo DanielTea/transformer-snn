@@ -1057,7 +1057,7 @@ def main():
     parser.add_argument("--untied-output", action="store_true",
                         help="as a control the Transformer's output layer has weights of its own in place of the "
                              "embedding's, as the output synapses of a stack have")
-    parser.add_argument("--transformer-norm", choices=("layer", "pool"), default=SNNConfig.norm,
+    parser.add_argument("--transformer-norm", choices=("layer", "pool", "cpool"), default=SNNConfig.norm,
                         help="as a control the Transformer's LayerNorms become pools: the stream divided by its mean "
                              "absolute activity and a learned rest, with a gain per channel and no centring, as a "
                              "stack's inhibitory pool raises its thresholds")
