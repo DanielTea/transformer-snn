@@ -347,6 +347,10 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    updates if the loop with sleep fails as well. Where it loses, the cost sits right after each window boundary
    (the first byte after a replayed window 0.011 worse), so a screen with gates that start closed, where sleep
    starts as the stack without it, runs on the laptop (`sleep_closed_gates_screen.json`, `--stack-sleep-keep`).
+   **Closed gates pass the laptop's screen**: after 24,000 updates sleep with gates that start closed leads the plain
+   bed by 0.0061 (interval 0.0052 to 0.0070; 0.0080 after 6,000 updates), with 0.0042 of gain on new contexts,
+   where the open gates lost 0.009, for twice the pulses. Two server seeds, alone and on the looped bed, are queued
+   (`sleep_closed_gates_with_data.json`); a pass by the shared reading sends sleep to a full-size pilot.
 
    Built and pre-registered next: **phases of a loop** (`--stack-loop-phases`, 70774fe,
    `loop_phases_with_data.json`). The passes of a loop share every synapse, so a level cannot tell its first pass
