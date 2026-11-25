@@ -106,5 +106,10 @@
   },
   "cost": "229,759 and 229,674 pulses a byte at 24,000 updates against the base's 115,653 and 115,737 (1.99 times, within the scaled budget of 226,000's price); 7,742 and 7,500 seconds of training against 1,857 and 2,002 (4.0 times on the server's GPU, beside another sleeping run under MPS).",
   "reading": "Sleep alone fails the shared reading: after 24,000 updates its mean lead over the plain bed is 0.0034, with one seed ahead (0.0099) and one behind (0.0031). Its lead grew by 0.0070 from 6,000 updates (mean -0.0036), above the 0.005 that the record names: if loop_sleep also fails, sleep alone gets the pair at 96,000 updates, in a record written then; if loop_sleep passes, loop_sleep goes on and this arm is reported. The split by context disagrees between the seeds, and the seeds' own bases differ by 0.0062, so the arm's lead is seed-bound. Where it is behind, the cost sits after the window boundary: on seed 20001 the first byte after a replayed window is 0.0112 worse after 24,000 updates (0.0234 after 6,000), later places about 0.002. The laptop's seed at 6,000 updates is 0.0065 ahead (sl-6k-s3 1.621763 against 1.628284)."
+ },
+ "amendment": {
+  "recorded_utc": "2026-11-25T08:10:47Z",
+  "change": "A third seed of sleep alone at 24,000 updates on the laptop, whose queue would run dry tonight: sl-24k-s3, seed 20003, the laptop runner's recipe with --lr 1.2e-3 --stack-sleep 64 --pulse-budget 226000, on the frozen copy of 79cf0a4 that trained sl-6k-s3, paired with rd-base-24k-s3 (1.482467). It is reported beside the server's two seeds, as sl-6k-s3 is, and does not change either reading; if sleep alone's 96,000-update pair is owed, it says how far a third seed agrees.",
+  "seen_before_amendment": "result_sleep_alone (6af4f63) with the server's four sleep-alone runs and the laptop's sl-6k-s3 (1.621763); lsl-6k-s3 (1.605117). No 24,000-update sleep run has trained on the laptop."
  }
 }
