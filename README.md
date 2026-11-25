@@ -77,6 +77,40 @@ the v11 Transformer scores 1.578. Every arm is one seed.
 [Research handoff](docs/V20_HANDOFF.md) ·
 [Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v20)
 
+## How Volley works
+
+```mermaid
+flowchart LR
+    B["Byte"] --> I["Input synapses"]
+    I --> S["Stream: 512 channels of signed spike counts"]
+    S --> R["State read: 8 heads race for 256 spikes over the stored cells of the stream and 128 knowledge cells"]
+    R --> C["Threshold cells: 1,188 a level, under an inhibitory pool"]
+    C -->|"back into the stream; 11 levels, levels 2 to 8 passed twice"| S
+    S --> O["256 output neurons and their pool cell"]
+    T[("Tape: every read's cells of the last 8,192 bytes")] -.-> R
+    C -.->|"fast output synapses, taught by every arriving byte"| O
+```
+
+Every neuron sends whole spike counts, every synapse is a whole
+number of charge ticks, and every sum stays within the range in
+which floating point adds exactly, so the same spikes come out
+however a stream is cut and on any device. A level is a state
+read and a layer of threshold cells. The read sends a probe; the
+cells that earlier bytes left on its tape answer with tags, and
+those whose tags match it best win a race for a fixed number of
+spikes and pass their payloads on: attention as a competition of
+spikes, with an offset by age and a forgetting slope that lets it
+reach 8,192 bytes back. The threshold cells hear the stream and
+its last few bytes through delayed fibres, and a pool of
+inhibitory cells raises every threshold with the stream's
+activity, the role a norm plays in a Transformer. In v20 the
+middle levels run twice through the same synapses, more
+computation for the same parameters. Fast output synapses learn
+from every byte after it was predicted, so the model adapts while
+it reads. Training uses gradients through surrogate slopes; the
+trained network runs in integers, and its pulses are counted
+against a budget.
+
 ## v20: depth by recurrence at full length
 
 v19 found that the distance to the Transformer is knowledge, and
