@@ -17,5 +17,168 @@
   "recorded_utc": "2026-11-24T08:28:33Z",
   "change": "Before any run. A correction of the parameter counts, checked by building each arm on the code copy that trains it (072eb90): the plain arms fs-tf3-relu and fs-tf3-gelu have 34,757,632 parameters, 5,632 (0.016%) more than the base, because the plain units' hidden width is rounded on its own; fs-tf3-reglu has 34,752,000, as the base. The arms, runs, measure and reading are unchanged; the three jobs are queued on GPU 1 after fsp-loop.",
   "seen_before_amendment": "No arm has trained; the four kinds of unit build and run a forward pass on the code copy on the server's CPU."
+ },
+ "result": {
+  "recorded_utc": "2026-11-25T04:25:17Z",
+  "bpb": {
+   "fs-tf3": 1.30572,
+   "fs-tf3-relu": 1.313405,
+   "fs-tf3-gelu": 1.301544,
+   "fs-tf3-reglu": 1.298175
+  },
+  "paired, arm minus base (compare_stream_scores; new contexts by gap_by_piece, near 496, far 8,192)": {
+   "fs-tf3-relu minus fs-tf3": {
+    "gap": 0.0077,
+    "interval_95": [
+     0.0068,
+     0.0086
+    ],
+    "new contexts": 0.0129,
+    "new_95": [
+     0.0117,
+     0.014
+    ]
+   },
+   "fs-tf3-gelu minus fs-tf3": {
+    "gap": -0.0042,
+    "interval_95": [
+     -0.005,
+     -0.0033
+    ],
+    "new contexts": -0.0009,
+    "new_95": [
+     -0.0023,
+     0.0003
+    ]
+   },
+   "fs-tf3-reglu minus fs-tf3": {
+    "gap": -0.0075,
+    "interval_95": [
+     -0.0084,
+     -0.0067
+    ],
+    "new contexts": -0.0065,
+    "new_95": [
+     -0.0078,
+     -0.0052
+    ]
+   }
+  },
+  "h, the price of the stack's kind of unit": 0.0077,
+  "census (experiments/unit_density.py, the first 65,536 validation bytes, windows of 512 with their second half counted)": {
+   "fs-tf3": {
+    "share of units open at a byte, by block": [
+     0.366,
+     0.343,
+     0.345,
+     0.321,
+     0.321,
+     0.332,
+     0.353,
+     0.374,
+     0.417,
+     0.463,
+     0.593
+    ],
+    "share of units that pass nine tenths of a block's output, by block": [
+     0.353,
+     0.456,
+     0.513,
+     0.529,
+     0.531,
+     0.531,
+     0.527,
+     0.522,
+     0.506,
+     0.48,
+     0.42
+    ]
+   },
+   "fs-tf3-relu": {
+    "share of units open at a byte, by block": [
+     0.208,
+     0.217,
+     0.183,
+     0.178,
+     0.199,
+     0.213,
+     0.229,
+     0.257,
+     0.294,
+     0.351,
+     0.465
+    ],
+    "share of units that pass nine tenths of a block's output, by block": [
+     0.145,
+     0.136,
+     0.114,
+     0.111,
+     0.124,
+     0.133,
+     0.143,
+     0.161,
+     0.185,
+     0.222,
+     0.298
+    ]
+   },
+   "fs-tf3-gelu": {
+    "share of units open at a byte, by block": [
+     0.287,
+     0.043,
+     0.086,
+     0.101,
+     0.12,
+     0.133,
+     0.16,
+     0.193,
+     0.224,
+     0.293,
+     0.425
+    ],
+    "share of units that pass nine tenths of a block's output, by block": [
+     0.708,
+     0.802,
+     0.778,
+     0.757,
+     0.737,
+     0.725,
+     0.704,
+     0.692,
+     0.682,
+     0.66,
+     0.601
+    ]
+   },
+   "fs-tf3-reglu": {
+    "share of units open at a byte, by block": [
+     0.275,
+     0.236,
+     0.262,
+     0.262,
+     0.254,
+     0.266,
+     0.3,
+     0.326,
+     0.393,
+     0.437,
+     0.556
+    ],
+    "share of units that pass nine tenths of a block's output, by block": [
+     0.109,
+     0.108,
+     0.128,
+     0.128,
+     0.124,
+     0.13,
+     0.148,
+     0.16,
+     0.195,
+     0.215,
+     0.27
+    ]
+   }
+  },
+  "reading": "(2): h is 0.0077 (0.0068 to 0.0086), below 0.009, a quarter of the spiking stack's 0.0359 at this length, so the unit is a small part of what the layout costs after 24,000 updates, and the next diagnostic walks the rest of the layout at full size: the pool in place of a norm and the output's own weights (a record of its own). Beside the reading: the plain hard unit is worse on new contexts (0.0129), and both other arms beat the Transformer's own SwiGLU units, the smooth plain unit by 0.0042 and the hard gated unit by 0.0075, so a unit that multiplies is 0.015 better than the plain hard unit at full size. The census finds the hard gated unit as thin as the plain hard one (nine tenths of a block's output from 11% to 27% of its units, against 11% to 30%) and SwiGLU dense (35% to 53%): a thin code is no cost in itself, and what the gated unit adds is its product. The test bed's diagnostic found the plain unit's price growing with data, so 0.0077 is a floor on its price after 90,000 updates. In spikes, no gated cell has paid on the test bed (homeostatic_gate_at_length.json, signed_gates_with_data.json)."
  }
 }
