@@ -1,0 +1,14 @@
+{
+ "study": "power_cells_with_data",
+ "recorded_utc": "2026-11-25T14:24:49Z",
+ "kind": "A screen by slope on the server's test bed, two seeds, 6,000 and 24,000 updates: power-law cells at the bed's best rate.",
+ "why": "On the laptop's seed power-law cells (power_cells_screen.json) lead the plain bed by 0.0262 after 6,000 updates (paired interval 0.0249 to 0.0273), 0.022 of it on new contexts, the 76% of bytes where the stack's gap to the Transformer lies, at the plain bed's parameters and pulses (115,640 a byte against 116,491). The loop gained 0.0234 at that length on the same seed at 2.3 times the pulses. The screen's 24,000-update run is training. Two server seeds join now, first in tonight's window, so that a verdict on two seeds stands by Thursday morning, when the recipe of the next full-length run is chosen, and so that a full-size pilot can run the same night if they hold.",
+ "arms": {
+  "pw8": "--granule-power 8 on the server's delayed bed (sched/bin/arm.sh stack); 5,249,060 parameters, as the base"
+ },
+ "base": "bed24-lr12-s1 1.486381, bed24-lr12-s2 1.492556, rd-base-6k-s1 1.621562, rd-base-6k-s2 1.628309: the plain delayed bed at 1.2e-3, the same seeds and lengths.",
+ "runs": "pw8-6k-s1, pw8-6k-s2, pw8-24k-s1, pw8-24k-s2: seeds 20001 and 20002, through sched/bin/arm.sh stack --lr 1.2e-3 (and --steps 6000) --granule-power 8, on the code copy of f876392 (v18c, launch-checked on the server's CPU), on GPU 0 at priority 34, first in tonight's window.",
+ "measure": "arm.sh's score: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights, bits kept; each run paired with the base of its seed and length (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); the pulses a byte and the cells' firing (experiments/cell_activity.py).",
+ "reading": "The shared reading of experiments/read_lead_study.py (--base-long bed24-lr12-s1 bed24-lr12-s2 --base-short rd-base-6k-s1 rd-base-6k-s2 --arm power pw8-24k-s1 pw8-24k-s2 --arm-short power pw8-6k-s1 pw8-6k-s2): a fix for late learning if at 24,000 updates the mean lead is at least 0.010 with both seeds ahead and it has grown by at least 0.005 since 6,000; a constant gain if it leads by that much without the growth; otherwise it fails. A fix or a constant gain sends power-law cells to full size at once: sched/bin/pw-decide.sh applies this reading as soon as the four scores exist and queues the pilot of full_size_power_cells.json, recorded with this one. The laptop's screen keeps its own reading and is reported beside.",
+ "seen_before_recording": "power_cells_screen.json with pw8-6k-s3 (1.602131) and its pairing and split by context; the laptop's 24,000-update run is training and its curve has not been read; the launch check of v18c. No server run of this record has trained."
+}

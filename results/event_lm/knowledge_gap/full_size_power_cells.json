@@ -1,0 +1,14 @@
+{
+ "study": "full_size_power_cells",
+ "recorded_utc": "2026-11-25T14:24:49Z",
+ "kind": "A pilot at full size, one seed, 24,000 updates: the lifted loop with power-law cells, beside the lifted loop of the same recipe. It runs only if power_cells_with_data.json's reading is a fix or a constant gain.",
+ "why": "Power-law cells fire round(k * k / 8) spikes for k thresholds of charge, the spike form of a squared rectifier, with a plain cell's synapses (f876392). On the laptop's test bed they lead the plain cells by 0.0262 after 6,000 updates at equal parameters and pulses (power_cells_screen.json); power_cells_with_data.json reads two server seeds tonight. At full size the looped stack's firing cells send a median of 5 to 9 spikes in most levels and 16 to 17 in the top two (experiments/cell_activity.py on fsp-loop, the first 8,192 validation bytes), so 8 thresholds sits near the median there as on the bed. The next full-length run (full_size_lifted_loop_second) takes a change only through a full-size pilot.",
+ "arms": {
+  "fs-loop6-lift-pw8": "sched/bin/full.sh stack fs-loop6-lift-pw8 --lr 6e-4 --stack-loop 2,8,2 --pulse-budget 507000 --pool-lifts-ceiling --granule-power 8, on the code copy of f876392 (v18c); the parameters of fs-loop6-lift"
+ },
+ "base": "fs-loop6-lift (1.300729): the lifted loop at 6e-4 of full_size_loop_variants.json, the same recipe, seed and measure; beside it fs-loop6 (1.31024) and the Transformer of the rate pilot at 6e-4 (1.28370).",
+ "runs": "24,000 updates of 8 windows of 512 bytes, peak rate 6e-4, warmup 1,000, cosine over the run, seed 20001; queued by sched/bin/pw-decide.sh on GPU 0 at priority 34 as soon as power_cells_with_data.json reads a fix or a constant gain, and not run otherwise.",
+ "measure": "full.sh's score, as for fs-loop6-lift: averaged weights on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, bits of every piece kept; paired with fs-loop6-lift (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); the pulses a byte; the cells' firing (experiments/cell_activity.py).",
+ "reading": "Power-law cells join the next full-length run if fs-loop6-lift-pw8 is at least 0.005 better than fs-loop6-lift with the paired interval clear of zero. Its pulses a byte are reported beside, and if they are more than a tenth above fs-loop6-lift's every claim states them. Between 0 and 0.005 better: reported, and a second seed decides. Otherwise power-law cells stay on the bed.",
+ "seen_before_recording": "power_cells_screen.json with pw8-6k-s3 (1.602131); the firing of fsp-loop's cells; fs-loop6-lift's score. No full-size run with power-law cells has trained."
+}
