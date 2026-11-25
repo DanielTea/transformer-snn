@@ -10,5 +10,137 @@
  "runs": "nd-6k-s1, nd-6k-s2, nd-24k-s1, nd-24k-s2: seeds 20001 and 20002, through sched/bin/arm.sh stack with --lr 1.2e-3 (and --steps 6000) --decay-synapses-only, on the code copy of b2a2117, on GPU 0 at priority 36. Beside them on the laptop, reported and not deciding: nd-6k-s3 and nd-24k-s3 against rd-base-6k-s3 1.628284 and rd-base-24k-s3 1.482467.",
  "measure": "arm.sh's score: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights; each run paired with the base of its seed and length (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); the controls' sizes at the end of training against the base's (how far each read's gain, grain and offsets and each cell's rest moved).",
  "reading": "The shared reading of experiments/read_lead_study.py against the base: a fix for late learning if at 24,000 updates the mean lead is at least 0.010 with both seeds ahead and it grew by at least 0.005 since 6,000; a constant gain if it leads by that much without the growth; otherwise it fails that reading. Because the option costs nothing, a smaller mark adopts it: a mean lead of at least 0.003 at 24,000 updates with both seeds ahead makes it the default of every full-size run recorded after this verdict (the full-length runs already queued keep their flags). A lead that grows by at least 0.005 from 6,000 to 24,000 updates without the 0.003 earns the pair at 96,000 updates, in a record written then.",
- "seen_before_recording": "The list of decayed parameters of the released looped stack (fsp-loop): of its controls, the age offsets (45,056), the cells' rests (13,068), the knowledge cells' offsets (11,264) and the reads' gains and grains (88 each) decay, the forgetting slopes (one dimension) do not. The tests of b2a2117 and the suite (1,423 passed). No run with the option has trained."
+ "seen_before_recording": "The list of decayed parameters of the released looped stack (fsp-loop): of its controls, the age offsets (45,056), the cells' rests (13,068), the knowledge cells' offsets (11,264) and the reads' gains and grains (88 each) decay, the forgetting slopes (one dimension) do not. The tests of b2a2117 and the suite (1,423 passed). No run with the option has trained.",
+ "result": {
+  "recorded_utc": "2026-11-25T20:21:52Z",
+  "bpb": {
+   "nd-6k-s1": 1.622462,
+   "nd-6k-s2": 1.621854,
+   "nd-24k-s1": 1.489803,
+   "nd-24k-s2": 1.488513
+  },
+  "lead over the base of its seed and length (paired, compare_stream_scores on the first 2,000,000 validation bytes as 16 streams; above zero the arm is better)": {
+   "nd-6k-s1": {
+    "lead": -0.0009,
+    "interval_95": [
+     -0.00182,
+     0.0
+    ]
+   },
+   "nd-6k-s2": {
+    "lead": 0.00645,
+    "interval_95": [
+     0.00548,
+     0.00741
+    ]
+   },
+   "nd-24k-s1": {
+    "lead": -0.00342,
+    "interval_95": [
+     -0.00435,
+     -0.00252
+    ]
+   },
+   "nd-24k-s2": {
+    "lead": 0.00404,
+    "interval_95": [
+     0.00305,
+     0.00505
+    ]
+   }
+  },
+  "by context, arm minus the base (gap_by_piece, near 240, far 8,192; below zero favours the arm), 24,000 updates": {
+   "nd-24k-s1": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0076,
+     "interval_95": [
+      -0.0017,
+      0.0169
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0107,
+     "interval_95": [
+      -0.0036,
+      0.0275
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.0248,
+     "interval_95": [
+      -0.0449,
+      0.0897
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.0004,
+     "interval_95": [
+      -0.0029,
+      0.0037
+     ]
+    }
+   },
+   "nd-24k-s2": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0164,
+     "interval_95": [
+      0.0007,
+      0.0298
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0285,
+     "interval_95": [
+      -0.0476,
+      -0.0125
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.1004,
+     "interval_95": [
+      0.0137,
+      0.1755
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0101,
+     "interval_95": [
+      -0.0131,
+      -0.0063
+     ]
+    }
+   }
+  },
+  "shared reading (experiments/read_lead_study.py)": {
+   "long_leads": [
+    -0.00342,
+    0.00404
+   ],
+   "long_mean_lead": 0.00031,
+   "seeds_ahead": 1,
+   "short_leads": [
+    -0.0009,
+    0.00645
+   ],
+   "short_mean_lead": 0.00278,
+   "growth": -0.00247,
+   "verdict": "fail"
+  },
+  "pulses_a_byte_at_24k": {
+   "nd-24k-s1": 115280,
+   "nd-24k-s2": 115140,
+   "bed24-lr12-s1": 115653,
+   "bed24-lr12-s2": 115737
+  },
+  "reading": "Fail. At 24,000 updates the mean lead is 0.0003 with one seed ahead (s1 0.0034 behind, s2 0.0040 ahead): under the shared reading's 0.010 and under the adoption mark of 0.003 with both seeds ahead. The lead shrank by 0.0025 from 6,000 updates, so no pair at 96,000 updates is earned. The two seeds disagree in sign at both lengths.",
+  "what follows": "Decay on synapses only is not made a default. The full-size pilot fs-loop6-lift-nd keeps its own reading (full_size_decay_synapses_only.json): this screen failed with one seed ahead, not with both behind, so a lead of at least 0.003 there still sends the option to the next full-length run."
+ }
 }

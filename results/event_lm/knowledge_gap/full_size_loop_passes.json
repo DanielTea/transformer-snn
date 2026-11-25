@@ -10,5 +10,69 @@
  "runs": "sched/bin/full.sh stack fs-loop9 --lr 6e-4 --stack-loop 2,8,3 --pulse-budget 705000 on the code copy that trained fs-loop6 (v17n): v16's stack with forgetting slopes and the pool of fine quanta, windows of 512 bytes, batch 8, 24,000 updates, warmup 1,000, cosine over the run, seed 20001; on GPU 1 after the loop's full-length run (fsp-loop) and the full-size unit diagnostic's first two arms.",
  "measure": "As every full-size pilot: averaged weights on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, bits of every piece kept; paired with fs-loop6 and with fs-st6 (experiments/compare_stream_scores.py), split by context (experiments/gap_by_piece.py, near 496, far 8,192). Beside the bits: the trainer's pulses a byte, the training time and the peak GPU memory.",
  "reading": "One seed: this reading picks a recipe and is not a finding about recurrence. The third pass adds knowledge if fs-loop9 is at least 0.005 better than fs-loop6 with the paired interval clear of zero; the loop's next full-length run then takes three passes, at 2.27 times the plain stack's pulses and about twice its training time, which every report of it states. Within 0.003 of fs-loop6 the third pass adds nothing and two passes stay. Between, unclear, reported only. Because more pulses alone hurt the plain stack (fs-b507), a gain here is read as the third pass's and not the budget's; the gain on new contexts is reported beside it. If the loop's full-length run (full_size_loop_run.json) finds that the loop's gain fades with data, this pilot is reported and builds nothing.",
- "seen_before_recording": "full_size_loop_pilot.json, full_size_loop_run.json and full_size_loop_variants.json as recorded (the full-length run is half done and unscored; the variants have not trained); loop_with_data.json with its result; the pilot's memory: fs-loop6 trained in half of a GPU's memory beside another run. No run of this record has started."
+ "seen_before_recording": "full_size_loop_pilot.json, full_size_loop_run.json and full_size_loop_variants.json as recorded (the full-length run is half done and unscored; the variants have not trained); loop_with_data.json with its result; the pilot's memory: fs-loop6 trained in half of a GPU's memory beside another run. No run of this record has started.",
+ "result": {
+  "recorded_utc": "2026-11-25T20:21:52Z",
+  "bpb": {
+   "fs-loop6": 1.310244,
+   "fs-loop9": 1.309429
+  },
+  "lead over the base (paired, compare_stream_scores on the first 2,000,000 validation bytes as 16 streams; above zero the arm is better)": {
+   "fs-loop9": {
+    "lead": 0.00082,
+    "interval_95": [
+     -2e-05,
+     0.00162
+    ]
+   }
+  },
+  "by context, arm minus base (gap_by_piece, near 240, far 8,192; below zero favours the arm)": {
+   "fs-loop9": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0257,
+     "interval_95": [
+      0.0165,
+      0.0336
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0057,
+     "interval_95": [
+      -0.0065,
+      0.0179
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0388,
+     "interval_95": [
+      -0.0935,
+      0.0247
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0016,
+     "interval_95": [
+      -0.0046,
+      0.0014
+     ]
+    }
+   }
+  },
+  "pulses_a_byte_at_24k": {
+   "fs-loop9": 710608,
+   "fs-loop6": 513025
+  },
+  "seconds_for_24k_updates": {
+   "fs-loop9": 9700.8,
+   "fs-loop6": 8327.2,
+   "note": "the runs' own clocks; fs-loop9 trained beside fs-loop12-lift on GPU 1 under MPS, paused once at the close of 2026-11-25 and resumed at 16:45Z"
+  },
+  "reading": "fs-loop9 is 0.0008 better than fs-loop6 [-0.00002, 0.0016], within 0.003: the third pass adds nothing at this length, and two passes stay. It fired 1.39 times fs-loop6's pulses (710,608 a byte against 513,025). By context it is 0.0016 better on new contexts [-0.0046, 0.0014] and 0.0257 worse on near copies.",
+  "applied": "sched/bin/fll-decide.sh applied this reading at 2026-11-25T17:15Z (sched/scores/fll-decision.json): fsp-lift trains with two passes (full_size_lifted_loop_run.json).",
+  "verdict": "Two passes stay. One seed: a recipe choice, not a finding about recurrence."
+ }
 }

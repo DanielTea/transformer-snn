@@ -10,5 +10,68 @@
  "runs": "sched/bin/full.sh stack fs-loop6-lift-b1014 --lr 6e-4 --stack-loop 2,8,2 --pulse-budget 1014000 --pool-lifts-ceiling, on the code copy of 97a2772 that trained every loop pilot, on GPU 0 at priority 36, after the loop with sleep's runs.",
  "measure": "As full_size_loop_variants.json: full.sh's score, the first 2,000,000 validation bytes as 16 unbroken streams at the trained reach, paired with fs-loop6-lift (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); the pulses a byte at 24,000 updates and the training time.",
  "reading": "One seed: this reading picks a recipe and is not a finding about energy. The lifted loop is held back by its budget if fs-loop6-lift-b1014 is at least 0.005 better than fs-loop6-lift with the paired interval clear of zero; a full-length run after fsp-lift then trains at the doubled budget, in a record of its own that states the pulses. Within 0.003 the budget is not what holds the loop back, and it stays at 507,000. Between, unclear and reported. Recorded either way: the gap, its part on new contexts, the pulses a byte it actually fires, and the time.",
- "seen_before_recording": "full_size_loop_variants.json's b310 and lift arms, full_size_loop_pilot.json's fs-b507, full_size_loop_run.json with its result. fs-loop9 and fs-loop12-lift are paused partway and unscored. No looped stack has trained at a budget above 705,000."
+ "seen_before_recording": "full_size_loop_variants.json's b310 and lift arms, full_size_loop_pilot.json's fs-b507, full_size_loop_run.json with its result. fs-loop9 and fs-loop12-lift are paused partway and unscored. No looped stack has trained at a budget above 705,000.",
+ "result": {
+  "recorded_utc": "2026-11-25T20:21:52Z",
+  "bpb": {
+   "fs-loop6-lift": 1.300729,
+   "fs-loop6-lift-b1014": 1.301215
+  },
+  "lead over fs-loop6-lift (paired, compare_stream_scores on the first 2,000,000 validation bytes as 16 streams; above zero the arm is better)": {
+   "fs-loop6-lift-b1014": {
+    "lead": -0.00049,
+    "interval_95": [
+     -0.00125,
+     0.00032
+    ]
+   }
+  },
+  "by context, arm minus fs-loop6-lift (gap_by_piece, near 240, far 8,192; below zero favours the arm)": {
+   "fs-loop6-lift-b1014": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0017,
+     "interval_95": [
+      -0.006,
+      0.0099
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0025,
+     "interval_95": [
+      -0.014,
+      0.0062
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0171,
+     "interval_95": [
+      -0.0669,
+      0.0426
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.002,
+     "interval_95": [
+      -0.0002,
+      0.0045
+     ]
+    }
+   }
+  },
+  "pulses_a_byte_at_24k": {
+   "fs-loop6-lift-b1014": 775890,
+   "fs-loop6-lift": 513300
+  },
+  "seconds_for_24k_updates": {
+   "fs-loop6-lift-b1014": 5846.8,
+   "fs-loop6-lift": 7769.1,
+   "note": "fs-loop6-lift-b1014 trained beside test-bed runs (nd-24k-s1, then nd-24k-s2 and the nd-6k pair) on GPU 0 under MPS; fs-loop6-lift beside fs-loop6-b310"
+  },
+  "reading": "fs-loop6-lift-b1014 is 0.0005 worse than fs-loop6-lift [-0.0013, 0.0003], within 0.003: the budget is not what holds the lifted loop back, and it stays at 507,000. Given twice the budget it fired 775,890 pulses a byte, 1.51 times fs-loop6-lift and 77% of its cap, and gained nothing; on new contexts, arm minus base, +0.0020 [-0.0002, 0.0045].",
+  "verdict": "The budget stays at 507,000 pulses a byte. One seed: a recipe choice, not a finding about energy."
+ }
 }
