@@ -281,8 +281,18 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    small part of what the layout costs. A unit that multiplies is still 0.015 better than the plain hard one, with
    a code as thin. The rest of the layout is walked next in floats (`full_size_layout_in_floats.json`, queued): the
    stack's kind of pool in place of the Transformer's LayerNorms, and an output layer with weights of its own.
-3. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
-   `randomness_at_best_rate.json`): does the charge grid limit late learning?
+3. **What holds late learning back: the charge grid and weight decay.** Does the charge grid limit late learning
+   (`weight_precision_with_data.json`; at the best rate `randomness_at_best_rate.json`)? A typical full-size synapse
+   is about 8 ticks from zero, so a tick is an eighth of it, and on the test bed a float stand-in that was level
+   with the spiking bed after 6,000 updates was 0.022 ahead after 24,000. A laptop screen puts the reads' and cells'
+   synapses on a grid four times finer at the bed's best rate (`charge_grid_at_best_rate.json`). Quantal release,
+   which rounds at random instead, was behind on the laptop's seed. **Weight decay on synapses only**
+   (`--decay-synapses-only`, `decay_synapses_only_with_data.json` and `full_size_decay_synapses_only.json`): the
+   trainer has decayed every parameter of two dimensions, a read's gain, grain and offsets by age and a cell's resting
+   charge among them, pulling each toward its starting value as if it were a synapse, and the more so at a higher
+   rate. A Transformer never decays its norms or temperatures. In the released looped stack the read gains settled at
+   -1.3 to -3.2 and the rests sank from 0.5 to about 0.2, both against that pull. The screen on the bed and a
+   full-size pilot run the same night; at no cost in parameters or pulses, a lead of 0.003 adopts it.
 4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
    the base for the rest.
 5. **Depth by recurrence at full size** (`full_size_loop_pilot.json`, passed): a looped stack runs its middle levels
