@@ -371,6 +371,15 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    (`full_size_loop_variants.json`), where the Transformer gains 0.0075 from the same step. **Nor do more pulses
    help**: given twice the budget the lifted loop fires 1.51 times the pulses and is 0.0005 worse, so the budget
    stays at 507,000 a byte.
+
+   Built and pre-registered next: **a racing loop** (`--stack-loop-exits`, d837b6c, `racing_loop_screen.json`).
+   A uniform third pass helps hard bytes and hurts copies, so it nets nothing. In cortex a decision is a race:
+   neurons for each option sum evidence, and the choice is made when one leads by enough, so easy choices are fast
+   and hard ones slow. Here the output neurons hear the end of every pass of the loop and sum it as evidence; each
+   pass's sum learns to predict the byte by itself, and a byte can be decided at the first pass whose evidence
+   leads by a margin. Two server seeds ask what summing costs at the top and how early bytes settle
+   (`experiments/loop_exits.py`); if they settle early, the loop that stops is built and screened at equal mean
+   pulses.
 6. **Skip fibres** (`skip_fibres_with_data.json`, pre-registered): every part of the stack hears one stream, the
    running sum of all that came before, fired again as whole counts after every read and cell layer.
    DeepCrossAttention (arXiv 2502.06785) finds that a Transformer gains when each layer hears the earlier layers
@@ -424,6 +433,25 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 Myelinated fibres and the cerebellar sheet failed at 6,000 updates (`myelin_and_sheet.json`); the sheet is re-tested
 by slope under 10. Ruled out as causes of the flattening: the pulse budget, noisy late weights and a code that grows
 denser with data (`learning_rate_by_context.json`), and the learning rate (`learning_rate_with_data.json`).
+
+## A second track: one model for language, reasoning and telemetry
+
+The plan (Volley-One) is one spiking model that writes and reasons in its own words with chains of thought and reads
+machine telemetry as a second sense, without a teacher model and without template-written answers. Knowledge is
+read from documents into the stream rather than memorized; reasoning is learned as people learn it, from human
+worked solutions, then by practice with feedback on checkable tasks kept at the edge of what the model can do,
+replayed in sleep, and internalized into silent passes of the racing loop. The first screens, pre-registered in
+`results/event_lm/one_model/`:
+
+- **How many steps of lookup a model chains without writing them** (`hop_generalization.json`,
+  `experiments/hop_tasks.py`, `experiments/hop_eval.py`): the test bed, its loop and its Transformer trained on
+  chains of 1 to 4 hops and tested on up to 16.
+- **Telemetry** (`telemetry_screen.json`, `experiments/pump_sim.py`, `experiments/telemetry_eval.py`): a simulated
+  centrifugal pump with nine faults whose truth is kept, eight bytes a second; the stack's surprise as a fault
+  detector beside a per-channel z-score detector (AUC 0.632 on the test pumps).
+- **Chains of thought learned from reward alone** (`practice_hops.json`, `experiments/practice_loop.py`): the
+  models practise hop tasks with room to write before the answer; only the answer is checked; the difficulty
+  follows the solve rate so that a quarter to a half of the tasks are solved.
 
 ## How to continue
 
