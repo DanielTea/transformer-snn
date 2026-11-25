@@ -304,7 +304,9 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    charge among them, pulling each toward its starting value as if it were a synapse, and the more so at a higher
    rate. A Transformer never decays its norms or temperatures. In the released looped stack the read gains settled at
    -1.3 to -3.2 and the rests sank from 0.5 to about 0.2, both against that pull. The screen on the bed and a
-   full-size pilot run the same night; at no cost in parameters or pulses, a lead of 0.003 adopts it.
+   full-size pilot run the same night; at no cost in parameters or pulses, a lead of 0.003 adopts it. **The bed's
+   screen fails**: after 24,000 updates one seed is 0.0034 behind and the other 0.0040 ahead, a mean of 0.0003, and
+   the lead shrank from 6,000 updates, so it is not made a default. The full-size pilot keeps its own reading.
 4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
    the base for the rest.
 5. **Depth by recurrence at full size** (`full_size_loop_pilot.json`, passed): a looped stack runs its middle levels
@@ -351,12 +353,20 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    from its second. In cortex the phases of a rhythm change a circuit's excitability, not its wiring; here every
    later pass gets a resting charge of its own for each cell and an offset of its own to each read head's gain,
    starting at zero, where the stack is the loop without them: 0.16% more parameters on the looped bed and 0.02% at
-   full size, no pulses. A mean lead of 0.005 after 24,000 updates on two seeds earns a full-size pilot.
+   full size, no pulses. A mean lead of 0.005 after 24,000 updates on two seeds earns a full-size pilot. **Phases
+   fail**: after 24,000 updates they are behind the looped bed on both server seeds (by 0.0023 and 0.0043) and on
+   the laptop's (by 0.0037), so they stop here. Whatever lets a level tell its passes apart, a resting charge and a
+   gain offset of its own are not it.
 
    **Next full-length run** (`full_size_lifted_loop_run.json`, pre-registered): the looped stack under the pool that
    lifts the ceiling, with a third pass and the Transformer's rate if their pilots pass; a job on the server picks
    the form and queues the run as soon as the pilots are scored. Beside it a pilot asks whether the lifted loop is
-   still held back by its pulses (`full_size_loop_budget.json`: twice the budget, its cost stated).
+   still held back by its pulses (`full_size_loop_budget.json`: twice the budget, its cost stated). **Neither pilot
+   passed**, so the run trains with two passes at 6e-4 and has trained since 2026-11-25 17:15 UTC: a third pass is
+   0.0008 better (`full_size_loop_passes.json`) for 1.39 times the pulses, and the Transformer's rate 0.0031 better
+   (`full_size_loop_variants.json`), where the Transformer gains 0.0075 from the same step. **Nor do more pulses
+   help**: given twice the budget the lifted loop fires 1.51 times the pulses and is 0.0005 worse, so the budget
+   stays at 507,000 a byte.
 6. **Skip fibres** (`skip_fibres_with_data.json`, pre-registered): every part of the stack hears one stream, the
    running sum of all that came before, fired again as whole counts after every read and cell layer.
    DeepCrossAttention (arXiv 2502.06785) finds that a Transformer gains when each layer hears the earlier layers
