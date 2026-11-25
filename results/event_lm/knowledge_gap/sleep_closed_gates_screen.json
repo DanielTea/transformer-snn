@@ -10,5 +10,111 @@
  "runs": "slc-6k-s3 and slc-24k-s3 on the laptop's GPU after the loop-phase seeds, on a frozen copy of c519644.",
  "measure": "experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes (the laptop runner's score), paired with the base of its length (experiments/compare_stream_scores.py), split by context (experiments/gap_by_piece.py, near 240, far 8,192) and by a byte's place in its window (experiments/window_place.py); how far the gates opened (the share of quarters kept, by level).",
  "reading": "A screen with one seed. Closed gates earn two server seeds of the same arm and its loop form (sleep on --stack-loop 1,4,3) at 6,000 and 24,000 updates, in a record written then, if at 24,000 updates slc-24k-s3 leads rd-base-24k-s3 by at least 0.005 with the paired interval clear of zero. Otherwise they are reported, and sleep stops with sleep_with_data's own verdict. Recorded either way: both leads, their split by context and by place in the window, and the gates' openings.",
- "seen_before_recording": "sleep_with_data.json's 6,000-update runs (sl, lsl, two server seeds and laptop sl-6k-s3), its first 24,000-update run sl-24k-s1 with its pairing, split by context and by place in the window, as cited; window_place on sl-6k-s1. No run with closed gates has trained."
+ "seen_before_recording": "sleep_with_data.json's 6,000-update runs (sl, lsl, two server seeds and laptop sl-6k-s3), its first 24,000-update run sl-24k-s1 with its pairing, split by context and by place in the window, as cited; window_place on sl-6k-s1. No run with closed gates has trained.",
+ "result": {
+  "recorded_utc": "2026-11-25T20:31:32Z",
+  "bpb": {
+   "slc-6k-s3": 1.620282,
+   "slc-24k-s3": 1.476411,
+   "rd-base-6k-s3": 1.628284,
+   "rd-base-24k-s3": 1.482467
+  },
+  "lead over the plain bed of its length (paired, compare_stream_scores; above zero sleep with closed gates is better)": {
+   "6,000 updates": {
+    "lead": 0.008,
+    "interval_95": [
+     0.00689,
+     0.00907
+    ]
+   },
+   "24,000 updates": {
+    "lead": 0.00606,
+    "interval_95": [
+     0.00515,
+     0.00701
+    ]
+   }
+  },
+  "by context, sleep minus plain (gap_by_piece, near 240, far 8,192; below zero favours sleep)": {
+   "6,000 updates": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.1054,
+     "interval_95": [
+      -0.1195,
+      -0.0932
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0153,
+     "interval_95": [
+      -0.0045,
+      0.0339
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0133,
+     "interval_95": [
+      -0.0846,
+      0.0815
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0015,
+     "interval_95": [
+      -0.0055,
+      0.0018
+     ]
+    }
+   },
+   "24,000 updates": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0008,
+     "interval_95": [
+      -0.0108,
+      0.0115
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0181,
+     "interval_95": [
+      -0.0341,
+      -0.0019
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0162,
+     "interval_95": [
+      -0.0903,
+      0.0624
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0042,
+     "interval_95": [
+      -0.0085,
+      -0.0006
+     ]
+    }
+   }
+  },
+  "parameters": {
+   "slc": 5256788,
+   "rd-base": 5249060
+  },
+  "pulses_a_byte": {
+   "slc-6k-s3": 231311,
+   "slc-24k-s3": 230166,
+   "note": "the plain bed fires about 116,000: the replay doubles the pulses, which the budget of 226,000 allows"
+  },
+  "reading": "Pass: after 24,000 updates slc-24k-s3 leads rd-base-24k-s3 by 0.0061 [0.0052, 0.0070], at least 0.005 with the interval clear of zero, so closed gates earn two server seeds of the same arm and its loop form at 6,000 and 24,000 updates (sleep_closed_gates_with_data.json). The lead shrank from 0.0080 after 6,000 updates, and where it sits moved: after 6,000 updates on near copies (-0.1054), after 24,000 on far copies (-0.0181 [-0.0341, -0.0019]) and new contexts (-0.0042 [-0.0085, -0.0006], 76% of the bytes), where the open-gated sleep of sl-24k-s1 had lost 0.009. Against the open-gated sleep of the same seed after 6,000 updates (sl-6k-s3 1.621763) the closed gates are 0.0015 better, unpaired. One seed.",
+  "owed": "The split by place in the window (experiments/window_place.py, both models over the 2,000,000 bytes) and the gates' openings (the share of quarters kept, by level) are not measured yet; no tool measures the sleep gates' quarters yet. They are added to this result when measured, before any server seed of sleep_closed_gates_with_data.json is read."
+ }
 }
