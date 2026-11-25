@@ -287,12 +287,12 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    spike form of a squared rectifier, which in floats recovered what plain units lose (v15's walk: 1.5087 against
    GELU's 1.5094 and the plain rectifier's 1.5249) without a second drive. It has a plain cell's synapses and no
    gate, where every spiking gate has failed; the squared cell tried in v15 fired k * k spikes with no scale and
-   collapsed. On the laptop's seed it leads the plain bed by **0.0262 after 6,000 updates** (paired interval
-   0.0249 to 0.0273), 0.022 of it on new contexts, at equal parameters and pulses: as much as the loop gained
-   there at 2.3 times the pulses. Two server seeds run first in the window of 2026-11-25
-   (`power_cells_with_data.json`), and if they read a fix or a constant gain an automatic job queues the full-size
-   pilot of the lifted loop with power-law cells the same night (`full_size_power_cells.json`), whose pass puts
-   them into the next full-length run.
+   collapsed. On the laptop's seed it led the plain bed by 0.0262 after 6,000 updates at equal parameters and
+   pulses, but by **0.0045 after 24,000** (`power_cells_screen.json`): it learns faster early and the plain cells
+   catch up as the rate decays. At 24,000 updates it is still 0.010 better on new contexts and 0.040 on far copies,
+   and loses that on contexts seen before with another follower (0.095 worse on 5% of bytes). Under the screen's
+   mark; the server seeds (`power_cells_with_data.json`) run behind the night's recipe pilots. A cell whose count
+   grows more gently than a square, or a smaller P, is the open question.
 3. **What holds late learning back: the charge grid and weight decay.** Does the charge grid limit late learning
    (`weight_precision_with_data.json`; at the best rate `randomness_at_best_rate.json`)? A typical full-size synapse
    is about 8 ticks from zero, so a tick is an eighth of it, and on the test bed a float stand-in that was level
