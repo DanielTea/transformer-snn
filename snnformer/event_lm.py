@@ -273,6 +273,11 @@ class EventLMConfig:
     # on its tape, through gate cells that hear both, so the bytes after the window read it as the replay saw it.
     # 0: the stack never sleeps.
     stack_sleep: int = 0
+    # Phases of a loop: every pass of a looped level after its first has a resting charge of its own for every cell
+    # and an offset of its own to every read head's gain, beside the synapses that all passes share, as the phases
+    # of a cortical rhythm change a circuit's excitability and not its wiring. Both start at zero, where the stack is
+    # the loop without them.
+    stack_loop_phases: bool = False
     granule_cap: int | None = None
     granule_gate: int = 0
     # A gated cell whose gate dendrite hears its fibres through the cell's own synapses: it fires about the square
@@ -3052,13 +3057,13 @@ class _StateRead(nn.Module):
         offset = F.embedding(place.clamp(0, self.word_span - 1), self.word_age.t()) * self.rate
         return offset.permute(0, 3, 1, 2), reach[:, None]
 
-    def _address(self, spikes, tokens=None, tape=None, position=0, heard=None):
+    def _address(self, spikes, tokens=None, tape=None, position=0, heard=None, gain_offset=None):
         """The spikes of every cell at every read as [batch, heads, bytes, cells], their sum at each read (none
         where the shares are a softmax's), the payloads and the number of cell spikes.
 
         In a stream the ``tape`` holds the cells that earlier bytes have left within reach. They stand before
         the cells of ``spikes``, ``position`` bytes have gone by before these, and the tape then takes up the
-        cells that the next bytes can still reach.
+        cells that the next bytes can still reach. ``gain_offset`` is a pass's own offset to every head's gain.
         """
         if self.kept and tape is not None:
             return self._address_kept(spikes, tape, position, heard)
@@ -3097,13 +3102,14 @@ class _StateRead(nn.Module):
         if self.mode == "age":
             shares = offset.masked_fill(~visible, -torch.inf).softmax(-1)
             return (shares if shares.ndim == 4 else shares[None]), None, payload, None
+        stored = None if self.mode == "age" else self.gain if gain_offset is None else self.gain + gain_offset
         if self.mode == "soft":
-            gain = (self.gain * self.rate).exp()
+            gain = (stored * self.rate).exp()
             charge = probe @ tag.transpose(2, 3) * (gain / math.sqrt(probe.shape[-1])) + offset
             return charge.masked_fill(~visible, -torch.inf).softmax(-1), None, payload, None
         # Pulse pairs charge a cell. The unit keeps the spread of the charge over cells near one at the start.
         unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
-        scale = (self.gain * self.rate).exp() / unit
+        scale = (stored * self.rate).exp() / unit
         charge = probe @ tag.transpose(2, 3) * scale + offset
         if self.budget is None:
             spacing = (self.spacing * self.rate).exp()
@@ -3143,14 +3149,15 @@ class _StateRead(nn.Module):
                 payload = torch.cat((payload, known_payload.expand(payload.shape[0], -1, -1, -1)), 2)
         return fired, fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum() + beats
 
-    def forward(self, spikes, pulse_counts=None, tokens=None, tape=None, position=0, fibres=None, heard=None):
-        fired, total, payload, cell_spikes = self._address(spikes, tokens, tape, position, heard)
+    def forward(self, spikes, pulse_counts=None, tokens=None, tape=None, position=0, fibres=None, heard=None,
+                gain_offset=None):
+        fired, total, payload, cell_spikes = self._address(spikes, tokens, tape, position, heard, gain_offset)
         if fibres is not None:
             # The fast output synapses hear which knowledge cells won, as [batch, bytes, heads, cells].
             fibres.append(fired[..., -self.knowledge:].detach().transpose(1, 2))
         return self._emit(spikes, fired, total, payload, cell_spikes, pulse_counts)
 
-    def replay(self, spikes, tape, position, pulse_counts=None, *, race=True):
+    def replay(self, spikes, tape, position, pulse_counts=None, *, race=True, gain_offset=None):
         """The stream after the read in a replay of the window of bytes that ends at ``position``, whose cells it
         then writes into ``tape``.
 
@@ -3175,7 +3182,8 @@ class _StateRead(nn.Module):
         offset = torch.where(distance >= 0, aged[:, distance.clamp(0, aged.shape[1] - 1)],
                              ahead[:, (-1 - distance).clamp(0, ahead.shape[1] - 1)])
         unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
-        scale = (self.gain * self.rate).exp() / unit
+        gain = self.gain if gain_offset is None else self.gain + gain_offset
+        scale = (gain * self.rate).exp() / unit
         charge = (probe @ tags.transpose(2, 3) * scale + offset).masked_fill(~visible, -torch.inf)
         if self.budget is None:
             spacing = (self.spacing * self.rate).exp()
@@ -4101,8 +4109,9 @@ class _GranuleLayer(nn.Module):
         self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
         self.emit = _IntegrateFire(cap, self.bits, False)
 
-    def rest_quarters(self):
-        quarters = self.rest.clamp(0, _GRANULE_REST_LIMIT) * _PACKET_UNITS
+    def rest_quarters(self, offset=None):
+        rest = self.rest if offset is None else self.rest + offset
+        quarters = rest.clamp(0, _GRANULE_REST_LIMIT) * _PACKET_UNITS
         return quarters.detach().round() + (quarters - quarters.detach())
 
     def gate_ticks(self):
@@ -4280,7 +4289,7 @@ class _GranuleLayer(nn.Module):
                 self.router_bias += _ROUTER_HOMEOSTASIS * (share - self.active / self.experts)
         return won.repeat_interleave(self.receive.shape[1] // self.experts, dim=-1)
 
-    def cells(self, spikes, tokens=None, carried=None, apical=None, heard=None):
+    def cells(self, spikes, tokens=None, carried=None, apical=None, heard=None, rest_offset=None):
         """The spike counts of all cells as [batch, bytes, clusters, cells]. ``apical`` is what the level's read
         brought to the stream, which the cells' apical tufts hear. ``heard`` is what the fibres of plain cells bring
         in place of the stream where skip fibres reach them, in sixteenths of a spike. The pool hears the stream
@@ -4306,14 +4315,14 @@ class _GranuleLayer(nn.Module):
 
             charge = _mixed_charge(collect, heard) if mixed else collect(heard)
         # A quarter spike of rest is a quarter of the cell's present threshold.
-        rest = self.rest_quarters().squeeze(-1) * quanta * self.quarter()
+        rest = self.rest_quarters(rest_offset).squeeze(-1) * quanta * self.quarter()
         own = None
         if self.tail and self.tail_local and torch.is_grad_enabled() and charge.requires_grad:
             # The same charge once more, as the cell's own synapses and rest answer for it: what they hear and the
             # pool's threshold are taken as given.
             given = heard.detach()
             own = (_mixed_charge(collect, given) if mixed else collect(given)) - (
-                self.rest_quarters().squeeze(-1) * quanta.detach() * self.quarter())
+                self.rest_quarters(rest_offset).squeeze(-1) * quanta.detach() * self.quarter())
         if self.gated:
             # The gate dendrite fires above the rest, and its spikes let the value dendrite's charge into the body.
             # A cell that gates itself opens by its own charge.
@@ -4351,10 +4360,11 @@ class _GranuleLayer(nn.Module):
             return F.gelu(thresholds * self.sharpness.exp())
         return self.fire(charge, quanta, sharpness=self.sharpness.exp())
 
-    def forward(self, spikes, tokens=None, carried=None, fired=None, apical=None, heard=None):
+    def forward(self, spikes, tokens=None, carried=None, fired=None, apical=None, heard=None, rest_offset=None):
         if heard is not None and self.credit is not None:
             raise ValueError("skip fibres reach cells that learn from the gradient")
-        cells = self.cells(spikes.detach() if self.credit == "local" else spikes, tokens, carried, apical, heard)
+        cells = self.cells(spikes.detach() if self.credit == "local" else spikes, tokens, carried, apical, heard,
+                           rest_offset)
         if fired is not None:
             # The fast output synapses hear the cells as fibres of their own. Trained ones pass their gradient on.
             fired.append(cells)
@@ -4472,6 +4482,9 @@ class EventLM(nn.Module):
         # A stack with a loop is built as the stack of the levels that a byte passes, whose passes of one level share
         # its reads and cells. The configuration that is kept names the loop, so a saved stack rebuilds as it was.
         stored, self.visits = cfg, self._visits(cfg)
+        if not isinstance(cfg.stack_loop_phases, bool) or (cfg.stack_loop_phases and (
+                cfg.stack_loop is None or cfg.stack_loop[2] < 2 or cfg.read_kept)):
+            raise ValueError("phases belong to the later passes of a loop of a stack without kept cells")
         cfg = self._unrolled(cfg)
         if cfg.delay_group_widths is not None:
             groups = cfg.group_widths
@@ -5046,6 +5059,23 @@ class EventLM(nn.Module):
         # without them.
         self.plastic_gains = (None if self.plastic_after is None
                               else nn.Parameter(torch.zeros(len(self.plastic_after))))
+        self.phase_rests = self.phase_gains = None
+        if cfg.stack_loop_phases:
+            # Every pass of a looped level after its first: a resting charge for each cell, in the cells' own units, and
+            # an offset to each read head's gain, stored at the address rate as the gain is. All start at zero.
+            later = [index for index in range(len(self.visits)) if self.visits.index(self.visits[index]) != index]
+            self.phase_rests = nn.ParameterDict(
+                {str(index): nn.Parameter(torch.zeros_like(self.granule_layers[str(index)].rest)) for index in later
+                 if self.granule_layers is not None and str(index) in self.granule_layers})
+            self.phase_gains = nn.ParameterDict(
+                {str(index): nn.Parameter(torch.zeros_like(self.state_reads[str(index)].gain)) for index in later
+                 if self.state_reads is not None and str(index) in self.state_reads
+                 and hasattr(self.state_reads[str(index)], "gain")})
+
+    def _phase(self, kind, index):
+        """A pass's own offset of the given kind at the level it visits as ``index``, or None."""
+        offsets = self.phase_rests if kind == "rest" else self.phase_gains
+        return None if offsets is None or str(index) not in offsets else offsets[str(index)]
 
     @staticmethod
     def _visits(cfg):
@@ -5787,10 +5817,12 @@ class EventLM(nn.Module):
             unread = spikes
             if str(index) in self.state_reads:
                 spikes = self.state_reads[str(index)].replay(spikes, stream.reads[str(index)], stream.position,
-                                                             memory_pulses, race=index < last)
+                                                             memory_pulses, race=index < last,
+                                                             gain_offset=self._phase("gain", index))
             if index < last and self.granule_layers is not None and str(index) in self.granule_layers:
                 apical = spikes - unread if self.cfg.granule_apical else None
-                spikes = self.granule_layers[str(index)](spikes, tokens, None, None, apical)
+                spikes = self.granule_layers[str(index)](spikes, tokens, None, None, apical,
+                                                         rest_offset=self._phase("rest", index))
 
     @staticmethod
     def _rested(stream):
@@ -5883,12 +5915,13 @@ class EventLM(nn.Module):
                     raise ValueError("state reads have no carried stream state yet outside a stack")
                 if stream is None and echo is not None and echo.everywhere:
                     spikes = self._echoed(echo, f"read{index}", spikes,
-                                          lambda heard, read=self.state_reads[str(index)]: read(heard, memory_pulses,
-                                                                                                tokens))
+                                          lambda heard, read=self.state_reads[str(index)], at=index: read(
+                                              heard, memory_pulses, tokens, gain_offset=self._phase("gain", at)))
                 elif stream is None:
                     spikes = self.state_reads[str(index)](
                         spikes, memory_pulses, tokens,
-                        heard=None if passed is None else self._heard(f"read{index}", spikes, passed[:-1]))
+                        heard=None if passed is None else self._heard(f"read{index}", spikes, passed[:-1]),
+                        gain_offset=self._phase("gain", index))
                 else:
                     known = (fibres if self.cfg.teach_knowledge and fibres is not None and index in heard_levels
                              else None)
@@ -5896,7 +5929,8 @@ class EventLM(nn.Module):
                     tape.attached = bool(self.cfg.stack_sleep)
                     spikes = self.state_reads[str(index)](
                         spikes, memory_pulses, tokens, tape, stream.position, known,
-                        None if passed is None else self._heard(f"read{index}", spikes, passed[:-1]))
+                        None if passed is None else self._heard(f"read{index}", spikes, passed[:-1]),
+                        gain_offset=self._phase("gain", index))
             if self.granule_layers is not None and str(index) in self.granule_layers:
                 if local_layers is not None:
                     raise ValueError("granule layers are not wired into the carried stream yet outside a stack")
@@ -5904,8 +5938,8 @@ class EventLM(nn.Module):
                 apical = spikes - unread if self.cfg.granule_apical else None
                 if echo is not None:
                     spikes = self._echoed(echo, f"cells{index}", spikes,
-                                          lambda heard, cells=self.granule_layers[str(index)], apical=apical:
-                                          cells(heard, tokens, apical=apical))
+                                          lambda heard, cells=self.granule_layers[str(index)], apical=apical, at=index:
+                                          cells(heard, tokens, apical=apical, rest_offset=self._phase("rest", at)))
                 else:
                     carried = None if stream is None else stream.cells.setdefault(str(index), FibreState())
                     if carried is not None:
@@ -5913,7 +5947,8 @@ class EventLM(nn.Module):
                     spikes = self.granule_layers[str(index)](
                         spikes, tokens, carried,
                         fibres if fibres is not None and index in heard_levels else None, apical,
-                        None if passed is None else self._heard(f"cells{index}", spikes, passed))
+                        None if passed is None else self._heard(f"cells{index}", spikes, passed),
+                        rest_offset=self._phase("rest", index))
             if passed is not None:
                 passed.append(spikes)
         if stream is not None and self.cfg.stack_sleep:
