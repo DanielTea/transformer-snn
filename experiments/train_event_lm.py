@@ -380,6 +380,7 @@ def build_model(args):
                             stack_sleep_keep=getattr(args, "stack_sleep_keep", EventLMConfig.stack_sleep_keep),
                             stack_loop_phases=bool(getattr(args, "stack_loop_phases", False)),
                             stack_loop_exits=bool(getattr(args, "stack_loop_exits", False)),
+                            balanced_synapses=bool(getattr(args, "balanced_synapses", False)),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             granule_power=getattr(args, "granule_power", EventLMConfig.granule_power),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
@@ -737,6 +738,9 @@ def main():
     parser.add_argument("--stack-sleep-keep", type=float, default=EventLMConfig.stack_sleep_keep, metavar="SHARE",
                         help="the share of a stored cell that a sleeping read's gates keep before they learn: 0.5, "
                              "or near 1 for gates that start closed, where sleep starts as the stack without it")
+    parser.add_argument("--balanced-synapses", action="store_true",
+                        help="every neuron of a stack's reads, plain cells and output has synapses that sum to zero over "
+                             "the stream's channels: balanced excitation and inhibition, which centres what it hears")
     parser.add_argument("--stack-loop-exits", action="store_true",
                         help="a racing loop: the output neurons hear the end of every pass of the loop and sum it as "
                              "evidence; the evidence after each earlier pass is trained as a prediction of its own")

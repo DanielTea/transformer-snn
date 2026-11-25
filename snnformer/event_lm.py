@@ -295,6 +295,12 @@ class EventLMConfig:
     # are the evidence of all passes with the top's. A byte may then be decided after the first pass whose evidence
     # leads by a margin, which experiments/loop_exits.py measures.
     stack_loop_exits: bool = False
+    # Balanced synapses: every synapse onto a read's probe, tag and payload neurons, a plain cell and an output neuron
+    # is held at the mean of that neuron's synapses less, so that each neuron's synapses sum to (nearly) zero over the
+    # channels of the stream (over each copy of it that late fibres bring). Excitation and inhibition then cancel for
+    # a stream whose channels all fire alike, as they balance in cortex, and a neuron answers the stream's pattern
+    # and not its level: the spiking form of the centring that a LayerNorm does, beside the pool that divides.
+    balanced_synapses: bool = False
     granule_cap: int | None = None
     # Power-law cells: a plain threshold cell fires round(k * k / granule_power) spikes for k thresholds of charge
     # above its rest, up to its largest count, as a cortical neuron's rate grows with a power of how far its membrane
@@ -633,7 +639,35 @@ def _weights_on_charge_grid(weight, bits):
     return _weight_ticks(weight, charge_bits=bits) / (1 << bits)
 
 
+def _groups(width, group):
+    return width if group is None or width % group else group
+
+
+def _centred(weight, group=None):
+    """Each neuron's synapses (along the last axis) less their mean over every ``group`` of inputs, or over all."""
+    size = _groups(weight.shape[-1], group)
+    grouped = weight.unflatten(-1, (weight.shape[-1] // size, size))
+    return (grouped - grouped.mean(-1, keepdim=True)).flatten(-2)
+
+
+def _balanced_ticks(ticks, group=None):
+    """Weight ticks less the mean of every ``group`` of a neuron's ticks, rounded to a tick: still whole ticks, and
+    each group sums to within half a tick per synapse of zero."""
+    size = _groups(ticks.shape[-1], group)
+    grouped = ticks.unflatten(-1, (ticks.shape[-1] // size, size))
+    if grouped.is_floating_point():
+        mean = grouped.mean(-1, keepdim=True)
+        mean = mean.detach().round() + (mean - mean.detach())
+    else:
+        mean = grouped.double().mean(-1, keepdim=True).round().to(grouped.dtype)
+    return (grouped - mean).flatten(-2)
+
+
 class _Synapse(nn.Module):
+    # Balanced synapses: None, or the width of the groups of inputs over which each neuron's synapses sum to zero
+    # (0: all of its inputs).
+    balance = None
+
     def __init__(self, inputs: int, outputs: int, gain: float, *, byte_input: bool = False,
                  continuous: bool = False, charge_bits: int = _CHARGE_BITS):
         super().__init__()
@@ -650,7 +684,12 @@ class _Synapse(nn.Module):
             self.weight = nn.Parameter(ticks.to(torch.int32), requires_grad=False)
 
     def weight_ticks(self):
-        return _weight_ticks(self.weight, quantized=not self.continuous, charge_bits=self.charge_bits)
+        ticks = _weight_ticks(self.weight, quantized=not self.continuous, charge_bits=self.charge_bits)
+        return ticks if self.balance is None else _balanced_ticks(ticks, self.balance or None)
+
+    def sizing_weight(self):
+        """The weights whose summed sizes bound this neuron's charge: the balanced ones where they are."""
+        return self.weight if self.balance is None else _centred(self.weight, self.balance or None)
 
     def forward(self, spikes):
         weight = self.weight_ticks()
@@ -2608,6 +2647,10 @@ class _StateRead(nn.Module):
             self.register_buffer("pacemakers", _pacemaker_counts(self.window, self.phases, 2 * self.window),
                                  persistent=False)
         self.payload = _Synapse(cfg.dim, cfg.read_width, gain=cfg.read_synapse_gain, charge_bits=bits)
+        if cfg.balanced_synapses:
+            for synapse in (getattr(self, "probe", None), getattr(self, "tag", None), self.payload):
+                if isinstance(synapse, _Synapse):
+                    synapse.balance = cfg.dim
         self.turn = cfg.read_turn
         if self.turn:
             # Every pair of a head's probe or tag neurons has a pacemaker pair, slower from pair to pair, and the
@@ -3352,7 +3395,10 @@ class _StateRead(nn.Module):
             if self.phases and index < 2:
                 phase = (self.probe_phase, self.tag_phase)[index]
                 allowed = allowed - (phase.weight_ticks().abs().sum(-1) * (_PHASE_SPIKES / self.emit.cap)).ceil()
-            sums = _unrounded_sums(synapse.weight, bits, width)
+            if synapse.balance is not None:
+                # Rounding a balanced synapse's mean moves it by half a tick more.
+                allowed = allowed - synapse.weight.shape[-1] / 2
+            sums = _unrounded_sums(synapse.sizing_weight(), bits, width)
             scaled += _shrink_synapses(synapse.weight, allowed / sums.clamp_min(1), bits)
         # A read neuron of the stream sums each head's synapses at that head's largest count of read pulses.
         pulses = (self.read_resolution * self.grain.exp().flatten() * self.fire.cap + 0.5) / self.emit.cap
@@ -4089,6 +4135,10 @@ class _GranuleLayer(nn.Module):
         # Spikes of charge a cell needs before its threshold counts, stored in quarter spikes.
         self.rest = nn.Parameter(torch.full((clusters, cells, 1), float(cfg.granule_rest)))
         self.branches = cfg.granule_branches
+        # Balanced synapses: a plain cell's synapses sum to zero over its fan, as excitation and inhibition balance.
+        self.balanced = bool(cfg.balanced_synapses)
+        if self.balanced and self.branches > 1:
+            raise ValueError("balanced synapses belong to cells of one dendrite")
         if self.branches > 1:
             # Every branch has a threshold of its own, stored in quarter spikes as the cell's rest is. At zero a branch
             # passes on all the charge it holds above none.
@@ -4192,6 +4242,11 @@ class _GranuleLayer(nn.Module):
         rest = self.rest if offset is None else self.rest + offset
         quarters = rest.clamp(0, _GRANULE_REST_LIMIT) * _PACKET_UNITS
         return quarters.detach().round() + (quarters - quarters.detach())
+
+    def receive_ticks(self):
+        """The cells' synapses in weight ticks, as [clusters, cells, fan]; balanced over the fan where they are."""
+        ticks = _weight_ticks(self.receive, charge_bits=self.bits)
+        return _balanced_ticks(ticks) if self.balanced else ticks
 
     def gate_ticks(self):
         """The synapses of the gate dendrites in charge ticks. A homeostatic gate's are scaled to the total strength
@@ -4387,7 +4442,7 @@ class _GranuleLayer(nn.Module):
         if self.branches > 1:
             charge = self.branched(heard, quanta)
         else:
-            receive = _weight_ticks(self.receive, charge_bits=self.bits)
+            receive = self.receive_ticks()
 
             def collect(counts):
                 return torch.einsum("btgk,gnk->btgn", counts, receive)
@@ -4456,7 +4511,7 @@ class _GranuleLayer(nn.Module):
         """The largest sums of weight ticks that a cell, a stream channel and a relay can receive. ``reach`` holds
         what a fibre of every channel may bring at most, in a stream neuron's largest counts, where skip fibres
         bring channels again."""
-        receive = _weight_ticks(self.receive, charge_bits=self.bits).abs()
+        receive = self.receive_ticks().abs()
         if reach is not None:
             receive = receive * reach[self.inputs][:, None]
         receive = receive.sum(-1).amax()
@@ -4515,6 +4570,8 @@ class _GranuleLayer(nn.Module):
         # synapses of a cell that gates itself also serve its gate.
         separate = self.gated and self.gate is not None
         dendrites = [(self.receive, 0 if separate else rest)]
+        if self.balanced:
+            spare = spare + self.receive.shape[-1] / 2
         if separate:
             dendrites.append((self.gate, rest))
         if self.vetoed:
@@ -4524,7 +4581,8 @@ class _GranuleLayer(nn.Module):
         scaled = 0
         for weight, resting in dendrites:
             allowed = limit - resting - spare
-            scaled += _shrink_synapses(weight, allowed / _unrounded_sums(weight, self.bits, width).clamp_min(1),
+            sizing = _centred(weight) if self.balanced and weight is self.receive else weight
+            scaled += _shrink_synapses(weight, allowed / _unrounded_sums(sizing, self.bits, width).clamp_min(1),
                                        self.bits)
         if self.apical is not None:
             # A tuft hears changes of up to two of a stream neuron's largest counts.
@@ -4564,6 +4622,9 @@ class EventLM(nn.Module):
         if not isinstance(cfg.stack_loop_phases, bool) or (cfg.stack_loop_phases and (
                 cfg.stack_loop is None or cfg.stack_loop[2] < 2 or cfg.read_kept)):
             raise ValueError("phases belong to the later passes of a loop of a stack without kept cells")
+        if not isinstance(cfg.balanced_synapses, bool) or (cfg.balanced_synapses and (
+                not cfg.stack or cfg.granule_gate or cfg.granule_veto)):
+            raise ValueError("balanced synapses belong to the reads, plain cells and output of a stack")
         if not isinstance(cfg.stack_loop_exits, bool) or (cfg.stack_loop_exits and (
                 cfg.stack_loop is None or cfg.stack_loop[2] < 2 or cfg.stack_sleep)):
             raise ValueError("a racing loop reads the passes of a loop of two or more passes, awake")
@@ -4828,6 +4889,8 @@ class EventLM(nn.Module):
         self.blocks = nn.ModuleList(_Level() if cfg.stack else _DelayBlock(cfg, i) for i in range(cfg.depth))
         self.local_history = len(self.delayed_input) + sum(block.history_size for block in self.blocks)
         self.output = _Synapse(cfg.dim, _VOCAB, gain=0.8, continuous=cfg.continuous)
+        if cfg.balanced_synapses:
+            self.output.balance = cfg.dim
         if cfg.output_tied:
             # One row of synapses for every byte: its way into the stream and its output neuron's way out of it.
             self.output.weight = self.input.weight
@@ -5404,7 +5467,10 @@ class EventLM(nn.Module):
         limit = _FP32_EXACT // self.input_emit.cap
         weight, bits = self.output.weight, self.output.charge_bits
         allowed = limit - weight.shape[-1] / 2 - 1
-        scaled = _shrink_synapses(weight, allowed / _unrounded_sums(weight, bits).clamp_min(1), bits)
+        if self.output.balance is not None:
+            allowed = allowed - weight.shape[-1] / 2
+        scaled = _shrink_synapses(weight, allowed / _unrounded_sums(self.output.sizing_weight(), bits).clamp_min(1),
+                                  bits)
         # Where skip fibres bring a channel again, a neuron's synapses from it count with all that may arrive.
         reaches = {} if self.skips is None else self._skip_reaches()
         for layers in (self.state_reads, self.granule_layers):
