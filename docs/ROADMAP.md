@@ -284,6 +284,17 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    small part of what the layout costs. A unit that multiplies is still 0.015 better than the plain hard one, with
    a code as thin. The rest of the layout is walked next in floats (`full_size_layout_in_floats.json`, queued): the
    stack's kind of pool in place of the Transformer's LayerNorms, and an output layer with weights of its own.
+   **Read: the pool is the largest part found.** In place of every LayerNorm the stack's pool costs the
+   Transformer 0.069 after 24,000 updates at full size (new contexts +0.084, far copies +0.075), three times
+   what the layout was thought to hold; an output with weights of its own makes it 0.008 better, so that part is
+   none of the gap. The pool divides by the stream's activity but takes no mean out. A float control with a
+   centred pool (`full_size_centring_in_floats.json`) says which half costs. Built beside it: **balanced
+   synapses** (`--balanced-synapses`, aa37176, `balanced_synapses.json`). In cortex the excitation and inhibition
+   onto a neuron balance, so it answers the pattern of its inputs and not their level. Here every synapse onto a
+   read's probe, tag and payload neurons, a plain cell and an output neuron is held at the neuron's mean synapse
+   less, in whole ticks, so each neuron's synapses sum to zero over the stream's channels: a level added to every
+   channel moves no charge, the charge stays exact, the parameters are the same, and the pool still divides. Two
+   bed seeds and a full-size pilot run if the control reads centring.
    **Power-law cells** (`--granule-power P`, `power_cells_screen.json`, on the laptop tonight): a cortical neuron's
    rate grows with a power of about two of how far its membrane stands past the threshold. A power-law cell fires
    round(k * k / P) spikes for k thresholds of charge, up to its cap, as a plain cell does at P thresholds: the
