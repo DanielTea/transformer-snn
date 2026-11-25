@@ -43,5 +43,154 @@
    }
   },
   "reading": "On a third seed and the laptop's shape of the bed the gate also catches up with data: its distance to the plain cell shrinks by 0.0098 from 6,000 to 24,000 updates (by 0.0100 on new contexts), where the server's two seeds shrank by 0.015. It is still 0.017 behind at 24,000 updates, further than on the server's fan2 bed (0.0047). Reported beside the reading at 96,000 updates, which it does not change."
+ },
+ "result": {
+  "recorded_utc": "2026-11-25T04:05:38Z",
+  "bpb": {
+   "hg-96k-s1": 1.389744,
+   "hg-96k-s2": 1.388418,
+   "pg-96k-s1-base": 1.376315,
+   "pg-96k-s2-base": 1.382509
+  },
+  "the shared reading (experiments/read_lead_study.py, against the bases of the same seeds and lengths)": {
+   "long_leads (96,000 updates)": [
+    -0.01343,
+    -0.00591
+   ],
+   "long_mean_lead": -0.00967,
+   "seeds_ahead": 0,
+   "short_leads (24,000 updates)": [
+    -0.00596,
+    -0.00346
+   ],
+   "short_mean_lead": -0.00471,
+   "growth": -0.00496,
+   "verdict": "fail"
+  },
+  "paired with the base, gate minus base (compare_stream_scores; new contexts by gap_by_piece, near 240, far 8,192)": {
+   "96,000 updates, seed 20001": {
+    "gap": 0.0134,
+    "interval_95": [
+     0.0125,
+     0.0143
+    ],
+    "new contexts": 0.0108
+   },
+   "96,000 updates, seed 20002": {
+    "gap": 0.0059,
+    "interval_95": [
+     0.0049,
+     0.0069
+    ],
+    "new contexts": 0.0095
+   }
+  },
+  "the gates after 96,000 updates (experiments/gate_state.py, the first 65,536 validation bytes)": {
+   "hg-96k-s1": {
+    "pulses a byte": 111231,
+    "share of the value that an open gate lets in, by level": [
+     0.512,
+     0.285,
+     0.271,
+     0.295,
+     0.348,
+     0.501
+    ],
+    "open gate states by the share let in (up to a quarter, a half, three quarters, more), by level": [
+     [
+      0.291,
+      0.249,
+      0.177,
+      0.283
+     ],
+     [
+      0.548,
+      0.292,
+      0.116,
+      0.044
+     ],
+     [
+      0.558,
+      0.312,
+      0.103,
+      0.027
+     ],
+     [
+      0.507,
+      0.336,
+      0.122,
+      0.035
+     ],
+     [
+      0.421,
+      0.344,
+      0.167,
+      0.068
+     ],
+     [
+      0.231,
+      0.307,
+      0.252,
+      0.21
+     ]
+    ]
+   },
+   "hg-96k-s2": {
+    "pulses a byte": 112648,
+    "share of the value that an open gate lets in, by level": [
+     0.454,
+     0.291,
+     0.274,
+     0.29,
+     0.352,
+     0.492
+    ],
+    "open gate states by the share let in (up to a quarter, a half, three quarters, more), by level": [
+     [
+      0.343,
+      0.267,
+      0.177,
+      0.212
+     ],
+     [
+      0.526,
+      0.313,
+      0.118,
+      0.042
+     ],
+     [
+      0.557,
+      0.303,
+      0.108,
+      0.032
+     ],
+     [
+      0.522,
+      0.323,
+      0.118,
+      0.037
+     ],
+     [
+      0.41,
+      0.349,
+      0.173,
+      0.068
+     ],
+     [
+      0.235,
+      0.315,
+      0.252,
+      0.197
+     ]
+    ]
+   },
+   "pg-96k-s1-base": {
+    "pulses a byte": 113636
+   },
+   "pg-96k-s2-base": {
+    "pulses a byte": 114132
+   }
+  },
+  "reading": "Fails. The gate caught up with the plain cell from 6,000 to 24,000 updates (by 0.015) and falls behind again from 24,000 to 96,000 (by 0.005): after 96,000 updates it is 0.0097 behind on the mean, behind on both seeds, and about 0.010 behind on new contexts. By this record's reading ramp gates are not pursued further. The record named the signed product of two drives as the next form of the cell; signed_gates_with_data.json has since failed on three seeds, so no form of the gated cell is open on this bed: every spiking gate tried (shunt, proportional, ramp, homeostatic ramp, signed product) costs more than it returns with data. The gates stay graded after 96,000 updates (at every level open states spread over all four quarters of the share let in, a quarter to a half of the value on the mean), and the gated stacks fire about the base's pulses (111,231 and 112,648 a byte against 113,636 and 114,132), so the loss is neither a gate turned into a switch nor a starved budget. The stack's depth by recurrence, which holds at full length (full_size_loop_run.json), is the line that continues."
  }
 }
