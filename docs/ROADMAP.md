@@ -294,7 +294,15 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    read's probe, tag and payload neurons, a plain cell and an output neuron is held at the neuron's mean synapse
    less, in whole ticks, so each neuron's synapses sum to zero over the stream's channels: a level added to every
    channel moves no charge, the charge stays exact, the parameters are the same, and the pool still divides. Two
-   bed seeds and a full-size pilot run if the control reads centring.
+   bed seeds and a full-size pilot run if the control reads centring. **The control reads the division**: the
+   centred pool still costs the Transformer 0.064, so centring recovers 8% and balanced synapses wait. The pool
+   divides by the stream's mean absolute activity where a norm divides by its root mean square; the two part where
+   a few channels are loud. Cortex divides by energy: in the normalization model a neuron's response is divided by
+   the pooled squared activity of its neighbours. **Energy pools** (`--pool-energy`, 91079d6, `energy_pool.json`)
+   let every pool of the stack hear the root of the stream's summed squared counts times its width, the summed
+   counts where the active channels fire alike and more where a few are loud: whole counts, the same spikes
+   however a stream is cut, no new parameters. A float control that divides by the root mean square, a full-size
+   pilot and two bed seeds run in the night of 2026-11-25.
    **Power-law cells** (`--granule-power P`, `power_cells_screen.json`, on the laptop tonight): a cortical neuron's
    rate grows with a power of about two of how far its membrane stands past the threshold. A power-law cell fires
    round(k * k / P) spikes for k thresholds of charge, up to its cap, as a plain cell does at P thresholds: the
