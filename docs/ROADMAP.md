@@ -276,6 +276,11 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    and a hard gated unit each end within about 0.005 on the mean, with seeds that disagree (growth
    0.007 and 0.008, unclear). A smoother cell and a cell that multiplies both
    remain candidates; `bounded_gates_in_floats.json` asks whether a gate may be bounded.
+   Read for v20 (`full_size_units_in_floats.json`): at full size the Transformer with the stack's kind of unit is
+   0.0077 behind its own after 24,000 updates, under a quarter of the spiking stack's distance, so the unit is a
+   small part of what the layout costs. A unit that multiplies is still 0.015 better than the plain hard one, with
+   a code as thin. The rest of the layout is walked next in floats (`full_size_layout_in_floats.json`, queued): the
+   stack's kind of pool in place of the Transformer's LayerNorms, and an output layer with weights of its own.
 3. **Quantal release and finer synaptic grids** (`weight_precision_with_data.json`; at the best rate
    `randomness_at_best_rate.json`): does the charge grid limit late learning?
 4. **The data-scaling curves** (`data_scaling_long.json`, running): which design's gap shrinks with data. It becomes
