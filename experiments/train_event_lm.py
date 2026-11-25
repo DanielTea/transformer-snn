@@ -379,6 +379,7 @@ def build_model(args):
                             stack_sleep=getattr(args, "stack_sleep", EventLMConfig.stack_sleep),
                             stack_sleep_keep=getattr(args, "stack_sleep_keep", EventLMConfig.stack_sleep_keep),
                             stack_loop_phases=bool(getattr(args, "stack_loop_phases", False)),
+                            stack_loop_exits=bool(getattr(args, "stack_loop_exits", False)),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             granule_power=getattr(args, "granule_power", EventLMConfig.granule_power),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
@@ -736,6 +737,11 @@ def main():
     parser.add_argument("--stack-sleep-keep", type=float, default=EventLMConfig.stack_sleep_keep, metavar="SHARE",
                         help="the share of a stored cell that a sleeping read's gates keep before they learn: 0.5, "
                              "or near 1 for gates that start closed, where sleep starts as the stack without it")
+    parser.add_argument("--stack-loop-exits", action="store_true",
+                        help="a racing loop: the output neurons hear the end of every pass of the loop and sum it as "
+                             "evidence; the evidence after each earlier pass is trained as a prediction of its own")
+    parser.add_argument("--loop-exit-weight", type=float, default=1.0,
+                        help="the weight of the mean loss of a racing loop's earlier passes beside the top's")
     parser.add_argument("--stack-loop-phases", action="store_true",
                         help="every pass of a looped level after its first has its own resting charge for each cell "
                              "and its own offset to each read head's gain, starting at zero")
@@ -1500,6 +1506,11 @@ def main():
             loss, language_loss, teacher_fraction = guided_language_loss(logits, targets, guidance, args.teacher_weight)
         if args.code_loss_weight:
             loss = loss + args.code_loss_weight * code_loss
+        if event and getattr(model, "exit_counts", None):
+            # The racing loop's earlier passes: each pass's summed evidence learns to predict the byte by itself.
+            exit_loss = torch.stack([F.cross_entropy(scoring_logits(evidence, event, args.spike_resolution).flatten(0, 1),
+                                                     targets.flatten()) for evidence in model.exit_counts]).mean()
+            loss = loss + args.loop_exit_weight * exit_loss
         if args.early_readout_weight:
             early_logits = scoring_logits(early[0], event, model.forecast_resolution)
             early_loss = F.cross_entropy(early_logits.flatten(0, 1), targets.flatten())

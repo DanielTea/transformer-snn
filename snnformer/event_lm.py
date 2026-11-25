@@ -289,6 +289,12 @@ class EventLMConfig:
     # of a cortical rhythm change a circuit's excitability and not its wiring. Both start at zero, where the stack is
     # the loop without them.
     stack_loop_phases: bool = False
+    # A racing loop: the output neurons hear the stream at the end of every pass of the loop, not only at the top,
+    # and add up what they hear as evidence, as decision neurons sum evidence until one option leads by enough. The
+    # evidence after each pass is a prediction of its own (kept in ``exit_counts`` for training); the stack's counts
+    # are the evidence of all passes with the top's. A byte may then be decided after the first pass whose evidence
+    # leads by a margin, which experiments/loop_exits.py measures.
+    stack_loop_exits: bool = False
     granule_cap: int | None = None
     # Power-law cells: a plain threshold cell fires round(k * k / granule_power) spikes for k thresholds of charge
     # above its rest, up to its largest count, as a cortical neuron's rate grows with a power of how far its membrane
@@ -4558,6 +4564,13 @@ class EventLM(nn.Module):
         if not isinstance(cfg.stack_loop_phases, bool) or (cfg.stack_loop_phases and (
                 cfg.stack_loop is None or cfg.stack_loop[2] < 2 or cfg.read_kept)):
             raise ValueError("phases belong to the later passes of a loop of a stack without kept cells")
+        if not isinstance(cfg.stack_loop_exits, bool) or (cfg.stack_loop_exits and (
+                cfg.stack_loop is None or cfg.stack_loop[2] < 2 or cfg.stack_sleep)):
+            raise ValueError("a racing loop reads the passes of a loop of two or more passes, awake")
+        self.exits = (() if not cfg.stack_loop_exits else
+                      tuple(cfg.stack_loop[0] + (cfg.stack_loop[1] - cfg.stack_loop[0] + 1) * done - 1
+                            for done in range(1, cfg.stack_loop[2])))
+        self.exit_counts = []
         cfg = self._unrolled(cfg)
         if cfg.delay_group_widths is not None:
             groups = cfg.group_widths
@@ -5993,6 +6006,11 @@ class EventLM(nn.Module):
         fibres = [] if heard_levels is not None else None
         # The stream as it stood at the input and after every level so far, for the skip fibres.
         passed = None if self.skips is None else [spikes]
+        # The stream at the end of every pass of a racing loop but the last, for the output neurons.
+        self.exit_counts, exit_streams = [], []
+        if self.exits and (echo is not None or correction_access is not None or return_prediction
+                           or early_readout is not None or tap is not None):
+            raise ValueError("a racing loop's output neurons hear the passes of a plain stack in windows or streams")
         for index, block in enumerate(self.blocks):
             if index == tap:
                 early = self._forecast_counts(spikes)
@@ -6045,6 +6063,8 @@ class EventLM(nn.Module):
                         rest_offset=self._phase("rest", index))
             if passed is not None:
                 passed.append(spikes)
+            if index in self.exits:
+                exit_streams.append(spikes)
         if stream is not None and self.cfg.stack_sleep:
             # The stream as it leaves the top of the stack, and the bytes, wait for their window's replay.
             stream.awake = spikes if stream.awake is None else torch.cat((stream.awake, spikes), 1)
@@ -6075,16 +6095,15 @@ class EventLM(nn.Module):
         elif echo is not None:
             spikes.retain_grad()
             echo.top = spikes
-        current = self.output(spikes)
-        if self.output_pool is not None:
-            # One quantum of threshold at rest and one more for every spike of the pool.
-            counts = self.output_emit(
-                current, 1 + self.output_pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)))
-        else:
-            counts = self.output_emit(current, reference=self._reference_counts(current))
-        if self.output_step > 1:
-            # Every spike stands for that many fine steps of evidence, in which the counts are scored.
-            counts = counts * self.output_step
+        counts = self._emitted(spikes)
+        if exit_streams:
+            # The racing loop: the output neurons heard the end of every earlier pass and summed it as evidence.
+            evidence = None
+            for heard in exit_streams:
+                part = self._emitted(heard)
+                evidence = part if evidence is None else evidence + part
+                self.exit_counts.append(evidence)
+            counts = counts + evidence
         if fibres is not None:
             # A stream runs the rule in whole numbers, except in training on streams, where trained fast synapses
             # run their window form from the state that the stream hands on, so that the gains learn.
@@ -6106,6 +6125,20 @@ class EventLM(nn.Module):
             outputs = (counts, prediction, self.prediction_memory.observation_code(observed))
             return outputs if early_readout is None else (*outputs, early)
         return counts if early_readout is None else (counts, early)
+
+    def _emitted(self, spikes):
+        """The output neurons' counts for the stream ``spikes``, in the fine steps of evidence they are scored in."""
+        current = self.output(spikes)
+        if self.output_pool is not None:
+            # One quantum of threshold at rest and one more for every spike of the pool.
+            counts = self.output_emit(
+                current, 1 + self.output_pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)))
+        else:
+            counts = self.output_emit(current, reference=self._reference_counts(current))
+        if self.output_step > 1:
+            # Every spike stands for that many fine steps of evidence, in which the counts are scored.
+            counts = counts * self.output_step
+        return counts
 
     def _heard(self, name, spikes, sources):
         """What the part ``name`` of a level hears through its skip fibres: the stream ``spikes`` and, at each
