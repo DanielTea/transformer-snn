@@ -5,6 +5,28 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
 <!-- hand-written:start -->
+## The looped stack at full length · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
+|---|---:|---|---:|---:|---:|---:|
+| 36.26M SNN stack, levels 2 to 8 run twice, trained on streams at 6e-4 | 36,263,956 | Stream, reach 8,192, taught output synapses | 1.10391 | 3 | — | — |
+| 36.26M SNN stack, levels 2 to 8 run twice, trained on streams at 6e-4 | 36,263,956 | Stream, reach 8,192 | 1.10762 | 4 | — | — |
+| 36.26M SNN stack, knowledge cells, trained on streams at 6e-4 (v19) | 36,263,956 | Stream, reach 8,192, taught output synapses | 1.11287 | 5 | — | — |
+| 36.26M SNN stack, levels 2 to 8 run twice, trained on streams at 6e-4 | 36,263,956 | Stream, as trained | 1.12595 | 6 | — | — |
+| 34.75M full attention, windows of 2,048 bytes, at 1.2e-3 | 34,752,000 | Windows with 2,032 bytes of history, taught output synapses | **1.07714** | 1 | — | — |
+| 34.75M full attention, windows of 2,048 bytes, at 1.2e-3 | 34,752,000 | Windows with 2,032 bytes of history | 1.07899 | 2 | — | — |
+
+v19's stack with its levels 2 to 8 run twice through the same synapses, 18 level passes on the synapses of 11, and
+the pulse budget scaled to 507,000 a byte (1.63 times v19's). It is the best spike-only stack so far, 0.0090 ahead
+of v19's on test (paired 95% interval 0.0084 to 0.0095) and 0.0086 on validation, nine tenths of it on new
+contexts. The Transformer is ahead by 0.0249 on test (0.0238 to 0.0261) and 0.0339 on validation, where it was ahead
+of v19's stack by 0.0339 and 0.0425 (`results/event_lm/knowledge_gap/full_size_loop_run.json`).
+[Model card](../models/spiking-byte-lm-v20/README.md) · [Scaling-law study](SCALING_LAW.md)
+
+![At full length the loop holds and narrows the gap to the Transformer](../results/figures/event_lm_loop_full_length.png)
+<!-- hand-written:end -->
+
+<!-- hand-written:start -->
 ## Each model at its best rate · 368,640,000 training targets · seed 20001
 
 | Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
