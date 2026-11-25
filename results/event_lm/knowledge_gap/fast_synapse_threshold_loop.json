@@ -1,0 +1,12 @@
+{
+ "study": "fast_synapse_threshold_loop",
+ "recorded_utc": "2026-11-25T09:28:01Z",
+ "kind": "A scan on the first million validation bytes, chosen before the test is read: the threshold of the looped stack's fast output synapses.",
+ "why": "Fast output synapses start at zero in every stream and learn from each byte after it was predicted; a spike of an output neuron takes a threshold of their fast charge. The threshold of 2^24 was tuned by v15 on the plain full-size stack, whose synapses hear the cells of 11 levels. The looped stack's hear the cells of 18 passes, and they gain it more: 0.0037 on test against the plain stack's 0.0017 (full_size_loop_run.json). Whether 2^24 is still the right threshold for 18 passes has not been asked. The scan runs on the server's CPUs, which are idle while DeepSeek has the GPUs, and its choice is made on validation bytes only, as the reach of 8,192 was.",
+ "arms": {
+  "thresholds": "fsp-loop's averaged weights (the v20 release file), reach 8,192, fast output synapses on the cells of all 18 passes (--teach-levels 0 to 17) at thresholds of 2^22, 2^23, 2^24 and 2^25; a further 2^26 if 2^25 is the lowest, or 2^21 if 2^22 is"
+ },
+ "measure": "experiments/eval_stream.py on the first 1,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, in pieces of 256, on the server's CPU (scores on the CPU and on a GPU agree to the fifth decimal, CASCADE_SYNAPSES.md), the bits of every piece kept, each threshold paired with 2^24 (experiments/compare_stream_scores.py).",
+ "reading": "The threshold with the fewest bits on the million is the looped stack's from here on if it is at least 0.001 below 2^24 there with the paired interval clear of zero; fsp-loop's test and validation are then rescored at it and reported as its reading at the chosen threshold, beside the pre-registered reading at 2^24, which stays the record's. Every later looped stack (fsp-lift and after) is then scored at both. Otherwise 2^24 stays and nothing is rescored.",
+ "seen_before_recording": "fsp-loop's scores at 2^24 (taught test 1.10391, validation 1.13866; reach 8,192 without fast synapses 1.10762 and 1.14041). No other threshold has been scored on a looped stack."
+}
