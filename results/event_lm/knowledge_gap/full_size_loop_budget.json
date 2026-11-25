@@ -1,0 +1,14 @@
+{
+ "study": "full_size_loop_budget",
+ "recorded_utc": "2026-11-25T06:35:38Z",
+ "kind": "One full-size pilot of 24,000 updates, one seed: the lifted loop given twice its pulse budget, against the lifted loop as piloted.",
+ "why": "The loop needs its pulses: at the plain stack's budget (310,000 a byte) the full-size loop was 0.0063 worse than at its scaled budget of 507,000 (full_size_loop_variants.json, fs-loop6-b310), while more pulses alone made the plain stack 0.009 worse because its membranes saturated (fs-b507, full_size_loop_pilot.json). The pool that lifts the ceiling removes that bound and made the loop 0.0095 better (fs-loop6-lift, 1.30073), and the looped stack at full length fires at its budget (510,145 a byte against 507,000, full_size_loop_run.json). Whether the lifted loop is still held back by its budget is not known. Daniel allowed more pulses if that is what wins (2026-11-21: 'if that makes us win yes'), as an arm of its own with its cost stated.",
+ "arms": {
+  "fs-loop6-lift-b1014": "--stack-loop 2,8,2 --pulse-budget 1014000 --pool-lifts-ceiling at peak rate 6e-4: fs-loop6-lift with twice its budget; 34,810,900 parameters, as fs-loop6-lift"
+ },
+ "base": "fs-loop6-lift (1.30073 on the first 2,000,000 validation bytes as streams; 513,300 pulses a byte at 24,000 updates): the same recipe, code, seed and measure.",
+ "runs": "sched/bin/full.sh stack fs-loop6-lift-b1014 --lr 6e-4 --stack-loop 2,8,2 --pulse-budget 1014000 --pool-lifts-ceiling, on the code copy of 97a2772 that trained every loop pilot, on GPU 0 at priority 36, after the loop with sleep's runs.",
+ "measure": "As full_size_loop_variants.json: full.sh's score, the first 2,000,000 validation bytes as 16 unbroken streams at the trained reach, paired with fs-loop6-lift (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); the pulses a byte at 24,000 updates and the training time.",
+ "reading": "One seed: this reading picks a recipe and is not a finding about energy. The lifted loop is held back by its budget if fs-loop6-lift-b1014 is at least 0.005 better than fs-loop6-lift with the paired interval clear of zero; a full-length run after fsp-lift then trains at the doubled budget, in a record of its own that states the pulses. Within 0.003 the budget is not what holds the loop back, and it stays at 507,000. Between, unclear and reported. Recorded either way: the gap, its part on new contexts, the pulses a byte it actually fires, and the time.",
+ "seen_before_recording": "full_size_loop_variants.json's b310 and lift arms, full_size_loop_pilot.json's fs-b507, full_size_loop_run.json with its result. fs-loop9 and fs-loop12-lift are paused partway and unscored. No looped stack has trained at a budget above 705,000."
+}
