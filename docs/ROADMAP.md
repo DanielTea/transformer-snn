@@ -281,6 +281,14 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    small part of what the layout costs. A unit that multiplies is still 0.015 better than the plain hard one, with
    a code as thin. The rest of the layout is walked next in floats (`full_size_layout_in_floats.json`, queued): the
    stack's kind of pool in place of the Transformer's LayerNorms, and an output layer with weights of its own.
+   **Power-law cells** (`--granule-power P`, `power_cells_screen.json`, on the laptop tonight): a cortical neuron's
+   rate grows with a power of about two of how far its membrane stands past the threshold. A power-law cell fires
+   round(k * k / P) spikes for k thresholds of charge, up to its cap, as a plain cell does at P thresholds: the
+   spike form of a squared rectifier, which in floats recovered what plain units lose (v15's walk: 1.5087 against
+   GELU's 1.5094 and the plain rectifier's 1.5249) without a second drive. It has a plain cell's synapses and no
+   gate, where every spiking gate has failed; the squared cell tried in v15 fired k * k spikes with no scale and
+   collapsed. After 300 updates on the laptop's CPU it was ahead of the plain bed; the screen reads 6,000 and
+   24,000 updates at the bed's best rate.
 3. **What holds late learning back: the charge grid and weight decay.** Does the charge grid limit late learning
    (`weight_precision_with_data.json`; at the best rate `randomness_at_best_rate.json`)? A typical full-size synapse
    is about 8 ticks from zero, so a tick is an eighth of it, and on the test bed a float stand-in that was level
