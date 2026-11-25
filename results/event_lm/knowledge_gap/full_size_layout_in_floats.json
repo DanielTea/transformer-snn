@@ -11,5 +11,101 @@
  "runs": "sched/bin/full.sh transformer NAME FLAG: 24,000 updates of 8 windows of 512 bytes, peak rate 3e-4, warmup 1,000, cosine over the run, seed 20001, on the code copy of 35c4a97, on GPU 0 at priority 37, after the sleep and phase screens' runs.",
  "measure": "As full_size_units_in_floats.json: averaged weights on the first 2,000,000 validation bytes in windows of 496 bytes of history before 16 scored, bits of every piece kept; each arm paired with fs-tf3 (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 496, far 8,192).",
  "reading": "One seed: these readings direct the next work and are not findings about the parts. The price of each part is the arm minus fs-tf3, read against what the unit leaves of the layout's distance, 0.0213 (0.0290 minus 0.0077). (1) A part whose price is at least half of that, 0.0107, is the larger part of what remains, and the next spiking work goes to it: for the pool, a normalization that centres as well as divides (a pool of inhibitory cells that subtracts the stream's mean activity before the threshold divides by it); for the output, an output layer that shares the input's synapses on the full-size stack (it failed on the test bed, shunt_tied/preregistered.json, so only at full size). (2) A part whose price is below a quarter, 0.0053, is a small part. (3) If both are small, the remaining distance lies in what neither diagnostic touched, the reads' layout and the stream's pulse budget, and the next diagnostic walks those. Reported either way: each price with its paired interval and its part on new contexts.",
- "seen_before_recording": "full_size_units_in_floats.json with its result; v15's walk at 9,000 updates (docs/STREAM_FORM.md); the arms' code built and tested (35c4a97: the pool's tests; the untied output's from before), and a pool-norm Transformer trained two updates on the laptop's CPU. No arm of this record has trained."
+ "seen_before_recording": "full_size_units_in_floats.json with its result; v15's walk at 9,000 updates (docs/STREAM_FORM.md); the arms' code built and tested (35c4a97: the pool's tests; the untied output's from before), and a pool-norm Transformer trained two updates on the laptop's CPU. No arm of this record has trained.",
+ "result": {
+  "recorded_utc": "2026-11-25T22:09:43Z",
+  "bpb": {
+   "fs-tf3": 1.305716,
+   "fs-tf3-pool": 1.374858,
+   "fs-tf3-own": 1.297332
+  },
+  "price of each part, arm minus fs-tf3 (paired, compare_stream_scores over 132,688 pieces of 16 bytes; above zero the part costs the Transformer)": {
+   "fs-tf3-pool": {
+    "price": 0.06914,
+    "interval_95": [
+     0.06815,
+     0.07013
+    ]
+   },
+   "fs-tf3-own": {
+    "price": -0.00838,
+    "interval_95": [
+     -0.00929,
+     -0.0075
+    ]
+   }
+  },
+  "by context, arm minus fs-tf3 (gap_by_piece, near 496, far 8,192)": {
+   "fs-tf3-pool": {
+    "copyable near": {
+     "share_of_bytes": 0.0987,
+     "gap": -0.0055,
+     "interval_95": [
+      -0.0093,
+      -0.0021
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0862,
+     "gap": 0.0745,
+     "interval_95": [
+      0.0683,
+      0.0804
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0068,
+     "interval_95": [
+      -0.0241,
+      0.0087
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.0836,
+     "interval_95": [
+      0.082,
+      0.0852
+     ]
+    }
+   },
+   "fs-tf3-own": {
+    "copyable near": {
+     "share_of_bytes": 0.0987,
+     "gap": -0.0072,
+     "interval_95": [
+      -0.011,
+      -0.0032
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0862,
+     "gap": -0.0057,
+     "interval_95": [
+      -0.0108,
+      -0.0013
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0089,
+     "interval_95": [
+      -0.0235,
+      0.0056
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0088,
+     "interval_95": [
+      -0.01,
+      -0.0076
+     ]
+    }
+   }
+  },
+  "reading": "The pool in place of every LayerNorm costs the Transformer 0.0691 [0.0682, 0.0701], more than three times the 0.0213 of the layout's distance that the unit leaves and far above the mark of 0.0107: it is the larger part of what remains, and the next spiking work goes to it, a normalization that centres as well as divides (a pool of inhibitory cells that subtracts the stream's mean activity before the threshold divides by it). The cost sits on new contexts (+0.0836, 76% of the bytes) and far copies (+0.0745); near copies are slightly better (-0.0055). The output's own weights do not cost the Transformer: they make it 0.0084 better [0.0075, 0.0093], on every kind of context alike, so the stack's untied output is no part of the distance, and an output that shares the input's synapses is not tried.",
+  "caveat": "One seed and a float control: the price is the pool's in a Transformer's residual stream at 3e-4 after 24,000 updates. It says where the float layout loses, not what a centring pool will gain in the spiking stack; that gain is measured on the stack itself."
+ }
 }
