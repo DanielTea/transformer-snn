@@ -44,6 +44,13 @@ stack is behind by 0.05 on test and 0.10 on validation, completing words it has 
 
 Records: `gap_by_piece_test.json`, `gap_by_piece_validation.json`.
 
+For v20's looped stack against the Transformer at its best rate the same fit by kind of byte puts the gap in letters
+and markup: letters, 72% of the bytes, are 0.036 behind on test and 0.075 on validation, wiki and XML markup (6%)
+0.075 and 0.137, and the bytes of multi-byte characters (0.6%) 0.24 and 0.17, while the stack is far ahead on
+punctuation (0.25 and 0.30) and line breaks (0.66 and 0.69). Letters and spaces rise and fall together from piece to
+piece, so only the narrow intervals are read; the loop's own gain over the plain stack is mostly in letters (0.012
+on test). What the stack lacks is the knowledge of how words and markup go on, which its memory cannot copy.
+
 ## What was tried
 
 All test-bed arms have the test bed's parameters (about 5.25 million) within a few hundred, train on streams unless
