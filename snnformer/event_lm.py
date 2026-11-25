@@ -301,6 +301,12 @@ class EventLMConfig:
     # a stream whose channels all fire alike, as they balance in cortex, and a neuron answers the stream's pattern
     # and not its level: the spiking form of the centring that a LayerNorm does, beside the pool that divides.
     balanced_synapses: bool = False
+    # An energy pool: the inhibitory pools of a stack's reads, cells and output hear the stream's energy, the square
+    # root of its channels' summed squared counts times their number, in place of their summed counts. That is the
+    # same for a stream whose active channels fire alike and larger where a few channels fire much more, so a stream
+    # is divided by its spread, as cortical normalization divides a neuron's response by the pooled squared activity
+    # of its neighbours (Heeger's normalization model) and as a Transformer's norm divides by the root mean square.
+    pool_energy: bool = False
     granule_cap: int | None = None
     # Power-law cells: a plain threshold cell fires round(k * k / granule_power) spikes for k thresholds of charge
     # above its rest, up to its largest count, as a cortical neuron's rate grows with a power of how far its membrane
@@ -829,6 +835,21 @@ class _ShuntedFire(_IntegrateFire):
             return counts.to(current.dtype)
         surrogate = (current * (self.quanta_per_threshold / self.threshold) / quanta).clamp(-self.cap, self.cap)
         return counts.to(current.dtype) + (surrogate - surrogate.detach())
+
+
+def _heard_activity(spikes, energy=False):
+    """What a stream's inhibitory pool hears at every byte, as [..., 1]: the summed counts of the stream's channels,
+    or with ``energy`` the whole part of the square root of their summed squares times their number, which equals the
+    summed counts where the active channels fire alike. Whole numbers for whole counts, with the gradient of the
+    smooth root while training."""
+    if not energy:
+        return spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)
+    channels = spikes.shape[-1]
+    whole = (spikes.detach().double().square().sum(-1, keepdim=True) * channels).sqrt().floor().to(spikes.dtype)
+    if not spikes.is_floating_point() or not spikes.requires_grad:
+        return whole
+    smooth = (spikes.square().sum(-1, keepdim=True) * channels + 1e-6).sqrt()
+    return whole + (smooth - smooth.detach())
 
 
 def _stream_pool(cfg):
@@ -2714,6 +2735,7 @@ class _StateRead(nn.Module):
                                        quanta_per_threshold=cfg.pool_quanta, capped=True)
             self.fire.lifted = cfg.pool_lifts_ceiling
             self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
+            self.energy = bool(cfg.pool_energy)
             self.budget = cfg.read_budget
             if self.budget is None:
                 # Cells fire once more for every ``spacing`` of charge they come closer to the most charged cell.
@@ -2852,7 +2874,7 @@ class _StateRead(nn.Module):
             probe, tag, payload = (self._unit(drive) for drive in (probe, tag, self.payload(for_payload)))
             return probe, tag, payload * self.read_resolution
         # The inhibitory pool raises every firing threshold with the stream's activity, as it does in a block.
-        quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+        quanta = self.rest_quanta + self.pool(_heard_activity(spikes, self.energy))
         quanta = quanta * self.threshold_scale
         if not self.signed:
             probe, tag = probe.clamp_min(0), tag.clamp_min(0)
@@ -4236,6 +4258,7 @@ class _GranuleLayer(nn.Module):
         # a whole threshold.
         self.tail, self.tail_local = cfg.granule_slope_tail * cfg.pool_fine, cfg.granule_slope_tail_local
         self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
+        self.energy = bool(cfg.pool_energy)
         self.emit = _IntegrateFire(cap, self.bits, False)
 
     def rest_quarters(self, offset=None):
@@ -4316,7 +4339,7 @@ class _GranuleLayer(nn.Module):
             opens = self.beat_at(self.word_bytes[tokens])
             return opens[..., None].expand(-1, -1, clusters).to(spikes.dtype), None
         if quanta is None:
-            quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+            quanta = self.rest_quanta + self.pool(_heard_activity(spikes, self.energy))
         quarter = self.tick.threshold // (self.tick.quanta_per_threshold * _PACKET_UNITS)
         rest = self.clock_rest.clamp(-_GRANULE_REST_LIMIT, _GRANULE_REST_LIMIT) * _PACKET_UNITS
         rest = rest.detach().round() + (rest - rest.detach())
@@ -4428,7 +4451,7 @@ class _GranuleLayer(nn.Module):
         brought to the stream, which the cells' apical tufts hear. ``heard`` is what the fibres of plain cells bring
         in place of the stream where skip fibres reach them, in sixteenths of a spike. The pool hears the stream
         itself."""
-        quanta = self.rest_quanta + self.pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype))
+        quanta = self.rest_quanta + self.pool(_heard_activity(spikes, self.energy))
         beats, rates = self.beats(spikes, tokens, quanta) if self.orders else (None, None)
         quanta = quanta[..., None]
         mixed = heard is not None
@@ -4622,6 +4645,8 @@ class EventLM(nn.Module):
         if not isinstance(cfg.stack_loop_phases, bool) or (cfg.stack_loop_phases and (
                 cfg.stack_loop is None or cfg.stack_loop[2] < 2 or cfg.read_kept)):
             raise ValueError("phases belong to the later passes of a loop of a stack without kept cells")
+        if not isinstance(cfg.pool_energy, bool) or (cfg.pool_energy and not cfg.stack):
+            raise ValueError("an energy pool belongs to the reads, cells and output of a stack")
         if not isinstance(cfg.balanced_synapses, bool) or (cfg.balanced_synapses and (
                 not cfg.stack or cfg.granule_gate or cfg.granule_veto)):
             raise ValueError("balanced synapses belong to the reads, plain cells and output of a stack")
@@ -6198,7 +6223,7 @@ class EventLM(nn.Module):
         if self.output_pool is not None:
             # One quantum of threshold at rest and one more for every spike of the pool.
             counts = self.output_emit(
-                current, 1 + self.output_pool(spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)))
+                current, 1 + self.output_pool(_heard_activity(spikes, self.cfg.pool_energy)))
         else:
             counts = self.output_emit(current, reference=self._reference_counts(current))
         if self.output_step > 1:

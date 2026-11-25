@@ -173,8 +173,16 @@ class _CentredPoolNorm(_PoolNorm):
         return self.weight * centred / (self.rest.abs() + centred.abs().mean(-1, keepdim=True))
 
 
+class _SpreadPoolNorm(_PoolNorm):
+    """The pool control dividing by the stream's root mean square in place of its mean absolute activity, with no
+    centring: a stack's pool that hears the stream's energy."""
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.weight * x / (self.rest.abs() + x.square().mean(-1, keepdim=True).sqrt())
+
+
 def _norm(dim: int, kind: str) -> nn.Module:
-    return {"layer": nn.LayerNorm, "pool": _PoolNorm, "cpool": _CentredPoolNorm}[kind](dim)
+    return {"layer": nn.LayerNorm, "pool": _PoolNorm, "cpool": _CentredPoolNorm, "spool": _SpreadPoolNorm}[kind](dim)
 
 
 class _TransformerBlock(nn.Module):
@@ -264,8 +272,9 @@ class TransformerLM(nn.Module):
         if cfg.feed_forward not in _UNITS or cfg.age_offsets < 0:
             raise ValueError("the feed-forward units are swiglu, reglu, gelu or relu, or a control gate (rampglu, "
                              "shuntglu, sigglu, bilinear), and the rate of the age offsets is not negative")
-        if cfg.norm not in ("layer", "pool", "cpool"):
-            raise ValueError("the reference's normalization is a LayerNorm or, as a control, a pool or a centred pool")
+        if cfg.norm not in ("layer", "pool", "cpool", "spool"):
+            raise ValueError("the reference's normalization is a LayerNorm or, as a control, a pool, a centred pool or "
+                             "a pool of the spread")
         if (cfg.feed_forward != "swiglu" or cfg.age_offsets or cfg.untied_output or cfg.norm != "layer") \
                 and cfg.attn != "transformer":
             raise ValueError("other units, age offsets, an output layer of its own and a pool in place of the norm "

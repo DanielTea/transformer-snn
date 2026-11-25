@@ -381,6 +381,7 @@ def build_model(args):
                             stack_loop_phases=bool(getattr(args, "stack_loop_phases", False)),
                             stack_loop_exits=bool(getattr(args, "stack_loop_exits", False)),
                             balanced_synapses=bool(getattr(args, "balanced_synapses", False)),
+                            pool_energy=bool(getattr(args, "pool_energy", False)),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             granule_power=getattr(args, "granule_power", EventLMConfig.granule_power),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
@@ -738,6 +739,9 @@ def main():
     parser.add_argument("--stack-sleep-keep", type=float, default=EventLMConfig.stack_sleep_keep, metavar="SHARE",
                         help="the share of a stored cell that a sleeping read's gates keep before they learn: 0.5, "
                              "or near 1 for gates that start closed, where sleep starts as the stack without it")
+    parser.add_argument("--pool-energy", action="store_true",
+                        help="the inhibitory pools of a stack hear the stream's energy (the root of its summed squared "
+                             "counts times its width) in place of its summed counts: division by the stream's spread")
     parser.add_argument("--balanced-synapses", action="store_true",
                         help="every neuron of a stack's reads, plain cells and output has synapses that sum to zero over "
                              "the stream's channels: balanced excitation and inhibition, which centres what it hears")
@@ -1061,7 +1065,7 @@ def main():
     parser.add_argument("--untied-output", action="store_true",
                         help="as a control the Transformer's output layer has weights of its own in place of the "
                              "embedding's, as the output synapses of a stack have")
-    parser.add_argument("--transformer-norm", choices=("layer", "pool", "cpool"), default=SNNConfig.norm,
+    parser.add_argument("--transformer-norm", choices=("layer", "pool", "cpool", "spool"), default=SNNConfig.norm,
                         help="as a control the Transformer's LayerNorms become pools: the stream divided by its mean "
                              "absolute activity and a learned rest, with a gain per channel and no centring, as a "
                              "stack's inhibitory pool raises its thresholds")

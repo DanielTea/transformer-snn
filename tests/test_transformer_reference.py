@@ -251,6 +251,19 @@ def test_a_centred_pool_takes_out_the_mean_before_it_divides():
     assert centred.blocks[0].mlp_norm.weight.grad.abs().sum() > 0
 
 
+def test_a_pool_of_the_spread_divides_by_the_root_mean_square():
+    torch.manual_seed(7)
+    spread = TransformerLM(replace(_FULL, norm="spool"), **_SMALL)
+    assert len([m for m in spread.modules() if type(m).__name__ == "_SpreadPoolNorm"]) == 2 * len(spread.blocks) + 1
+    x = torch.randn(2, 5, 16) + 3.0
+    norm = spread.blocks[0].attn_norm
+    torch.testing.assert_close(norm(x), x / (1e-3 + x.square().mean(-1, keepdim=True).sqrt()))
+    # One loud channel is held down: the output's root mean square stays near one.
+    loud = torch.zeros(1, 1, 16)
+    loud[..., 0] = 100.0
+    assert norm(loud).square().mean().sqrt() < 1.01
+
+
 def test_the_pool_is_a_control_of_the_full_transformer_only():
     with pytest.raises(ValueError, match="pool"):
         TransformerLM(replace(_FULL, norm="batch"), **_SMALL)
