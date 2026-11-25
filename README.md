@@ -13,30 +13,28 @@ can. In the game, a volley answers the ball before it bounces, as
 the model answers each byte when it comes. Releases up to v17 were
 published as ShuntFormer; their tags and files keep that name.
 
-The newest release, **v19**, trains the spike-only stack and its
-Transformer for the full 90,000 updates, each at the learning rate
-where it trains best at full size. The stack at 6e-4 reaches
-**1.113 bits per byte** on the enwik8 test, its best score so far
-and 0.003 ahead of v18. The Transformer at 1.2e-3 reaches 1.079,
-so at each model's best rate the gap is 0.034 on test and 0.042 on
-validation, wider than v17's 0.010 at a shared rate: once both
-have seen all their data, a faster rate is worth 0.028 to the
-Transformer and 0.004 to the stack. The stack stays ahead wherever
-the text it has read offers a copy, and it is 0.09 bits per byte
-behind on new contexts, three quarters of the bytes. A float
-stand-in, a diagnostic that is never a path, shows that most of
-that distance is not in the spikes: reads and cells that answer in
-real numbers close a fifth of it at full size, and four fifths
-belong to what the blocks compute. Depth by recurrence, the one
-part that adds knowledge at full size at equal parameters, holds
-with data on three seeds of the test bed, and its full-length run
-is training. The v19 weights are release assets, and the model that
-runs from a clone is v11.
+The newest release, **v20**, trains the looped stack for the full
+90,000 updates beside v19's pair: every byte passes the middle
+levels 2 to 8 twice, through the same synapses. It reaches
+**1.104 bits per byte** on the enwik8 test, its best score so far
+and 0.009 ahead of v19's plain stack, with the same gain on
+validation. The Transformer at its best rate reaches 1.079, so the
+gap falls from 0.034 to 0.025 on test and from 0.042 to 0.034 on
+validation. Nine tenths of the loop's gain is on new contexts,
+where the stack trails: depth by recurrence adds knowledge, and
+the gain holds with four times the data of its pilot. The looped
+stack has the same 36.26M parameters and fires 1.63 times the
+pulses. v20 also picks the loop's next form, finds the first
+spiking gate that catches up with data, and builds sleep, a stack
+that replays every finished window of its stream and rewrites its
+memory, which is on test. The v20 weights are release assets, and
+the model that runs from a clone is v11.
 
-![At full length the best learning rate pays the Transformer, not the stack](results/figures/event_lm_best_rate_pair.png)
+![At full length the loop holds and narrows the gap to the Transformer](results/figures/event_lm_loop_full_length.png)
 
 | Release | Adds | enwik8 test | Transformer | Scored in |
 |---|---|---:|---:|---|
+| [v20](#v20-depth-by-recurrence-at-full-length) | Depth by recurrence at full length, the loop's form, gated cells that catch up, sleep | 1.104 | **1.079** | Unbroken streams; windows of 2,048 bytes |
 | [v19](#v19-each-model-at-its-best-rate) | Each model at its best rate for 90,000 updates, where the distance lies, depth by recurrence with data | 1.113 | **1.079** | Unbroken streams; windows of 2,048 bytes |
 | [v18](#v18-membranes-that-saturate-and-a-ceiling-that-lifts) | Word heads, the learning rate at full size, membranes that saturate and the ceiling that lifts | 1.116 | **1.107** | Unbroken streams; windows of 2,048 bytes |
 | [v17](#v17-the-knowledge-gap) | Knowledge cells in the race, training on streams, where the gap is | 1.117 | **1.107** | Unbroken streams; windows of 2,048 bytes |
@@ -48,13 +46,15 @@ runs from a clone is v11.
 | [v11](#v11-surprise-clock-and-fast-synapses) | Fast synapses written by error spikes | 1.645 | 1.704 | One continuous stream |
 
 Each Transformer has the size and the training of its row. The
-Transformers of v19, v18, v17 and v16 trained on windows of 2,048
-bytes from 24,000 updates, as their stacks did, and read 2,048;
-every other one reads 512 bytes. v19's pair trained at each
-model's best peak rate, the stack at 6e-4 and the Transformer at
-1.2e-3; the earlier ones at 3e-4. The stacks of v19, v18 and v17
-have 36.26M parameters, 4.2% more than their Transformer, for
-their knowledge cells; v18's word heads add 352 more. v16 to v12 have
+Transformers of v20, v19, v18, v17 and v16 trained on windows of
+2,048 bytes from 24,000 updates, as their stacks did, and read
+2,048; every other one reads 512 bytes. v20 and v19 share their
+Transformer, and their stacks and it trained at each model's best
+peak rate, the stacks at 6e-4 and the Transformer at 1.2e-3; the
+earlier ones at 3e-4. The stacks of v20, v19, v18 and v17 have
+36.26M parameters, 4.2% more than their Transformer, for their
+knowledge cells; v18's word heads add 352 more. v20's stack runs
+its levels 2 to 8 twice and fires 1.63 times v19's pulses. v16 to v12 have
 about 34.8M parameters and
 368.64M training targets from random weights. The Transformer of
 v15 has the standard shape and trained under the rotated
@@ -72,10 +72,115 @@ the v11 Transformer scores 1.578. Every arm is one seed.
 [Knowledge-gap study](docs/KNOWLEDGE_GAP.md) ·
 [Roadmap](docs/ROADMAP.md) ·
 [Scaling-law study](docs/SCALING_LAW.md) ·
-[Model card](models/spiking-byte-lm-v19/README.md) ·
+[Model card](models/spiking-byte-lm-v20/README.md) ·
 [Leaderboard](docs/LEADERBOARD.md) ·
-[Research handoff](docs/V19_HANDOFF.md) ·
-[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v19)
+[Research handoff](docs/V20_HANDOFF.md) ·
+[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v20)
+
+## v20: depth by recurrence at full length
+
+v19 found that the distance to the Transformer is knowledge, and
+its loop pilot found the first part that adds knowledge at full
+size at equal parameters: running levels 2 to 8 twice through the
+same synapses, as cortex iterates. v20 trains that looped stack
+for the full 90,000 updates beside v19's pair, picks the loop's
+form in full-size pilots, and screens two gated cells and sleep on
+the test bed. Every test was recorded before its runs
+(`results/event_lm/knowledge_gap/`); the study is
+[docs/SCALING_LAW.md](docs/SCALING_LAW.md).
+
+**The loop holds at full length.** After 90,000 updates at 6e-4
+the looped stack scores 1.1039 bits per byte on the enwik8 test
+and 1.1387 on validation, read as 16 unbroken streams with fast
+output synapses on all 18 passes at a reach of 8,192 bytes. That
+is 0.0090 better than v19's plain stack on test (paired 95%
+interval 0.0084 to 0.0095) and 0.0086 on validation
+(`full_size_loop_run.json`). The pilot's gain after 24,000
+updates was 0.0096, so the gain has not faded with four times the
+data, the streams, the knowledge cells and the fast synapses. The
+Transformer is ahead by 0.025 on test (0.024 to 0.026) and 0.034
+on validation, where it was ahead of the plain stack by 0.034 and
+0.042. The loop adds no parameters; it fires 1.63 times the plain
+stack's pulses, for which its budget was scaled, and every claim
+of it says so.
+
+**Its gain is knowledge.** Split byte by byte by what each byte's
+context offers, nine tenths of the loop's gain is on new contexts,
+three quarters of the bytes: 0.012 bits per byte better than the
+plain stack there on test and 0.010 on validation. Against the
+Transformer the distance on new contexts falls from 0.090 to 0.078
+on test and from 0.100 to 0.090 on validation, and the stack stays
+far ahead on copies (0.08 near and 0.46 from 2 to 8 KB back).
+Where the eight bytes before ran earlier and something else
+followed them, about 5% of the bytes, the looped stack is about
+0.05 worse than the plain one.
+
+**Its membranes saturate, and the pool that lifts the ceiling
+helps it.** The looped stack's top level sits at its bound twice
+as often as the plain stack's: 27% of the top cells' entries
+against 12%, and 11% of the top read's against 2.4%. In full-size
+pilots of 24,000 updates (`full_size_loop_variants.json`) the loop
+under the pool that lifts the ceiling, which divides a charge
+before it is bounded, is 0.0095 better than the loop as it trained
+here (0.0087 to 0.0104), 0.0145 on new contexts, and the loop at
+the plain stack's pulse budget is 0.0063 worse: the loop needs its
+pulses. On the test bed the loop's gain is constant with data on
+two more seeds (`loop_with_data.json`: 0.014 and 0.028 over the
+energy control after 24,000 updates), and skip fibres add nothing
+to it (`skip_fibres_with_data.json`). The next full-length run
+takes the loop under the lifting pool; two pilots decide whether
+it also takes a third pass and the Transformer's rate.
+
+**The gated cells: bounds are not the trouble, learning is.** In
+floats the plain rectifying unit, the stack's cell, falls behind
+with data, where the Transformer's gated units do not (v19). No
+bounded gate falls behind with data in floats
+(`bounded_gates_in_floats.json`): ramp, shunt, logistic and product
+gates each cost a constant level and none grows. In spikes, a ramp
+gate held in range as cortex holds a neuron, its synapses scaled
+back to their first total and its rest moved by a local rule
+toward a set share of open bytes (`--granule-gate-home`), is the
+first spiking gate that catches up with data: 0.020 behind the
+plain cell after 6,000 updates and 0.005 after 24,000, on two seeds
+(`homeostatic_gates_with_data.json`), and from 0.027 to 0.017 on a
+third. It misses the screen's mark, and a pair at 96,000 updates
+decides whether it passes the plain cell
+(`homeostatic_gate_at_length.json`). A gate that multiplies two
+drives of either sign (`--granule-gate-signed`) falls behind with
+data on three seeds (`signed_gates_with_data.json`): its product
+lets in up to 2.2 times the value, its cells fire 22,200 pulses a
+byte, and the reads are left with half their pulses.
+
+**Sleep, built and on test.** At rest the hippocampus replays
+recent experience, forward and in reverse, and memories are
+rewritten in the light of what followed. Lee et al. (2026,
+"Sample-Efficient In-Context Adaptation via Sleep") let a
+Transformer re-run itself over every finished window of its
+context and refine its stored keys and values through a learned
+gate, and it reaches its loss with 2.1 to 2.4 times fewer context
+tokens. v20 builds it in spikes (`--stack-sleep 64`): after every
+64 bytes of a stream the stack replays the window that has just
+ended. The stream as it left the top of the stack enters the
+first level again, every level runs once more over the window, and
+the replay's reads see the whole window, its later bytes too. Gate
+cells in every read then decide, cell by cell and in quarters, how
+much of the stored cell the replay rewrites. The spikes are the
+same however the stream is cut, and with gates that keep every
+cell it is the stack without sleep. After 6,000 updates on the
+test bed it is not ahead: 0.004 behind the plain bed alone and
+0.007 behind the loop on top of it, two seeds each. The runs of
+24,000 updates decide (`sleep_with_data.json`). The replay doubles
+the pulses a byte.
+
+**Smaller results.** Reaches of 16,384 and 32,768 cells read worse
+than 8,192 for v19's stack (`stream_reach_longer.json`), so 8,192
+stays. An output whose every spike stands for 8 fine steps saves a
+third of the pulses and costs 0.0016 after 24,000 updates on one
+seed of the test bed (`output_step_with_data.json`).
+
+**Limits.** One seed at full size. The pulses a byte are the
+trainer's count, not audited by a native decoder. The looped stack
+trained without the lifting pool that its pilots now prefer.
 
 ## v19: each model at its best rate
 
@@ -965,6 +1070,16 @@ control gates.
 [Restore and rescore](docs/V19_HANDOFF.md#restore-the-checkpoints) ·
 [Exact manifest](models/spiking-byte-lm-v19/manifest.json)
 
+The v20 archive holds the best spike-only stack so far, v19's
+stack with its levels 2 to 8 run twice through the same synapses
+for 90,000 updates. A second asset holds the bits of every scoring
+recorded since v19. Its handoff has the restore command, the
+scoring of the looped stack and its pairing with v19's pair, the
+saturation probe, and the flags of the homeostatic gate, the
+signed gate and sleep.
+[Restore and rescore](docs/V20_HANDOFF.md#restore-the-checkpoint) ·
+[Exact manifest](models/spiking-byte-lm-v20/manifest.json)
+
 Regenerate the leaderboards, scientific figures and browser report
 from the checked-in records.
 
@@ -982,6 +1097,8 @@ python experiments/plot_gap_by_context.py
 python experiments/plot_distance_split.py
 python experiments/plot_full_size_parts.py
 python experiments/plot_plain_units.py
+python experiments/plot_pair_curves.py
+python experiments/plot_loop_full_length.py
 python experiments/make_report.py docs/report.html
 ```
 

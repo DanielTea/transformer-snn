@@ -362,6 +362,7 @@ def build_model(args):
                             stack_loop=(None if getattr(args, "stack_loop", None) is None
                                         else tuple(map(int, args.stack_loop.split(",")))),
                             stack_skips=getattr(args, "stack_skips", EventLMConfig.stack_skips),
+                            stack_sleep=getattr(args, "stack_sleep", EventLMConfig.stack_sleep),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
@@ -384,6 +385,8 @@ def build_model(args):
                             granule_ramp=getattr(args, "granule_ramp", EventLMConfig.granule_ramp),
                             granule_inner_gate=getattr(args, "granule_inner_gate",
                                                        EventLMConfig.granule_inner_gate),
+                            granule_gate_home=getattr(args, "granule_gate_home", EventLMConfig.granule_gate_home),
+                            granule_gate_signed=getattr(args, "granule_gate_signed", EventLMConfig.granule_gate_signed),
                             output_tied=getattr(args, "tied_output", EventLMConfig.output_tied),
                             granule_veto=getattr(args, "granule_veto", EventLMConfig.granule_veto),
                             granule_branches=getattr(args, "granule_branches", EventLMConfig.granule_branches),
@@ -709,6 +712,10 @@ def main():
                              "input and after each earlier level, through a gain for every channel that starts at "
                              "zero (level), or the read's probes, tags and payloads each through gains of their "
                              "own (parts); every pass of a loop has its own gains")
+    parser.add_argument("--stack-sleep", type=int, default=EventLMConfig.stack_sleep, metavar="WINDOW",
+                        help="sleep: after every WINDOW bytes of a stream the stack replays the window, every level "
+                             "once more from the stream at its top, its reads reaching the whole window, and each "
+                             "read writes the replay's cells into its tape through gate cells (0: never)")
     parser.add_argument("--read-after", help="comma-separated byte-rate blocks that a state read follows")
     parser.add_argument("--read-width", type=int, default=EventLMConfig.read_width, help="channels of a state read")
     parser.add_argument("--read-heads", type=int, default=EventLMConfig.read_heads)
@@ -826,6 +833,13 @@ def main():
     parser.add_argument("--granule-inner-gate", action="store_true",
                         help="with --granule-gate, the gate dendrite sends no spike: its steps stay inside the "
                              "cell, as a veto's do, and only the body's spikes count as pulses")
+    parser.add_argument("--granule-gate-home", type=float, default=EventLMConfig.granule_gate_home, metavar="SHARE",
+                        help="with --granule-ramp, a homeostatic gate: its synapses keep their first total strength "
+                             "and a local rule moves its rest while training until on the mean it lets in SHARE of "
+                             "the collected charge (0 to 1; 0 is off)")
+    parser.add_argument("--granule-gate-signed", action="store_true",
+                        help="with --granule-gate and --granule-inner-gate, a gate that multiplies two drives of "
+                             "either sign: no rest, spikes on both rails, synapses that keep their first total")
     parser.add_argument("--granule-branches", type=int, default=EventLMConfig.granule_branches, metavar="BRANCHES",
                         help="the dendrite of every plain granule cell branches BRANCHES times: each branch sums an "
                              "equal share of the cell's fibres and passes on only the charge above a threshold of its "

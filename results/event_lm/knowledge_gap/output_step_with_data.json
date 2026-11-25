@@ -12,5 +12,128 @@
  "measure": "experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams, lead 8,192, averaged weights, bits kept, each arm scored with the output step it trained with and paired with the base of its length (experiments/compare_stream_scores.py); experiments/gap_by_piece.py (near 240, far 8,192); experiments/gate_state.py for the pulses a byte by population on the first 65,536 validation bytes, which shows where the freed pulses go; the price of the budget along training",
  "prediction": "From the price alone, to first order: out8 leads the base by about 0.009 bits per byte at 6,000 updates (0.020 nats for the whole budget times the 30% of it that the output frees) and by about 0.002 at 24,000 (0.0045 nats times 34%). out8-b75 is level with the base at both lengths. A lead at 24,000 updates well above 0.002 would mean that pulses are worth more along the way than the price at the end says.",
  "reading": "A screen with one seed. Arms that share a seed and change nothing that matters have differed by 0.001 to 0.004 (the nulls of gated_cells_with_data and noisy_thresholds_with_data). out8 earns two seeds on the server at both lengths and an arm with --output-step 8 in the next full-size pilot if it leads the base by at least 0.010 at 24,000 updates, or by at least 0.005 there with a lead no smaller than at 6,000 updates. Otherwise the coarse output stays what output_step_on_trained_weights.json showed, a saving of energy at no cost in bits, and is reported only. out8-b75 shows that the saving also holds as a way to train if it is within 0.004 of the base at 24,000 updates; if it trails by more, the saving is stated for trained weights alone. Recorded either way: both arms at both lengths, the split by context, the pulses by population and the price along training.",
- "seen_before_recording": "output_step_on_trained_weights.json (cd72ec3): the measurement on weights that trained with fine spikes, and the price paths of rd-base-6k-s3 and rd-base-24k-s3 named above. loop_with_data's arm b264, which gives the plain bed 2.3 times the budget, is queued on the laptop ahead of this screen and has not trained; full_size_loop_pilot's arm fs-b507 is queued on the server and has not trained. No run has trained with a coarse output step beyond the unit tests."
+ "seen_before_recording": "output_step_on_trained_weights.json (cd72ec3): the measurement on weights that trained with fine spikes, and the price paths of rd-base-6k-s3 and rd-base-24k-s3 named above. loop_with_data's arm b264, which gives the plain bed 2.3 times the budget, is queued on the laptop ahead of this screen and has not trained; full_size_loop_pilot's arm fs-b507 is queued on the server and has not trained. No run has trained with a coarse output step beyond the unit tests.",
+ "result": {
+  "recorded_utc": "2026-11-24T21:49:09Z",
+  "bpb": {
+   "rd-base-6k-s3": 1.628284,
+   "out8-6k-s3": 1.620953,
+   "out8-b75-6k-s3": 1.625896,
+   "rd-base-24k-s3": 1.482467,
+   "out8-24k-s3": 1.4834,
+   "out8-b75-24k-s3": 1.48408
+  },
+  "note_on_the_base": "The base's score files on the laptop read 1.628284 and 1.482467; the record's base line quoted 1.628291 and 1.482439 from an earlier scoring. The paired leads use the score files.",
+  "leads over the base (compare_stream_scores, paired; above zero the arm is better)": {
+   "out8 6k": {
+    "lead": 0.00733,
+    "interval_95": [
+     0.00627,
+     0.00839
+    ]
+   },
+   "out8 24k": {
+    "lead": -0.00093,
+    "interval_95": [
+     -0.00187,
+     -1e-05
+    ]
+   },
+   "out8-b75 6k": {
+    "lead": 0.00239,
+    "interval_95": [
+     0.00137,
+     0.00343
+    ]
+   },
+   "out8-b75 24k": {
+    "lead": -0.00161,
+    "interval_95": [
+     -0.0025,
+     -0.00069
+    ]
+   }
+  },
+  "by context at 24,000 updates, arm minus base (gap_by_piece, near 240, far 8,192; below zero favours the arm)": {
+   "out8": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0112,
+     "interval_95": [
+      0.0011,
+      0.0209
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0386,
+     "interval_95": [
+      -0.0556,
+      -0.023
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.0716,
+     "interval_95": [
+      -0.0075,
+      0.1438
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.0006,
+     "interval_95": [
+      -0.0028,
+      0.0037
+     ]
+    }
+   },
+   "out8-b75": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0263,
+     "interval_95": [
+      0.0168,
+      0.0376
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0539,
+     "interval_95": [
+      -0.0682,
+      -0.0401
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.0764,
+     "interval_95": [
+      0.0003,
+      0.1483
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.0019,
+     "interval_95": [
+      -0.0009,
+      0.005
+     ]
+    }
+   }
+  },
+  "pulses_a_byte_at_24k (trainer)": {
+   "rd-base": 116193,
+   "out8": 113559,
+   "out8-b75": 76187
+  },
+  "pulses_by_population_and_price_along_training": "not read in this session",
+  "readings": {
+   "out8": "0.0073 ahead at 6,000 updates and 0.0009 behind at 24,000 [0.0000, 0.0019]: no lead at 24,000, so it earns no server seeds and no full-size arm. The coarse output stays a saving of energy at no cost in bits (output_step_on_trained_weights.json), reported only. Like every early gain on the bed, its 6k lead fades with data.",
+   "out8-b75": "0.0016 behind the base at 24,000 updates [0.0007, 0.0025], within the 0.004 allowed: the saving also holds as a way to train. It trains at 76,187 pulses a byte against the base's 116,193 (34% fewer) for 0.0016 bits a byte. By context it gives up near copies (+0.026) and wins far copies (-0.054); new contexts are level."
+  },
+  "verdict": "Reported only (out8 has no lead at 24,000 updates). The coarse output's energy saving holds when trained in (out8-b75 within 0.004): a model may train with a third fewer pulses at almost no cost in bits."
+ }
 }

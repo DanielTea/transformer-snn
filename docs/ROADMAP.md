@@ -16,7 +16,8 @@ claims are made, and what to try next. Every number links to a record in
 
 | Scale | Stack | Transformer | Gap (bits per byte) |
 |---|---|---|---|
-| Full size, each model at its best rate (v19: fsp-st at 6e-4, 36.3M parameters), enwik8 test | 1.1129 | 1.0790 (34.75M, at 1.2e-3) | **0.034 behind** |
+| Full size, the looped stack (fsp-loop: levels 2 to 8 run twice, 36.3M parameters, 1.63 times the pulses), enwik8 test | 1.1039 | 1.0790 (34.75M, at 1.2e-3) | **0.025 behind** |
+| Full size, each model at its best rate (v19: fsp-st at 6e-4, 36.3M parameters), enwik8 test | 1.1129 | 1.0790 (34.75M, at 1.2e-3) | 0.034 behind |
 | The same pair against the Transformer with output synapses that learn while it reads | 1.1129 | 1.0771 | 0.036 behind |
 | Full size, both at 3e-4 (v18: l2048-word-st, 36.3M), enwik8 test | 1.1162 | 1.1067 (34.75M) | 0.0095 behind |
 | The same stack against the Transformer with output synapses that learn while it reads | 1.1162 | 1.1032 | 0.013 behind |
@@ -27,8 +28,9 @@ claims are made, and what to try next. Every number links to a record in
 | Test bed, 98.3M training bytes, each model at its best learning rate, mean of two seeds | 1.4895 | 1.4412 | 0.048 behind |
 
 The full-size stacks read up to 8,192 cells back and have fast synapses that
-learn while they read; the best one has 128 knowledge cells in every read and
-trained on streams at its best rate, 6e-4. The full-size Transformer reads windows of
+learn while they read; the best one has 128 knowledge cells in every read,
+trained on streams at its best rate, 6e-4, and runs its levels 2 to 8 twice with
+tied synapses (`full_size_loop_run.json`). The full-size Transformer reads windows of
 2,048 bytes. The test-bed stack has delayed fibres and trained on streams.
 Sources: `results/event_lm/knowledge_gap/full_size_best_rate_pair.json`,
 `results/event_lm/long_streams/leaderboard.json`,
@@ -235,7 +237,15 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    the laptop's seed was not run. Untried: a lower rate or a decay on the gate's drive, and a set point, a resting
    level that keeps each gate open at about half of the bytes as cortical neurons keep their excitability in
    range. They wait for the float diagnostic below: if a gated unit earns nothing at this size in floats, no spike
-   form of it can.
+   form of it can. Built for v20 (`--granule-gate-home SHARE`, c750cac): homeostatic gates. The
+   proportional gate failed because its synapses grew until the range rule shrank 9,000 to 14,000 neurons, so a set
+   point on the rest alone would chase that growth. Cortex holds a neuron in range by two mechanisms at once:
+   synaptic scaling, which keeps the total strength of its synapses fixed, and intrinsic plasticity, which moves
+   its excitability toward a target rate. Here a ramp gate's synapses keep the total they had at the first byte,
+   and a local rule moves its rest, outside the gradient and only while training, toward a let-in share of one
+   half on the mean, so that a gate can only be graded. Its screen on the bed where the proportional gate turned
+   into a switch is pre-registered and queued, held until `bounded_gates_in_floats.json` has been read
+   (`homeostatic_gates_with_data.json`); `full_size_units_in_floats.json` prices what a working cell could win.
 
    Two controls in floats would say whether the unit also explains the gap late in training, since the walk priced
    it at 9,000 updates: a Transformer with plain units on the test bed at 6,000 and 24,000 updates (does it flatten
@@ -273,8 +283,12 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    parameters that adds knowledge at full size. It spends 1.63 times the pulses and 1.4 times the training time.
    On the test bed the loop holds with data (`loop_with_data.json`): 0.025 ahead of the plain bed given the same
    pulses after 6,000 updates and 0.017 after 24,000 (0.013 on new contexts), and on two more seeds 0.020 and
-   0.025 ahead of the plain bed. Its run of 90,000 updates at full size is at half length
-   (`full_size_loop_run.json`).
+   0.025 ahead of the plain bed. **At full length the gain holds** (`full_size_loop_run.json`): after 90,000
+   updates beside the v19 pair the looped stack scores 1.1039 on test and 1.1387 on validation, 0.0090 and
+   0.0086 better than the plain stack, more than nine tenths of it on new contexts, and 0.025 behind the
+   Transformer on test where the plain stack is 0.034 behind. Its top membranes sit at their bound twice as often
+   as the plain stack's (27% of the top cells' entries), which the lifting pool removes. The loop is the stack's
+   depth from here on.
    The raised budget alone makes the plain stack 0.009 worse, because its membranes saturate. The loop has earned
    a run of 90,000 updates beside the pair, and that run is pre-registered (`full_size_loop_run.json`): the
    pair's stack arm with the loop and its budget, queued for the night of 2026-11-23 and read against the pair's
@@ -282,6 +296,18 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    test and validation. Still open, and piloted beside it (`full_size_loop_variants.json`, pre-registered): whether
    the loop needs the raised budget at full size, and whether the pool that lifts the ceiling adds to it. The
    pilot picks the form of the loop's next full-length run.
+
+   Built and pre-registered beside it: **sleep** (`--stack-sleep 64`, 79cf0a4, `sleep_with_data.json`), depth
+   for the memory instead of for every byte. After every 64 bytes of a stream the stack replays the window that
+   has just ended, as the hippocampus replays recent experience at rest: the stream as it left the top of the stack
+   enters the first level again, every level runs once more over the window, and the replay's reads reach the
+   whole window, the later bytes too, since the window is over. Gate cells in every read then decide, cell by cell
+   and in quarters, how much of each stored cell the replay rewrites, so the bytes after a window read it as the
+   replay saw it. It follows Lee et al. 2026 ("Sample-Efficient In-Context Adaptation via Sleep"), which reached a
+   Transformer's loss with 2.1 to 2.4 times fewer context tokens. Integer spikes, exact under any cut, and with
+   gates that keep every cell it is the stack without sleep. The screen runs sleep alone and on top of the loop,
+   two seeds at 6,000 and 24,000 updates, against the plain and looped beds; the replay doubles the pulses a byte,
+   which the budget is scaled for, and costs 2.3 times the training time.
 6. **Skip fibres** (`skip_fibres_with_data.json`, pre-registered): every part of the stack hears one stream, the
    running sum of all that came before, fired again as whole counts after every read and cell layer.
    DeepCrossAttention (arXiv 2502.06785) finds that a Transformer gains when each layer hears the earlier layers

@@ -1,0 +1,227 @@
+{
+ "study": "homeostatic_gates_with_data",
+ "recorded_utc": "2026-11-24T08:44:30Z",
+ "kind": "A screen by slope on the server's fan2 test bed, two seeds, 6,000 and 24,000 updates: the proportional gate held in range by synaptic scaling and intrinsic plasticity. It runs only if bounded_gates_in_floats.json does not read (A).",
+ "why": "The stack falls further behind its Transformer with every doubling of training: in the full-size pair's own validation readings it leads after 6,000 updates, is level after about 12,000, and trails by about 0.025 more with each doubling after that (full_size_best_rate_pair.json). In floats on the test bed, the stack's kind of unit, plain and shut below zero, is the one that falls behind with data (growth 0.029 on the mean of two seeds), while a gated unit stays within about 0.005 on the mean (plain_units_with_data.json): the unit can explain more than half of the stack's slope. In spikes, every gated cell that trained with data lost, and the proportional gate (pg16) lost in a way that names its cause: it kept pace for 2,250 updates and then grew its synapses until the range rule shrank 9,000 to 14,000 neurons, its open gates let in 0.82 to 0.87 of their value, three quarters of them in the last quarter, and it ended 0.80 and 0.65 behind after 24,000 updates (proportional_gates_with_data.json). It turned into a switch. Cortex holds a neuron in range by two mechanisms at once: synaptic scaling keeps the total strength of its synapses fixed (Turrigiano, Leslie, Desai, Rutherford and Nelson 1998), and intrinsic plasticity moves its excitability toward a target rate (Desai, Rutherford and Turrigiano 1999). The homeostatic gate built here (c750cac, --granule-gate-home SHARE) does both for a ramp gate: its synapses keep the total strength they had at the first byte, so learning changes what the gate hears and not how much, and a local rule outside the gradient, only while training, moves its rest by 0.01 of the ramp's width per update for every unit by which the gate's mean let-in share stands from SHARE, at most the ramp's width either way. With a set point of one half on the mean, a gate can only be graded. The rule adds two buffers a layer and no parameter, starts exactly as the ramp gate, and keeps every count exact under any cut of the stream.",
+ "arms": {
+  "home16": "pg16 with --granule-gate-home 0.5: --granule-fan 512 --granule-cells 408 --granule-gate 4 --granule-ramp 16 --granule-inner-gate --pool-lifts-ceiling --granule-gate-home 0.5; 5,239,232 parameters, as pg16 (6,246 fewer than the base)"
+ },
+ "base": "The runs of proportional_gates_with_data ending in -base: the fan2 bed under the lifting pool (--granule-fan 512 --granule-cells 681 --pool-lifts-ceiling, 5,245,478 parameters), pg-6k-s1-base 1.61344, pg-6k-s2-base 1.61582, pg-24k-s1-base 1.47410, pg-24k-s2-base 1.48214, the same seeds and lengths. They trained on the code copy v17o (26198b3); every part added since is off in them and was tested to leave the plain stack unchanged. Beside them pg16's own scores (pg-*-gate), the ramp gate without the rule.",
+ "runs": "hg-6k-s1, hg-6k-s2, hg-24k-s1, hg-24k-s2: seeds 20001 and 20002, through sched/bin/bed.sh stack with --lr 1.2e-3 (and --steps 6000 for the short runs) and the arm's flags, on a code copy of c750cac, on GPU 0 at priority 33 in the window of 2026-11-24/25, queued held and released when bounded_gates_in_floats.json has been read.",
+ "measure": "As proportional_gates_with_data: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights, bits of every piece kept; each run paired with the base of its seed and length and with pg16's; experiments/gap_by_piece.py (near 240, far 8,192). Beside the bits: the trainer's pulses a byte, the neurons that the range rule shrank, and on the 24,000-update runs experiments/gate_state.py: the open gate states sorted by the share of the value that they let in (up to a quarter, a half, three quarters, or more), and where the rule left the gates' rests.",
+ "reading": "The shared reading of experiments/read_lead_study.py against the base: home16 is a fix for late learning if at 24,000 updates its mean lead is at least 0.010 with both seeds ahead and that lead is at least 0.005 larger than at 6,000; a lead at 24,000 without that growth is a constant gain; anything else fails. A fix or a constant gain of at least 0.010 sends the homeostatic gate to a full-size pilot under the lifting pool against the lifted plain stack (fs-st6-lift, 1.31341), in a record of its own written before that run. What the mechanism predicts is read beside it and decides nothing: on the 24,000-update runs fewer than half of the open gate states let in more than three quarters of their value (pg16: three quarters or more), and the range rule shrinks far fewer neurons than pg16's 9,000 to 14,000. If the bits fail and the gates stay graded, a graded gate is not enough and the report says so; if the gates still turn into switches, the rule did not hold them and the report says that. The condition: if bounded_gates_in_floats.json reads (A), bounded gates lose their lead in floats as well, its own reading forbids trying a ramp or a set point again, and these runs are retired unrun.",
+ "seen_before_recording": "proportional_gates_with_data.json and plain_units_with_data.json with their results; full_size_best_rate_pair.json's result and the pair's own validation readings along training; the rule's tests (16, with the suite at 1,363 passing). No run of this record has trained; bounded_gates_in_floats.json has no score yet.",
+ "result": {
+  "recorded_utc": "2026-11-24T21:12:59Z",
+  "bpb": {
+   "hg-6k-s1": 1.629568,
+   "hg-6k-s2": 1.639069,
+   "hg-24k-s1": 1.480056,
+   "hg-24k-s2": 1.485599,
+   "pg-6k-s1-base": 1.613443,
+   "pg-6k-s1-gate": 1.678161,
+   "pg-6k-s2-base": 1.61582,
+   "pg-6k-s2-gate": 1.66341,
+   "pg-24k-s1-base": 1.474097,
+   "pg-24k-s1-gate": 2.276507,
+   "pg-24k-s2-base": 1.482136,
+   "pg-24k-s2-gate": 2.135466
+  },
+  "the shared reading (experiments/read_lead_study.py)": {
+   "long_leads": [
+    -0.00596,
+    -0.00346
+   ],
+   "long_mean_lead": -0.00471,
+   "seeds_ahead": 0,
+   "a_lead": false,
+   "short_leads": [
+    -0.01612,
+    -0.02325
+   ],
+   "short_mean_lead": -0.01969,
+   "growth": 0.01498,
+   "b_growth": true,
+   "verdict": "fail"
+  },
+  "paired with the base, home16 minus the base (compare_stream_scores; new contexts by gap_by_piece, near 240, far 8,192)": {
+   "6,000 updates, seed 20001": {
+    "gap": 0.01612,
+    "interval_95": [
+     0.01514,
+     0.01711
+    ],
+    "new contexts": 0.019,
+    "new contexts interval_95": [
+     0.0157,
+     0.0222
+    ]
+   },
+   "6,000 updates, seed 20002": {
+    "gap": 0.02325,
+    "interval_95": [
+     0.02218,
+     0.02435
+    ],
+    "new contexts": 0.0127,
+    "new contexts interval_95": [
+     0.0094,
+     0.0161
+    ]
+   },
+   "24,000 updates, seed 20001": {
+    "gap": 0.00596,
+    "interval_95": [
+     0.005,
+     0.00693
+    ],
+    "new contexts": 0.0063,
+    "new contexts interval_95": [
+     0.0019,
+     0.0096
+    ]
+   },
+   "24,000 updates, seed 20002": {
+    "gap": 0.00346,
+    "interval_95": [
+     0.00251,
+     0.00446
+    ],
+    "new contexts": -0.0,
+    "new contexts interval_95": [
+     -0.0035,
+     0.0034
+    ]
+   }
+  },
+  "paired with pg16, the ramp gate without the rule, home16 minus pg16": {
+   "24,000 updates, seed 20001": {
+    "gap": -0.79645,
+    "interval_95": [
+     -0.80575,
+     -0.7869
+    ],
+    "new contexts": -0.9678,
+    "new contexts interval_95": [
+     -0.9922,
+     -0.9369
+    ]
+   },
+   "24,000 updates, seed 20002": {
+    "gap": -0.64987,
+    "interval_95": [
+     -0.65785,
+     -0.64154
+    ],
+    "new contexts": -0.8261,
+    "new contexts interval_95": [
+     -0.851,
+     -0.7995
+    ]
+   }
+  },
+  "the gates after 24,000 updates (experiments/gate_state.py, the first 65,536 validation bytes)": {
+   "hg-24k-s1": {
+    "pulses a byte": 112091.10015190972,
+    "share of the value that an open gate lets in, by level": [
+     0.328,
+     0.248,
+     0.237,
+     0.274,
+     0.324,
+     0.442
+    ],
+    "open gate states by the share let in (up to a quarter, a half, three quarters, more), by level": [
+     [
+      0.448,
+      0.345,
+      0.157,
+      0.051
+     ],
+     [
+      0.59,
+      0.317,
+      0.082,
+      0.01
+     ],
+     [
+      0.612,
+      0.315,
+      0.065,
+      0.007
+     ],
+     [
+      0.525,
+      0.363,
+      0.099,
+      0.014
+     ],
+     [
+      0.434,
+      0.379,
+      0.151,
+      0.036
+     ],
+     [
+      0.263,
+      0.361,
+      0.253,
+      0.122
+     ]
+    ]
+   },
+   "hg-24k-s2": {
+    "pulses a byte": 112122.99570622519,
+    "share of the value that an open gate lets in, by level": [
+     0.333,
+     0.27,
+     0.236,
+     0.251,
+     0.319,
+     0.439
+    ],
+    "open gate states by the share let in (up to a quarter, a half, three quarters, more), by level": [
+     [
+      0.437,
+      0.349,
+      0.162,
+      0.051
+     ],
+     [
+      0.538,
+      0.352,
+      0.096,
+      0.014
+     ],
+     [
+      0.616,
+      0.309,
+      0.068,
+      0.007
+     ],
+     [
+      0.582,
+      0.328,
+      0.08,
+      0.01
+     ],
+     [
+      0.445,
+      0.373,
+      0.148,
+      0.035
+     ],
+     [
+      0.265,
+      0.365,
+      0.253,
+      0.117
+     ]
+    ]
+   }
+  },
+  "not measured": "the neurons that the range rule shrank: the trainer does not log them for these runs",
+  "verdict": "Fails by the shared reading. After 24,000 updates home16 is 0.0060 and 0.0035 behind the base (mean 0.0047), with no seed ahead, where a lead of 0.010 was asked. Its lead grows by 0.0150 from 6,000 updates (0.0161 and 0.0232 behind) to 24,000: it catches up with data, but the reading needs a lead at 24,000. Its full-size pilot (full_size_homeostatic_gate.json) is not released.",
+  "reading": "The rule does what it was built for. On these seeds the proportional gate without it ended 0.80 and 0.65 behind the base after 24,000 updates, with three quarters or more of its open gate states in the last quarter: it had become a switch. With the rule the same gate is 0.797 and 0.650 better than pg16 (paired), its open gates let in 0.24 to 0.44 of their value by level, and only 1% to 12% of its open states lie in the last quarter, the most at the last level. It is the first spiking gate that does not break with data, and the first whose distance to the plain cell shrinks with data, by 0.015 over two doublings; on new contexts after 24,000 updates it is 0.006 behind on one seed and level on the other. In floats a ramp gate costs a constant 0.024 against the gated reference after 24,000 updates where a plain unit costs 0.015 and keeps growing (bounded_gates_in_floats.json, plain_units_with_data.json), so a ramp gate is expected to trail the plain cell early and could pass it only later, which is the direction of the two lengths here. Whether it passes the plain cell with more data is not known: at the pace of these two lengths, 0.0075 a doubling, it would lead by about 0.010 after 96,000 updates. It spends 112,100 pulses a byte against the budget of 113,000; its gate steps stay inside the cells."
+ }
+}

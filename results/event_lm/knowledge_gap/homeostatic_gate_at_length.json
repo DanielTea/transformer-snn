@@ -1,0 +1,47 @@
+{
+ "study": "homeostatic_gate_at_length",
+ "recorded_utc": "2026-11-24T21:13:34Z",
+ "kind": "The homeostatic gate and its base on the server's fan2 test bed at 96,000 updates, two seeds: does a gate that catches up with data pass the plain cell?",
+ "why": "The stack falls behind its Transformer with every doubling of training, and the plain threshold cell is the kind of unit that falls behind in floats. The homeostatic gate (homeostatic_gates_with_data.json) is the first spiking gate that does not break with data: after 6,000 updates it is 0.0161 and 0.0232 behind the bed's plain cells, after 24,000 0.0060 and 0.0035, so its distance shrinks by 0.015 over two doublings, while the same gate without the rule ended 0.80 and 0.65 behind. It failed its screen, which asked for a lead at 24,000 updates; in floats a ramp gate costs a constant 0.024 where a plain unit costs 0.015 and keeps growing (bounded_gates_in_floats.json, plain_units_with_data.json), so a ramp gate can only pass a plain cell late. At the pace of the two lengths, 0.0075 a doubling, it would lead by about 0.010 after 96,000 updates. That is a question about learning with data, the stack's central problem, and two more doublings on the bed answer it.",
+ "arms": {
+  "home16 at 96,000 updates": "the arm of homeostatic_gates_with_data (--granule-fan 512 --granule-cells 408 --granule-gate 4 --granule-ramp 16 --granule-inner-gate --pool-lifts-ceiling --granule-gate-home 0.5), 5,239,232 parameters",
+  "the base at 96,000 updates": "the fan2 bed under the lifting pool (--granule-fan 512 --granule-cells 681 --pool-lifts-ceiling), 5,245,478 parameters"
+ },
+ "runs": "hg-96k-s1, hg-96k-s2, pg-96k-s1-base, pg-96k-s2-base: seeds 20001 and 20002, through sched/bin/bed.sh stack with --lr 1.2e-3 --steps 96000 (warmup 300, cosine over the run, 393M training bytes), all on the code copy of c750cac, on GPU 0, resumable across windows.",
+ "measure": "As homeostatic_gates_with_data: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights; each arm paired with the base of its seed (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); experiments/gate_state.py on the trained gates.",
+ "reading": "The homeostatic gate passes the plain cell with data if after 96,000 updates its mean lead over the base is at least 0.005 with both seeds ahead, and that lead is at least 0.005 larger than its mean lead after 24,000 updates (-0.0047): it is then a fix for late learning, and it goes to full size at full length, 90,000 updates beside the stack it would join, in a record of its own written before that run; a full-size pilot of 24,000 updates would only show the early cost that the bed shows. If its mean lead after 96,000 updates is below 0.005, ramp gates are not pursued further and the next form of the cell is the signed product of two drives, the gate that stayed nearest the reference in floats. Recorded either way: every lead, the leads on new contexts, the pulses a byte and how graded the gates stay.",
+ "seen_before_recording": "homeostatic_gates_with_data.json with its result, bounded_gates_in_floats.json and plain_units_with_data.json with theirs. No run of 96,000 updates of either arm exists.",
+ "amendment": {
+  "recorded_utc": "2026-11-24T22:37:33Z",
+  "change": "Before any run has a score. A third seed of the gate's catch-up on the laptop, whose queue empties tonight: hg-6k-s3 and hg-24k-s3, seed 20003, the laptop runner's recipe with --lr 1.2e-3 (and --steps 6000), --granule-gate 4 --granule-ramp 16 --granule-inner-gate --granule-gate-home 0.5 --granule-cells 681 --pool-lifts-ceiling, on the laptop's frozen copy of 819b545 (which holds the rule of c750cac), paired with lift-6k-s3 (1.620623) and lift-24k-s3 (1.483491), the lifted plain bed of the laptop's shape. It asks whether the gate's distance to the plain cell shrinks from 6,000 to 24,000 updates on a third seed and another shape of the bed, as on the server's two seeds (by 0.015); it is reported beside and does not change this record's reading at 96,000 updates.",
+  "seen_before_amendment": "No run of this record has trained; homeostatic_gates_with_data.json and signed_gates_with_data.json with their results."
+ },
+ "result_laptop_seed": {
+  "recorded_utc": "2026-11-25T02:56:22Z",
+  "bpb": {
+   "hg-6k-s3": 1.64746,
+   "hg-24k-s3": 1.500486,
+   "lift-6k-s3": 1.620623,
+   "lift-24k-s3": 1.483491
+  },
+  "paired with the lifted plain bed, gate minus base (compare_stream_scores; new contexts by gap_by_piece, near 240, far 8,192)": {
+   "6,000 updates": {
+    "gap": 0.0268,
+    "interval_95": [
+     0.0257,
+     0.028
+    ],
+    "new contexts": 0.0211
+   },
+   "24,000 updates": {
+    "gap": 0.017,
+    "interval_95": [
+     0.016,
+     0.018
+    ],
+    "new contexts": 0.0111
+   }
+  },
+  "reading": "On a third seed and the laptop's shape of the bed the gate also catches up with data: its distance to the plain cell shrinks by 0.0098 from 6,000 to 24,000 updates (by 0.0100 on new contexts), where the server's two seeds shrank by 0.015. It is still 0.017 behind at 24,000 updates, further than on the server's fan2 bed (0.0047). Reported beside the reading at 96,000 updates, which it does not change."
+ }
+}

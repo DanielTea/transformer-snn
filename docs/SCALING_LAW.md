@@ -395,6 +395,27 @@ and 0.0251 after 24,000 updates (0.017 and 0.026 on new contexts); their energy 
 costs 2.3 times the pulses and about twice the training time. At full size it is the one part at equal parameters
 that adds knowledge (above), and its run of 90,000 updates is at half length.
 
+## The loop holds at full length
+
+The looped stack trained for 90,000 updates beside the pair, as its stack arm with levels 2 to 8 run twice through
+the same synapses and the pulse budget scaled to 507,000 (`full_size_loop_run.json`), all three read as streams:
+
+| Reading | Looped stack | Plain stack (v19) | Loop over plain | Transformer |
+|---|---:|---:|---:|---:|
+| Test, reach 8,192, taught output synapses | 1.1039 | 1.1129 | 0.0090 better (0.0084 to 0.0095) | 1.0790 |
+| Validation, reach 8,192, taught output synapses | 1.1387 | 1.1473 | 0.0086 better (0.0080 to 0.0092) | 1.1048 |
+| Test, reach 8,192 | 1.1076 | 1.1146 | 0.0070 better | |
+| Test, as trained | 1.1260 | 1.1302 | 0.0043 better | |
+
+The pilot's gain after 24,000 updates was 0.0096, so the gain holds with four times the data. Nine tenths of it is on
+new contexts (0.0116 better there on test), so the distance to the Transformer on new contexts falls from 0.090 to
+0.078, and the whole gap from 0.034 to 0.025 on test and from 0.042 to 0.034 on validation. The looped stack fires
+1.63 times the pulses and its top level saturates twice as often (27% of the top cells' entries against 12%). In
+full-size pilots of 24,000 updates the loop under the pool that lifts the ceiling is 0.0095 better than the loop as
+trained here, and at the plain stack's budget 0.0063 worse (`full_size_loop_variants.json`); on the test bed's two
+server seeds the loop's gain over its energy control is constant with data (`loop_with_data.json`), and looped skip
+fibres fail (`skip_fibres_with_data.json`). The loop is the stack's depth from here on.
+
 ## Skip fibres: a small, steady gain under the mark
 
 Skip fibres (`--stack-skips`) let a level's read and cells hear the streams of earlier levels through gains of
@@ -448,13 +469,12 @@ pulses a byte, no runaway) but reads 1.7776 on streams with averaged weights whe
 | `data_scaling_long.json` | The curves: the Transformer, the delayed stack and the plain stack at 6,000 to 96,000 updates, at each model's best rate |
 | `weight_precision_with_data.json` | Finer charge grids and quantal release, at 6,000 and 24,000 updates |
 | `cell_dither_with_data.json` | Stochastic firing of the threshold cells, alone and with quantal release |
-| `loop_with_data.json` | The loop's energy controls on the server's two seeds (b264 at 6,000 and 24,000 updates), beside the looped bases of the skip-fibre screen |
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
 | `plain_units_with_data.json` | A diagnostic in floats on the server's CPU: the test bed's Transformer with plain or gated units, hard or smooth, at 6,000 and 24,000 updates: which property of the unit falls behind with data (pre-registered) |
-| `skip_fibres_with_data.json` | The looped bed with skip fibres against the looped bed on the server's two seeds at 6,000 and 24,000 updates, and the laptop's third seed at 24,000 (the plain arms failed) |
-| `output_step_with_data.json` | Output spikes of 1/16 bit in training, at the old budget and at a budget cut by the saving, a screen on the laptop (pre-registered) |
-| `full_size_loop_run.json` | The looped stack at full size and full length: the pair's stack arm with levels 2 to 8 run twice and the pulse budget scaled with the passes, 90,000 updates, read against the pair's plain stack and its Transformer; training on GPU 1, at 49,500 of 90,000 updates on 2026-11-24 at 06:00 UTC (pre-registered) |
-| `full_size_loop_variants.json` | Two full-size pilots of 24,000 updates against the loop as piloted: the loop at the plain stack's pulse budget, and the loop under the pool that lifts the ceiling; they pick the form of the loop's next full-length run (pre-registered) |
+| `full_size_loop_variants.json` | The lifted loop at the Transformer's rate, 1.2e-3 (fs-loop12-lift), against the lifted loop at 6e-4; the old budget and the lifting pool are read (pre-registered) |
+| `sleep_with_data.json` | Sleep (`--stack-sleep 64`): the stack replays every finished window of its stream and rewrites its reads' cells; alone and on the loop, two seeds at 6,000 and 24,000 updates (pre-registered) |
+| `homeostatic_gate_at_length.json` | The homeostatic gate against the plain cell at 96,000 updates on two seeds: does a gate that catches up with data pass it (pre-registered) |
 | `full_size_spikes_late.json` | The second night: half stand-ins with softmax reads only and with real-valued cells only, and the stand-in at the Transformer's rate, 1.2e-3 (diagnostics, never a path) |
-| `bounded_gates_in_floats.json` | A diagnostic in floats on the server's CPU: the test bed's Transformer with three bounded gates and a plain product in place of its gated units, at 6,000 and 24,000 updates on two seeds: is a bound on the gate what loses the gated unit's lead with data (pre-registered) |
 | `subthreshold_slope_with_data.json` | The slope far below the threshold (`--granule-slope-tail`): the server's two seeds of the bed at 6,000 and 24,000 updates with a knee arm, and full-size pilots at 6e-4 and 1.2e-3 (pre-registered) |
+| `full_size_units_in_floats.json` | A diagnostic in floats at full size: the Transformer with plain hard, plain smooth and hard gated units in place of its own, 24,000 updates at 3e-4: how much of the layout's distance is the unit (pre-registered) |
+| `full_size_loop_passes.json` | A full-size pilot of a third pass through the loop's middle levels (levels 2 to 8 three times, 2.27 times the plain stack's pulses), 24,000 updates at 6e-4 (pre-registered) |

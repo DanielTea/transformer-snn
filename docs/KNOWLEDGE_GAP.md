@@ -157,7 +157,13 @@ Transformer 0.028 and the stack 0.004, so the gap grows to 0.034 on test. It is 
 ahead on near copies and 0.41 ahead on copies only its reach finds, and 0.090 behind on new contexts, three quarters
 of the bytes. The study of that release is [SCALING_LAW.md](SCALING_LAW.md).
 
-Records: `full_size.json`, `full_size_word_heads.json`, `full_size_best_rate_pair.json`,
+v20 trained the same stack with its levels 2 to 8 run twice through the same synapses, beside that pair
+(`full_size_loop_run.json`). It scores 1.1039 on test and 1.1387 on validation, 0.0090 and 0.0086 better than v19's
+stack, and nine tenths of that gain is on new contexts: 0.0116 better there on test. Against the Transformer the
+distance on new contexts falls from 0.090 to 0.078 and the whole gap from 0.034 to 0.025. Depth by recurrence is the
+first part to narrow the knowledge gap at full length; it fires 1.63 times the pulses and adds no parameters.
+
+Records: `full_size.json`, `full_size_word_heads.json`, `full_size_best_rate_pair.json`, `full_size_loop_run.json`,
 `results/event_lm/trained_plasticity/arms.json`.
 
 ## What this means
