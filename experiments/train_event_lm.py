@@ -420,7 +420,8 @@ def build_model(args):
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window,
                   feed_forward=getattr(args, "feed_forward", SNNConfig.feed_forward),
                   age_offsets=getattr(args, "age_offsets", SNNConfig.age_offsets),
-                  untied_output=getattr(args, "untied_output", SNNConfig.untied_output))
+                  untied_output=getattr(args, "untied_output", SNNConfig.untied_output),
+                  norm=getattr(args, "transformer_norm", SNNConfig.norm))
     if args.local_lookback is not None:
         per_layer, extra = divmod(args.local_lookback - 1, args.depth)
         model_kwargs["local_windows"] = tuple(1 + per_layer + (layer < extra) for layer in range(args.depth))
@@ -1024,6 +1025,10 @@ def main():
     parser.add_argument("--untied-output", action="store_true",
                         help="as a control the Transformer's output layer has weights of its own in place of the "
                              "embedding's, as the output synapses of a stack have")
+    parser.add_argument("--transformer-norm", choices=("layer", "pool"), default=SNNConfig.norm,
+                        help="as a control the Transformer's LayerNorms become pools: the stream divided by its mean "
+                             "absolute activity and a learned rest, with a gain per channel and no centring, as a "
+                             "stack's inhibitory pool raises its thresholds")
     parser.add_argument("--local-window", type=int, default=32, help="local Transformer attention window")
     parser.add_argument("--local-lookback", type=int, help="effective context including the current byte")
     parser.add_argument("--ctx", type=int, default=256)

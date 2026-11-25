@@ -149,13 +149,31 @@ _GATES = {"rampglu": lambda drive: drive.clamp(0, 1), "shuntglu": lambda drive: 
           "sigglu": torch.sigmoid, "bilinear": lambda drive: drive}
 
 
+class _PoolNorm(nn.Module):
+    """A control of LayerNorm: the stream divided by its mean absolute activity and a learned rest, with a gain per
+    channel and no centring, as a stack's inhibitory pool raises the threshold of every neuron with the summed
+    activity of the stream it hears."""
+
+    def __init__(self, dim: int) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(dim))
+        self.rest = nn.Parameter(torch.full((), 1e-3))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.weight * x / (self.rest.abs() + x.abs().mean(-1, keepdim=True))
+
+
+def _norm(dim: int, kind: str) -> nn.Module:
+    return nn.LayerNorm(dim) if kind == "layer" else _PoolNorm(dim)
+
+
 class _TransformerBlock(nn.Module):
     def __init__(self, dim: int, heads: int, hidden: int, window: int | None, *, plain: int = 0, smooth: bool = True,
-                 ages: int = 0, age_rate: float = 1.0, gate: str | None = None) -> None:
+                 ages: int = 0, age_rate: float = 1.0, gate: str | None = None, norm: str = "layer") -> None:
         super().__init__()
-        self.attn_norm = nn.LayerNorm(dim)
+        self.attn_norm = _norm(dim, norm)
         self.attn = _CausalAttention(dim, heads, window, ages, age_rate)
-        self.mlp_norm = nn.LayerNorm(dim)
+        self.mlp_norm = _norm(dim, norm)
         # ``plain`` units each have one row of input weights. A gated unit has two rows: one opens the unit and
         # the other is what it passes on. A unit opens smoothly, or not at all below a threshold at zero.
         self.plain, self.smooth = plain, smooth
@@ -236,16 +254,19 @@ class TransformerLM(nn.Module):
         if cfg.feed_forward not in _UNITS or cfg.age_offsets < 0:
             raise ValueError("the feed-forward units are swiglu, reglu, gelu or relu, or a control gate (rampglu, "
                              "shuntglu, sigglu, bilinear), and the rate of the age offsets is not negative")
-        if (cfg.feed_forward != "swiglu" or cfg.age_offsets or cfg.untied_output) and cfg.attn != "transformer":
-            raise ValueError("other units, age offsets and an output layer of its own are controls of the full "
-                             "Transformer")
+        if cfg.norm not in ("layer", "pool"):
+            raise ValueError("the reference's normalization is a LayerNorm or, as a control, a pool")
+        if (cfg.feed_forward != "swiglu" or cfg.age_offsets or cfg.untied_output or cfg.norm != "layer") \
+                and cfg.attn != "transformer":
+            raise ValueError("other units, age offsets, an output layer of its own and a pool in place of the norm "
+                             "are controls of the full Transformer")
         # Offsets by age replace the rotary phases: a head then addresses by content and by distance in two terms.
         self.rotary_dim = 2 * ((dim // heads) // 2) if cfg.position_embeddings and not cfg.age_offsets else 0
         hidden = max(1, round(2 * cfg.mlp_ratio * dim / 3))
         gated, smooth = _UNITS[cfg.feed_forward]
         options = dict(plain=0 if gated else max(1, round(cfg.mlp_ratio * dim)), smooth=smooth,
                        ages=ctx if cfg.age_offsets else 0, age_rate=cfg.age_offsets or 1.0,
-                       gate=cfg.feed_forward if cfg.feed_forward in _GATES else None)
+                       gate=cfg.feed_forward if cfg.feed_forward in _GATES else None, norm=cfg.norm)
         self.tok = nn.Embedding(vocab, dim)
         window = cfg.local_window if cfg.attn in ("transformer_local", "transformer_event", "transformer_successor") else None
         if window is not None and window < 1:
@@ -262,7 +283,7 @@ class TransformerLM(nn.Module):
             )
         else:
             self.blocks = nn.ModuleList(_TransformerBlock(dim, heads, hidden, width, **options) for width in windows)
-        self.norm = nn.LayerNorm(dim)
+        self.norm = _norm(dim, cfg.norm)
         self.head = nn.Linear(dim, vocab, bias=False)
         self._init_weights(self.tok)
         if cfg.untied_output:
