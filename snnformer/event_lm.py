@@ -290,6 +290,11 @@ class EventLMConfig:
     # the loop without them.
     stack_loop_phases: bool = False
     granule_cap: int | None = None
+    # Power-law cells: a plain threshold cell fires round(k * k / granule_power) spikes for k thresholds of charge
+    # above its rest, up to its largest count, as a cortical neuron's rate grows with a power of how far its membrane
+    # stands past the threshold. At granule_power thresholds it fires as a plain cell does, below them fewer spikes and
+    # above them more. 0: plain cells, whose count grows in a line.
+    granule_power: int = 0
     granule_gate: int = 0
     # A gated cell whose gate dendrite hears its fibres through the cell's own synapses: it fires about the square
     # of its charge above the rest, with no synapses beyond a plain cell's.
@@ -3431,9 +3436,24 @@ class _ExcitatoryFire(_IntegrateFire):
     threshold cells) adds logistic noise to its charge while training, and a smooth cell
     learns from the slope of the count it fires on average under the noise at
     its peak, a softplus as wide as the noise, in place of the plain slope.
+
+    With ``power`` (``granule_power``) a cell fires round(k * k / power)
+    spikes for k thresholds of charge, found in whole numbers, up to the
+    count at which a plain cell stops: the spike form of a squared
+    rectifier, scaled so that the cell fires as a plain one does at
+    ``power`` thresholds. It learns from the slope of the same square of
+    its smooth threshold (a softplus ``smooth`` spikes wide), which is
+    flat from the charge at which its count stops.
     """
 
+    # A population whose count grows with the square of its charge (``granule_power``): the plain threshold cells.
+    power = 0
+
     def forward(self, current, quanta=None, *, reference=None, smooth=False, tail=0.0, own=None):
+        if self.power:
+            if reference is not None or tail:
+                raise ValueError("power-law cells count against their pool's threshold and learn from their own slope")
+            return self._squared(current, quanta, smooth)
         noisy = (self.noisy and _CELL_NOISE[0] > 0 and reference is None and torch.is_grad_enabled()
                  and current.is_floating_point())
         threshold = self.threshold if quanta is None else quanta * (self.threshold // self.quanta_per_threshold)
@@ -3460,6 +3480,33 @@ class _ExcitatoryFire(_IntegrateFire):
         else:
             learned = smooth * F.gelu(current / (threshold * smooth))
         return counts.detach() + (learned - learned.detach())
+
+    def _squared(self, current, quanta, smooth):
+        """The spikes of power-law cells, round(k * k / power) for k thresholds of charge, with their slope."""
+        if quanta is None:
+            raise ValueError("power-law cells count their charge against the threshold that their pool sets")
+        quantum = self.threshold // self.quanta_per_threshold
+        units = quanta.to(torch.int64)
+        threshold = units * quantum
+        bounded = current if self.lifted else current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
+        charge = bounded.to(torch.int64).clamp_min(0)
+        # k * k / power for k = charge / threshold, rounded half up, in whole numbers.
+        square = threshold * threshold * self.power
+        counts = (2 * charge * charge + square) // (2 * square)
+        if self.lifted:
+            limit = torch.full_like(units, self.capped)
+        else:
+            limit = (self.cap * self.quanta_per_threshold) // units
+            if self.capped:
+                limit = limit.clamp(max=self.capped)
+        counts = counts.minimum(limit)
+        if not current.is_floating_point():
+            return counts.to(current.dtype)
+        spikes = current / (quanta * quantum)
+        rising = smooth * F.softplus(spikes / smooth) if smooth else spikes.clamp_min(0)
+        # Flat from the charge at which the count stops, sqrt(power * limit) thresholds.
+        learned = rising.minimum((limit * self.power).to(current.dtype).sqrt()).square() / self.power
+        return counts.to(current.dtype) + (learned - learned.detach())
 
 
 class _ShapedFire(_ExcitatoryFire):
@@ -3842,6 +3889,17 @@ class _GranuleLayer(nn.Module):
     neuron's largest count. A channel that hears many cells can then take larger synapses from each within the
     range of exact sums.
 
+    With ``granule_power`` a plain cell's count grows with the square of its
+    charge: k thresholds above its rest fire round(k * k / granule_power)
+    spikes, up to its largest count, so it fires as a plain cell does at
+    granule_power thresholds, fewer spikes below and more above. A cortical
+    neuron's rate grows so, with a power of about two of how far its
+    membrane stands past the threshold, once noise has smoothed the
+    threshold. In floats a squared rectifier keeps up with gated units where
+    a plain one falls behind; the earlier spike form of it (``granule_self_gate``)
+    fired k * k spikes without a scale and did not train. A power-law cell has
+    a plain cell's synapses and nothing more.
+
     With ``granule_gate`` every cell has two dendrites on the same fibres, each
     with its own synapses. The gate dendrite has the cell's resting charge
     and fires above it, ``granule_gate`` spikes for a threshold of charge. The
@@ -4105,6 +4163,8 @@ class _GranuleLayer(nn.Module):
             # before either way of counting it.
             self.fire.dither = not cfg.pool_lifts_ceiling
             self.fire.noisy = True
+            # Power-law cells fire about k * k / granule_power spikes for k thresholds of charge.
+            self.fire.power = cfg.granule_power
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
             # that they cause.
             self.fire.price_share = cfg.granule_price
@@ -4897,6 +4957,8 @@ class EventLM(nn.Module):
              or cfg.granule_gate_home or cfg.granule_gate_signed) and cfg.granule_after is None):
             raise ValueError("granule_self_gate, granule_shunt, granule_ramp and granule_inner_gate gate the cells of "
                              "granule layers, and there are none")
+        if cfg.granule_power and cfg.granule_after is None:
+            raise ValueError("power-law cells are the cells of granule layers, and there are none")
         if cfg.granule_after is not None:
             below = cfg.depth if cfg.clock_start is None else cfg.clock_start
             if (cfg.carry or cfg.continuous or not cfg.granule_after
@@ -4942,6 +5004,13 @@ class EventLM(nn.Module):
             if cfg.granule_cap is not None and (not isinstance(cfg.granule_cap, int)
                                                 or not 1 <= cfg.granule_cap <= _HIDDEN_CAP * cfg.resolution):
                 raise ValueError("a granule cell's largest count is a whole number of spikes up to a stream neuron's")
+            if (isinstance(cfg.granule_power, bool) or not isinstance(cfg.granule_power, int)
+                    or not 0 <= cfg.granule_power <= 64
+                    or cfg.granule_power and (cfg.granule_gate or cfg.granule_veto or cfg.granule_budget is not None
+                                              or cfg.granule_slope_tail or cfg.granule_branches > 1)):
+                raise ValueError("power-law cells fire about k * k / granule_power spikes for k thresholds, "
+                                 "granule_power from 1 to 64, and are plain threshold cells: no gate, veto, race, "
+                                 "branches or slope far below the threshold")
             if not isinstance(cfg.granule_gate, int) or cfg.granule_gate < 0 or (
                     cfg.granule_gate and (cfg.granule_budget is not None or cfg.granule_soft)):
                 raise ValueError("gated granule cells have a whole number of gate spikes to a threshold and do "
