@@ -5795,12 +5795,21 @@ class EventLM(nn.Module):
             raise ValueError("fast output synapses learn along a stream")
         state = StreamState() if stream is None else stream
         window, counts, start = self.cfg.stack_sleep, [], 0
-        while start < tokens.shape[1]:
-            end = min(tokens.shape[1], start + window - state.position % window)
-            counts.append(self._awake(tokens[:, start:end], stream=state, memory_pulses=memory_pulses))
-            if state.position % window == 0:
-                self._sleep(state, memory_pulses)
-            start = end
+        # The weights are checked against the range of exact sums once for all the stretches: the check waits for a
+        # graphics processor to finish its queue, and the stretches share the weights.
+        checked = self._check_weights
+        if checked and self.input.weight.is_floating_point():
+            self._check_accumulator()
+        self._check_weights = False
+        try:
+            while start < tokens.shape[1]:
+                end = min(tokens.shape[1], start + window - state.position % window)
+                counts.append(self._awake(tokens[:, start:end], stream=state, memory_pulses=memory_pulses))
+                if state.position % window == 0:
+                    self._sleep(state, memory_pulses)
+                start = end
+        finally:
+            self._check_weights = checked
         self._rested(state)
         return torch.cat(counts, 1)
 

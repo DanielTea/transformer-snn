@@ -182,3 +182,15 @@ def test_the_trainer_hands_the_sleep_to_the_model(monkeypatch, tmp_path):
     assert read.sleep == 4 and read.ahead.shape[-1] == 4
     # Four updates on streams moved the gates: later windows of every piece read what the replays wrote.
     assert read.sleep_rest.any()
+
+
+def test_a_sleeping_stack_checks_its_weights_once_for_all_stretches(monkeypatch):
+    model, tokens = _stack(stack_sleep=_WINDOW), _bytes(length=70)
+    model._check_weights = True
+    calls = []
+    original = model._check_accumulator
+    monkeypatch.setattr(model, "_check_accumulator", lambda: calls.append(1) or original())
+    with torch.no_grad():
+        model(tokens)
+    # Five stretches, one check; and the setting is as it was.
+    assert len(calls) == 1 and model._check_weights is True
