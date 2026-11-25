@@ -246,6 +246,11 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    half on the mean, so that a gate can only be graded. Its screen on the bed where the proportional gate turned
    into a switch is pre-registered and queued, held until `bounded_gates_in_floats.json` has been read
    (`homeostatic_gates_with_data.json`); `full_size_units_in_floats.json` prices what a working cell could win.
+   **Result:** the homeostatic gate is the first spiking gate that caught up with data (0.020 behind the plain cell
+   after 6,000 updates, 0.005 after 24,000), but by 96,000 updates it falls behind again, 0.0097 on the mean of two
+   seeds (`homeostatic_gate_at_length.json`), with gates that stay graded and the base's pulses. The signed gate,
+   a product of two drives of either sign, fails on three seeds (`signed_gates_with_data.json`). No form of the
+   gated cell is open on the bed; depth by recurrence is the line that continues.
 
    Two controls in floats would say whether the unit also explains the gap late in training, since the walk priced
    it at 9,000 updates: a Transformer with plain units on the test bed at 6,000 and 24,000 updates (does it flatten
@@ -307,7 +312,19 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    Transformer's loss with 2.1 to 2.4 times fewer context tokens. Integer spikes, exact under any cut, and with
    gates that keep every cell it is the stack without sleep. The screen runs sleep alone and on top of the loop,
    two seeds at 6,000 and 24,000 updates, against the plain and looped beds; the replay doubles the pulses a byte,
-   which the budget is scaled for, and costs 2.3 times the training time.
+   which the budget is scaled for, and costs 2.3 times the training time. After 6,000 updates it is not ahead (0.004
+   behind alone, 0.007 on the loop); the 24,000-update runs decide.
+
+   Built and pre-registered next: **phases of a loop** (`--stack-loop-phases`, 70774fe,
+   `loop_phases_with_data.json`). The passes of a loop share every synapse, so a level cannot tell its first pass
+   from its second. In cortex the phases of a rhythm change a circuit's excitability, not its wiring; here every
+   later pass gets a resting charge of its own for each cell and an offset of its own to each read head's gain,
+   starting at zero, where the stack is the loop without them: 0.16% more parameters on the looped bed and 0.02% at
+   full size, no pulses. A mean lead of 0.005 after 24,000 updates on two seeds earns a full-size pilot.
+
+   **Next full-length run** (`full_size_lifted_loop_run.json`, pre-registered): the looped stack under the pool that
+   lifts the ceiling, with a third pass and the Transformer's rate if their pilots pass; a job on the server picks
+   the form and queues the run as soon as the pilots are scored.
 6. **Skip fibres** (`skip_fibres_with_data.json`, pre-registered): every part of the stack hears one stream, the
    running sum of all that came before, fired again as whole counts after every read and cell layer.
    DeepCrossAttention (arXiv 2502.06785) finds that a Transformer gains when each layer hears the earlier layers
