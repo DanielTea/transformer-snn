@@ -273,6 +273,9 @@ class EventLMConfig:
     # on its tape, through gate cells that hear both, so the bytes after the window read it as the replay saw it.
     # 0: the stack never sleeps.
     stack_sleep: int = 0
+    # The share of a stored cell that a sleeping read's gate cells keep before they have learned: one half, or near one
+    # for gates that start closed, where sleep starts as the stack without it.
+    stack_sleep_keep: float = 0.5
     # Phases of a loop: every pass of a looped level after its first has a resting charge of its own for every cell
     # and an offset of its own to every read head's gain, beside the synapses that all passes share, as the phases
     # of a cortical rhythm change a circuit's excitability and not its wiring. Both start at zero, where the stack is
@@ -2692,7 +2695,9 @@ class _StateRead(nn.Module):
             # from every channel of the cell as the replay made it and as the tape holds it, and a rest.
             width = cfg.read_width // cfg.read_heads
             self.sleep_gate = nn.Parameter(torch.zeros(2, self.heads, 2 * width))
-            self.sleep_rest = nn.Parameter(torch.zeros(2, self.heads))
+            # The rest at which a deaf gate keeps the chosen share, stored at the address rate.
+            keep = cfg.stack_sleep_keep
+            self.sleep_rest = nn.Parameter(torch.full((2, self.heads), math.log(keep / (1 - keep)) / self.rate))
             self.sleep_bits = bits
             # A gate synapse saturates where the sum of all of a gate cell's synapses at the largest pulses of a
             # cell would leave the range of exact sums.
@@ -4505,6 +4510,9 @@ class EventLM(nn.Module):
         sleep = cfg.stack_sleep
         if not isinstance(sleep, int) or isinstance(sleep, bool) or sleep < 0:
             raise ValueError("a stack sleeps after every whole number of bytes, or never (0)")
+        keep = cfg.stack_sleep_keep
+        if isinstance(keep, bool) or not isinstance(keep, (int, float)) or not 0 < keep < 1:
+            raise ValueError("a sleeping read's gates keep a share of a stored cell between nought and one")
         reach = cfg.read_window if cfg.read_reach is None else cfg.read_reach
         if sleep and (not cfg.stack or not cfg.read_after or cfg.read_mode != "race" or not 2 <= sleep < reach
                       or cfg.read_kept or cfg.read_word_heads or cfg.read_beats or cfg.read_phases or cfg.read_turn

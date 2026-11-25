@@ -363,6 +363,7 @@ def build_model(args):
                                         else tuple(map(int, args.stack_loop.split(",")))),
                             stack_skips=getattr(args, "stack_skips", EventLMConfig.stack_skips),
                             stack_sleep=getattr(args, "stack_sleep", EventLMConfig.stack_sleep),
+                            stack_sleep_keep=getattr(args, "stack_sleep_keep", EventLMConfig.stack_sleep_keep),
                             stack_loop_phases=bool(getattr(args, "stack_loop_phases", False)),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
@@ -714,6 +715,9 @@ def main():
                              "input and after each earlier level, through a gain for every channel that starts at "
                              "zero (level), or the read's probes, tags and payloads each through gains of their "
                              "own (parts); every pass of a loop has its own gains")
+    parser.add_argument("--stack-sleep-keep", type=float, default=EventLMConfig.stack_sleep_keep, metavar="SHARE",
+                        help="the share of a stored cell that a sleeping read's gates keep before they learn: 0.5, "
+                             "or near 1 for gates that start closed, where sleep starts as the stack without it")
     parser.add_argument("--stack-loop-phases", action="store_true",
                         help="every pass of a looped level after its first has its own resting charge for each cell "
                              "and its own offset to each read head's gain, starting at zero")
