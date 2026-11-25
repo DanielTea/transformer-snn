@@ -94,7 +94,7 @@ flowchart LR
 Every neuron sends whole spike counts, every synapse is a whole
 number of charge ticks, and every sum stays within the range in
 which floating point adds exactly, so the same spikes come out
-however a stream is cut and on any device. A level is a state
+however a stream is cut into pieces. A level is a state
 read and a layer of threshold cells. The read sends a probe; the
 cells that earlier bytes left on its tape answer with tags, and
 those whose tags match it best win a race for a fixed number of
@@ -108,7 +108,7 @@ middle levels run twice through the same synapses, more
 computation for the same parameters. Fast output synapses learn
 from every byte after it was predicted, so the model adapts while
 it reads. Training uses gradients through surrogate slopes; the
-trained network runs in integers, and its pulses are counted
+trained network fires whole counts, and its pulses are counted
 against a budget.
 
 ## v20: depth by recurrence at full length
