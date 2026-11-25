@@ -13,5 +13,10 @@
   "recorded_utc": "2026-11-25T09:45:19Z",
   "change": "Pieces of 64 bytes instead of 256, one threshold at a time with 24 threads. A check of 40,000 bytes at 2^24 in pieces of 256 on the server's CPU needed more than 20 GiB and was stopped by its memory cap after 10 minutes, before it scored; the scheduler's CPU jobs are capped at 28 GiB so that DeepSeek's model stays in the page cache. The stack fires the same spikes however a stream is cut, at a reach longer than its window too, and the fast synapses are taught byte by byte in whole numbers (EventLM._teach; tests/test_stack_loop.py, tests/test_knowledge_gap_cells.py), so pieces of 64 give the scores of pieces of 256. Should pieces of 64 also exceed the cap, the scan runs on a server GPU in a window with nothing else changed. The thresholds, bytes, streams, pairing and reading are unchanged.",
   "seen_before_amendment": "The stopped check, which wrote no score. No threshold has been scored."
+ },
+ "amendment_2": {
+  "recorded_utc": "2026-11-25T20:25:58Z",
+  "change": "The order of the remaining thresholds: 2^25 before 2^22, then the further threshold if an end is the lowest. 2^23 scored 1.168208 on the million, 0.0016 above 2^24 (1.166653; paired interval 0.0014 to 0.0017), so the threshold the reading can still adopt lies above 2^24 if anywhere, and 2^25, with 2^26 if 2^25 is the lowest, now lands within the night of 2026-11-25 instead of the evening of 2026-11-26, before fsp-lift is scored, which the reading scores at both thresholds if one is adopted. 2^22, started at 20:22Z, is stopped unscored and runs after 2^25. The thresholds, the further threshold's rule, bytes, streams, pieces, pairing and reading are unchanged.",
+  "seen_before_amendment": "teach-24 (1.166653) and teach-23 (1.168208) with their pairing; no score at 2^22 or 2^25."
  }
 }
