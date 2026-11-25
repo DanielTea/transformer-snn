@@ -1,0 +1,14 @@
+{
+ "study": "power_cells_in_loop_screen",
+ "recorded_utc": "2026-11-25T16:21:15Z",
+ "kind": "A screen on the laptop's GPU, one seed, 24,000 updates: power-law cells in the looped test bed, at the bed's best rate.",
+ "why": "On the plain bed power-law cells (--granule-power 8) led by 0.0262 after 6,000 updates and by 0.0045 after 24,000 (power_cells_screen.json): they learn faster early and the plain cells catch up. At 24,000 updates they are still 0.010 better on new contexts and 0.040 on far copies, and worse on contexts seen before with another follower (0.095) and on near copies (0.029), the pattern that the full size's wider fan also showed against the bed (cell_shape_with_data.json). The loop is the stack's best recipe and the next full-length run is a lifted loop; whether power-law cells add anything to the loop at 24,000 updates decides whether their full-size pilot is worth a night. The laptop's queue runs dry before Thursday morning, so this runs in its idle hours.",
+ "arms": {
+  "lpw8-24k-s3": "--stack-loop 1,4,3 --pulse-budget 264000 --granule-power 8 on the laptop's delayed bed at 1.2e-3, seed 20003, on the frozen copy of f876392; the looped bed's parameters"
+ },
+ "base": "loop-24k-s3 1.468458: the laptop's looped bed (--stack-loop 1,4,3 --pulse-budget 264000) at 1.2e-3, seed 20003, plain cells.",
+ "runs": "lpw8-24k-s3 on the laptop after sl-24k-s3, through its runner's recipe.",
+ "measure": "The laptop runner's score: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, paired with loop-24k-s3 (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); the pulses a byte.",
+ "reading": "Power-law cells add to the loop if lpw8-24k-s3 leads loop-24k-s3 by at least 0.005 with the paired interval clear of zero. The full-size pilot of full_size_power_cells.json then runs in the next night with room on a GPU, whatever power_cells_with_data's seeds read, by an amendment to that record written then; whether power-law cells join a full-length run stays as power_cells_with_data's amendment 89cb332 says. Otherwise the result is reported beside power_cells_with_data's, and power-law cells rest until a gentler form is built.",
+ "seen_before_recording": "power_cells_screen.json with both of its results; cell_shape_with_data.json; loop-24k-s3's score. No looped run with power-law cells has trained."
+}
