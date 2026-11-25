@@ -119,8 +119,11 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
 
 1. **Spiking and streaming only.** The stack is built, trained and scored as
    a stream. The Transformer reference may read windows, as it was trained.
+   Non-spiking models may help train it, as teachers, task generators, verifiers
+   or graders (Daniel, 2026-11-25), but the model that is released and scored is
+   purely spiking, with no float layer, twin or hybrid in it.
 2. **Equal parameters and equal training data** for every comparison with
-   the Transformer. Pulses per byte, the stack's energy, are reported beside
+   the Transformer; whatever a teacher gives one of them, the other gets too. Pulses per byte, the stack's energy, are reported beside
    it. The budget may be raised where the evidence says that is what closes
    the gap (Daniel, 2026-11-22), but only as an arm of its own against the
    old budget, never hidden inside another change, and every claim states
