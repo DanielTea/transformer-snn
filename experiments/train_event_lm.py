@@ -62,6 +62,20 @@ EVENT_ROUTES = {
 }
 
 
+def load_corpus(path: Path):
+    """The train, validation and test bytes of a raw corpus whose sidecar ``path.json`` names their sizes."""
+    sidecar = json.loads(Path(f"{path}.json").read_text())
+    raw = path.read_bytes()
+    sizes = [int(sidecar[split]) for split in ("train", "validation", "test")]
+    if sum(sizes) != len(raw):
+        raise ValueError(f"{path}: {len(raw):,} bytes where its sidecar names {sum(sizes):,}")
+    if "sha256" in sidecar and hashlib.sha256(raw).hexdigest() != sidecar["sha256"]:
+        raise ValueError(f"{path}: checksum does not match its sidecar")
+    data = np.frombuffer(raw, dtype=np.uint8)
+    first, second = sizes[0], sizes[0] + sizes[1]
+    return data[:first], data[first:second], data[second:]
+
+
 def scoring_logits(output: torch.Tensor, event: bool, resolution: int = 1) -> torch.Tensor:
     """Score the signed spike evidence outside the event decoder."""
     return output.float() * (math.log(2) / (8 * resolution)) if event else output
@@ -618,6 +632,9 @@ def main():
     parser.add_argument("--data", type=Path, default=Path(os.environ.get("ENWIK8_PATH", str(DATA))))
     parser.add_argument("--training-mixture", type=Path,
                         help="sample training windows from a pinned byte mixture catalogue")
+    parser.add_argument("--corpus", type=Path,
+                        help="train and validate on a raw byte file split by its sidecar FILE.json (train, validation "
+                             "and test bytes, in that order) instead of enwik8, such as experiments/hop_tasks.py writes")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--seed", type=int, default=0)
@@ -1222,6 +1239,8 @@ def main():
     if args.stream is not None and ((args.save_every and args.save_every % rounds) or args.stream_from % rounds):
         parser.error("the stretches of all --stream-groups take a number of updates that divides --save-every "
                      "and --stream-from")
+    if args.corpus is not None and args.training_mixture is not None:
+        parser.error("--corpus trains on its own bytes; drop --training-mixture")
     if args.stream_from and (args.stream is None or not 0 < args.stream_from < args.steps):
         parser.error("--stream-from needs --stream and an update below --steps")
     event = args.variant in EVENT_ROUTES
@@ -1233,7 +1252,8 @@ def main():
     try:
         device = resolve_device(args.device)
         checkpoint = checkpoint_path(args)
-        train, val, test = load_splits(args.data.expanduser())
+        train, val, test = (load_splits(args.data.expanduser()) if args.corpus is None
+                            else load_corpus(args.corpus.expanduser()))
         mixture = (None if args.training_mixture is None
                    else TrainingMixture(args.training_mixture.expanduser(), train, args.ctx))
         max_windows = args.eval_bs * max(args.eval_batches, args.final_eval_batches)
@@ -1597,6 +1617,7 @@ def main():
     for label, score in stream_scores.items():
         print(f"{name} {label.replace('_', ' ')}: {score['bpb']:.4f} bpb", flush=True)
     args_record = dict(vars(args), data=str(args.data), results_dir=None if results_dir is None else str(results_dir),
+                       corpus=None if args.corpus is None else str(args.corpus),
                        synapse_readout=None if args.synapse_readout is None else str(args.synapse_readout),
                        head_readout=None if args.head_readout is None else str(args.head_readout),
                        load_weights=loaded_weights,
