@@ -15,5 +15,51 @@
   "recorded_utc": "2026-11-25T13:51:13Z",
   "change": "The runs' order on the laptop, before any of them has trained: pw8-6k-s3 and pw8-24k-s3 run next, ahead of slc-24k-s3, which is paused at a stream boundary with its state saved and resumes after them, and of the decay and grid seeds, so that the screen reads before tonight's GPU window rather than on Thursday morning. The arm, base, measure and reading are unchanged.",
   "seen_before_amendment": "slc-6k-s3 1.620282 (sleep_closed_gates_screen.json); no run of this record has trained."
+ },
+ "result": {
+  "recorded_utc": "2026-11-25T16:15:17Z",
+  "bpb": {
+   "pw8-6k-s3": 1.602131,
+   "pw8-24k-s3": 1.477919,
+   "rd-base-6k-s3": 1.628284,
+   "rd-base-24k-s3": 1.482467
+  },
+  "paired with the plain bed, plain minus power (compare_stream_scores; by context gap_by_piece, near 240, far 8,192)": {
+   "6,000 updates": {
+    "lead": 0.0262,
+    "interval_95": [
+     0.0249,
+     0.0273
+    ],
+    "by context (power minus plain; below zero power is better)": {
+     "copyable near": -0.1338,
+     "copyable far only": 0.0247,
+     "seen, other follower": -0.0386,
+     "new": -0.0221
+    }
+   },
+   "24,000 updates": {
+    "lead": 0.0045,
+    "interval_95": [
+     0.0036,
+     0.0055
+    ],
+    "by context (power minus plain; below zero power is better)": {
+     "copyable near": 0.0294,
+     "copyable far only": -0.0404,
+     "seen, other follower": 0.0952,
+     "new": -0.0098
+    }
+   }
+  },
+  "growth of the lead from 6,000 to 24,000 updates": -0.0217,
+  "pulses a byte (the trainer's last reading)": {
+   "pw8-6k-s3": 115640,
+   "rd-base-6k-s3": 116491,
+   "pw8-24k-s3": 115921,
+   "rd-base-24k-s3": 116193
+  },
+  "along the 24,000-update run (the trainer's stream readings on its validation sample, power minus plain)": "ahead by 0.018 at 1,500 updates, behind by 0.003 to 0.010 from 6,000 to 10,500, level at 12,000, ahead by 0.004 to 0.007 from 13,500 to the end",
+  "reading": "No gain at this scale by the screen's mark: the lead at 24,000 updates is 0.0045, under 0.005, though its interval is clear of zero, and it fell by 0.0217 from 6,000 updates instead of growing. The large lead after 6,000 updates belongs to a short schedule: power-law cells learn faster early, and the plain cells catch up when the rate decays later. At 24,000 updates power-law cells are still 0.010 better on new contexts and 0.040 better on far copies, and lose it on contexts seen before with another follower (0.095 worse on their 5% of bytes) and on near copies (0.029 worse). They do not earn the server seeds by this reading; power_cells_with_data.json, recorded before this score, reads its own two seeds."
  }
 }
