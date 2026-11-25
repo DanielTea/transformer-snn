@@ -8,5 +8,10 @@
  },
  "measure": "experiments/eval_stream.py on the first 1,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, in pieces of 256, on the server's CPU (scores on the CPU and on a GPU agree to the fifth decimal, CASCADE_SYNAPSES.md), the bits of every piece kept, each threshold paired with 2^24 (experiments/compare_stream_scores.py).",
  "reading": "The threshold with the fewest bits on the million is the looped stack's from here on if it is at least 0.001 below 2^24 there with the paired interval clear of zero; fsp-loop's test and validation are then rescored at it and reported as its reading at the chosen threshold, beside the pre-registered reading at 2^24, which stays the record's. Every later looped stack (fsp-lift and after) is then scored at both. Otherwise 2^24 stays and nothing is rescored.",
- "seen_before_recording": "fsp-loop's scores at 2^24 (taught test 1.10391, validation 1.13866; reach 8,192 without fast synapses 1.10762 and 1.14041). No other threshold has been scored on a looped stack."
+ "seen_before_recording": "fsp-loop's scores at 2^24 (taught test 1.10391, validation 1.13866; reach 8,192 without fast synapses 1.10762 and 1.14041). No other threshold has been scored on a looped stack.",
+ "amendment": {
+  "recorded_utc": "2026-11-25T09:45:19Z",
+  "change": "Pieces of 64 bytes instead of 256, one threshold at a time with 24 threads. A check of 40,000 bytes at 2^24 in pieces of 256 on the server's CPU needed more than 20 GiB and was stopped by its memory cap after 10 minutes, before it scored; the scheduler's CPU jobs are capped at 28 GiB so that DeepSeek's model stays in the page cache. The stack fires the same spikes however a stream is cut, at a reach longer than its window too, and the fast synapses are taught byte by byte in whole numbers (EventLM._teach; tests/test_stack_loop.py, tests/test_knowledge_gap_cells.py), so pieces of 64 give the scores of pieces of 256. Should pieces of 64 also exceed the cap, the scan runs on a server GPU in a window with nothing else changed. The thresholds, bytes, streams, pairing and reading are unchanged.",
+  "seen_before_amendment": "The stopped check, which wrote no score. No threshold has been scored."
+ }
 }
