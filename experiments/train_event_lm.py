@@ -33,8 +33,8 @@ from common import (
 )
 from snnformer import SNNConfig, count_params
 from snnformer.event_lm import (
-    EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES, echo_feedback,
-    weight_dither, cell_dither, cell_noise,
+    CONTROL_PARAMETERS, EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES,
+    echo_feedback, weight_dither, cell_dither, cell_noise,
 )
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
@@ -1075,6 +1075,9 @@ def main():
     parser.add_argument("--rotate-stacks", action="store_true",
                         help="with --rotated-adam, also turn every matrix of a three-dimensional weight, such as "
                              "the synapses of granule cells")
+    parser.add_argument("--decay-synapses-only", action="store_true",
+                        help="weight decay acts on synapses only: a stack's gains, grains, offsets by age, resting "
+                             "charges and other charges are not pulled toward their starting values")
     parser.add_argument("--lr-scale", type=_lr_scales, default=(), metavar="PART=FACTOR,...",
                         help="multiply the learning rate of every parameter whose name contains a part by that "
                              "part's factor; of several matching parts the longest counts")
@@ -1339,7 +1342,8 @@ def main():
         parser.error("--stream trains a stack whose reads and cells carry their state, with a validation split "
                      "that holds its streams")
     optimizer = make_optimizer(model, args.lr, args.wd, betas=(0.9, args.adam_beta2), rotated=args.rotated_adam,
-                               stacks=args.rotate_stacks, scales=args.lr_scale)
+                               stacks=args.rotate_stacks, scales=args.lr_scale,
+                               exempt=CONTROL_PARAMETERS if args.decay_synapses_only else frozenset())
     average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
     feedback = None if args.echo is None else EchoFeedback(args.echo_seed)
     if args.read_credit is not None:

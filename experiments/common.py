@@ -164,18 +164,19 @@ def checkpoint_path(args) -> Path | None:
     return path
 
 
-def make_optimizer(model, lr, wd, betas=(0.9, 0.99), rotated=None, stacks=False, scales=()):
+def make_optimizer(model, lr, wd, betas=(0.9, 0.99), rotated=None, stacks=False, scales=(), exempt=frozenset()):
     """AdamW, or Adam in each weight matrix's gradient eigenbasis with ``rotated`` steps between basis updates.
 
     With ``stacks`` the rotated optimizer also turns every matrix of a three-dimensional weight. ``scales``
     holds pairs of a name part and a factor: a parameter whose name contains a part steps with the learning
     rate times that part's factor, and of several such parts the longest counts, so ``age`` leaves ``beat_age``
-    to a pair of its own. Every group keeps its factor as ``lr_scale`` for a schedule.
+    to a pair of its own. Every group keeps its factor as ``lr_scale`` for a schedule. Weight decay acts on the
+    parameters of two or more dimensions, except those with a part of their dotted name in ``exempt``.
     """
     groups = {}
     scales = sorted(scales, key=lambda pair: -len(pair[0]))
     for n, p in model.named_parameters():
-        decay = wd if p.ndim >= 2 and "pos" not in n else 0.0
+        decay = wd if p.ndim >= 2 and "pos" not in n and not exempt & set(n.split(".")) else 0.0
         scale = next((factor for part, factor in scales if part in n), 1.0)
         groups.setdefault((decay == 0.0, scale), {"params": [], "weight_decay": decay, "lr_scale": scale,
                                                   "lr": lr * scale})["params"].append(p)

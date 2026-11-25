@@ -92,6 +92,14 @@ _HOME_RATE = 0.01
 # The most spikes that a sleeping read's gate cell fires for a cell of a replayed window: each keeps that share of
 # the stored cell.
 _SLEEP_QUARTERS = 4
+# The parameters of a stack that are charges, offsets and gains and not synapses: a read's gain, grain, spacing and
+# offsets by age, a cell's resting charge, a head's forgetting slope and the like. A trainer may leave them out of
+# weight decay, which would pull every one of them toward its starting value as if it were a synapse.
+CONTROL_PARAMETERS = frozenset({
+    "age", "ahead", "beat_age", "beat_mark", "branch_rest", "clock_rest", "forget", "gain", "grain", "kept_offset",
+    "known_offset", "myelin_shift", "phase_gains", "phase_rests", "rest", "sharpness", "skips", "sleep_rest",
+    "spacing", "word_age",
+})
 # The most copies of its spikes that an apical tuft adds to a cell's own: a cell bursts up to four times its count.
 _BURST_LIMIT = 3
 # A skip fibre's gain is a whole number of sixteenths, and the stored gains of the fibres that bring one channel to
