@@ -12,6 +12,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from . import race_kernel
 from .coasting_heads import CoastingHeads, HeadState
 from .fast_synapses import FastSynapses, SynapseState
 from .neurons import integer_spike
@@ -2477,6 +2478,10 @@ def _spread_phases(first, count, device, dtype):
 # A stream's budgeted race read is computed by age (_StateRead._address_band): the same spikes as by cell, with half
 # the work when a window is as long as the reach. Off, every read takes _StateRead._address's path by cell.
 _READ_BY_AGE = True
+# On a CUDA device with Triton, a read by age can run in fused kernels (snnformer/race_kernel.py): the same spikes and
+# payload pulses, the same gradient to rounding, without the tables of every byte's cells by age. Off until checked on
+# the server's GPU.
+_READ_FUSED = False
 
 
 @functools.lru_cache(maxsize=8)
@@ -2566,6 +2571,23 @@ class _ReadByAge:
         where = torch.where(back >= 0, back, cells).expand_as(self.band)
         fired = self.band.new_zeros(*self.band.shape[:-1], cells + 1).scatter(-1, where, self.band)[..., :cells]
         return fired if self.known is None else torch.cat((fired, self.known), -1)
+
+
+class _ReadFused:
+    """A stream read's spikes as the fused kernels (race_kernel.FusedRace) leave them for _emit: the payload pulses
+    that every byte's spikes have passed on, [batch, heads, bytes, channels], and the knowledge cells' spikes for the
+    fast output synapses, [batch, heads, bytes, knowledge] or None."""
+
+    __slots__ = ("packet", "known")
+
+    def __init__(self, packet, known):
+        self.packet, self.known = packet, known
+
+    def read(self):
+        return self.packet
+
+    def by_cell(self):
+        raise ValueError("a fused read keeps no spikes by cell; fibres hear its knowledge cells")
 
 
 class _BudgetedRace(torch.autograd.Function):
@@ -3430,10 +3452,13 @@ class _StateRead(nn.Module):
         tape.payload = _carry(tape, payload[:, :, oldest:])
         tape.tag = _carry(tape, tag[:, :, oldest:])
         self._keep_late(tape, spikes, heard)
-        _, valid, phase = _ages_in_reach(kept, steps, self.reach, position, self.heads, spikes.device, probe.dtype)
         stored = self.gain if gain_offset is None else self.gain + gain_offset
         unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
         scale = (stored * self.rate).exp() / unit
+        if (_READ_FUSED and race_kernel.available(probe)
+                and race_kernel.fits(probe.shape[-1], payload.shape[-1], self.knowledge)):
+            return self._address_fused(probe, tag, payload, scale, kept, steps, position)
+        _, valid, phase = _ages_in_reach(kept, steps, self.reach, position, self.heads, spikes.device, probe.dtype)
         # A cell's offset is that of its age, as _age_offsets gives it by cell.
         charge = _band_dots(probe, tag, kept, self.reach) * scale + (self.aged() * self.rate)[:, None]
         charge = charge.masked_fill(~valid, -torch.inf)
@@ -3452,12 +3477,29 @@ class _StateRead(nn.Module):
         read = _ReadByAge(fired, known_fired, payload, known_payload, kept, self.reach)
         return read, total.clamp_min(1), None, count
 
+    def _address_fused(self, probe, tag, payload, scale, kept, steps, position):
+        """The rest of _address_band in the fused kernels: the same phases, offsets and knowledge cells, the race and
+        the payload pulses it passes on computed together."""
+        device = probe.device
+        order = torch.arange(self.heads, device=device)[:, None, None]
+        phase = ((_spread_phases(position - kept, kept + steps, device, probe.dtype) + order / self.heads) % 1)[:, 0]
+        known_tag = known_payload = known_offset = known_phase = None
+        if self.knowledge:
+            known_tag, known_payload, known_offset = self.known()
+            known_phase = (_spread_phases(-self.knowledge - 1, self.knowledge, device, probe.dtype)
+                           + order / self.heads) % 1
+        packet, fired_total, known_fired = race_kernel.race(
+            probe, tag, payload, scale, self.aged() * self.rate, known_tag, known_payload, known_offset, phase,
+            known_phase, kept, self.reach, float(self.budget))
+        return _ReadFused(packet, known_fired), fired_total[..., None].clamp_min(1), None, fired_total.sum()
+
     def forward(self, spikes, pulse_counts=None, tokens=None, tape=None, position=0, fibres=None, heard=None,
                 gain_offset=None):
         fired, total, payload, cell_spikes = self._address(spikes, tokens, tape, position, heard, gain_offset)
         if fibres is not None:
             # The fast output synapses hear which knowledge cells won, as [batch, bytes, heads, cells].
-            won = (fired.known if fired.known is not None else fired.by_cell()) if isinstance(fired, _ReadByAge) \
+            won = (fired.known if fired.known is not None else fired.by_cell()) \
+                if isinstance(fired, (_ReadByAge, _ReadFused)) \
                 else fired[..., -self.knowledge:]
             fibres.append(won.detach().transpose(1, 2))
         return self._emit(spikes, fired, total, payload, cell_spikes, pulse_counts)
@@ -3554,7 +3596,7 @@ class _StateRead(nn.Module):
         """The stream after the read: the payloads that the cells' spikes pass on, counted by the read neurons and
         sent to the stream through the read's output synapses."""
         # Whole cell spikes pass whole payload pulses on, and their sum is the same in any order.
-        packet = fired.read() if isinstance(fired, _ReadByAge) else fired @ payload
+        packet = fired.read() if isinstance(fired, (_ReadByAge, _ReadFused)) else fired @ payload
         if total is not None:
             packet = packet / total
         if self.mode == "race":
