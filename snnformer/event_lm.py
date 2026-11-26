@@ -25,6 +25,8 @@ _TICKS = 1 << _CHARGE_BITS
 _PACKET_BITS = 2
 _PACKET_UNITS = 1 << _PACKET_BITS
 _PACKET_TICKS = _TICKS // _PACKET_UNITS
+# A cubic cell (granule_power_exponent 3) counts its charge in steps of 2**-_CUBE_STEP_BITS of a threshold.
+_CUBE_STEP_BITS = 12
 _WEIGHT_LIMIT = 127
 _HIDDEN_CAP = 32
 _OUTPUT_CAP = 128
@@ -319,6 +321,12 @@ class EventLMConfig:
     # stands past the threshold. At granule_power thresholds it fires as a plain cell does, below them fewer spikes and
     # above them more. 0: plain cells, whose count grows in a line.
     granule_power: int = 0
+    # The power of a power-law cell's count: 2, the square above, or 3, the cube: round(k^3 / P^2) spikes for k
+    # thresholds of charge (k in steps of a 4,096th of a threshold, so that the cube stays a whole number in 64 bits),
+    # again as a plain cell fires at P thresholds. Cortical neurons' rates grow with powers from about 2 to 4 of how
+    # far the membrane stands past the threshold; a steeper power keeps more cells silent and lets the strongly driven
+    # ones fire more.
+    granule_power_exponent: int = 2
     granule_gate: int = 0
     # A gated cell whose gate dendrite hears its fibres through the cell's own synapses: it fires about the square
     # of its charge above the rest, with no synapses beyond a plain cell's.
@@ -3541,11 +3549,15 @@ class _ExcitatoryFire(_IntegrateFire):
 
     # A population whose count grows with the square of its charge (``granule_power``): the plain threshold cells.
     power = 0
+    # The power of that count (``granule_power_exponent``): 2, the square, or 3, the cube.
+    exponent = 2
 
     def forward(self, current, quanta=None, *, reference=None, smooth=False, tail=0.0, own=None):
         if self.power:
             if reference is not None or tail:
                 raise ValueError("power-law cells count against their pool's threshold and learn from their own slope")
+            if self.exponent == 3:
+                return self._cubed(current, quanta, smooth)
             return self._squared(current, quanta, smooth)
         noisy = (self.noisy and _CELL_NOISE[0] > 0 and reference is None and torch.is_grad_enabled()
                  and current.is_floating_point())
@@ -3599,6 +3611,50 @@ class _ExcitatoryFire(_IntegrateFire):
         rising = smooth * F.softplus(spikes / smooth) if smooth else spikes.clamp_min(0)
         # Flat from the charge at which the count stops, sqrt(power * limit) thresholds.
         learned = rising.minimum((limit * self.power).to(current.dtype).sqrt()).square() / self.power
+        return counts.to(current.dtype) + (learned - learned.detach())
+
+    def _cubed(self, current, quanta, smooth):
+        """The spikes of cubic cells, round(k^3 / power^2) for k thresholds of charge, with their slope.
+
+        k is counted in steps of a 4,096th of a threshold, rounded down, and the charge is first cut at ``reach``
+        thresholds, past which the count is past every limit a cell can have. So every number stays whole and
+        within 64 bits, and a whole charge gives the same count as the same charge in floats.
+        """
+        if quanta is None:
+            raise ValueError("power-law cells count their charge against the threshold that their pool sets")
+        quantum = self.threshold // self.quanta_per_threshold
+        units = quanta.to(torch.int64)
+        threshold = units * quantum
+        if self.lifted:
+            limit = torch.full_like(units, self.capped)
+        else:
+            limit = (self.cap * self.quanta_per_threshold) // units
+            if self.capped:
+                limit = limit.clamp(max=self.capped)
+        largest = self.capped if (self.lifted or self.capped) else self.cap * self.quanta_per_threshold
+        scale = self.power * self.power
+        reach = 1
+        while reach ** 3 < scale * (largest + 1):
+            reach += 1
+        unit = 1 << (3 * _CUBE_STEP_BITS)
+        if 2 * (reach << _CUBE_STEP_BITS) ** 3 + 2 * scale * unit >= 1 << 63:
+            raise ValueError("a cubic cell's count must stay within 64 bits: lower its cap or its power")
+        cut = reach * threshold
+        if current.is_floating_point():
+            bounded = current if self.lifted else current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
+            charge = bounded.clamp_min(0).minimum(cut.to(current.dtype)).to(torch.int64)
+        else:
+            bounded = current if self.lifted else current.clamp(-self.threshold * self.cap, self.threshold * self.cap)
+            charge = bounded.to(torch.int64).clamp_min(0).minimum(cut)
+        steps = (charge << _CUBE_STEP_BITS) // threshold
+        counts = (2 * steps * steps * steps + scale * unit) // (2 * scale * unit)
+        counts = counts.minimum(limit)
+        if not current.is_floating_point():
+            return counts.to(current.dtype)
+        spikes = current / (quanta * quantum)
+        rising = smooth * F.softplus(spikes / smooth) if smooth else spikes.clamp_min(0)
+        # Flat from the charge at which the count stops, (power^2 * limit)^(1/3) thresholds.
+        learned = rising.minimum((limit * scale).to(current.dtype).pow(1 / 3)).pow(3) / scale
         return counts.to(current.dtype) + (learned - learned.detach())
 
 
@@ -3992,6 +4048,9 @@ class _GranuleLayer(nn.Module):
     a plain one falls behind; the earlier spike form of it (``granule_self_gate``)
     fired k * k spikes without a scale and did not train. A power-law cell has
     a plain cell's synapses and nothing more.
+    With ``granule_power_exponent`` 3 the count grows with the cube instead:
+    round(k^3 / granule_power^2), the same at granule_power thresholds, so more
+    cells stay silent and the strongly driven ones fire more.
 
     With ``granule_gate`` every cell has two dendrites on the same fibres, each
     with its own synapses. The gate dendrite has the cell's resting charge
@@ -4260,8 +4319,10 @@ class _GranuleLayer(nn.Module):
             # before either way of counting it.
             self.fire.dither = not cfg.pool_lifts_ceiling
             self.fire.noisy = True
-            # Power-law cells fire about k * k / granule_power spikes for k thresholds of charge.
+            # Power-law cells fire about k * k / granule_power spikes for k thresholds of charge (k^3 / granule_power^2
+            # with granule_power_exponent 3).
             self.fire.power = cfg.granule_power
+            self.fire.exponent = cfg.granule_power_exponent
             # By default the pulse budget counts the cells' own spikes and its price acts on the stream pulses
             # that they cause.
             self.fire.price_share = cfg.granule_price
@@ -5082,6 +5143,10 @@ class EventLM(nn.Module):
                              "granule layers, and there are none")
         if cfg.granule_power and cfg.granule_after is None:
             raise ValueError("power-law cells are the cells of granule layers, and there are none")
+        if (isinstance(cfg.granule_power_exponent, bool) or cfg.granule_power_exponent not in (2, 3)
+                or cfg.granule_power_exponent != 2 and not cfg.granule_power):
+            raise ValueError("power-law cells fire with a power of 2 or 3 of their thresholds, and a power other than 2 "
+                             "needs power-law cells (granule_power)")
         if cfg.granule_after is not None:
             below = cfg.depth if cfg.clock_start is None else cfg.clock_start
             if (cfg.carry or cfg.continuous or not cfg.granule_after

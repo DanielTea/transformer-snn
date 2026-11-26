@@ -385,6 +385,8 @@ def build_model(args):
                             pool_energy_gradient=bool(getattr(args, "pool_energy_gradient", False)),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
                             granule_power=getattr(args, "granule_power", EventLMConfig.granule_power),
+                            granule_power_exponent=getattr(args, "granule_power_exponent",
+                                                           EventLMConfig.granule_power_exponent),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
                             read_turn=getattr(args, "read_turn", EventLMConfig.read_turn),
@@ -862,6 +864,11 @@ def main():
                         help="power-law cells: a plain cell fires round(k * k / THRESHOLDS) spikes for k thresholds "
                              "of charge above its rest, up to its largest count, as a plain cell does at THRESHOLDS; "
                              "plain cells when omitted or 0")
+    parser.add_argument("--granule-power-exponent", type=int, choices=(2, 3),
+                        default=EventLMConfig.granule_power_exponent, metavar="POWER",
+                        help="with --granule-power P: the power of a cell's count, round(k^POWER / P^(POWER-1)) "
+                             "spikes for k thresholds, as a plain cell fires at P thresholds; 2 (the square) when "
+                             "omitted, or 3 (the cube)")
     parser.add_argument("--granule-gate", type=int, default=EventLMConfig.granule_gate, metavar="SPIKES",
                         help="every granule cell has a gate dendrite and a value dendrite: each gate spike lets "
                              "the value dendrite's charge into the cell body once, and SPIKES of them are a "
@@ -1232,6 +1239,8 @@ def main():
         parser.error("--cell-noise takes a width of more than 0 and at most 4 thresholds")
     if args.granule_power and (args.cell_noise is not None or args.cell_dither):
         parser.error("power-law cells count their charge without noise or dither")
+    if args.granule_power_exponent != 2 and not args.granule_power:
+        parser.error("--granule-power-exponent sets the power of power-law cells: it needs --granule-power")
     if args.cell_noise is not None and args.cell_dither:
         parser.error("--cell-noise and --cell-dither are two kinds of random firing; choose one")
     if args.cell_noise is not None and args.granule_slope_tail:
