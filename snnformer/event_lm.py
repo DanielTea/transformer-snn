@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import functools
 import math
 from dataclasses import dataclass, field, replace
 
@@ -2473,6 +2474,143 @@ def _spread_phases(first, count, device, dtype):
     return ((cells * _GOLDEN_STEP) % _PHASE_STEPS).to(dtype).div(_PHASE_STEPS).to(device)
 
 
+# A stream's budgeted race read is computed by age (_StateRead._address_band): the same spikes as by cell, with half
+# the work when a window is as long as the reach. Off, every read takes _StateRead._address's path by cell.
+_READ_BY_AGE = True
+
+
+@functools.lru_cache(maxsize=8)
+def _ages_in_reach(kept, steps, reach, position, heads, device, dtype):
+    """For a stream's read by age: the cell of every age within reach for each byte as [bytes, reach] (below zero
+    before the stream's first cell), whether it holds a cell, and the phase at which that cell starts each head's
+    race as [heads, bytes, reach], the phases being _address's for the same cells."""
+    back = (kept + torch.arange(steps, device=device))[:, None] - torch.arange(reach, device=device)
+    order = torch.arange(heads, device=device)[:, None, None]
+    phase = (_spread_phases(position - kept, kept + steps, device, dtype) + order / heads) % 1
+    phase = phase.expand(-1, steps, -1).gather(-1, back.clamp_min(0).expand(heads, -1, -1))
+    return back, back >= 0, phase
+
+
+# A read by age works through a window's bytes in blocks of this many, each against the cells within its reach.
+_AGE_BLOCK = 256
+
+
+def _age_spans(steps, kept, reach, device):
+    """For a read by age: how many silent cells stand before the first (so that every age has a cell), and for
+    each block of bytes its first and last byte, where its span of cells starts, and the place of each age of
+    each of its bytes in that span, as [bytes in the block, reach]."""
+    lead = max(0, reach - 1 - kept)
+    start = kept + lead - reach + 1
+    blocks = []
+    for first in range(0, steps, _AGE_BLOCK):
+        last = min(steps, first + _AGE_BLOCK)
+        rows = torch.arange(last - first, device=device)[:, None]
+        blocks.append((first, last, start + first, rows + reach - 1 - torch.arange(reach, device=device)))
+    return lead, blocks
+
+
+def _band_dots(probe, tag, kept, reach):
+    """Every byte's probe against the tags of its cells within reach, by age, as [batch, heads, bytes, reach]: the
+    entries of ``probe @ tag^T`` at cell ``kept + byte - age``, and zero before the first cell. The sums are of whole
+    pulses, so each entry is that of the whole product."""
+    steps = probe.shape[2]
+    lead, blocks = _age_spans(steps, kept, reach, probe.device)
+    tag = F.pad(tag, (0, 0, lead, 0))
+    parts = []
+    for first, last, start, place in blocks:
+        span = tag[:, :, start:start + last - first + reach - 1]
+        dots = probe[:, :, first:last] @ span.transpose(2, 3)
+        parts.append(dots.gather(-1, place.expand(*dots.shape[:-1], -1)))
+    return parts[0] if len(parts) == 1 else torch.cat(parts, 2)
+
+
+def _band_read(fired, payload, kept, reach):
+    """The payload pulses that every byte's cell spikes by age pass on, as [batch, heads, bytes, channels]: the sum
+    over ages of ``fired[..., age]`` times the payload of cell ``kept + byte - age``. Whole spikes pass whole pulses
+    on, so the sum is that of the read by cell."""
+    steps = fired.shape[2]
+    lead, blocks = _age_spans(steps, kept, reach, fired.device)
+    payload = F.pad(payload, (0, 0, lead, 0))
+    parts = []
+    for first, last, start, place in blocks:
+        span = payload[:, :, start:start + last - first + reach - 1]
+        block = fired[:, :, first:last]
+        spread = block.new_zeros(*block.shape[:-1], span.shape[2]).scatter(-1, place.expand_as(block), block)
+        parts.append(spread @ span)
+    return parts[0] if len(parts) == 1 else torch.cat(parts, 2)
+
+
+class _ReadByAge:
+    """A stream read's spikes as _StateRead._address_band leaves them for _emit: each byte's cells within reach by
+    age, [batch, heads, bytes, reach], the knowledge cells', [batch, heads, bytes, knowledge] or None, and the
+    payloads of the window's and the tape's cells and of the knowledge cells."""
+
+    __slots__ = ("band", "known", "payload", "known_payload", "kept", "reach")
+
+    def __init__(self, band, known, payload, known_payload, kept, reach):
+        self.band, self.known, self.payload, self.known_payload = band, known, payload, known_payload
+        self.kept, self.reach = kept, reach
+
+    def read(self):
+        """``fired @ payload`` of the read by cell, knowledge cells included."""
+        packet = _band_read(self.band, self.payload, self.kept, self.reach)
+        return packet if self.known is None else packet + self.known @ self.known_payload
+
+    def by_cell(self):
+        """The spikes as the read by cell has them, [batch, heads, bytes, cells (+ knowledge)]."""
+        steps, cells = self.band.shape[2], self.payload.shape[2]
+        back = (self.kept + torch.arange(steps, device=self.band.device))[:, None] - torch.arange(
+            self.reach, device=self.band.device)
+        where = torch.where(back >= 0, back, cells).expand_as(self.band)
+        fired = self.band.new_zeros(*self.band.shape[:-1], cells + 1).scatter(-1, where, self.band)[..., :cells]
+        return fired if self.known is None else torch.cat((fired, self.known), -1)
+
+
+class _BudgetedRace(torch.autograd.Function):
+    """A budgeted race's spikes from the charges of every byte's cells by age, [batch, heads, bytes, reach] with
+    -inf where no cell is, and of the knowledge cells, [batch, heads, bytes, knowledge] or None.
+
+    The forward pass is _StateRead._address's: the peak over both, ``grown = exp(charge - peak)``, their total (the
+    cells in the order of their ages, then the knowledge cells), ``rate = grown / total * budget`` and
+    ``floor(rate + phase)`` spikes, whose gradient is the rate's. The backward pass uses the rates' own derivative,
+    ``d rate_i / d charge_j = rate_i (delta_ij - rate_j / budget)``, in place of differentiating each step: the same
+    gradient, in which the peak's part is exactly zero, in a few passes over the charges.
+    """
+
+    @staticmethod
+    def forward(ctx, charge, known, valid, phase, known_phase, budget):
+        peak = charge.amax(-1, keepdim=True)
+        if known is not None:
+            peak = torch.maximum(peak, known.amax(-1, keepdim=True))
+        grown = (charge - peak).exp()
+        total = (grown * valid).sum(-1, keepdim=True)
+        known_rate = known_fired = None
+        if known is not None:
+            known_grown = (known - peak).exp()
+            total = total + known_grown.sum(-1, keepdim=True)
+            known_rate = known_grown / total * budget
+            known_fired = (known_rate + known_phase).floor()
+        rate = grown / total * budget
+        ctx.budget = budget
+        ctx.save_for_backward(rate, known_rate)
+        return (rate + phase).floor(), known_fired
+
+    @staticmethod
+    def backward(ctx, grad_fired, grad_known):
+        rate, known_rate = ctx.saved_tensors
+        if grad_fired is None:
+            grad_fired = torch.zeros_like(rate)
+        share = (grad_fired * rate).sum(-1, keepdim=True)
+        if known_rate is not None:
+            if grad_known is None:
+                grad_known = torch.zeros_like(known_rate)
+            share = share + (grad_known * known_rate).sum(-1, keepdim=True)
+        share = share / ctx.budget
+        grad_charge = rate * (grad_fired - share)
+        grad_known_charge = None if known_rate is None else known_rate * (grad_known - share)
+        return grad_charge, grad_known_charge, None, None, None, None
+
+
 def _earlier_bytes(first, count):
     """For the bytes ``first`` to ``first + count - 1`` of a stream, a pseudo-random earlier byte within the last
     1,024, or -1 for a byte that has none before it. The golden ratio draws them in whole numbers, so that a window
@@ -3183,6 +3321,9 @@ class _StateRead(nn.Module):
         """
         if self.kept and tape is not None:
             return self._address_kept(spikes, tape, position, heard)
+        if (_READ_BY_AGE and tape is not None and self.mode == "race" and self.budget is not None
+                and not (self.beats or self.phases or self.turn or self.word_heads)):
+            return self._address_band(spikes, tape, position, heard, gain_offset)
         steps = spikes.shape[1]
         probe, tag, payload = self.packets(spikes, None if tape is None else tape.late, heard=heard,
                                            before_probe=None if tape is None else tape.late_probe)
@@ -3265,12 +3406,57 @@ class _StateRead(nn.Module):
                 payload = torch.cat((payload, known_payload.expand(payload.shape[0], -1, -1, -1)), 2)
         return fired, fired.sum(-1, keepdim=True).clamp_min(1), payload, fired.sum() + beats
 
+    def _address_band(self, spikes, tape, position, heard=None, gain_offset=None):
+        """``_address`` for a stream's budgeted race without clocks or word heads, computed by age: each byte's cells
+        within reach in the order of their ages, as [batch, heads, bytes, reach], in place of all the cells that the
+        tape and the window hold. A byte reaches ``reach`` of the ``kept + bytes`` cells, so a window as long as the
+        reach costs half as much, and the race's gradient takes a few passes (_BudgetedRace).
+
+        Its forward pass gives _address's values exactly: the charges are sums of whole pulses, which any order adds
+        alike, every later step takes the same values, and the total runs over the cells in the same order and
+        layout. It returns them as _address does, by cell."""
+        steps = spikes.shape[1]
+        probe, tag, payload = self.packets(spikes, tape.late, heard=heard, before_probe=tape.late_probe)
+        kept = 0
+        if tape.payload is not None:
+            kept = tape.payload.shape[2]
+            payload = torch.cat((tape.payload, payload), 2)
+            tag = torch.cat((tape.tag, tag), 2)
+        # A later byte reaches the cells of the last ``reach`` bytes, its own among them.
+        oldest = max(0, payload.shape[2] - self.reach + 1)
+        tape.payload = _carry(tape, payload[:, :, oldest:])
+        tape.tag = _carry(tape, tag[:, :, oldest:])
+        self._keep_late(tape, spikes, heard)
+        _, valid, phase = _ages_in_reach(kept, steps, self.reach, position, self.heads, spikes.device, probe.dtype)
+        stored = self.gain if gain_offset is None else self.gain + gain_offset
+        unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
+        scale = (stored * self.rate).exp() / unit
+        # A cell's offset is that of its age, as _age_offsets gives it by cell.
+        charge = _band_dots(probe, tag, kept, self.reach) * scale + (self.aged() * self.rate)[:, None]
+        charge = charge.masked_fill(~valid, -torch.inf)
+        known = known_payload = known_phase = None
+        if self.knowledge:
+            known_tag, known_payload, known_offset = self.known()
+            known = probe @ known_tag.transpose(1, 2) * scale + known_offset[:, None]
+            heads = torch.arange(self.heads, device=spikes.device)[:, None, None]
+            known_phase = (_spread_phases(-self.knowledge - 1, self.knowledge, spikes.device, probe.dtype)
+                           + heads / self.heads) % 1
+        fired, known_fired = _BudgetedRace.apply(charge, known, valid, phase, known_phase, float(self.budget))
+        # Whole spikes: their sums are those of the read by cell in any order.
+        total, count = fired.sum(-1, keepdim=True), fired.sum()
+        if self.knowledge:
+            total, count = total + known_fired.sum(-1, keepdim=True), count + known_fired.sum()
+        read = _ReadByAge(fired, known_fired, payload, known_payload, kept, self.reach)
+        return read, total.clamp_min(1), None, count
+
     def forward(self, spikes, pulse_counts=None, tokens=None, tape=None, position=0, fibres=None, heard=None,
                 gain_offset=None):
         fired, total, payload, cell_spikes = self._address(spikes, tokens, tape, position, heard, gain_offset)
         if fibres is not None:
             # The fast output synapses hear which knowledge cells won, as [batch, bytes, heads, cells].
-            fibres.append(fired[..., -self.knowledge:].detach().transpose(1, 2))
+            won = (fired.known if fired.known is not None else fired.by_cell()) if isinstance(fired, _ReadByAge) \
+                else fired[..., -self.knowledge:]
+            fibres.append(won.detach().transpose(1, 2))
         return self._emit(spikes, fired, total, payload, cell_spikes, pulse_counts)
 
     def replay(self, spikes, tape, position, pulse_counts=None, *, race=True, gain_offset=None):
@@ -3365,7 +3551,7 @@ class _StateRead(nn.Module):
         """The stream after the read: the payloads that the cells' spikes pass on, counted by the read neurons and
         sent to the stream through the read's output synapses."""
         # Whole cell spikes pass whole payload pulses on, and their sum is the same in any order.
-        packet = fired @ payload
+        packet = fired.read() if isinstance(fired, _ReadByAge) else fired @ payload
         if total is not None:
             packet = packet / total
         if self.mode == "race":
