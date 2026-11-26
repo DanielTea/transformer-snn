@@ -522,7 +522,12 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   24,000 updates.
 - **Telemetry** (`telemetry_screen.json`, `experiments/pump_sim.py`, `experiments/telemetry_eval.py`): a simulated
   centrifugal pump with nine faults whose truth is kept, eight bytes a second; the stack's surprise as a fault
-  detector beside a per-channel z-score detector (AUC 0.632 on the test pumps).
+  detector beside a per-channel z-score detector (AUC 0.632 on the test pumps). The surprise fails the mark of 0.80
+  (AUC 0.715). It is nearly certain for faults that add vibration (bearing wear, imbalance, misalignment: 0.96) but
+  at chance for the seal leak and the stuck valve, which move the pump to a new steady state that soon becomes as
+  predictable as the old one. So the telemetry sense must add three things: a slow memory of each pump's normal,
+  the relations between channels that the physics fixes, and a test that also marks a stream that grows too
+  predictable (a frozen sensor).
 - **Chains of thought learned from reward alone** (`practice_hops.json`, `experiments/practice_loop.py`): the
   models practise hop tasks with room to write before the answer; only the answer is checked; the difficulty
   follows the solve rate so that a quarter to a half of the tasks are solved.
