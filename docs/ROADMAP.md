@@ -305,10 +305,15 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    pilot and two bed seeds run in the night of 2026-11-25. **The float control finds the price**: a pool that
    divides by the root mean square costs the Transformer only 0.0020 against its LayerNorm, so 97% of the pool's
    0.069 is dividing by the mean absolute activity in place of the energy; no centring is needed. **The spiking
-   energy pool fails on the bed** (after 24,000 updates one seed 0.0105 behind, one 0.0045 ahead, at equal pulses).
-   The bed's pool does not lift the membranes' ceiling, so a pool that inhibits more also takes range from every
-   neuron, and an energy pool inhibits more wherever a few channels are loud; the full-size pilot lifts the ceiling
-   and decides for full size.
+   energy pool fails on the bed** (after 24,000 updates one seed 0.0105 behind, one 0.0045 ahead, at equal pulses)
+   **and at full size**: with the membranes' ceiling lifted, so that a stronger pool takes no range from the
+   neurons, the lifted loop with energy pools is 0.0040 behind the same loop (new contexts 0.008, far copies 0.012),
+   and energy pools stay off. What a Transformer loses with the stack's pool is not what the stack loses with it,
+   so the layout walk's largest part is not yet a recipe for the stack. A likely reason, not yet measured: a
+   Transformer's stream is signed and dense with a few channels far louder than the rest, which a division by mean
+   activity leaves loud, while the stack's counts are whole and capped, so no channel can be far louder, and
+   dividing them by their energy mostly inhibits sparse patterns more. The ratio of energy to summed activity, token
+   by token, in both trained streams tells.
    **Power-law cells** (`--granule-power P`, `power_cells_screen.json`, on the laptop tonight): a cortical neuron's
    rate grows with a power of about two of how far its membrane stands past the threshold. A power-law cell fires
    round(k * k / P) spikes for k thresholds of charge, up to its cap, as a plain cell does at P thresholds: the
