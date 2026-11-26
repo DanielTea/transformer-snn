@@ -23,5 +23,20 @@
   "recorded_utc": "2026-11-26T00:49:20Z",
   "change": "2^26 before 2^22, and no threshold starts late in a weekday window. 2^25 scored 1.166631 on the million, the lowest so far (2^24 1.166653; paired difference -0.00002, interval -0.00012 to +0.00008), so the arms add the further threshold 2^26. Amendment_2 meant 2^26 to land within the night, but the job as started scored 2^22 first and the further threshold only after it, which would have put 2^26 across the window's close; 2^22, started at 00:41:43Z, is stopped unscored after about 6 minutes, and the job now scores 2^26 first, then 2^22. A threshold now starts only while DeepSeek is stopped and, on weekdays, not from 02:00 to 07:00 UTC: a scoring takes about four hours and holds about 23 GiB without a memory cap, which must not stand beside DeepSeek's model after the close, so 2^22 waits for the window of 2026-11-26. 2^21 is still scored if 2^22 turns out the lowest; no threshold beyond 2^26 is scored, as the arms say. The thresholds, bytes, streams, pieces, pairing and reading are unchanged.",
   "seen_before_amendment": "teach-24 (1.166653), teach-23 (1.168208) and teach-25 (1.166631) with their pairings against 2^24; no score at 2^22 or 2^26."
+ },
+ "scores_so_far": {
+  "recorded_utc": "2026-11-26T04:57:02Z",
+  "scores": {
+   "2^23": 1.168208,
+   "2^24": 1.166653,
+   "2^25": 1.166631,
+   "2^26": 1.167058
+  },
+  "pairings": {
+   "2^23 against 2^24": "+0.00155 [+0.00141, +0.00170] over 17,552 pieces of 64 bytes",
+   "2^25 against 2^24": "-0.00002 [-0.00012, +0.00008] over 17,552 pieces of 64 bytes",
+   "2^26 against 2^24": "+0.00040 [+0.00024, +0.00057] over 17,552 pieces of 64 bytes"
+  },
+  "state": "Four of the five thresholds are scored: the curve is flat from 2^24 to 2^25 and rises on both sides (2^23 0.0016 worse, 2^26 0.0004 worse), so no threshold scored so far is 0.001 below 2^24; 2^25, the lowest, now lies inside the scanned range, so the scan reaches no further up. 2^22 waits for the window of Thursday 2026-11-26 (amendment_3) and the record's result is written when it lands; until then fsp-lift is scored at 2^24, as full-pair3.sh does."
  }
 }
