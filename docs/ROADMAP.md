@@ -345,7 +345,10 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    updates they led by 0.0176, so the plain cells catch up part of the way with data. Power-law cells therefore join
    the next full-length run, **fsp-lift2** (`full_size_lifted_loop_second.json`): the lifted loop with power-law
    cells, on GPU 0 alone from the evening of 2026-11-26, read against fsp-lift, fsp-loop and the Transformer. Its
-   90,000 updates show how much of the gain survives at full length.
+   90,000 updates show how much of the gain survives at full length. **In the loop the gain is larger**: on the
+   laptop's seed, after 24,000 updates, the looped bed with power-law cells leads the looped bed with plain cells
+   by 0.0095 (interval 0.0086 to 0.0105) at equal pulses (`power_cells_in_loop_screen.json`), twice the same seed's
+   lead on the plain bed, again on new contexts (0.015 better on 76% of bytes) with near copies 0.029 worse.
 3. **What holds late learning back: the charge grid and weight decay.** Does the charge grid limit late learning
    (`weight_precision_with_data.json`; at the best rate `randomness_at_best_rate.json`)? A typical full-size synapse
    is about 8 ticks from zero, so a tick is an eighth of it, and on the test bed a float stand-in that was level
