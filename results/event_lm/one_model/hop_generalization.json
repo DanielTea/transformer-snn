@@ -345,5 +345,297 @@
    }
   },
   "reading": "No arm learned the task in 12,000 updates (mean accuracy over 1 to 4 hops: hop-stack 0.5884, hop-loop 0.0973, hop-tf 0.0948, all below 0.80), so by the reading and its amendment all three train again to 24,000 updates, and no comparison is read at 12,000. Not part of the reading: the plain stack looks up one hop in every line (1.000, 0.008 bits) and two in most (0.858), but not three or four (0.235, 0.261). Past the trained hops its accuracy rises with the chain's length (0.279 at 6 hops, 0.331 at 16) because lines with longer chains hold fewer distinct digits (6.8 at one hop, 3.9 at 16): a uniform guess among the digits of names that another assignment points to scores 0.198 at 3 hops and 0.368 at 16 (the floors above), so beyond two hops the stack does little better than such a guess, and any comparison at 8 or 16 hops stands on a floor of 0.23 to 0.37. The loop and the Transformer give every digit the same probability at every hop count (3.32 bits, every answer a digit): they learned that a digit comes, not which. The scorer builds each model from its checkpoint's saved configuration with the trainer's own loader, the loop included, and reads the stacks as one stream as eval_stream.py does."
+ },
+ "result_at_24000_updates": {
+  "recorded_utc": "2026-11-26T17:00:56Z",
+  "runs": "hop-stack-24k, hop-loop-24k and hop-tf-24k as the amendment registered: trained again from the start with --steps 24000 on the frozen code copy 4d64208, otherwise as at 12,000 updates, one at a time on the laptop's GPU (hop-stack-24k scored 2026-11-26 12:49Z, hop-tf-24k 13:08Z, hop-loop-24k 16:54Z), scored by the same scorer on the averaged weights.",
+  "accuracy by hops (most likely byte; 95% Wilson interval; mean answer bits; share of answers that are a digit)": {
+   "hop-stack": {
+    "1": {
+     "answers": 984,
+     "right": 984,
+     "accuracy": 1.0,
+     "interval_95": [
+      0.9961,
+      1.0
+     ],
+     "answer_bits": 0.0031,
+     "some_digit": 1.0
+    },
+    "2": {
+     "answers": 984,
+     "right": 875,
+     "accuracy": 0.8892,
+     "interval_95": [
+      0.8681,
+      0.9073
+     ],
+     "answer_bits": 0.633,
+     "some_digit": 1.0
+    },
+    "3": {
+     "answers": 984,
+     "right": 372,
+     "accuracy": 0.378,
+     "interval_95": [
+      0.3483,
+      0.4088
+     ],
+     "answer_bits": 2.4284,
+     "some_digit": 1.0
+    },
+    "4": {
+     "answers": 984,
+     "right": 241,
+     "accuracy": 0.2449,
+     "interval_95": [
+      0.2191,
+      0.2727
+     ],
+     "answer_bits": 2.7923,
+     "some_digit": 1.0
+    },
+    "6": {
+     "answers": 984,
+     "right": 263,
+     "accuracy": 0.2673,
+     "interval_95": [
+      0.2406,
+      0.2958
+     ],
+     "answer_bits": 2.7119,
+     "some_digit": 1.0
+    },
+    "8": {
+     "answers": 984,
+     "right": 279,
+     "accuracy": 0.2835,
+     "interval_95": [
+      0.2563,
+      0.3125
+     ],
+     "answer_bits": 2.6177,
+     "some_digit": 1.0
+    },
+    "12": {
+     "answers": 984,
+     "right": 277,
+     "accuracy": 0.2815,
+     "interval_95": [
+      0.2543,
+      0.3104
+     ],
+     "answer_bits": 2.4464,
+     "some_digit": 1.0
+    },
+    "16": {
+     "answers": 984,
+     "right": 324,
+     "accuracy": 0.3293,
+     "interval_95": [
+      0.3006,
+      0.3592
+     ],
+     "answer_bits": 2.3168,
+     "some_digit": 1.0
+    }
+   },
+   "hop-loop": {
+    "1": {
+     "answers": 984,
+     "right": 97,
+     "accuracy": 0.0986,
+     "interval_95": [
+      0.0815,
+      0.1188
+     ],
+     "answer_bits": 3.3223,
+     "some_digit": 1.0
+    },
+    "2": {
+     "answers": 984,
+     "right": 112,
+     "accuracy": 0.1138,
+     "interval_95": [
+      0.0955,
+      0.1352
+     ],
+     "answer_bits": 3.3224,
+     "some_digit": 1.0
+    },
+    "3": {
+     "answers": 984,
+     "right": 89,
+     "accuracy": 0.0904,
+     "interval_95": [
+      0.0741,
+      0.11
+     ],
+     "answer_bits": 3.3224,
+     "some_digit": 1.0
+    },
+    "4": {
+     "answers": 984,
+     "right": 85,
+     "accuracy": 0.0864,
+     "interval_95": [
+      0.0704,
+      0.1056
+     ],
+     "answer_bits": 3.3224,
+     "some_digit": 1.0
+    },
+    "6": {
+     "answers": 984,
+     "right": 89,
+     "accuracy": 0.0904,
+     "interval_95": [
+      0.0741,
+      0.11
+     ],
+     "answer_bits": 3.3224,
+     "some_digit": 1.0
+    },
+    "8": {
+     "answers": 984,
+     "right": 89,
+     "accuracy": 0.0904,
+     "interval_95": [
+      0.0741,
+      0.11
+     ],
+     "answer_bits": 3.3224,
+     "some_digit": 1.0
+    },
+    "12": {
+     "answers": 984,
+     "right": 107,
+     "accuracy": 0.1087,
+     "interval_95": [
+      0.0908,
+      0.1297
+     ],
+     "answer_bits": 3.3225,
+     "some_digit": 1.0
+    },
+    "16": {
+     "answers": 984,
+     "right": 105,
+     "accuracy": 0.1067,
+     "interval_95": [
+      0.0889,
+      0.1276
+     ],
+     "answer_bits": 3.3221,
+     "some_digit": 1.0
+    }
+   },
+   "hop-tf": {
+    "1": {
+     "answers": 984,
+     "right": 92,
+     "accuracy": 0.0935,
+     "interval_95": [
+      0.0769,
+      0.1133
+     ],
+     "answer_bits": 3.3226,
+     "some_digit": 1.0
+    },
+    "2": {
+     "answers": 984,
+     "right": 105,
+     "accuracy": 0.1067,
+     "interval_95": [
+      0.0889,
+      0.1276
+     ],
+     "answer_bits": 3.3227,
+     "some_digit": 1.0
+    },
+    "3": {
+     "answers": 984,
+     "right": 107,
+     "accuracy": 0.1087,
+     "interval_95": [
+      0.0908,
+      0.1297
+     ],
+     "answer_bits": 3.3224,
+     "some_digit": 1.0
+    },
+    "4": {
+     "answers": 984,
+     "right": 96,
+     "accuracy": 0.0976,
+     "interval_95": [
+      0.0806,
+      0.1177
+     ],
+     "answer_bits": 3.3229,
+     "some_digit": 1.0
+    },
+    "6": {
+     "answers": 984,
+     "right": 84,
+     "accuracy": 0.0854,
+     "interval_95": [
+      0.0695,
+      0.1045
+     ],
+     "answer_bits": 3.3231,
+     "some_digit": 1.0
+    },
+    "8": {
+     "answers": 984,
+     "right": 121,
+     "accuracy": 0.123,
+     "interval_95": [
+      0.1039,
+      0.145
+     ],
+     "answer_bits": 3.3228,
+     "some_digit": 1.0
+    },
+    "12": {
+     "answers": 984,
+     "right": 99,
+     "accuracy": 0.1006,
+     "interval_95": [
+      0.0833,
+      0.121
+     ],
+     "answer_bits": 3.3225,
+     "some_digit": 1.0
+    },
+    "16": {
+     "answers": 984,
+     "right": 93,
+     "accuracy": 0.0945,
+     "interval_95": [
+      0.0778,
+      0.1144
+     ],
+     "answer_bits": 3.3234,
+     "some_digit": 1.0
+    }
+   }
+  },
+  "mean accuracy over 1 to 4 hops": {
+   "hop-stack": 0.628,
+   "hop-loop": 0.0973,
+   "hop-tf": 0.1016
+  },
+  "learned (>= 0.80)": {
+   "hop-stack": false,
+   "hop-loop": false,
+   "hop-tf": false
+  },
+  "validation of the averaged weights, in windows (trainer's log, not part of the reading)": {
+   "hop-stack": 2.6192,
+   "hop-loop": 2.6249,
+   "hop-tf": 2.6393
+  },
+  "reading": "No arm learned the task in 24,000 updates either (mean accuracy over 1 to 4 hops: hop-stack 0.6280, hop-loop 0.0973, hop-tf 0.1016, all below 0.80). The reading compares only arms that learned the task, so it makes no comparison at any hop count, and it registered no further step: the screen ends without deciding whether the racing loop is tested on this probe first. Not part of the reading: twice the updates moved the plain stack from 0.5884 to 0.6280. One hop stays perfect (984 of 984, 0.003 bits), two rise from 0.858 to 0.889 and three from 0.235 to 0.378 (guessing floor 0.198, result_at_12000_updates), four stay near a quarter (0.245; floor 0.202), and past the trained hops it stays at 0.27 to 0.33, near or under the floors of 0.22 to 0.37: it has learned one lookup, mostly two, and is starting on three. hop-loop answers 0 on every line: at every hop count its right answers equal the number of answers that are 0 (97, 112, 89, 85, 89, 89, 107 and 105 of 984) and its answer bits are log2 10 = 3.322 to within 0.001, so it gives the ten digits the same probability and the tie goes to the first, as at 12,000 updates (where two lines differed). hop-tf too gives the ten digits the same probability (3.322 to 3.323 bits); its accuracies scatter around 0.10. Its validation fell from 2.90 to 2.65 bits per byte between steps 6,750 and 9,750, as when a copying circuit forms, with no gain on the answers. Both learned the corpus's other bytes about as well as the stack (validation above); an answer is one byte in about 140, so missing every answer costs little in bits per byte. The loop and the Transformer thus did not learn even one lookup in this setup, which one seed at one rate cannot attribute to their architecture; the plain stack did. A probe that first teaches one lookup (shorter lines, or a curriculum from one hop) would need its own registration. The practice screen (practice_hops.json) starts from hop-stack-24k and hop-tf-24k as its amendment registered."
  }
 }

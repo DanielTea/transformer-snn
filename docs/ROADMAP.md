@@ -522,10 +522,12 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
 
 - **How many steps of lookup a model chains without writing them** (`hop_generalization.json`,
   `experiments/hop_tasks.py`, `experiments/hop_eval.py`): the test bed, its loop and its Transformer trained on
-  chains of 1 to 4 hops and tested on up to 16. At 12,000 updates none has learned it (mean accuracy over 1 to 4
-  hops: the stack 0.59, the loop 0.10, the Transformer 0.09, against a mark of 0.80). The stack looks up one hop in
-  every line and two in most; the loop and the Transformer do not look up even one. All three train again to
-  24,000 updates.
+  chains of 1 to 4 hops and tested on up to 16. None learned it, at 12,000 updates or after training again to
+  24,000 (mean accuracy over 1 to 4 hops at 24,000: the stack 0.63, the loop 0.10, the Transformer 0.10, against a
+  mark of 0.80), so the screen ends without a comparison. The stack looks up one hop in every line, two in most
+  (0.89) and is starting on three (0.38); the loop answers 0 on every line and the Transformer gives every digit
+  the same probability, though both learned the corpus's other bytes about as well as the stack. A probe that
+  first teaches one lookup (shorter lines, or a curriculum from one hop) would need its own registration.
 - **Telemetry** (`telemetry_screen.json`, `experiments/pump_sim.py`, `experiments/telemetry_eval.py`): a simulated
   centrifugal pump with nine faults whose truth is kept, eight bytes a second; the stack's surprise as a fault
   detector beside a per-channel z-score detector (AUC 0.632 on the test pumps). The surprise fails the mark of 0.80
