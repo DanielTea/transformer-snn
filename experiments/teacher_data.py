@@ -11,7 +11,13 @@ with every item. Three jobs:
            with answers the program computes; kept when the reply's final number is within 1% of it
   explain  explanations for an operator of simulated pump faults (experiments/pump_sim.py), from the measured facts
            of each fault; kept when the fact checker finds the fault's cause named and every number given with a
-           channel's unit within 5% of a measured value or change
+           channel's unit within 5% of a measured value or change. Retired for diagnose: in about a third of its
+           draws a speed change or a stop fell inside the windows, and a cause named anywhere in the text passed
+  diagnose explain's successor: the windows hold the speed within 1% with the pump running, the two suction faults
+           (a falling tank, a clogging strainer) are one cause, since the facts cannot tell them apart, and the reply
+           ends with a line 'Cause: ...' naming one of eight causes (and the sensor, for a sensor fault); kept when
+           that line is the fault's and every number given with a channel's unit holds as in explain, the rated
+           speed and the differential pressure counted as measured
 
 The endpoint is asked one request at a time, only while its /health answers ok, and the job ends at --stop-utc on its
 own, so that it holds no request when the scheduler stops the server's model to open a GPU window.
@@ -192,17 +198,26 @@ EXPLAINER = ("You are a reliability engineer. From the telemetry facts you are g
              "the numbers in the facts.")
 
 
-def fault_facts(rng: np.random.Generator, hours: float = 4.0) -> dict:
+def fault_facts(rng: np.random.Generator, hours: float = 4.0, steady: bool = False, kind: str | None = None) -> dict:
     """A simulated pump with one fault, and the measured facts of it: the channels' means over the ten minutes before
-    the fault and the ten minutes after it is at full strength."""
+    the fault and the ten minutes after it is at full strength. With ``steady``, the pump is drawn again until its
+    speed holds within 1% of the rated speed, running, from the first window's start to the second's end, so that
+    no setpoint change or stop is read as the fault. ``kind`` fixes the fault (for tests) without changing the draws."""
     seconds = int(hours * 3600)
-    kind = str(rng.choice(FAULTS))
-    channel = str(rng.choice(CHANNELS[1:])) if kind.startswith("sensor") else None
-    ramp = 1 if kind == "sensor_freeze" else int(rng.choice([60, 600, 1800]))
-    start = int(rng.integers(seconds // 3, seconds // 2))
-    run = Run(Pump.draw(rng), seconds, [Fault(kind, start, ramp, float(rng.uniform(0.6, 1.0)), channel)],
-              seed=int(rng.integers(2 ** 31)))
-    values = simulate(run)
+    drawn = str(rng.choice(FAULTS))
+    kind = kind or drawn
+    for _ in range(100):
+        channel = str(rng.choice(CHANNELS[1:])) if kind.startswith("sensor") else None
+        ramp = 1 if kind == "sensor_freeze" else int(rng.choice([60, 600, 1800]))
+        start = int(rng.integers(seconds // 3, seconds // 2))
+        run = Run(Pump.draw(rng), seconds, [Fault(kind, start, ramp, float(rng.uniform(0.6, 1.0)), channel)],
+                  seed=int(rng.integers(2 ** 31)))
+        values = simulate(run)
+        speed = values[max(0, start - 600):min(seconds, start + ramp + 600), 0]
+        if not steady or (speed.min() > 100 and speed.max() - speed.min() < 0.01 * run.pump.n0):
+            break
+    else:
+        raise RuntimeError("no steady window in 100 draws")
     before = values[max(0, start - 600):start].mean(0)
     after = values[min(seconds - 600, start + ramp):min(seconds, start + ramp + 600)].mean(0)
     spread = values[max(0, start - 600):start].std(0)
@@ -247,6 +262,68 @@ def check_explain(facts: dict, reply: str) -> tuple[bool, str]:
     return True, "cause named; numbers match"
 
 
+# --- diagnose ----------------------------------------------------------------------------------------------------
+
+# The causes a reply may end on, and the faults each stands for: a falling tank and a clogging strainer both pull the
+# suction down, and which of them cavitates depends on its severity, so the facts name them together.
+DIAGNOSES = {"low suction": ("cavitation", "clogging"), "bearing wear": ("bearing_wear",),
+             "impeller imbalance": ("imbalance",), "misalignment": ("misalignment",),
+             "valve stuck shut": ("valve_stuck",), "seal leak": ("seal_leak",), "sensor drift": ("sensor_drift",),
+             "frozen sensor": ("sensor_freeze",)}
+SENSORS = {name.split("_")[0]: name for name in CHANNELS[1:]}
+DIAGNOSER = (EXPLAINER + " End with one line of the form 'Cause: <cause>', where <cause> is exactly one of: "
+             + ", ".join(DIAGNOSES) + ". For a sensor fault, name the sensor, as in 'Cause: sensor drift on flow' "
+             "(the sensors: " + ", ".join(SENSORS) + ").")
+_CAUSE_LINE = re.compile(r"[\s*_#>`-]*cause[\s*_`]*:[\s*_`]*(.+?)[\s*_`.]*", re.IGNORECASE)
+
+
+def diagnosis(reply: str) -> tuple[str, str | None] | None:
+    """The cause on the reply's last line 'Cause: ...', as (cause, the sensor's channel or None); None unless the line
+    names exactly one of DIAGNOSES (and, for the two sensor faults, a sensor)."""
+    lines = [line for line in reply.strip().splitlines() if line.strip()]
+    found = _CAUSE_LINE.fullmatch(lines[-1].strip()) if lines else None
+    if not found:
+        return None
+    said = re.sub(r"\s+", " ", found.group(1).strip().lower())
+    said = re.sub(r"\s*\([^()]*\)$", "", said)  # a closing remark in brackets is allowed
+    if said in DIAGNOSES and not said.startswith(("sensor", "frozen")):
+        return said, None
+    for name in ("sensor drift", "frozen sensor"):
+        sensor = re.fullmatch(re.escape(name) + r" (?:on|of|in) (?:the )?(\w+)(?: sensor| reading| channel)?", said)
+        if sensor and sensor.group(1) in SENSORS:
+            return name, SENSORS[sensor.group(1)]
+    return None
+
+
+def check_diagnose(facts: dict, reply: str) -> tuple[bool, str]:
+    """The last line names the fault's cause (and its sensor), and every number given with a channel's unit is within
+    5% (or 0.05) of a measured value, change or spread of a channel with that unit, of the rated speed, or of the
+    differential pressure (discharge less suction) before, after or its change."""
+    said = diagnosis(reply)
+    if said is None:
+        return False, "no last line 'Cause: ...' naming one cause"
+    name, sensor = said
+    if facts["kind"] not in DIAGNOSES[name]:
+        return False, f"said {name}, was {facts['kind']}"
+    if facts["channel"] and sensor != facts["channel"]:
+        return False, f"said {name} on {sensor}, was on {facts['channel']}"
+    rows = facts["channels"]
+    measured = {"rpm": [facts["rated_rpm"]]}
+    for channel, row in rows.items():
+        for unit in UNITS[channel]:
+            measured.setdefault(unit.lower(), []).extend(
+                [row["before"], row["after"], abs(row["change"]), row["spread_before"], row["spread_after"]])
+    lift = [rows["discharge_bar"][when] - rows["suction_bar"][when] for when in ("before", "after")]
+    measured["bar"].extend(lift + [abs(lift[1] - lift[0])])
+    for number, unit in re.findall(r"(" + NUMBER + r")\s*(m3/h|m³/h|m\^3/h|rpm|bar|mm/s|°c|amps|amperes|a)\b",
+                                   reply.lower()):
+        value = abs(float(number.replace(",", "")))
+        allowed = measured.get(unit, [])
+        if allowed and not any(math.isclose(value, abs(m), rel_tol=0.05, abs_tol=0.05) for m in allowed):
+            return False, f"{number} {unit} matches no measured value"
+    return True, f"{name}{' on ' + sensor.split('_')[0] if sensor else ''}; numbers match"
+
+
 # --- the job -----------------------------------------------------------------------------------------------------
 
 def run_job(job: str, teacher: Teacher, out: Path, count: int, seed: int, log=print) -> dict:
@@ -277,9 +354,12 @@ def run_job(job: str, teacher: Teacher, out: Path, count: int, seed: int, log=pr
             elif job == "physics":
                 item = physics_item(rng)
                 system, user, check = SOLVER, item["question"], check_physics
-            else:
+            elif job == "explain":
                 item = fault_facts(nrng)
                 system, user, check = EXPLAINER, facts_text(item), check_explain
+            else:
+                item = fault_facts(nrng, steady=True)
+                system, user, check = DIAGNOSER, facts_text(item), check_diagnose
             started = time.time()
             reply, thinking = teacher.ask(system, user)
             asked += 1
@@ -302,7 +382,7 @@ def write_corpus(inputs: Path, out: Path, seed: int = 1, shares=(0.9, 0.05, 0.05
             row = json.loads(line)
             if not row["kept"]:
                 continue
-            if row["job"] == "explain":
+            if row["job"] in ("explain", "diagnose"):
                 texts.append(f"Telemetry:\n{row['prompt']}\nWhat happened, and what should I do?\n{row['reply']}\n\n")
             else:
                 texts.append(f"Question: {row['prompt']}\n{row['reply']}\n\n")
@@ -323,7 +403,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="what", required=True)
     run = sub.add_parser("run")
-    run.add_argument("--job", choices=("gsm8k", "physics", "explain"), required=True)
+    run.add_argument("--job", choices=("gsm8k", "physics", "explain", "diagnose"), required=True)
     run.add_argument("--base", required=True, help="the endpoint, e.g. http://127.0.0.1:18000")
     run.add_argument("--key-file", type=Path, help="a file holding the endpoint's key, if it wants one")
     run.add_argument("--out", type=Path, required=True)
