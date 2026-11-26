@@ -302,7 +302,13 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    let every pool of the stack hear the root of the stream's summed squared counts times its width, the summed
    counts where the active channels fire alike and more where a few are loud: whole counts, the same spikes
    however a stream is cut, no new parameters. A float control that divides by the root mean square, a full-size
-   pilot and two bed seeds run in the night of 2026-11-25.
+   pilot and two bed seeds run in the night of 2026-11-25. **The float control finds the price**: a pool that
+   divides by the root mean square costs the Transformer only 0.0020 against its LayerNorm, so 97% of the pool's
+   0.069 is dividing by the mean absolute activity in place of the energy; no centring is needed. **The spiking
+   energy pool fails on the bed** (after 24,000 updates one seed 0.0105 behind, one 0.0045 ahead, at equal pulses).
+   The bed's pool does not lift the membranes' ceiling, so a pool that inhibits more also takes range from every
+   neuron, and an energy pool inhibits more wherever a few channels are loud; the full-size pilot lifts the ceiling
+   and decides for full size.
    **Power-law cells** (`--granule-power P`, `power_cells_screen.json`, on the laptop tonight): a cortical neuron's
    rate grows with a power of about two of how far its membrane stands past the threshold. A power-law cell fires
    round(k * k / P) spikes for k thresholds of charge, up to its cap, as a plain cell does at P thresholds: the
@@ -314,12 +320,17 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    catch up as the rate decays. At 24,000 updates it is still 0.010 better on new contexts and 0.040 on far copies,
    and loses that on contexts seen before with another follower (0.095 worse on 5% of bytes). Under the screen's
    mark; the server seeds (`power_cells_with_data.json`) run behind the night's recipe pilots. A cell whose count
-   grows more gently than a square, or a smaller P, is the open question.
+   grows more gently than a square, or a smaller P, is the open question. **The two server seeds read a constant
+   gain**: after 24,000 updates power-law cells lead the bed by 0.0100 and 0.0156 (0.0128 on the mean, both seeds
+   ahead) at equal parameters and pulses, most of it on new contexts, after 0.0156 at 6,000 updates. The full-size
+   pilot (`full_size_power_cells.json`) and two more seeds run the same night; power-law cells join the next
+   full-length run only if four seeds hold and the pilot is 0.005 better than the lifted loop.
 3. **What holds late learning back: the charge grid and weight decay.** Does the charge grid limit late learning
    (`weight_precision_with_data.json`; at the best rate `randomness_at_best_rate.json`)? A typical full-size synapse
    is about 8 ticks from zero, so a tick is an eighth of it, and on the test bed a float stand-in that was level
    with the spiking bed after 6,000 updates was 0.022 ahead after 24,000. A laptop screen puts the reads' and cells'
-   synapses on a grid four times finer at the bed's best rate (`charge_grid_at_best_rate.json`). Quantal release,
+   synapses on a grid four times finer at the bed's best rate (`charge_grid_at_best_rate.json`); **it is no limit at
+   this length**: on the finer grid the bed is 0.0066 behind after 24,000 updates and 0.0086 after 6,000. Quantal release,
    which rounds at random instead, was behind on the laptop's seed. **Weight decay on synapses only**
    (`--decay-synapses-only`, `decay_synapses_only_with_data.json` and `full_size_decay_synapses_only.json`): the
    trainer has decayed every parameter of two dimensions, a read's gain, grain and offsets by age and a cell's resting
