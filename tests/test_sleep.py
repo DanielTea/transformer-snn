@@ -182,3 +182,35 @@ def test_the_trainer_hands_the_sleep_to_the_model(monkeypatch, tmp_path):
     assert read.sleep == 4 and read.ahead.shape[-1] == 4
     # Four updates on streams moved the gates: later windows of every piece read what the replays wrote.
     assert read.sleep_rest.any()
+
+
+def test_a_sleeping_stack_checks_its_weights_once_for_all_stretches(monkeypatch):
+    model, tokens = _stack(stack_sleep=_WINDOW), _bytes(length=70)
+    model._check_weights = True
+    calls = []
+    original = model._check_accumulator
+    monkeypatch.setattr(model, "_check_accumulator", lambda: calls.append(1) or original())
+    with torch.no_grad():
+        model(tokens)
+    # Five stretches, one check; and the setting is as it was.
+    assert len(calls) == 1 and model._check_weights is True
+
+
+def test_gates_that_start_closed_start_as_the_stack_without_sleep():
+    tokens = _bytes(length=70)
+    plain, sleeping = _stack().eval(), _stack(stack_sleep=_WINDOW, stack_sleep_keep=0.95).eval()
+    sleeping.load_state_dict({k: v for k, v in plain.state_dict().items()}, strict=False)
+    for read in _reads(sleeping):
+        # A deaf gate fires round(4 * 0.95) = 4 quarters: it keeps every stored cell.
+        torch.testing.assert_close((read.sleep_rest * read.rate).sigmoid(), torch.full_like(read.sleep_rest, 0.95))
+    with torch.no_grad():
+        assert torch.equal(sleeping(tokens), plain(tokens))
+    # The default starts halfway open.
+    halfway = _stack(stack_sleep=_WINDOW)
+    assert all(not read.sleep_rest.any() for read in _reads(halfway))
+
+
+@pytest.mark.parametrize("keep", [0.0, 1.0, 1.5, True])
+def test_a_stack_refuses_a_share_kept_that_is_not_one(keep):
+    with pytest.raises(ValueError, match="keep a share"):
+        _stack(stack_sleep=_WINDOW, stack_sleep_keep=keep)

@@ -58,6 +58,12 @@ class SNNConfig:
     feed_forward: str = "swiglu"
     age_offsets: float = 0.0  # above 0 the reference addresses by an offset per head and distance at this rate, without RoPE
     untied_output: bool = False  # the reference's output layer has weights of its own, not the embedding's
+    # The reference's normalization: "layer" (LayerNorm), or as a control "pool": the stream divided by its mean
+    # absolute activity and a learned rest, with a gain per channel and no centring, as a stack's inhibitory pool
+    # raises every threshold with the stream's activity; or "cpool": that pool after the stream's mean is subtracted;
+    # "spool": the pool dividing by the root mean square; "gpool": the pool that trains with the root mean square's
+    # gradient through its divisor.
+    norm: str = "layer"
     qk_levels: int | None = None  # spike levels of Q/K neurons (None -> same as levels; 1 -> binary)
     softmax_temp_init: float = 1.0  # initial inverse temperature of softmax attention
     wta_k: int = 1  # winners per query for the WTA baseline

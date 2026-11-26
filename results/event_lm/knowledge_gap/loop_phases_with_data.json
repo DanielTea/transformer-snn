@@ -1,0 +1,171 @@
+{
+ "study": "loop_phases_with_data",
+ "recorded_utc": "2026-11-25T04:07:16Z",
+ "kind": "A screen by slope on the server's delayed test bed, two seeds, 6,000 and 24,000 updates: whether the passes of a loop gain from an excitability of their own (phases) beside the synapses they share.",
+ "why": "Depth by recurrence holds at full length (full_size_loop_run.json: 0.0090 better than the plain stack on test, nine tenths of it on new contexts) and is the line that continues, now that no form of the gated cell is open (homeostatic_gate_at_length.json). A loop's passes share every synapse, so a level cannot tell its first pass from its second except by what the stream brings. In cortex the phases of a rhythm change a circuit's excitability and not its wiring: the same cells answer differently at different phases of a theta cycle, which models of encoding and retrieval use. Relaxed recursive Transformers find that giving each pass a little of its own recovers much of what tied passes lose. The spike form built here (70774fe, --stack-loop-phases) gives every pass of a looped level after its first a resting charge of its own for each cell and an offset of its own to each read head's gain, both starting at zero, where the stack is the loop without them bit for bit: 8,208 parameters on the looped bed (0.16%) and 8,372 at full size (0.02%), no pulses of their own.",
+ "arms": {
+  "phases": "--stack-loop 1,4,3 --pulse-budget 264000 --stack-loop-phases: the looped bed of loop_with_data, level 0 once, levels 1 to 4 three times, level 5 once, with phases for the second and third passes of levels 1 to 4"
+ },
+ "base": "lp-6k-s1 1.605730, lp-6k-s2 1.605468, lp-24k-s1 1.466405, lp-24k-s2 1.467507: the looped bed without phases, the same seeds, lengths, rate and budget (code v17r).",
+ "runs": "ph-6k-s1, ph-6k-s2, ph-24k-s1, ph-24k-s2: seeds 20001 and 20002, through sched/bin/arm.sh stack with --lr 1.2e-3 (and --steps 6000) and the arm's flags, on the code copy of 70774fe (v17z), on GPU 0 at priority 36, after the sleep screen's runs. Beside them on the laptop, reported and not deciding: ph-6k-s3 and ph-24k-s3 against loop-6k-s3 1.604914 and loop-24k-s3 1.468458.",
+ "measure": "arm.sh's score: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights, bits kept; each run paired with the base of its seed and length (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); the learned offsets by pass (how far each pass's rests and gains moved from the shared ones).",
+ "reading": "The shared reading of experiments/read_lead_study.py against the looped base (--base-long lp-24k-s1 lp-24k-s2 --base-short lp-6k-s1 lp-6k-s2): a fix for late learning if at 24,000 updates the mean lead is at least 0.010 with both seeds ahead and it has grown by at least 0.005 since 6,000; a constant gain if it leads by that much without the growth; otherwise it fails that reading. Because the phases cost almost no parameters and no pulses, a smaller mark sends them on: a mean lead of at least 0.005 at 24,000 updates with both seeds ahead earns a full-size pilot (the lifted loop with and without phases, 24,000 updates at 6e-4, a record of its own written first), and phases join a full-length run only through that pilot. Below that they are reported and stop.",
+ "seen_before_recording": "The tests of 70774fe and the suite (1,411 passed); on the server's CPU 30 updates of the arm at a batch of 4 and a short score, for the launch check (5,257,268 parameters). No phased run has trained.",
+ "result_laptop_seed": {
+  "recorded_utc": "2026-11-25T11:19:05Z",
+  "bpb": {
+   "ph-6k-s3": 1.608769,
+   "ph-24k-s3": 1.472189,
+   "loop-6k-s3": 1.604914,
+   "loop-24k-s3": 1.468458
+  },
+  "paired with the laptop's looped bed, phases minus loop (compare_stream_scores; new contexts by gap_by_piece, near 240, far 8,192)": {
+   "6,000 updates": {
+    "gap": 0.0039,
+    "interval_95": [
+     0.003,
+     0.0048
+    ],
+    "new contexts": -0.0025
+   },
+   "24,000 updates": {
+    "gap": 0.0037,
+    "interval_95": [
+     0.0028,
+     0.0047
+    ],
+    "new contexts": 0.0022
+   }
+  },
+  "learned offsets of ph-24k-s3": "the cells' rests of the later passes moved from the shared ones by 0.07 to 0.13 thresholds on the mean (at most 0.55); the read heads' gain offsets by less than 0.008",
+  "reading": "On the laptop's seed the phases cost 0.0039 at 6,000 updates and 0.0037 at 24,000, each interval clear of zero: a small constant cost, neither a lead nor a growth. It is reported beside the server's two seeds, which decide."
+ },
+ "result": {
+  "recorded_utc": "2026-11-25T20:24:32Z",
+  "bpb": {
+   "ph-6k-s1": 1.608624,
+   "ph-6k-s2": 1.610013,
+   "ph-24k-s1": 1.468696,
+   "ph-24k-s2": 1.471812
+  },
+  "lead over the looped base of its seed and length (paired, compare_stream_scores; above zero phases are better)": {
+   "ph-6k-s1": {
+    "lead": -0.00289,
+    "interval_95": [
+     -0.00384,
+     -0.00196
+    ]
+   },
+   "ph-6k-s2": {
+    "lead": -0.00455,
+    "interval_95": [
+     -0.00543,
+     -0.00367
+    ]
+   },
+   "ph-24k-s1": {
+    "lead": -0.00229,
+    "interval_95": [
+     -0.00321,
+     -0.0014
+    ]
+   },
+   "ph-24k-s2": {
+    "lead": -0.00431,
+    "interval_95": [
+     -0.00523,
+     -0.00341
+    ]
+   }
+  },
+  "by context, phases minus loop, 24,000 updates (gap_by_piece, near 240, far 8,192; below zero favours phases)": {
+   "ph-24k-s1": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0285,
+     "interval_95": [
+      0.0167,
+      0.0387
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0132,
+     "interval_95": [
+      -0.0037,
+      0.0294
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.011,
+     "interval_95": [
+      -0.0796,
+      0.0713
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0009,
+     "interval_95": [
+      -0.004,
+      0.0027
+     ]
+    }
+   },
+   "ph-24k-s2": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0079,
+     "interval_95": [
+      -0.003,
+      0.0188
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.026,
+     "interval_95": [
+      0.0096,
+      0.0424
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0498,
+     "interval_95": [
+      -0.1227,
+      0.0091
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.0047,
+     "interval_95": [
+      0.002,
+      0.0082
+     ]
+    }
+   }
+  },
+  "shared reading (experiments/read_lead_study.py)": {
+   "long_leads": [
+    -0.00229,
+    -0.00431
+   ],
+   "long_mean_lead": -0.0033,
+   "seeds_ahead": 0,
+   "a_lead": false,
+   "short_leads": [
+    -0.00289,
+    -0.00455
+   ],
+   "short_mean_lead": -0.00372,
+   "growth": 0.00042,
+   "b_growth": false,
+   "verdict": "fail"
+  },
+  "reading": "Fail. After 24,000 updates phases are behind the looped bed on both server seeds (-0.0023 and -0.0043, a mean of -0.0033), far from the 0.005 that would earn a full-size pilot, and behind after 6,000 updates as well (-0.0029 and -0.0046). With the laptop's seed (-0.0037 at 24,000 updates) three of three seeds are behind.",
+  "what follows": "Phases are reported and stop: no full-size pilot, and they join no full-length run."
+ }
+}

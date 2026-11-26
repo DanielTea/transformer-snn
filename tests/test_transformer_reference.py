@@ -212,3 +212,60 @@ def test_an_output_layer_of_its_own_learns_apart_from_the_embedding():
 def test_the_controls_belong_to_the_full_transformer(setting):
     with pytest.raises(ValueError):
         TransformerLM(replace(_FULL, **setting), **_SMALL)
+
+
+def test_a_pool_in_place_of_the_norm_divides_by_mean_activity_without_centring():
+    torch.manual_seed(5)
+    layer, pooled = TransformerLM(_FULL, **_SMALL), TransformerLM(replace(_FULL, norm="pool"), **_SMALL)
+    norms = [module for module in pooled.modules() if type(module).__name__ == "_PoolNorm"]
+    # Two in every block and one before the output.
+    assert len(norms) == 2 * len(pooled.blocks) + 1
+    assert not any(isinstance(module, torch.nn.LayerNorm) for module in pooled.modules())
+    x = torch.randn(2, 5, 16) + 3.0
+    norm = pooled.blocks[0].attn_norm
+    torch.testing.assert_close(norm(x), x / (1e-3 + x.abs().mean(-1, keepdim=True)))
+    # A stream twice as active is divided twice as much, and no mean is taken out.
+    torch.testing.assert_close(norm(2 * x), norm(x), rtol=1e-3, atol=1e-4)
+    assert norm(x).mean() > 0.5
+    tokens = torch.randint(0, 32, (2, 12))
+    pooled(tokens).square().mean().backward()
+    assert pooled.blocks[0].attn_norm.weight.grad.abs().sum() > 0 and pooled.norm.rest.grad is not None
+    # It has a gain for every channel and one rest where LayerNorm has a gain and a bias for every channel.
+    count = lambda model: sum(p.numel() for p in model.parameters())
+    assert count(layer) - count(pooled) == (2 * len(pooled.blocks) + 1) * (16 - 1)
+
+
+def test_a_centred_pool_takes_out_the_mean_before_it_divides():
+    torch.manual_seed(6)
+    centred = TransformerLM(replace(_FULL, norm="cpool"), **_SMALL)
+    norms = [module for module in centred.modules() if type(module).__name__ == "_CentredPoolNorm"]
+    assert len(norms) == 2 * len(centred.blocks) + 1
+    x = torch.randn(2, 5, 16) + 3.0
+    norm = centred.blocks[0].attn_norm
+    shifted = x - x.mean(-1, keepdim=True)
+    torch.testing.assert_close(norm(x), shifted / (1e-3 + shifted.abs().mean(-1, keepdim=True)))
+    # A level added to every channel changes nothing, and the output has no mean.
+    torch.testing.assert_close(norm(x + 7.0), norm(x), rtol=1e-4, atol=1e-4)
+    assert norm(x).mean(-1).abs().max() < 1e-5
+    centred(torch.randint(0, 32, (2, 12))).square().mean().backward()
+    assert centred.blocks[0].mlp_norm.weight.grad.abs().sum() > 0
+
+
+def test_a_pool_of_the_spread_divides_by_the_root_mean_square():
+    torch.manual_seed(7)
+    spread = TransformerLM(replace(_FULL, norm="spool"), **_SMALL)
+    assert len([m for m in spread.modules() if type(m).__name__ == "_SpreadPoolNorm"]) == 2 * len(spread.blocks) + 1
+    x = torch.randn(2, 5, 16) + 3.0
+    norm = spread.blocks[0].attn_norm
+    torch.testing.assert_close(norm(x), x / (1e-3 + x.square().mean(-1, keepdim=True).sqrt()))
+    # One loud channel is held down: the output's root mean square stays near one.
+    loud = torch.zeros(1, 1, 16)
+    loud[..., 0] = 100.0
+    assert norm(loud).square().mean().sqrt() < 1.01
+
+
+def test_the_pool_is_a_control_of_the_full_transformer_only():
+    with pytest.raises(ValueError, match="pool"):
+        TransformerLM(replace(_FULL, norm="batch"), **_SMALL)
+    with pytest.raises(ValueError, match="pool in place of the norm"):
+        TransformerLM(replace(_FULL, norm="pool", attn="transformer_local"), **_SMALL)

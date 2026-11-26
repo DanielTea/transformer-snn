@@ -1,0 +1,264 @@
+{
+ "study": "practice_hops",
+ "recorded_utc": "2026-11-25T21:47:14Z",
+ "kind": "A screen with one seed on the laptop's GPU: practice with feedback on multi-hop lookups, where a model may write anything before its answer and only the answer is checked; the test bed's stack and its Transformer of hop_generalization.json, each after its training on 1 to 4 hops.",
+ "why": "Daniel asked for a model that reasons with chains of thought in its own words, without template-written answers and without a teacher model, and drew the loop: tasks generated and verified, attempted by the model, graded, kept where it solves a quarter to a half of them, the generator improved from the solve rate. Here programs play the helper models of the drawing. A hop task is answered by following a chain of names; between the query's '=' and its digit a model can write the names of the chain (?zt=mx=qa=7), each a lookup of one hop, so a chain of thought fits the task's own syntax and no program writes it. Trained on direct answers, the models have never seen such a chain: if practice makes them write one and get further, the chain of thought was learned from reward alone.",
+ "loop": "experiments/practice_loop.py: every round 16 tasks at the current number of hops, verified (the answer follows from the line; the query is a name), 8 attempts each written as streams (a stack) or windows (the Transformer) at temperature 1.0 up to a newline or 48 bytes; reward 1 if the last byte before the newline is the answer; the solve rate moves the hops by a staircase (above a half +1, below a quarter -1), starting at 4; a GRPO step (rewards minus the group's mean over its spread, on the written bytes; Adam at 3e-5, gradients clipped at 1) on the tasks whose attempts disagree; 300 rounds; seed 0.",
+ "arms": {
+  "practice-stack": "hop-stack's averaged weights after its 12,000 updates",
+  "practice-tf": "hop-tf's averaged weights after its 12,000 updates"
+ },
+ "measure": "Before and after practice, practice_loop.py --evaluate 1 2 3 4 6 8 12 16 --evaluate-tasks 200: greedy answers with room to think (up to 48 bytes), the accuracy of the last byte, the share of answers that write at least one name, the mean bytes; and the rounds' log: solve rate, hops, share of attempts that write a name.",
+ "reading": "Read only for arms whose base learned the task by hop_generalization.json's mark (mean accuracy of at least 0.80 over 1 to 4 hops). (a) Practice works if an arm's accuracy at 8 hops after practice is at least 0.20 above its own before. (b) A chain of thought emerged if after practice at least half of an arm's answers at 8 hops write a name, and those answers are more accurate than the arm's answers without one (both reported). (c) The stack practises further than the Transformer if after practice its accuracy at 8 hops, and at 16, is at least 0.10 above the Transformer's with the 95% intervals apart. One seed, synthetic: a screen of the practice loop and of chains of thought learned without a teacher, not a claim about reasoning in language.",
+ "seen_before_recording": "Three practice rounds of the 30-update smoke model (solve rate 0, nothing learned) that checked the loop end to end, and tests/test_practice_loop.py. No trained model has practised.",
+ "amendment": {
+  "recorded_utc": "2026-11-26T09:44:43Z",
+  "change": "If no arm of hop_generalization.json learns the task in 12,000 updates (by its amendment of the same time: if hop-loop's mean over 1 to 4 hops is also below 0.80), practice-stack and practice-tf start from the averaged weights of hop-stack-24k and hop-tf-24k after their 24,000 updates instead, and run after those two are scored. The loop, the measure and the reading stay as registered: an arm is read only if its base learned the task by the mark, now at 24,000 updates. If hop-loop learns the task in 12,000 updates while hop-stack and hop-tf do not, neither arm can be read by the reading, and practice waits for a further amendment written before it runs.",
+  "seen_before_amendment": "No practice has run. hop_generalization.json's scores at 1 to 4 hops of hop-stack and hop-tf and, by mistake, their accuracies past 4 hops (listed in that record's amendment); nothing of hop-loop's scores."
+ },
+ "amendment_2": {
+  "recorded_utc": "2026-11-26T17:03:22Z",
+  "change": "hop_generalization.json ended at 24,000 updates with no arm at its mark (mean over 1 to 4 hops: hop-stack-24k 0.6280, hop-tf-24k 0.1016), so by this record's reading neither arm could be read. On this task a chain of thought is a series of one-hop lookups written out (?zt=mx=qa=7), so what a base must bring to practice is the single lookup, not the whole task. The reading's first sentence therefore becomes: read only for arms whose base answers one hop right in at least 0.80 of lines in hop_generalization.json. hop-stack-24k does (1.000); hop-tf-24k does not (0.0935), so practice-tf runs as registered and is reported, not read, and (c), which compares the two arms, is not read. (a) and (b) stay as registered for practice-stack. Second, the frozen code: the first runs on the laptop's GPU (2026-11-26 16:56Z) stopped at their first evaluation, because experiments/practice_loop.py turned the logits into float64 before moving them to the CPU, and Apple's GPU has no float64. The commit that records this amendment moves the logits to the CPU first; the runs use code-bfd3dcd with only that line changed (code-bfd3dcd-mps). On the CPU the line gives the same numbers as before, and a new test runs attempts and learning on Apple's GPU. The loop, its settings, the measure and the bases stay as registered and amended (amendment).",
+  "seen_before_amendment": "All of hop_generalization.json's scores at 24,000 updates (its result_at_24000_updates), which prompted the new condition. Of practice: nothing. The two failed runs wrote only the error. Two smoke runs per base on the laptop's GPU (seed 99, 2 tasks, 4 bytes, 1 round), whose outputs were discarded unread, checked that evaluation and practice run there."
+ },
+ "result": {
+  "recorded_utc": "2026-11-26T17:20:08Z",
+  "runs": "practice-stack from hop-stack-24k and practice-tf from hop-tf-24k, on code-bfd3dcd-mps (amendment_2), on the laptop's GPU on 2026-11-26 between 17:08Z and 17:14Z: evaluation, 300 rounds of practice, evaluation again, as registered.",
+  "greedy answers with room to think, 200 tasks a hop count (accuracy of the last byte; share writing a name; mean bytes)": {
+   "practice-stack": {
+    "before": {
+     "1": {
+      "accuracy": 0.985,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "2": {
+      "accuracy": 0.865,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "3": {
+      "accuracy": 0.42,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "4": {
+      "accuracy": 0.245,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "6": {
+      "accuracy": 0.305,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "8": {
+      "accuracy": 0.24,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "12": {
+      "accuracy": 0.315,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "16": {
+      "accuracy": 0.395,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     }
+    },
+    "after": {
+     "1": {
+      "accuracy": 0.995,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "2": {
+      "accuracy": 0.775,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "3": {
+      "accuracy": 0.635,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "4": {
+      "accuracy": 0.285,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "6": {
+      "accuracy": 0.225,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "8": {
+      "accuracy": 0.23,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "12": {
+      "accuracy": 0.275,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "16": {
+      "accuracy": 0.33,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     }
+    }
+   },
+   "practice-tf": {
+    "before": {
+     "1": {
+      "accuracy": 0.085,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "2": {
+      "accuracy": 0.105,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "3": {
+      "accuracy": 0.075,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "4": {
+      "accuracy": 0.075,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "6": {
+      "accuracy": 0.065,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "8": {
+      "accuracy": 0.095,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "12": {
+      "accuracy": 0.135,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "16": {
+      "accuracy": 0.105,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     }
+    },
+    "after": {
+     "1": {
+      "accuracy": 0.09,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "2": {
+      "accuracy": 0.065,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "3": {
+      "accuracy": 0.085,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "4": {
+      "accuracy": 0.115,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "6": {
+      "accuracy": 0.045,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "8": {
+      "accuracy": 0.085,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "12": {
+      "accuracy": 0.11,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     },
+     "16": {
+      "accuracy": 0.095,
+      "wrote_names": 0.0,
+      "mean_bytes": 2.0
+     }
+    }
+   }
+  },
+  "rounds": {
+   "practice-stack": {
+    "rounds": 300,
+    "rounds at each hop count": {
+     "2": 14,
+     "3": 219,
+     "4": 67
+    },
+    "rounds with a GRPO step": 300,
+    "mean solve rate": 0.3855,
+    "share of attempts that write a name: mean": 0.0054,
+    "share of attempts that write a name: largest in a round": 0.0547
+   },
+   "practice-tf": {
+    "rounds": 300,
+    "rounds at each hop count": {
+     "1": 297,
+     "2": 1,
+     "3": 1,
+     "4": 1
+    },
+    "rounds with a GRPO step": 300,
+    "mean solve rate": 0.1003,
+    "share of attempts that write a name: mean": 0.0005,
+    "share of attempts that write a name: largest in a round": 0.0078
+   }
+  },
+  "accuracy at 8 hops with its 95% Wilson interval": {
+   "practice-stack": {
+    "before": [
+     0.24,
+     [
+      0.1861,
+      0.3037
+     ]
+    ],
+    "after": [
+     0.23,
+     [
+      0.1771,
+      0.2931
+     ]
+    ]
+   },
+   "practice-tf": {
+    "before": [
+     0.095,
+     [
+      0.0617,
+      0.1436
+     ]
+    ],
+    "after": [
+     0.085,
+     [
+      0.0537,
+      0.1319
+     ]
+    ]
+   }
+  },
+  "reading": "(a) Practice does not work for practice-stack, the one arm read (amendment_2): its accuracy at 8 hops is 0.23 after practice [0.177, 0.293] against 0.24 before [0.186, 0.304], a change of -0.01 against the mark of +0.20. (b) No chain of thought emerged: after practice none of its answers at 8 hops writes a name (mark: at least half), so no answers with a name exist to compare with those without. (c) needs both arms read and is not read. practice-tf, reported as a control, stays at chance before and after at every hop count, its staircase at one hop for 297 of 300 rounds. Not part of the reading: in its 300 rounds practice-stack wrote a name in 0.5% of its attempts (at most 5.5% in a round) and otherwise answered with one digit and a newline. It practised mostly at 3 hops (219 rounds; 67 at 4, 14 at 2), and its greedy accuracy at 3 hops rose from 0.42 to 0.635 and at 4 from 0.245 to 0.285, while it fell at 2 (0.865 to 0.775) and past 4 hops (16: 0.395 to 0.33). Reward sharpened the direct answer where the staircase held it, but a model trained only on direct answers almost never samples a written chain at temperature 1.0, and the GRPO step cannot reinforce what is not sampled: in 300 rounds of this loop a chain of thought did not arise from reward alone. Before practice can lengthen chains, the model needs written chains to start from (a share of its training text that writes a chain out, or a teacher's written reasoning); that would be a new registration."
+ }
+}

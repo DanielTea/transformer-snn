@@ -1,0 +1,141 @@
+{
+ "release": "spiking-byte-lm-v21",
+ "model": {
+  "file": null,
+  "note": "The weights are not in the repository. They are in the fsp-lift archive of the release.",
+  "source_checkpoint": "full_size_lifted_loop/fsp-lift/model.pt.averaged",
+  "sha256": "974d8a853fd57af2548b597a92cf8a983dd3d213f30fdaaf59c0aca03353fce6",
+  "bytes": 237169809,
+  "bytes_note": "The state dictionary names every pass of the loop's levels, so the weights of levels 2 to 8 are stored twice, as identical copies; the stack has 36,263,956 parameters.",
+  "archive": "spiking-byte-lm-v21-checkpoints-fsp-lift.tar.gz",
+  "archive_sha256": "ae7b4a348f298835614c6c0a32a661ded337dc09736873e8b82e9af75bb20012",
+  "parameters": 36263956,
+  "training_targets": 368640000,
+  "seed": 20001,
+  "optimizer": "Adam in the eigenbasis of each weight matrix's gradient moments, refreshed every 50 updates, the matrices of three-dimensional weights turned as well",
+  "weights": "running average with decay 0.999",
+  "training_windows": "512 bytes in batches of 8 up to 24,000 updates, then unbroken streams: 15 groups of 10 windows of 2,048 bytes that continue each other, in batches of 2, with a read reach of 2,048 cells; 4,096 targets an update throughout",
+  "peak_rate": 0.0006,
+  "schedule": "1,000 warmup updates, then cosine decay over the 90,000 updates",
+  "forked_at": {
+   "updates": 24000,
+   "from": "fsp-lift-p, v15's recipe with --read-forget, the loop and the lifting pool on windows of 512 bytes, at the same peak rate and schedule"
+  },
+  "architecture": {
+   "stack": "eleven levels, each a state read of 8 heads and then a layer of 1,188 threshold cells, both writing their spikes back into one stream of 512 channels",
+   "forgetting": "every read head learns a slope: a cell beyond the window takes the oldest age's offset plus the slope times the doublings of its age beyond the window",
+   "knowledge_cells": "128 learned cells a head that race beside the stream's own cells and never age",
+   "pulse_budget_per_byte": 507000,
+   "loop": "every byte passes levels 0 and 1, then levels 2 to 8 twice through the same synapses, then levels 9 and 10: 18 level passes on the synapses of 11, each pass with a tape of its own in a stream",
+   "lifting_pool": "every population's inhibitory pool divides a neuron's charge before the membrane bounds it (--pool-lifts-ceiling), so no membrane is held at its bound; it adds no parameters and no pulses"
+  },
+  "stream_scores": {
+   "enwik8_test": {
+    "reach_8192_taught": 1.08175,
+    "reach_8192": 1.08266,
+    "as_trained": 1.0983,
+    "over_fsp_loop": [
+     -0.0222,
+     [
+      -0.0228,
+      -0.0216
+     ]
+    ],
+    "over_fsp_st": [
+     -0.0311,
+     [
+      -0.0317,
+      -0.0305
+     ]
+    ],
+    "over_fsp_tf": [
+     0.0028,
+     [
+      0.0017,
+      0.0038
+     ]
+    ],
+    "over_fsp_tf_taught": [
+     0.0046,
+     [
+      0.0036,
+      0.0056
+     ]
+    ],
+    "reach_8192_over_fsp_tf": [
+     0.0037,
+     [
+      0.0027,
+      0.0047
+     ]
+    ]
+   },
+   "enwik8_validation": {
+    "reach_8192_taught": 1.11358,
+    "reach_8192": 1.11283,
+    "as_trained": 1.12758,
+    "over_fsp_loop": [
+     -0.0251,
+     [
+      -0.0257,
+      -0.0245
+     ]
+    ],
+    "over_fsp_st": [
+     -0.0337,
+     [
+      -0.0343,
+      -0.0331
+     ]
+    ],
+    "over_fsp_tf": [
+     0.0088,
+     [
+      0.0077,
+      0.0098
+     ]
+    ],
+    "over_fsp_tf_taught": [
+     0.0092,
+     [
+      0.0082,
+      0.0102
+     ]
+    ],
+    "reach_8192_over_fsp_tf": [
+     0.008,
+     [
+      0.0071,
+      0.009
+     ]
+    ]
+   },
+   "protocol": "16 unbroken streams of each split after 8,192 unscored lead bytes; fast output synapses at a threshold of 2^24 on the cells of all 18 passes, starting at zero in every stream",
+   "gaps_note": "A gap is this checkpoint minus the named model, paired piece by piece, with its 95% interval; over_* gaps are of the taught reading unless named otherwise. Above zero this checkpoint is behind."
+  },
+  "reach_chosen": {
+   "first_validation_million": {
+    "trained_2048": 1.15614,
+    "8192": 1.14015
+   }
+  },
+  "pulses_per_byte": {
+   "validation, last evaluation": 506746,
+   "training, last evaluation": 511340
+  },
+  "flags": "--variant event_steered --no-carry --stack --dim 512 --hidden 4 --depth 11 --spike-resolution 16 --router-charge-bits 8 --pulse-budget 310000 --read-after 0,1,2,3,4,5,6,7,8,9,10 --read-width 512 --read-heads 8 --read-window 512 --read-mode race --read-budget 256 --read-resolution 4 --read-address-rate 64 --read-delays 4 --read-cap 128 --granule-after 0,1,2,3,4,5,6,7,8,9,10 --granule-clusters 1 --granule-fan 1024 --granule-delays 4 --granule-cells 1188 --granule-slope --granule-cap 128 --pool-fine 16 --pool-rest 4 --pool-rate 32 --output-pool 128 --rotated-adam 50 --rotate-stacks --weight-average 0.999 --read-forget --ctx 2048 --bs 2 --read-reach 2048 --read-knowledge 128 --stream 10 --stream-groups 15 --steps 90000 --warmup 1000 --lr 6e-4 --wd 0.05 --seed 20001 --stack-loop 2,8,2 --pulse-budget 507000 --pool-lifts-ceiling",
+  "scored_file_sha256": "1333b1b9ea82d662a5e71abb1d85a27da108c8d780b6db0938ac772602baf2af",
+  "paths_note": "The released file is the scored file with the training arguments that name folders rewritten to repository paths; its weights are identical.",
+  "record": "results/event_lm/knowledge_gap/full_size_lifted_loop_run.json"
+ },
+ "also_released": {
+  "spiking-byte-lm-v21-bits.tar.gz": {
+   "sha256": "89bc5e5656c7cc1e3305dd48137d9ca443017e1a6c2aaa33f6e78e023b2b49d1",
+   "what": "per-piece bits and scoring records of the scorings recorded since v20, with the runs they are paired against, under results/event_lm/knowledge_gap/bits: full_size_lifted_loop (this checkpoint, every reading), full_size_loop (the scan of the fast output synapses' threshold on v20's stack, 2^22 to 2^26), full_size_pilots (under the lifting pool: the loop, its third pass, the Transformer's rate, twice the budget, decay on synapses only, power-law cells and energy pools; in floats: the Transformer with plain and gated units shut below zero and with smooth units, with its own output, and with the stack's pool, a centred pool and a root-mean-square pool) and test_bed (the bed's base runs at its best rate on four seeds, decay on synapses only, phases for the loop's passes, the looped bed, the charge grid, power-law cells on four seeds and in the loop, energy pools, the racing loop and its exits, the homeostatic gate's base at 96,000 updates, sleep alone and with gates that start closed; server and laptop seeds)"
+  },
+  "earlier_checkpoints": "The Transformer (fsp-tf) and the plain stack (fsp-st) are assets of spiking-byte-lm-v19; v20's looped stack (fsp-loop) is an asset of spiking-byte-lm-v20."
+ },
+ "license": "AGPL-3.0-only",
+ "copyright": "2026 control-f and Daniel Tremer",
+ "commercial_license": "available from control-f"
+}

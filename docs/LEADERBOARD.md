@@ -5,6 +5,29 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
 <!-- hand-written:start -->
+## The lifted loop at full length · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
+|---|---:|---|---:|---:|---:|---:|
+| 36.26M SNN stack, levels 2 to 8 run twice under the lifting pool, trained on streams at 6e-4 | 36,263,956 | Stream, reach 8,192, taught output synapses | 1.08175 | 3 | — | — |
+| 36.26M SNN stack, levels 2 to 8 run twice under the lifting pool, trained on streams at 6e-4 | 36,263,956 | Stream, reach 8,192 | 1.08266 | 4 | — | — |
+| 36.26M SNN stack, levels 2 to 8 run twice under the lifting pool, trained on streams at 6e-4 | 36,263,956 | Stream, as trained | 1.09830 | 5 | — | — |
+| 36.26M SNN stack, levels 2 to 8 run twice, trained on streams at 6e-4 (v20) | 36,263,956 | Stream, reach 8,192, taught output synapses | 1.10391 | 6 | — | — |
+| 34.75M full attention, windows of 2,048 bytes, at 1.2e-3 | 34,752,000 | Windows with 2,032 bytes of history, taught output synapses | **1.07714** | 1 | — | — |
+| 34.75M full attention, windows of 2,048 bytes, at 1.2e-3 | 34,752,000 | Windows with 2,032 bytes of history | 1.07899 | 2 | — | — |
+
+v20's looped stack with every population's pool dividing a neuron's charge before its membrane bounds it
+(`--pool-lifts-ceiling`) and nothing else changed: the same parameters, pulses (1.63 times v19's) and training time.
+It is the best spike-only stack so far, 0.0222 ahead of v20's on test (paired 95% interval 0.0216 to 0.0228) and
+0.0251 on validation, more than all of it on new contexts. The Transformer is ahead by 0.0028 on test (0.0017 to
+0.0038) and 0.0088 on validation (0.0077 to 0.0098), where it was ahead of v20's stack by 0.0249 and 0.0339
+(`results/event_lm/knowledge_gap/full_size_lifted_loop_run.json`).
+[Model card](../models/spiking-byte-lm-v21/README.md) · [Scaling-law study](SCALING_LAW.md)
+
+![Release by release, the spiking stack closes on the Transformer](../results/figures/event_lm_full_size_line.png)
+<!-- hand-written:end -->
+
+<!-- hand-written:start -->
 ## The looped stack at full length · 368,640,000 training targets · seed 20001
 
 | Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |

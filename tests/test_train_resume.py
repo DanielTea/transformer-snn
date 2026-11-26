@@ -157,3 +157,33 @@ def test_a_trained_decoder_may_gain_reads_and_cell_layers_and_not_lose_one(train
     with pytest.raises(SystemExit):
         trainer(tmp_path / "fewer", "--load-weights", str(tmp_path / "more" / "model.pt"))
     assert "the decoder differs in granule_after, read_after" in capsys.readouterr().err
+
+
+def test_a_run_with_the_fused_optimizer_ends_at_the_same_weights_and_may_switch_on_resume(trainer, tmp_path):
+    # On the CPU the fused step applies the loop's operations to every tensor, so the runs agree to the bit; a run
+    # may switch the speed settings when it continues.
+    plain, fused, switched = tmp_path / "plain", tmp_path / "fused", tmp_path / "switched"
+    trainer(plain)
+    trainer(fused, "--fused-optimizer")
+    trainer(switched, "--stop-at", "4")
+    trainer(switched, "--fused-optimizer")
+    for folder in (fused, switched):
+        for name in ("model.pt", "model.pt.averaged"):
+            one = torch.load(plain / name, weights_only=True)["state_dict"]
+            other = torch.load(folder / name, weights_only=True)["state_dict"]
+            assert all(torch.equal(one[key], other[key]) for key in one), (folder.name, name)
+    assert [p["val_bpb"] for p in record(plain)["curve"]] == [p["val_bpb"] for p in record(fused)["curve"]]
+
+
+def test_a_cuda_graph_needs_a_cuda_device(trainer, tmp_path):
+    if torch.cuda.is_available():
+        pytest.skip("a CUDA device is here: the GPU check covers the graph")
+    with pytest.raises((SystemExit, ValueError)):
+        trainer(tmp_path, "--cuda-graph")
+
+
+def test_exact_products_need_a_cuda_device(trainer, tmp_path):
+    if torch.cuda.is_available():
+        pytest.skip("a CUDA device is here: the GPU check covers the tensor cores")
+    with pytest.raises(SystemExit):
+        trainer(tmp_path, "--exact-products")

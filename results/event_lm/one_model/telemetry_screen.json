@@ -1,0 +1,71 @@
+{
+ "study": "telemetry_screen",
+ "recorded_utc": "2026-11-25T21:40:26Z",
+ "kind": "A screen with one seed on the laptop's GPU: the spiking test bed trained on simulated pump telemetry as a byte stream, its surprise as a fault detector, beside a classical detector.",
+ "why": "The one-model plan reads telemetry as a second sense of the stream. Before that sense is built, this asks whether the stack, trained on telemetry alone (eight bytes a second, one a channel), predicts a healthy pump well enough that its surprise marks the faults, better than a detector that watches each channel on its own. Its fast synapses and its reads over the recent stream should let it learn each pump's normal while it runs.",
+ "data": "experiments/pump_sim.py: training corpus data/onemodel/telemetry/pumps-v1.bin (150 pumps of 86400 seconds, one fault in about half of them in their second half; seed 1, sha256 d96b6d0a1c9c81e392e4f25fe8917810423134bdc70df6533ad0de140310b000; 93,312,000 train, 5,529,600 validation and 4,838,400 test bytes). Test set data/onemodel/telemetry/tests-v1.bin: 45 pumps of 6 hours, 4 with each of the nine faults and 9 healthy (seed 2, sha256 8f04f1ab4db9e18883fbf97efe125ac4eecd6a7ca24496953ada9f9b50b6a38c).",
+ "arms": {
+  "tel-stack": "the laptop's delayed test bed (5,249,060 parameters) trained on streams with --corpus data/onemodel/telemetry/pumps-v1.bin, 12,000 updates of 16 x 256 bytes at 1.2e-3, seed 20001, the bed's other settings unchanged"
+ },
+ "measure": "experiments/telemetry_eval.py on the test set: the stack reads the 45 pumps side by side as unbroken streams; a second's surprise is the bits of its eight bytes, averaged over the last 60 seconds; positives are the seconds from a fault's start, negatives the seconds before it and the healthy pumps' seconds, the first hour of every pump left out; the AUC over all pumps and for each kind of fault against the healthy pumps. The classical detector (the largest per-channel z-score against the hour before, averaged over 60 seconds) on the same bytes.",
+ "reading": "The stack's surprise finds faults if its AUC over all pumps is at least 0.80 and at least 0.10 above the classical detector's (0.6321). Every kind is reported; a frozen sensor makes the stream more predictable, so a surprise that only rises cannot mark it, and it is reported apart. If the screen passes, the telemetry sense (input synapses of its own, text interleaved by the clock) is built and the one model is screened on text and telemetry together, in a record written then; if not, the stack's per-kind misses decide what the sense must add.",
+ "seen_before_recording": "The classical detector on the test set: all 0.6321, bearing_wear 0.757, cavitation 0.6347, clogging 0.7289, imbalance 0.6449, misalignment 0.6825, seal_leak 0.5781, sensor_drift 0.6652, sensor_freeze 0.4955, valve_stuck 0.5864. The simulator's tests (tests/test_pump_sim.py: every fault leaves its signature). No model has trained on telemetry.",
+ "result": {
+  "recorded_utc": "2026-11-26T10:59:45Z",
+  "AUC over all 45 pumps and for each kind against the healthy pumps (the stack's surprise; the classical detector)": {
+   "all": {
+    "stack": 0.7151,
+    "classical": 0.6321,
+    "difference": 0.083
+   },
+   "bearing_wear": {
+    "stack": 0.9631,
+    "classical": 0.757,
+    "difference": 0.2061
+   },
+   "cavitation": {
+    "stack": 0.6682,
+    "classical": 0.6347,
+    "difference": 0.0335
+   },
+   "clogging": {
+    "stack": 0.8853,
+    "classical": 0.7289,
+    "difference": 0.1564
+   },
+   "imbalance": {
+    "stack": 0.9667,
+    "classical": 0.6449,
+    "difference": 0.3218
+   },
+   "misalignment": {
+    "stack": 0.963,
+    "classical": 0.6825,
+    "difference": 0.2805
+   },
+   "seal_leak": {
+    "stack": 0.4998,
+    "classical": 0.5781,
+    "difference": -0.0783
+   },
+   "sensor_drift": {
+    "stack": 0.7112,
+    "classical": 0.6652,
+    "difference": 0.046
+   },
+   "sensor_freeze": {
+    "stack": 0.4297,
+    "classical": 0.4955,
+    "difference": -0.0658
+   },
+   "valve_stuck": {
+    "stack": 0.4987,
+    "classical": 0.5864,
+    "difference": -0.0877
+   }
+  },
+  "bits per second of the stack on the test pumps": 4.9032,
+  "passes (AUC >= 0.80 and >= 0.10 above the classical 0.6321)": false,
+  "reading": "The stack's surprise does not find faults by the mark: AUC 0.7151 over all pumps, 0.083 above the classical detector's 0.6321 and below 0.80. By kind it is nearly certain where a fault adds vibration (bearing wear 0.9631, imbalance 0.9667, misalignment 0.9630) and good for the clogging strainer (0.8853), whose cavitation shakes every channel; it is at chance for the seal leak (0.4998) and the stuck valve (0.4987), weak for the falling tank (0.6682) and the drifting sensor (0.7112), and below chance for the frozen sensor (0.4297), as the record foresaw: a frozen channel makes the stream more predictable. The kinds it misses move the pump to a new steady operating point (less flow, other pressures) or shift one reading by a constant; once such a change has settled, a predictor finds the new state as predictable as the old one, and a surprise measured against the recent past cannot hold it. The classical detector, which compares each second with the hour before, misses the same two kinds (0.5781, 0.5864). By the reading, these misses decide what the telemetry sense must add: a slow memory of each pump's own normal, against which a settled shift stays a deviation; the relations between channels that the physics fixes (flow, head and current at a given speed), so that an operating point that breaks them is marked; and a two-sided test, so that a stream that grows too predictable is marked as well as one that grows less. Why each kind is missed is drawn from the simulator's physics, not measured second by second. One seed."
+ }
+}

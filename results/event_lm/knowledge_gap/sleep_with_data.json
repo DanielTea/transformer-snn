@@ -1,22 +1,115 @@
 {
-  "study": "sleep_with_data",
-  "recorded_utc": "2026-11-24T23:37:35Z",
-  "kind": "A screen by slope on the server's delayed test bed, two seeds, 6,000 and 24,000 updates, four arms: whether a stack that replays every finished window of its stream and rewrites its reads' cells (sleep) gains over the stack without it, alone and on top of the loop.",
-  "why": "Daniel asked on 2026-11-24 whether sleep, as in Lee et al. 2026, 'Sample-Efficient In-Context Adaptation via Sleep' (read on pages 1 to 9), would help, whether it can be combined with the loop, and then to build it and queue the test. In that paper a Transformer runs one pass per token while awake, and after every window of 256 tokens runs N - 1 more passes over the finished window, feeding its top hidden state back to its first layer, with attention both ways inside the window; a learned gate blends the refined keys and values into the cache, and the loss is taken on the awake pass only. They report the loss of the model without sleep reached with 2.1 times (N = 2) and 2.4 times (N = 4) fewer context tokens, a loss in the first window, per-token loops ahead at most positions with sleep overtaking them late, and boundary spikes without the gate. Brains do something like it: at rest and in sleep the hippocampus replays recent experience, forward and in reverse, and memories are rewritten in the light of what followed. Volley's stack is ahead of the Transformer on copies and behind on new contexts (v19: 0.074 better near, 0.41 better far, 0.0895 behind on new contexts), so sleep, which works on the memory, may help where the stack is already strong; this screen measures whether it gains at all and with data.",
-  "design": "Built in 79cf0a4 (--stack-sleep WINDOW, 23 tests). After every WINDOW bytes of a stream, counted from its first byte, the stack replays the window that has just ended: the stream as it left the top of the stack at the window's bytes enters the first level again and every level that a byte passes runs once more over the window (for the loop, all 14 level passes). The replay's reads reach every cell of the window, a later cell by a learned offset per head for how far ahead it stands, beside the cells that the tape holds before the window; its late fibres and cell layers hear the window alone. Every read then writes the cells that the replay made into the window's cells on its tape through two gate cells per head and cell (tag, payload), which hear the cell as the replay made it and as the tape holds it, start deaf and halfway open, and fire up to four spikes, each a quarter of the stored cell that stays; the cell takes the rest from the replay in whole pulses. A sleeping stack hears a piece in stretches that end where a window ends; within a piece the tapes keep their gradient, so later windows learn through the replays (the state handed to the next piece keeps none, as before). The top read only writes its cells: nothing would hear what its race passed on. WINDOW is 64 here: the training pieces are 256 bytes and carry no gradient between them, so with 64 three of every four replays are read by later bytes of the same piece, and every byte reaches about four windows back within the read's reach of 256.",
-  "arms": {
-    "plain": "the delayed test bed at 1.2e-3, pulse budget 113,000 (existing runs)",
-    "loop": "--stack-loop 1,4,3 --pulse-budget 264000: level 0 once, levels 1 to 4 three times, level 5 once, the budget scaled by 14/6 (existing runs)",
-    "sleep": "--stack-sleep 64 --pulse-budget 226000: the budget scaled by 12/6 for the replay's pass over every level, as the loop's was by its passes; 5,256,788 parameters (the base's 5,249,060 and 7,728 of replay offsets and gate cells)",
-    "loop_sleep": "--stack-loop 1,4,3 --stack-sleep 64 --pulse-budget 528000: the loop's budget scaled by 28/14 for its replay"
+ "study": "sleep_with_data",
+ "recorded_utc": "2026-11-24T23:37:35Z",
+ "kind": "A screen by slope on the server's delayed test bed, two seeds, 6,000 and 24,000 updates, four arms: whether a stack that replays every finished window of its stream and rewrites its reads' cells (sleep) gains over the stack without it, alone and on top of the loop.",
+ "why": "Daniel asked on 2026-11-24 whether sleep, as in Lee et al. 2026, 'Sample-Efficient In-Context Adaptation via Sleep' (read on pages 1 to 9), would help, whether it can be combined with the loop, and then to build it and queue the test. In that paper a Transformer runs one pass per token while awake, and after every window of 256 tokens runs N - 1 more passes over the finished window, feeding its top hidden state back to its first layer, with attention both ways inside the window; a learned gate blends the refined keys and values into the cache, and the loss is taken on the awake pass only. They report the loss of the model without sleep reached with 2.1 times (N = 2) and 2.4 times (N = 4) fewer context tokens, a loss in the first window, per-token loops ahead at most positions with sleep overtaking them late, and boundary spikes without the gate. Brains do something like it: at rest and in sleep the hippocampus replays recent experience, forward and in reverse, and memories are rewritten in the light of what followed. Volley's stack is ahead of the Transformer on copies and behind on new contexts (v19: 0.074 better near, 0.41 better far, 0.0895 behind on new contexts), so sleep, which works on the memory, may help where the stack is already strong; this screen measures whether it gains at all and with data.",
+ "design": "Built in 79cf0a4 (--stack-sleep WINDOW, 23 tests). After every WINDOW bytes of a stream, counted from its first byte, the stack replays the window that has just ended: the stream as it left the top of the stack at the window's bytes enters the first level again and every level that a byte passes runs once more over the window (for the loop, all 14 level passes). The replay's reads reach every cell of the window, a later cell by a learned offset per head for how far ahead it stands, beside the cells that the tape holds before the window; its late fibres and cell layers hear the window alone. Every read then writes the cells that the replay made into the window's cells on its tape through two gate cells per head and cell (tag, payload), which hear the cell as the replay made it and as the tape holds it, start deaf and halfway open, and fire up to four spikes, each a quarter of the stored cell that stays; the cell takes the rest from the replay in whole pulses. A sleeping stack hears a piece in stretches that end where a window ends; within a piece the tapes keep their gradient, so later windows learn through the replays (the state handed to the next piece keeps none, as before). The top read only writes its cells: nothing would hear what its race passed on. WINDOW is 64 here: the training pieces are 256 bytes and carry no gradient between them, so with 64 three of every four replays are read by later bytes of the same piece, and every byte reaches about four windows back within the read's reach of 256.",
+ "arms": {
+  "plain": "the delayed test bed at 1.2e-3, pulse budget 113,000 (existing runs)",
+  "loop": "--stack-loop 1,4,3 --pulse-budget 264000: level 0 once, levels 1 to 4 three times, level 5 once, the budget scaled by 14/6 (existing runs)",
+  "sleep": "--stack-sleep 64 --pulse-budget 226000: the budget scaled by 12/6 for the replay's pass over every level, as the loop's was by its passes; 5,256,788 parameters (the base's 5,249,060 and 7,728 of replay offsets and gate cells)",
+  "loop_sleep": "--stack-loop 1,4,3 --stack-sleep 64 --pulse-budget 528000: the loop's budget scaled by 28/14 for its replay"
+ },
+ "bases": {
+  "plain": "bed24-lr12-s1 1.486381, bed24-lr12-s2 1.492556 (code v17k), rd-base-6k-s1 1.621562, rd-base-6k-s2 1.628309 (v17l)",
+  "loop": "lp-24k-s1 1.466405, lp-24k-s2 1.467507, lp-6k-s1 1.605730, lp-6k-s2 1.605468 (v17r)"
+ },
+ "runs": "sl-6k-s1, sl-6k-s2, sl-24k-s1, sl-24k-s2, lsl-6k-s1, lsl-6k-s2, lsl-24k-s1, lsl-24k-s2: seeds 20001 and 20002, through sched/bin/arm.sh stack with --lr 1.2e-3 (and --steps 6000) and the arm's flags, on the code copy of 79cf0a4 (v17y), on GPU 0: the four 6,000-update runs at priority 32, after the two homeostatic 96,000-update runs that train now, and the four 24,000-update runs at priority 34, after their controls pg-96k-*-base. Beside them on the laptop, reported and not deciding: sl-6k-s3 and lsl-6k-s3 (code-79cf0a4, after the queue's present runs), against rd-base-6k-s3 1.628284 and loop-6k-s3 1.604914.",
+ "measure": "arm.sh's score: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights, bits kept. Paired leads (experiments/compare_stream_scores.py) of sleep against plain and of loop_sleep against loop at each length and seed; experiments/gap_by_piece.py (near 240, far 8,192), since sleep works on the memory; the lead by a byte's place in its window of 64, from the bits files; the trainer's pulses a byte, which count the replay, and the time an update takes against the arm's base.",
+ "reading": "The shared reading of experiments/read_lead_study.py twice: sleep against plain (--base-long bed24-lr12-s1 bed24-lr12-s2 --base-short rd-base-6k-s1 rd-base-6k-s2) and loop_sleep against loop (--base-long lp-24k-s1 lp-24k-s2 --base-short lp-6k-s1 lp-6k-s2). An arm is a fix for late learning if at 24,000 updates its mean lead is at least 0.010 with both seeds ahead and the lead has grown by at least 0.005 since 6,000; a lead at 24,000 without that growth is a constant gain; anything else fails. If loop_sleep is a fix or a constant gain of at least 0.010, sleep goes to full size on the looped stack (fs-loop6 under the lifting pool, with and without sleep, a record of its own written before those runs). If only sleep alone passes, it goes to full size on the plain stack the same way. If both fail but an arm's lead grows by at least 0.005 from 6,000 to 24,000 updates, that arm gets the pair at 96,000 updates, as the homeostatic gate did, in a record written then. Otherwise sleep is reported and stops. The 6,000-update runs decide nothing alone.",
+ "cost": "The replay runs every level once more over every byte: the trainer's pulses a byte about double (the laptop's first 60 updates: 228,028 against 120,724), and an update took 2.3 times as long on the laptop's GPU (60.4 s against 26.1 s for 60 updates; 45.9 s with windows of 128). The extra pulses are allowed only as this arm of its own (Daniel, 2026-11-21: 'if that makes us win yes'), and the energy control of the loop (b264, loop_with_data.json) found no gain from a larger budget alone on this bed.",
+ "seen_before_recording": "The paper; the 23 tests of 79cf0a4 and the suite (1,400 passed); 60 updates of the sleeping bed at windows of 64 and 128 on the laptop's GPU, for the timing above (validation after 60 updates 3.79 and 3.77 bpb against the plain bed's 3.79, which reads nothing); on the server's CPU 30 updates of each new arm at a batch of 4 and a short score of each, for the launch check (5,256,788 parameters in both). No sleeping run has trained beyond that.",
+ "result_sleep_alone": {
+  "recorded_utc": "2026-11-25T06:32:50Z",
+  "bpb": {
+   "sl-6k-s1": 1.62912,
+   "sl-6k-s2": 1.627981,
+   "sl-24k-s1": 1.489476,
+   "sl-24k-s2": 1.482651,
+   "rd-base-6k-s1": 1.621562,
+   "rd-base-6k-s2": 1.628309,
+   "bed24-lr12-s1": 1.486381,
+   "bed24-lr12-s2": 1.492556
   },
-  "bases": {
-    "plain": "bed24-lr12-s1 1.486381, bed24-lr12-s2 1.492556 (code v17k), rd-base-6k-s1 1.621562, rd-base-6k-s2 1.628309 (v17l)",
-    "loop": "lp-24k-s1 1.466405, lp-24k-s2 1.467507, lp-6k-s1 1.605730, lp-6k-s2 1.605468 (v17r)"
+  "the shared reading (experiments/read_lead_study.py, sleep against plain)": {
+   "long_leads": [
+    -0.00309,
+    0.00991
+   ],
+   "long_mean_lead": 0.00341,
+   "seeds_ahead": 1,
+   "a_lead": false,
+   "short_leads": [
+    -0.00756,
+    0.00033
+   ],
+   "short_mean_lead": -0.00362,
+   "growth": 0.00702,
+   "b_growth": true,
+   "verdict": "fail"
   },
-  "runs": "sl-6k-s1, sl-6k-s2, sl-24k-s1, sl-24k-s2, lsl-6k-s1, lsl-6k-s2, lsl-24k-s1, lsl-24k-s2: seeds 20001 and 20002, through sched/bin/arm.sh stack with --lr 1.2e-3 (and --steps 6000) and the arm's flags, on the code copy of 79cf0a4 (v17y), on GPU 0: the four 6,000-update runs at priority 32, after the two homeostatic 96,000-update runs that train now, and the four 24,000-update runs at priority 34, after their controls pg-96k-*-base. Beside them on the laptop, reported and not deciding: sl-6k-s3 and lsl-6k-s3 (code-79cf0a4, after the queue's present runs), against rd-base-6k-s3 1.628284 and loop-6k-s3 1.604914.",
-  "measure": "arm.sh's score: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights, bits kept. Paired leads (experiments/compare_stream_scores.py) of sleep against plain and of loop_sleep against loop at each length and seed; experiments/gap_by_piece.py (near 240, far 8,192), since sleep works on the memory; the lead by a byte's place in its window of 64, from the bits files; the trainer's pulses a byte, which count the replay, and the time an update takes against the arm's base.",
-  "reading": "The shared reading of experiments/read_lead_study.py twice: sleep against plain (--base-long bed24-lr12-s1 bed24-lr12-s2 --base-short rd-base-6k-s1 rd-base-6k-s2) and loop_sleep against loop (--base-long lp-24k-s1 lp-24k-s2 --base-short lp-6k-s1 lp-6k-s2). An arm is a fix for late learning if at 24,000 updates its mean lead is at least 0.010 with both seeds ahead and the lead has grown by at least 0.005 since 6,000; a lead at 24,000 without that growth is a constant gain; anything else fails. If loop_sleep is a fix or a constant gain of at least 0.010, sleep goes to full size on the looped stack (fs-loop6 under the lifting pool, with and without sleep, a record of its own written before those runs). If only sleep alone passes, it goes to full size on the plain stack the same way. If both fail but an arm's lead grows by at least 0.005 from 6,000 to 24,000 updates, that arm gets the pair at 96,000 updates, as the homeostatic gate did, in a record written then. Otherwise sleep is reported and stops. The 6,000-update runs decide nothing alone.",
-  "cost": "The replay runs every level once more over every byte: the trainer's pulses a byte about double (the laptop's first 60 updates: 228,028 against 120,724), and an update took 2.3 times as long on the laptop's GPU (60.4 s against 26.1 s for 60 updates; 45.9 s with windows of 128). The extra pulses are allowed only as this arm of its own (Daniel, 2026-11-21: 'if that makes us win yes'), and the energy control of the loop (b264, loop_with_data.json) found no gain from a larger budget alone on this bed.",
-  "seen_before_recording": "The paper; the 23 tests of 79cf0a4 and the suite (1,400 passed); 60 updates of the sleeping bed at windows of 64 and 128 on the laptop's GPU, for the timing above (validation after 60 updates 3.79 and 3.77 bpb against the plain bed's 3.79, which reads nothing); on the server's CPU 30 updates of each new arm at a batch of 4 and a short score of each, for the launch check (5,256,788 parameters in both). No sleeping run has trained beyond that."
+  "paired leads, plain minus sleep (compare_stream_scores; above zero sleep is better)": {
+   "6,000 updates, seed 20001": {
+    "lead": -0.0076,
+    "interval_95": [
+     -0.0086,
+     -0.0065
+    ]
+   },
+   "6,000 updates, seed 20002": {
+    "lead": 0.0003,
+    "interval_95": [
+     -0.0007,
+     0.0013
+    ]
+   },
+   "24,000 updates, seed 20001": {
+    "lead": -0.0031,
+    "interval_95": [
+     -0.0041,
+     -0.0022
+    ]
+   },
+   "24,000 updates, seed 20002": {
+    "lead": 0.0099,
+    "interval_95": [
+     0.009,
+     0.0109
+    ]
+   }
+  },
+  "leads by what the context offers (gap_by_piece, near 240, far 8,192; above zero sleep is better)": {
+   "24,000 updates, seed 20001": {
+    "copyable near": 0.0189,
+    "copyable far only": -0.0333,
+    "seen, other follower": 0.1082,
+    "new": -0.0089
+   },
+   "24,000 updates, seed 20002": {
+    "copyable near": -0.0079,
+    "copyable far only": 0.0164,
+    "seen, other follower": -0.0022,
+    "new": 0.0116
+   }
+  },
+  "sleep minus plain by a byte's place in its window of 64, seed 20001 (experiments/window_place.py; above zero sleep is worse)": {
+   "6,000 updates": {
+    "first byte": 0.0234,
+    "first quarter": 0.01,
+    "last quarter": 0.0076
+   },
+   "24,000 updates": {
+    "first byte": 0.0112,
+    "first quarter": 0.0045,
+    "last quarter": 0.002
+   }
+  },
+  "cost": "229,759 and 229,674 pulses a byte at 24,000 updates against the base's 115,653 and 115,737 (1.99 times, within the scaled budget of 226,000's price); 7,742 and 7,500 seconds of training against 1,857 and 2,002 (4.0 times on the server's GPU, beside another sleeping run under MPS).",
+  "reading": "Sleep alone fails the shared reading: after 24,000 updates its mean lead over the plain bed is 0.0034, with one seed ahead (0.0099) and one behind (0.0031). Its lead grew by 0.0070 from 6,000 updates (mean -0.0036), above the 0.005 that the record names: if loop_sleep also fails, sleep alone gets the pair at 96,000 updates, in a record written then; if loop_sleep passes, loop_sleep goes on and this arm is reported. The split by context disagrees between the seeds, and the seeds' own bases differ by 0.0062, so the arm's lead is seed-bound. Where it is behind, the cost sits after the window boundary: on seed 20001 the first byte after a replayed window is 0.0112 worse after 24,000 updates (0.0234 after 6,000), later places about 0.002. The laptop's seed at 6,000 updates is 0.0065 ahead (sl-6k-s3 1.621763 against 1.628284)."
+ },
+ "amendment": {
+  "recorded_utc": "2026-11-25T08:10:47Z",
+  "change": "A third seed of sleep alone at 24,000 updates on the laptop, whose queue would run dry tonight: sl-24k-s3, seed 20003, the laptop runner's recipe with --lr 1.2e-3 --stack-sleep 64 --pulse-budget 226000, on the frozen copy of 79cf0a4 that trained sl-6k-s3, paired with rd-base-24k-s3 (1.482467). It is reported beside the server's two seeds, as sl-6k-s3 is, and does not change either reading; if sleep alone's 96,000-update pair is owed, it says how far a third seed agrees.",
+  "seen_before_amendment": "result_sleep_alone (6af4f63) with the server's four sleep-alone runs and the laptop's sl-6k-s3 (1.621763); lsl-6k-s3 (1.605117). No 24,000-update sleep run has trained on the laptop."
+ }
 }

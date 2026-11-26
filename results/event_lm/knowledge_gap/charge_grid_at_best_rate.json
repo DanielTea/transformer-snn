@@ -1,0 +1,52 @@
+{
+ "study": "charge_grid_at_best_rate",
+ "recorded_utc": "2026-11-25T07:47:56Z",
+ "kind": "A screen on the laptop's GPU, one seed, 6,000 and 24,000 updates: every synapse of the delayed test bed on a charge grid four times finer, at the bed's best rate.",
+ "why": "Every synapse sends a whole number of ticks, its stored size rounded to a grid of 1/256 of a threshold; a typical synapse of the full-size stack is about 8 ticks from zero (an initial spread of 1/32 at a fan of 1,024), so a tick is an eighth of it. The gradient passes the rounding straight through, and late in training, when the cosine makes steps small, many updates change nothing the stack fires. weight_precision_with_data.json asks whether this limits late learning, at 3e-4, and has not run: its server runs wait at the end of the queue (priorities 40 to 53) and its 6,000-update bases have not trained. Its own reason is the strongest sign yet that spikes cost more late: on the test bed a float stand-in was level with the spiking bed after 6,000 updates and 0.022 ahead after 24,000. The stack falls behind the Transformer as data grows (pair_curves.json), and no cause has been found; this screen asks the grid at the rate where the bed trains best, 1.2e-3, on the laptop while the server's GPUs are busy.",
+ "arms": {
+  "grid10": "--router-charge-bits 10: the synapses of the reads, the cells, the input and the output on a grid of 1/1,024 of a threshold, every limit scaled with it; 5,249,060 parameters, as the base; it trained 30 updates on the laptop's CPU within the range of exact sums"
+ },
+ "base": "rd-base-6k-s3 1.628284 and rd-base-24k-s3 1.482467: the laptop's delayed bed at 1.2e-3, seed 20003, on the 8-bit grid.",
+ "runs": "grid10-6k-s3 and grid10-24k-s3 on the laptop's GPU after the decay screen's seeds, on the frozen copy of b2a2117 (its code is the base's for this arm).",
+ "measure": "The laptop runner's score: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, paired with the base of its length (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); the pulses a byte and how many neurons the range rule shrank.",
+ "reading": "A screen with one seed. The grid limits late learning if at 24,000 updates grid10 leads the base by at least 0.005 with the paired interval clear of zero and its lead has grown by at least 0.005 since 6,000; it then earns two server seeds at 6,000 and 24,000 updates at 1.2e-3 against bed24-lr12 and rd-base-6k, and a full-size pilot of the lifted loop on the finer grid, in a record written then. A lead at 24,000 updates of at least 0.005 without the growth earns the two server seeds only. Otherwise the grid is reported as no limit at this length, and weight_precision_with_data.json keeps its place in the queue.",
+ "seen_before_recording": "weight_precision_with_data.json (unrun) and its cited stand-in curves; the laptop's randomness seeds (quantal release rd-release -0.0018 at 6,000 and -0.0048 at 24,000 updates, rd-both -0.0016 and -0.0088, unrecorded in their record), which round at random rather than more finely; 30 updates of the arm on the laptop's CPU. No run on the finer grid has trained.",
+ "amendment": {
+  "recorded_utc": "2026-11-25T07:48:23Z",
+  "change": "A correction of the arm's description, before any run: --router-charge-bits 10 puts the synapses of the reads and of the cells (and the cells' relays and clocks, where there are any) on the grid of 1/1,024 of a threshold; the input and output synapses keep their own grid of 1/64, which the option does not touch. The arm, runs, measure and reading are unchanged.",
+  "seen_before_amendment": "No run of this record has trained; the code (snnformer/event_lm.py: the reads and cell layers take router_charge_bits, the input and output synapses the default charge bits)."
+ },
+ "result": {
+  "recorded_utc": "2026-11-26T00:54:59Z",
+  "runs": {
+   "grid10-6k-s3": 1.636858,
+   "grid10-24k-s3": 1.489086
+  },
+  "pairings": {
+   "grid10-6k-s3 against rd-base-6k-s3": "+0.0086 [+0.0076, +0.0096] over 4,160 pieces of 512 bytes (behind)",
+   "grid10-24k-s3 against rd-base-24k-s3": "+0.0066 [+0.0057, +0.0076] (behind)"
+  },
+  "gap_by_context": {
+   "6,000 updates": {
+    "copyable near": 0.06,
+    "copyable far only": -0.003,
+    "seen, other follower": 0.0258,
+    "new": 0.004
+   },
+   "24,000 updates": {
+    "copyable near": 0.0053,
+    "copyable far only": -0.0027,
+    "seen, other follower": 0.0691,
+    "new": 0.0036
+   }
+  },
+  "pulses_a_byte": {
+   "grid10-6k-s3": 116346,
+   "rd-base-6k-s3": 116491,
+   "grid10-24k-s3": 115887,
+   "rd-base-24k-s3": 116193
+  },
+  "neurons_the_range_rule_shrank": "grid10-24k-s3: 2,017 at the evaluation of step 3,000, rising to 116,000 at step 7,500 and falling to 154 by step 21,000, the last that reported any; grid10-6k-s3: 44 to 134; the bases on the 8-bit grid none",
+  "reading": "No limit at this length. On the finer grid the bed trails its base by 0.0066 after 24,000 updates and 0.0086 after 6,000, at the same pulses; behind on new contexts at both lengths. The 8-bit grid of 1/256 of a threshold does not limit late learning at this length; the finer grid's sums reach the range rule often, which shrinks synapses. weight_precision_with_data.json keeps its place in the queue."
+ }
+}

@@ -1,0 +1,487 @@
+{
+ "study": "full_size_lifted_loop_run",
+ "recorded_utc": "2026-11-25T03:25:29Z",
+ "kind": "One run at full size and full length, one seed: the looped stack under the pool that lifts the ceiling, in the form that the loop's two pending full-size pilots pick, trained and scored as fsp-loop was, beside v19's pair.",
+ "why": "The loop holds at full length (full_size_loop_run.json): fsp-loop scores 1.10391 on test and 1.13866 on validation, 0.0090 and 0.0086 better than the plain stack fsp-st, and 0.0249 and 0.0339 behind the Transformer fsp-tf. Its top level sits at the membrane's bound for 26.7% of the cells' entries (fsp-st: 12.0%). In full-size pilots of 24,000 updates the loop under the pool that lifts the ceiling, which divides a charge before bounding it, was 0.0095 better than the loop as fsp-loop trained (0.0145 on new contexts), and full_size_loop_variants.json's reading sends the loop's next full-length run under that pool. Two pilots of that record and of full_size_loop_passes.json have not trained: whether a third pass through the loop adds knowledge (fs-loop9) and whether the lifted loop gains from the Transformer's rate (fs-loop12-lift). This is the run that their readings shape.",
+ "arm": {
+  "fsp-lift": "sched/bin/full-pair3.sh stack fsp-lift RATE --stack-loop 2,8,PASSES --pulse-budget BUDGET --pool-lifts-ceiling, the flags in both stages: fsp-loop's recipe (v19's stack at full length, 24,000 updates on windows of 512 bytes, then unbroken streams of windows of 2,048 with 128 knowledge cells a head and a reach of 2,048 to update 90,000, one cosine over the run, seed 20001) under the lifting pool. PASSES is 3 with BUDGET 705,000 (25 level passes, the plain stack's 310,000 scaled by 25/11) if fs-loop9 passes full_size_loop_passes.json's reading, else 2 with BUDGET 507,000 (18/11). RATE is 1.2e-3 if fs-loop12-lift passes the reading of full_size_loop_variants.json's amendment, else 6e-4. The loop adds no parameters: 36,263,956 in the long stage."
+ },
+ "decision": "Applied by a job on the server as soon as fs-loop9, fs-loop6, fs-loop12-lift and fs-loop6-lift are scored, with experiments/compare_stream_scores.py on their bits (the first 2,000,000 validation bytes as streams): three passes if fs-loop9 is at least 0.005 better than fs-loop6 with the paired 95% interval clear of zero; the Transformer's rate if fs-loop12-lift is at least 0.005 better than fs-loop6-lift with the interval clear of zero; otherwise two passes and 6e-4, as the readings name their defaults. The decision and both pairings are written to the server's scores before the run is queued, and copied into this record's result.",
+ "training": "Code: the copy of 97a2772 that trained fsp-loop and every loop pilot. Server GPU 1, alone (never under MPS), queued at once after the decision, behind nothing but the pilots; fsp-loop took 16.3 hours of training and about 1.5 of scoring, so about 18 GPU hours with two passes and about 25 with three; the run spans windows by pause and resume.",
+ "base": "fsp-loop (the loop without the lifting pool), fsp-st (the plain stack) and fsp-tf (the Transformer at 1.2e-3): the same seed, data, schedule and scoring.",
+ "measure": "As full_size_loop_run.json: the stack read as a stream over the full enwik8 test and validation splits at the reach chosen on the first 1,000,000 validation bytes (its trained 2,048 or 8,192), with fast output synapses at 2^24 on the cells of every pass and without, paired with fsp-loop, fsp-st and fsp-tf piece by piece (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 2,032, far 8,192); beside the scores the pulses a byte, the training time and the share of membrane entries at their bound (experiments/membrane_saturation.py, which counts a lifted population's entries at its cap).",
+ "reading": "(1) The looped stack beats the Transformer at full size if its taught test score is below fsp-tf's frozen score with the paired 95% interval of the gap below zero, and the same holds on validation: the pair's own reading. The gap to fsp-tf with fast output synapses at 0.07 is recorded beside it, and the claim is made without reservation only if it holds against that too; every claim states the pulses a byte. (2) The new form improves the loop if fsp-lift is at least 0.005 better than fsp-loop on taught test and on taught validation, each interval clear of zero; within 0.003 on either split it does not, and between it is unclear. If the decision kept two passes and 6e-4, this is the lifting pool's gain at full length. (3) If (2) holds, fsp-lift's form is the stack's recipe from here on; otherwise fsp-loop's stays. Recorded either way: every score with and without fast synapses, the gaps to fsp-loop, fsp-st and fsp-tf on both splits with their intervals and their split by context, the pulses a byte against fsp-loop's 510,145, the training time, and the saturation.",
+ "seen_before_recording": "fsp-loop's scores and its saturation (full_size_loop_run.json); the pilots fs-loop6 1.31024, fs-loop6-b310 1.31656 and fs-loop6-lift 1.30073 on the first 2,000,000 validation bytes (full_size_loop_variants.json). fs-loop9 and fs-loop12-lift have not trained: they wait on GPU 1 behind the diagnostic fs-tf3-relu. No lifted loop has trained past 24,000 updates.",
+ "result": {
+  "recorded_utc": "2026-11-26T22:20:57Z",
+  "decision (written to the server's scores on 2026-11-25 at 17:10Z, before the run was queued; it started at 17:15Z)": {
+   "rule": "three passes if fs-loop9 leads fs-loop6 by at least 0.005 with the paired interval clear of zero; 1.2e-3 if fs-loop12-lift leads fs-loop6-lift the same way; otherwise two passes and 6e-4",
+   "third pass (fs-loop9 over fs-loop6)": {
+    "lead": 0.000815,
+    "interval_95": [
+     -2.4e-05,
+     0.001617
+    ],
+    "holds": false,
+    "fs-loop6": 1.310244,
+    "fs-loop9": 1.309429
+   },
+   "rate (fs-loop12-lift over fs-loop6-lift)": {
+    "lead": 0.003123,
+    "interval_95": [
+     0.002331,
+     0.003945
+    ],
+    "holds": false,
+    "fs-loop6-lift": 1.300729,
+    "fs-loop12-lift": 1.297606
+   },
+   "passes": 2,
+   "budget": 507000,
+   "peak_rate": "6e-4",
+   "pairing": "compare_stream_scores on the pilots' bits, the first 2,000,000 validation bytes as streams, 4,160 pieces of 512 bytes; a lead above zero is fewer bits for the first-named run",
+   "reading": "Neither lead reaches 0.005. A third pass leads by 0.0008 with the interval across zero; the Transformer's rate leads by 0.0031 (0.0023 to 0.0039), clear of zero and short of the mark. So the run kept two passes, the budget of 507,000 and a peak rate of 6e-4: fsp-loop's recipe under the lifting pool, with nothing else changed."
+  },
+  "scores": {
+   "fsp-lift": {
+    "taught test (reach 8,192, fast output synapses at 2^24 on all 18 passes)": 1.08175,
+    "taught validation": 1.11358,
+    "reach 8,192 test": 1.08266,
+    "reach 8,192 validation": 1.11283,
+    "as trained test (reach 2,048)": 1.0983,
+    "as trained validation": 1.12758
+   },
+   "fsp-loop": {
+    "taught test (reach 8,192, fast output synapses at 2^24 on all 18 passes)": 1.10391,
+    "taught validation": 1.13866,
+    "reach 8,192 test": 1.10762,
+    "reach 8,192 validation": 1.14041,
+    "as trained test (reach 2,048)": 1.12595,
+    "as trained validation": 1.15719
+   },
+   "fsp-st": {
+    "taught test (reach 8,192, fast output synapses on its 11 levels)": 1.11287,
+    "taught validation": 1.14726,
+    "reach 8,192 test": 1.1146,
+    "reach 8,192 validation": 1.14686,
+    "as trained test": 1.13021,
+    "as trained validation": 1.16117
+   },
+   "fsp-tf": {
+    "frozen test (windows of 2,048)": 1.07899,
+    "frozen validation": 1.1048,
+    "taught at 0.07 test": 1.07714,
+    "taught at 0.07 validation": 1.10442
+   }
+  },
+  "reach": "chosen on the first 1,000,000 validation bytes: 1.14015 at 8,192 against 1.15614 at the trained 2,048 (fsp-loop: 1.16847 and 1.1873), so 8,192",
+  "pairing": "experiments/compare_stream_scores.py and experiments/gap_by_piece.py, run on the laptop on the bits of every piece copied from the server's scores, as for full_size_loop_run.json. The server's own job scored the run; it wrote no pairing.",
+  "(1) against the Transformer (paired, compare_stream_scores; above zero the lifted loop is behind)": {
+   "taught test over frozen fsp-tf": {
+    "gap": 0.0028,
+    "interval_95": [
+     0.0017,
+     0.0038
+    ]
+   },
+   "taught validation over frozen fsp-tf": {
+    "gap": 0.0088,
+    "interval_95": [
+     0.0077,
+     0.0098
+    ]
+   },
+   "taught test over taught fsp-tf": {
+    "gap": 0.0046,
+    "interval_95": [
+     0.0036,
+     0.0056
+    ]
+   },
+   "taught validation over taught fsp-tf": {
+    "gap": 0.0092,
+    "interval_95": [
+     0.0082,
+     0.0102
+    ]
+   },
+   "reach 8,192 test (no fast synapses) over frozen fsp-tf": {
+    "gap": 0.0037,
+    "interval_95": [
+     0.0027,
+     0.0047
+    ]
+   },
+   "reach 8,192 validation (no fast synapses) over frozen fsp-tf": {
+    "gap": 0.008,
+    "interval_95": [
+     0.0071,
+     0.009
+    ]
+   },
+   "as trained test over frozen fsp-tf": {
+    "gap": 0.0193,
+    "interval_95": [
+     0.0185,
+     0.0202
+    ]
+   },
+   "as trained validation over frozen fsp-tf": {
+    "gap": 0.0228,
+    "interval_95": [
+     0.0219,
+     0.0237
+    ]
+   },
+   "reading": "The lifted loop does not beat the Transformer. With fast output synapses it is 0.0028 behind fsp-tf's frozen score on test and 0.0088 behind on validation, each interval above zero, and 0.0046 and 0.0092 behind the Transformer with fast output synapses at 0.07. At the reach of 8,192 without fast synapses it is 0.0037 and 0.0080 behind. fsp-loop was 0.0249 and 0.0339 behind and the plain stack 0.0339 and 0.0425: a ninth of fsp-loop's gap is left on test and a quarter on validation. The lifted loop spends 506,746 pulses a byte."
+  },
+  "(2) the new form against the loop (paired; below zero the lifted loop is better)": {
+   "taught test over fsp-loop": {
+    "gap": -0.0222,
+    "interval_95": [
+     -0.0228,
+     -0.0216
+    ]
+   },
+   "taught validation over fsp-loop": {
+    "gap": -0.0251,
+    "interval_95": [
+     -0.0257,
+     -0.0245
+    ]
+   },
+   "reach 8,192 test over fsp-loop": {
+    "gap": -0.025,
+    "interval_95": [
+     -0.0256,
+     -0.0243
+    ]
+   },
+   "reach 8,192 validation over fsp-loop": {
+    "gap": -0.0276,
+    "interval_95": [
+     -0.0282,
+     -0.027
+    ]
+   },
+   "as trained test over fsp-loop": {
+    "gap": -0.0277,
+    "interval_95": [
+     -0.0283,
+     -0.027
+    ]
+   },
+   "as trained validation over fsp-loop": {
+    "gap": -0.0296,
+    "interval_95": [
+     -0.0303,
+     -0.029
+    ]
+   },
+   "reading": "Holds: fsp-lift is 0.0222 better than fsp-loop on taught test and 0.0251 on taught validation, each interval clear of zero and more than four times the 0.005 that the reading asks. The decision kept two passes and 6e-4, so this is the lifting pool's gain at full length. The pilot's gain after 24,000 updates on windows of 512 was 0.0095 (fs-loop6-lift over fs-loop6), so the gain has not faded but more than doubled with 90,000 updates for 24,000, the streams and the knowledge cells. Without fast output synapses it is larger: 0.0250 and 0.0276 at the reach of 8,192, and 0.0277 and 0.0296 as trained."
+  },
+  "against the plain stack (paired; below zero the lifted loop is better)": {
+   "taught test over fsp-st": {
+    "gap": -0.0311,
+    "interval_95": [
+     -0.0317,
+     -0.0305
+    ]
+   },
+   "taught validation over fsp-st": {
+    "gap": -0.0337,
+    "interval_95": [
+     -0.0343,
+     -0.0331
+    ]
+   },
+   "reach 8,192 test over fsp-st": {
+    "gap": -0.0319,
+    "interval_95": [
+     -0.0326,
+     -0.0313
+    ]
+   },
+   "reach 8,192 validation over fsp-st": {
+    "gap": -0.034,
+    "interval_95": [
+     -0.0346,
+     -0.0334
+    ]
+   },
+   "as trained test over fsp-st": {
+    "gap": -0.0319,
+    "interval_95": [
+     -0.0326,
+     -0.0313
+    ]
+   },
+   "as trained validation over fsp-st": {
+    "gap": -0.0336,
+    "interval_95": [
+     -0.0342,
+     -0.033
+    ]
+   }
+  },
+  "what fast output synapses add (paired; below zero they help)": {
+   "fsp-lift, taught over reach 8,192, test": {
+    "gap": -0.0009,
+    "interval_95": [
+     -0.0011,
+     -0.0007
+    ]
+   },
+   "fsp-lift, taught over reach 8,192, validation": {
+    "gap": 0.0007,
+    "interval_95": [
+     0.0005,
+     0.001
+    ]
+   },
+   "fsp-loop, taught over reach 8,192, test": {
+    "gap": -0.0037,
+    "interval_95": [
+     -0.0039,
+     -0.0034
+    ]
+   },
+   "fsp-loop, taught over reach 8,192, validation": {
+    "gap": -0.0017,
+    "interval_95": [
+     -0.0019,
+     -0.0016
+    ]
+   },
+   "reading": "At 2^24 the fast output synapses add 0.0009 to the lifted loop on test, where they added 0.0037 to fsp-loop, and on validation they cost it 0.0007 (0.0005 to 0.0010), where they added 0.0017 to fsp-loop. The lifted loop's best validation score is the one without them, 1.11283. The reading's scores are the taught ones, as registered. fast_synapse_threshold_loop.json kept 2^24 on fsp-loop; no threshold has been scanned on a lifted loop."
+  },
+  "by what the context offers (gap_by_piece on the taught scores, near 2,032, far 8,192; below zero favours the lifted loop)": {
+   "fsp-lift over fsp-loop, test": {
+    "copyable near": {
+     "share_of_bytes": 0.1659,
+     "gap": -0.0062,
+     "interval_95": [
+      -0.0091,
+      -0.0038
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0424,
+     "gap": 0.0197,
+     "interval_95": [
+      0.0079,
+      0.0331
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0547,
+     "gap": 0.0571,
+     "interval_95": [
+      0.0277,
+      0.0921
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.737,
+     "gap": -0.034,
+     "interval_95": [
+      -0.0358,
+      -0.0323
+     ]
+    }
+   },
+   "fsp-lift over fsp-loop, validation": {
+    "copyable near": {
+     "share_of_bytes": 0.1346,
+     "gap": -0.0155,
+     "interval_95": [
+      -0.0205,
+      -0.011
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0427,
+     "gap": 0.0058,
+     "interval_95": [
+      -0.0052,
+      0.0179
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0542,
+     "gap": 0.0975,
+     "interval_95": [
+      0.0609,
+      0.1281
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7684,
+     "gap": -0.0371,
+     "interval_95": [
+      -0.039,
+      -0.0352
+     ]
+    }
+   },
+   "fsp-lift over fsp-st, test": {
+    "copyable near": {
+     "share_of_bytes": 0.1659,
+     "gap": -0.0134,
+     "interval_95": [
+      -0.016,
+      -0.011
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0424,
+     "gap": -0.0274,
+     "interval_95": [
+      -0.0385,
+      -0.0164
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0547,
+     "gap": 0.1072,
+     "interval_95": [
+      0.0773,
+      0.1376
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.737,
+     "gap": -0.0456,
+     "interval_95": [
+      -0.0476,
+      -0.0438
+     ]
+    }
+   },
+   "fsp-lift over fsp-st, validation": {
+    "copyable near": {
+     "share_of_bytes": 0.1346,
+     "gap": -0.0288,
+     "interval_95": [
+      -0.0336,
+      -0.0235
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0427,
+     "gap": -0.0367,
+     "interval_95": [
+      -0.05,
+      -0.0221
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0542,
+     "gap": 0.1492,
+     "interval_95": [
+      0.1149,
+      0.1874
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7684,
+     "gap": -0.0473,
+     "interval_95": [
+      -0.0491,
+      -0.0455
+     ]
+    }
+   },
+   "fsp-lift over frozen fsp-tf, test": {
+    "copyable near": {
+     "share_of_bytes": 0.1659,
+     "gap": -0.087,
+     "interval_95": [
+      -0.0929,
+      -0.0812
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0424,
+     "gap": -0.4381,
+     "interval_95": [
+      -0.477,
+      -0.4003
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0547,
+     "gap": 0.0623,
+     "interval_95": [
+      -0.0043,
+      0.1137
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.737,
+     "gap": 0.0439,
+     "interval_95": [
+      0.0411,
+      0.0472
+     ]
+    }
+   },
+   "fsp-lift over frozen fsp-tf, validation": {
+    "copyable near": {
+     "share_of_bytes": 0.1346,
+     "gap": -0.0866,
+     "interval_95": [
+      -0.0971,
+      -0.0765
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0427,
+     "gap": -0.4009,
+     "interval_95": [
+      -0.4488,
+      -0.3537
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0542,
+     "gap": -0.05,
+     "interval_95": [
+      -0.1228,
+      0.0355
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7684,
+     "gap": 0.0524,
+     "interval_95": [
+      0.0492,
+      0.0552
+     ]
+    }
+   },
+   "reading": "The lifting pool's gain is knowledge: on new contexts, three quarters of the bytes, the lifted loop is 0.0340 better than fsp-loop on test and 0.0371 on validation, more than its whole gain (1.13 and 1.14 times it). It is also better on near copies (0.0062 and 0.0155). It is worse where a context offers a byte that was followed by another byte before: 0.0571 and 0.0975 worse than fsp-loop on about 5% of the bytes, where fsp-loop was already about 0.05 worse than the plain stack, so 0.107 and 0.149 worse than the plain stack. On copies that only the long reach offers it is 0.0197 worse than fsp-loop on test (0.0079 to 0.0331) and 0.0058 on validation with the interval across zero; against the plain stack it is still 0.0274 and 0.0367 better there, where fsp-loop was 0.0471 and 0.0425 better. Against the Transformer the gap on new contexts falls from fsp-loop's 0.0779 to 0.0439 on test and from 0.0895 to 0.0524 on validation; on copies the lifted loop stays far ahead (0.087 near and 0.438 far on test, 0.087 and 0.401 on validation)."
+  },
+  "pulses a byte": "fsp-lift 511,340 in training and 506,746 on the trainer's validation streams, against fsp-loop's 509,980 and 510,145: the same budget of 507,000 and the same spending within 1%, 1.625 times the plain stack's 314,666 and 311,820. Every claim of the lifted loop states it.",
+  "training time": "58,820 s on the trainer's clock, as fsp-loop's 58,820 s: the two logs read 58,532 s and 58,533 s at update 90,000 and differ by 13 to 70 s at updates 24,000, 45,000, 60,000, 75,000 and 87,000, fsp-lift the earlier each time, so the lifting pool costs no training time. fsp-lift trained on GPU 1 outside MPS with the copy of 97a2772, from 2026-11-25 17:15Z to its pause before the window's close at 06:15Z (update 75,750) and from 16:50Z on 2026-11-26; with its scoring it ended at 21:28Z, 17.6 hours on the GPU.",
+  "membrane saturation (whole stack, the first 65,536 validation bytes; experiments/membrane_saturation.py of the copy that trained the run, on the server's CPU)": {
+   "fsp-lift (the share of entries whose count reached the cap)": {
+    "cells": 2.1e-05,
+    "cells at the top level": 0.00036,
+    "reads": 8e-05,
+    "reads at the top level": 1.6e-07,
+    "reads at the loop's last level": 0.00071,
+    "other": 0.0293
+   },
+   "fsp-loop (the share of entries at the membrane's bound; full_size_loop_run.json)": {
+    "cells": 0.0243,
+    "cells at the top level": 0.267,
+    "reads": 0.0219,
+    "reads at the top level": 0.1095,
+    "other": 0.0181
+   }
+  },
+  "saturation reading": "The lifting pool removes the bound that held fsp-loop's top level, where 26.7% of the top cells' entries and 11.0% of the top read's sat at the membrane's bound. A lifted population divides its charge before bounding it and has no such bound; its count still stops at its cap, which 0.036% of the top cells' entries reach, 0.002% of all cells' and 0.008% of all reads'. The most at any level is 0.07%, at the read of the loop's last level. The two shares are of different events, the bound of a charge for fsp-loop and the cap of a count for fsp-lift, as the script counts them. The other populations stand at 2.9% against fsp-loop's 1.8%.",
+  "(3) what follows": "(2) holds, so fsp-lift's form, the loop under the pool that lifts the ceiling, is the stack's recipe from here on. (1) does not hold: 0.0028 on test and 0.0088 on validation are left to the Transformer. fsp-lift2 (full_size_lifted_loop_second.json), the lifted loop with power-law cells, is training and is read against fsp-lift."
+ }
+}

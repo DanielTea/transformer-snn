@@ -1,0 +1,233 @@
+"""Practice with feedback: a model learns from its own attempts at tasks kept at the edge of what it can do.
+
+The loop of the drawing in the one-model plan, with programs where the drawing has helper models (the plan admits no
+other model as a teacher):
+  generator  draws tasks of a family at a difficulty (here: lookups along a chain of ``hops`` names, experiments/
+             hop_tasks.py; the line is the prompt up to the query's '=');
+  verifier   keeps a task only if its reference answer follows from its own assignments and the task is not answered
+             by the query's own name;
+  model      writes ATTEMPTS continuations of every task as one stream each, a byte at a time, up to a newline or
+             MAX_BYTES bytes, at a temperature;
+  grader     takes the last byte before the newline as the answer and gives a reward of 1 if it is the right digit;
+  solve rate per difficulty; the improver moves the difficulty by a staircase so that the solve rate stays between
+             a quarter and a half (above a half it adds a hop, below a quarter it takes one away);
+  learning   a policy-gradient step on the attempts of every task whose attempts disagree (the group's rewards minus
+             their mean, over their spread), on the bytes the model wrote, as GRPO does; tasks that all attempts
+             solve or all fail teach nothing and are left out.
+The model may write anything before its answer. Between the query's '=' and the answer digit it can write the names of
+the chain (?zt=mx=qa=7), each one lookup that a shallow model can make: a chain of thought in the task's own syntax,
+which no program writes for it. The share of attempts that write at least one name is reported every round.
+
+usage: python experiments/practice_loop.py --checkpoint run/model.pt.averaged --out practice/ --rounds 200 \\
+    [--device mps]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import random
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+import torch
+from torch.nn import functional as F
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from common import resolve_device  # noqa: E402
+from hop_tasks import chain_of, example, resolve  # noqa: E402
+from snnformer.event_lm import EventLM  # noqa: E402
+from train_event_lm import load_checkpoint, scoring_logits  # noqa: E402
+
+NEWLINE = ord("\n")
+
+
+def scores(model, output):
+    """A model's output as scores over the 256 bytes: a stack's spike evidence, a Transformer's logits."""
+    if isinstance(model, EventLM):
+        return scoring_logits(output, True, model.cfg.resolution)
+    return output
+
+
+@dataclass
+class Task:
+    prompt: bytes      # the line up to and with the query's '='
+    answer: int        # the answer digit's byte
+    hops: int
+
+
+def generate(rng: random.Random, hops: int) -> Task:
+    line = example(rng, hops)
+    cut = line.rindex("=") + 1
+    return Task(line[:cut].encode(), ord(line[cut]), hops)
+
+
+def verify(task: Task) -> bool:
+    """The reference answer follows from the task's own assignments, and the query is not a digit itself."""
+    text = task.prompt.decode() + chr(task.answer) + "\n"
+    answer, hops = resolve(text)
+    query = task.prompt.decode().rsplit(";?", 1)[1][:-1]
+    return answer == chr(task.answer) and hops == task.hops and not query.isdigit()
+
+
+def grade(task: Task, written: bytes) -> float:
+    """1 if the last byte before the newline is the right digit; an attempt without a newline gets nothing."""
+    if NEWLINE not in written:
+        return 0.0
+    body = written[:written.index(NEWLINE)]
+    return float(len(body) > 0 and body[-1] == task.answer)
+
+
+def staircase(hops: int, solve_rate: float, low: float = 0.25, high: float = 0.5, longest: int = 24) -> int:
+    if solve_rate > high:
+        return min(hops + 1, longest)
+    if solve_rate < low:
+        return max(hops - 1, 1)
+    return hops
+
+
+@torch.no_grad()
+def attempts(model, tasks: list[Task], count: int, max_bytes: int, temperature: float, generator, device):
+    """``count`` continuations of every task, written in parallel streams a byte at a time."""
+    prompts = [task.prompt for task in tasks for _ in range(count)]
+    width = max(len(p) for p in prompts)
+    # Every stream hears its own prompt; shorter prompts are led by newlines, which end a line of the corpus.
+    heard = torch.tensor([[NEWLINE] * (width - len(p)) + list(p) for p in prompts], dtype=torch.long, device=device)
+    written = [bytearray() for _ in prompts]
+    done = [False] * len(prompts)
+    stack = isinstance(model, EventLM)
+    # A stack carries its state from byte to byte; a Transformer reads its whole window again for every byte.
+    counts, state = model.stream(heard, None) if stack else (model(heard), None)
+    for _ in range(max_bytes):
+        logits = scores(model, counts)[:, -1].cpu().double()  # to the CPU first: Apple's GPU has no float64
+        chances = (logits / temperature).softmax(-1)
+        drawn = torch.multinomial(chances, 1, generator=generator).squeeze(-1)
+        for row, byte in enumerate(drawn.tolist()):
+            if not done[row]:
+                written[row].append(byte)
+                done[row] = byte == NEWLINE
+        if all(done):
+            break
+        if stack:
+            counts, state = model.stream(drawn[:, None].to(device), state)
+        else:
+            heard = torch.cat((heard, drawn[:, None].to(device)), 1)
+            counts = model(heard)
+    return [bytes(w) for w in written]
+
+
+def policy_loss(model, tasks: list[Task], written: list[bytes], rewards: torch.Tensor, count: int, device):
+    """The GRPO loss on the bytes written for the tasks whose attempts disagree, or None if none do."""
+    groups = rewards.view(len(tasks), count)
+    spread = groups.std(1, unbiased=False)
+    useful = spread > 0
+    if not useful.any():
+        return None
+    advantages = ((groups - groups.mean(1, keepdim=True)) / (spread[:, None] + 1e-6))[useful].flatten()
+    rows = [index for index, keep in enumerate(useful.repeat_interleave(count).tolist()) if keep]
+    texts = [tasks[i // count].prompt + written[i] for i in rows]
+    width = max(len(t) for t in texts)
+    tokens = torch.tensor([[NEWLINE] * (width - len(t)) + list(t) for t in texts], dtype=torch.long, device=device)
+    mask = torch.zeros(len(rows), width - 1, device=device)
+    for row, index in enumerate(rows):
+        length = len(written[index])
+        mask[row, width - 1 - length:] = 1.0
+    logits = scores(model, model(tokens[:, :-1])).float()
+    logp = -F.cross_entropy(logits.flatten(0, 1), tokens[:, 1:].flatten(), reduction="none").view(len(rows), -1)
+    per_attempt = (logp * mask).sum(1) / mask.sum(1).clamp_min(1)
+    return -(advantages.to(device) * per_attempt).mean()
+
+
+def wrote_the_chain(task: Task, written: bytes) -> bool:
+    """The answer writes the query's whole chain and nothing else: ?zt= then mx=qa=7 and a newline (one hop: 7)."""
+    steps = chain_of(task.prompt.decode() + chr(task.answer) + "\n")
+    return written == "=".join(steps[1:]).encode() + b"\n"
+
+
+@torch.no_grad()
+def evaluate(model, hops_list, count: int, max_bytes: int, seed: int, device) -> dict:
+    """Greedy answers with room to think: for every hop count, ``count`` tasks (drawn from ``seed``), the model
+    writes its most likely bytes up to a newline; the accuracy of the last byte, the share of answers that write at
+    least one name, the share that write the query's whole chain right (wrote_the_chain), and the mean bytes."""
+    found = {}
+    for hops in hops_list:
+        rng = random.Random(seed * 1000 + hops)
+        tasks = [generate(rng, hops) for _ in range(count)]
+        written = attempts(model, tasks, 1, max_bytes, 1e-6, torch.Generator().manual_seed(seed), device)
+        chains = sum(wrote_the_chain(t, w) for t, w in zip(tasks, written))
+        found[str(hops)] = {"accuracy": round(sum(grade(t, w) for t, w in zip(tasks, written)) / count, 4),
+                            "wrote_names": round(sum(map(wrote_a_name, written)) / count, 4),
+                            "wrote_the_chain": round(chains / count, 4),
+                            "mean_bytes": round(sum(len(w) for w in written) / count, 2)}
+    return found
+
+
+def wrote_a_name(written: bytes) -> bool:
+    body = written.split(b"\n", 1)[0]
+    return any(chr(b).isalpha() for b in body)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--rounds", type=int, default=200)
+    parser.add_argument("--tasks", type=int, default=16, help="tasks a round")
+    parser.add_argument("--attempts", type=int, default=8, help="attempts at every task")
+    parser.add_argument("--max-bytes", type=int, default=48)
+    parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--lr", type=float, default=3e-5)
+    parser.add_argument("--start-hops", type=int, default=4)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--evaluate", type=int, nargs="*",
+                        help="only score greedy answers with room to think at these hop counts, into OUT/evaluate.json")
+    parser.add_argument("--evaluate-tasks", type=int, default=200)
+    args = parser.parse_args()
+    device = resolve_device(args.device)
+    model, checkpoint = load_checkpoint(args.checkpoint, device)
+    if args.evaluate:
+        args.out.mkdir(parents=True, exist_ok=True)
+        found = evaluate(model, args.evaluate, args.evaluate_tasks, args.max_bytes, args.seed + 7, device)
+        (args.out / "evaluate.json").write_text(json.dumps({"checkpoint": str(args.checkpoint), "by_hops": found},
+                                                           indent=1) + "\n")
+        print(json.dumps(found), flush=True)
+        return
+    optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=args.lr)
+    rng, generator = random.Random(args.seed), torch.Generator().manual_seed(args.seed)
+    args.out.mkdir(parents=True, exist_ok=True)
+    log = (args.out / "rounds.jsonl").open("a")
+    hops = args.start_hops
+    for round_ in range(1, args.rounds + 1):
+        tasks = [task for task in (generate(rng, hops) for _ in range(args.tasks)) if verify(task)]
+        model.eval()
+        written = attempts(model, tasks, args.attempts, args.max_bytes, args.temperature, generator, device)
+        rewards = torch.tensor([grade(tasks[i // args.attempts], w) for i, w in enumerate(written)])
+        solve_rate = float(rewards.mean())
+        model.train()
+        loss = policy_loss(model, tasks, written, rewards, args.attempts, device)
+        if loss is not None:
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            if hasattr(model, "synaptic_scaling"):
+                model.synaptic_scaling()
+        row = {"round": round_, "hops": hops, "tasks": len(tasks), "solve_rate": round(solve_rate, 4),
+               "wrote_names": round(sum(map(wrote_a_name, written)) / len(written), 4),
+               "mean_bytes": round(sum(len(w) for w in written) / len(written), 2),
+               "loss": None if loss is None else round(float(loss), 5),
+               "example": (tasks[0].prompt[-12:] + written[0]).decode("latin-1")}
+        log.write(json.dumps(row) + "\n")
+        log.flush()
+        print(json.dumps(row), flush=True)
+        hops = staircase(hops, solve_rate)
+        if round_ % 50 == 0 or round_ == args.rounds:
+            torch.save({**checkpoint, "state_dict": model.state_dict(), "practice_rounds": round_,
+                        "practice_hops": hops}, args.out / "model.pt")
+    log.close()
+
+
+if __name__ == "__main__":
+    main()

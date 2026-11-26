@@ -1,0 +1,26 @@
+{
+  "study": "cubic_cells_with_data",
+  "recorded_utc": "2026-11-26T07:07:10Z",
+  "kind": "A screen by data on the test bed with two server seeds (6,000 and 24,000 updates), a full-size pilot of 24,000 updates, and the laptop's seed beside: power-law cells whose count grows with the cube of their charge, against the square cells that fsp-lift2 carries.",
+  "why": "Power-law cells with the square (--granule-power 8: round(k * k / 8) spikes for k thresholds) are the largest single gain of the last iterations: a constant gain of 0.0125 on four bed seeds after 24,000 updates (power_cells_with_data.json, result_four_seeds), 0.0137 at full size in the lifted loop (full_size_power_cells.json) and 0.0095 in the laptop's looped bed (power_cells_in_loop_screen.json), all at equal parameters and pulses. They fire a sparser code: about half as many cells fire at a byte, and those that fire have a longer tail (full_size_power_cells_activity.json). The gain is on new contexts; near copies lose. Cortical neurons' rates grow with powers of about 2 to 4 of how far the membrane stands past the threshold, so the square is one point of a family. The cube, round(k^3 / 64) for k thresholds (--granule-power 8 --granule-power-exponent 3, the same count as a plain cell and a square cell at 8 thresholds), keeps every cell under 4 thresholds silent and lets strongly driven cells fire more. Whether the code should grow sparser still, or the square is already past the best power, is the open question of the power-law line; a gentler power is the other side of it and is not tested here. The cube has no new parameters.",
+  "arms": {
+    "pc3-24k-s1, pc3-24k-s2": "sched/bin/arm.sh stack pc3-24k-sN --lr 1.2e-3 --seed 2000N --granule-power 8 --granule-power-exponent 3, the delayed test bed's recipe of the pw8 runs at 1.2e-3, on the code copy v18i of 1bb45e5, the commit that adds the exponent; 5,249,060 parameters as pw8's",
+    "pc3-6k-s1, pc3-6k-s2": "the same with --steps 6000",
+    "fs-loop6-lift-pc3": "sched/bin/full.sh stack fs-loop6-lift-pc3 --lr 6e-4 --stack-loop 2,8,2 --pulse-budget 507000 --pool-lifts-ceiling --granule-power 8 --granule-power-exponent 3, on v18i; the parameters of fs-loop6-lift-pw8 (34,810,900)",
+    "beside, on the laptop": "pc3-6k-s3 and pc3-24k-s3: the laptop's delayed bed at 1.2e-3, seed 20003, --granule-power 8 --granule-power-exponent 3, on the frozen copy code-1bb45e5, in the laptop's idle hours after the one-model screens"
+  },
+  "base": {
+    "bed": "the square cells of the same seed and length on v18c: pw8-24k-s1 1.476404, pw8-24k-s2 1.476946, pw8-6k-s1 1.608844, pw8-6k-s2 1.609802 (power_cells_with_data.json)",
+    "full size": "fs-loop6-lift-pw8 1.287005 (full_size_power_cells.json), the same recipe, seed and measure",
+    "laptop": "pw8-6k-s3 1.602131, pw8-24k-s3 1.477919 (power_cells_screen.json)",
+    "code": "v18i must score fs-loop6-lift-pw8's averaged weights bit for bit as v18c does (8,000 validation bytes as 4 streams, CPU) before any arm runs; otherwise nothing is queued and the drift is recorded"
+  },
+  "runs": "The bed arms and the pilot on the server's GPU 1 with an AFTER line on fsp-lift, behind the jobs queued there before this record (priorities up to 34): the bed arms at priority 35 (GPU_MEM 24), the pilot at 36 (GPU_MEM 40), under MPS as bed jobs and pilots are. They run in the window of 2026-11-26/27 if GPU 1 has room and otherwise in the next window. The laptop arms run after run-practice.sh ends, through run-queue.sh.",
+  "measure": "Bed and laptop: the runner's score, the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, paired with the square run of the same seed and length (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192). Pilot: full.sh's score, paired with fs-loop6-lift-pw8 and split the same way; the cells' firing (experiments/cell_activity.py, 8,192 bytes, lead 256). The pulses a byte of every run.",
+  "reading": {
+    "bed": "The cube reads better on the bed if after 24,000 updates both server seeds lead their square run and the mean lead is at least 0.003; worse if both trail or the mean trails by 0.003 or more; otherwise level. The 6,000-update runs and the laptop's seed are reported beside.",
+    "full size": "The cube replaces the square in the next full-length run if fs-loop6-lift-pc3 is at least 0.005 better than fs-loop6-lift-pw8 with the paired interval clear of zero and the bed reads better. If the pilot passes and the bed reads level or worse, two more server seeds (20003, 20004) decide before any full-length run carries the cube, by an amendment written then. Between 0 and 0.005 better: unclear, the square stays. Otherwise the square stays, and the steeper side of the power-law line is closed.",
+    "pulses": "If an arm fires more than a tenth more pulses a byte than its base, every claim states them."
+  },
+  "seen_before_recording": "power_cells_screen.json, power_cells_with_data.json (both readings), full_size_power_cells.json and its firing, power_cells_in_loop_screen.json, full_size_lifted_loop_second.json. No run with cubic cells has trained."
+}

@@ -1,0 +1,61 @@
+{
+ "study": "fast_synapse_threshold_loop",
+ "recorded_utc": "2026-11-25T09:28:01Z",
+ "kind": "A scan on the first million validation bytes, chosen before the test is read: the threshold of the looped stack's fast output synapses.",
+ "why": "Fast output synapses start at zero in every stream and learn from each byte after it was predicted; a spike of an output neuron takes a threshold of their fast charge. The threshold of 2^24 was tuned by v15 on the plain full-size stack, whose synapses hear the cells of 11 levels. The looped stack's hear the cells of 18 passes, and they gain it more: 0.0037 on test against the plain stack's 0.0017 (full_size_loop_run.json). Whether 2^24 is still the right threshold for 18 passes has not been asked. The scan runs on the server's CPUs, which are idle while DeepSeek has the GPUs, and its choice is made on validation bytes only, as the reach of 8,192 was.",
+ "arms": {
+  "thresholds": "fsp-loop's averaged weights (the v20 release file), reach 8,192, fast output synapses on the cells of all 18 passes (--teach-levels 0 to 17) at thresholds of 2^22, 2^23, 2^24 and 2^25; a further 2^26 if 2^25 is the lowest, or 2^21 if 2^22 is"
+ },
+ "measure": "experiments/eval_stream.py on the first 1,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, in pieces of 256, on the server's CPU (scores on the CPU and on a GPU agree to the fifth decimal, CASCADE_SYNAPSES.md), the bits of every piece kept, each threshold paired with 2^24 (experiments/compare_stream_scores.py).",
+ "reading": "The threshold with the fewest bits on the million is the looped stack's from here on if it is at least 0.001 below 2^24 there with the paired interval clear of zero; fsp-loop's test and validation are then rescored at it and reported as its reading at the chosen threshold, beside the pre-registered reading at 2^24, which stays the record's. Every later looped stack (fsp-lift and after) is then scored at both. Otherwise 2^24 stays and nothing is rescored.",
+ "seen_before_recording": "fsp-loop's scores at 2^24 (taught test 1.10391, validation 1.13866; reach 8,192 without fast synapses 1.10762 and 1.14041). No other threshold has been scored on a looped stack.",
+ "amendment": {
+  "recorded_utc": "2026-11-25T09:45:19Z",
+  "change": "Pieces of 64 bytes instead of 256, one threshold at a time with 24 threads. A check of 40,000 bytes at 2^24 in pieces of 256 on the server's CPU needed more than 20 GiB and was stopped by its memory cap after 10 minutes, before it scored; the scheduler's CPU jobs are capped at 28 GiB so that DeepSeek's model stays in the page cache. The stack fires the same spikes however a stream is cut, at a reach longer than its window too, and the fast synapses are taught byte by byte in whole numbers (EventLM._teach; tests/test_stack_loop.py, tests/test_knowledge_gap_cells.py), so pieces of 64 give the scores of pieces of 256. Should pieces of 64 also exceed the cap, the scan runs on a server GPU in a window with nothing else changed. The thresholds, bytes, streams, pairing and reading are unchanged.",
+  "seen_before_amendment": "The stopped check, which wrote no score. No threshold has been scored."
+ },
+ "amendment_2": {
+  "recorded_utc": "2026-11-25T20:25:58Z",
+  "change": "The order of the remaining thresholds: 2^25 before 2^22, then the further threshold if an end is the lowest. 2^23 scored 1.168208 on the million, 0.0016 above 2^24 (1.166653; paired interval 0.0014 to 0.0017), so the threshold the reading can still adopt lies above 2^24 if anywhere, and 2^25, with 2^26 if 2^25 is the lowest, now lands within the night of 2026-11-25 instead of the evening of 2026-11-26, before fsp-lift is scored, which the reading scores at both thresholds if one is adopted. 2^22, started at 20:22Z, is stopped unscored and runs after 2^25. The thresholds, the further threshold's rule, bytes, streams, pieces, pairing and reading are unchanged.",
+  "seen_before_amendment": "teach-24 (1.166653) and teach-23 (1.168208) with their pairing; no score at 2^22 or 2^25."
+ },
+ "amendment_3": {
+  "recorded_utc": "2026-11-26T00:49:20Z",
+  "change": "2^26 before 2^22, and no threshold starts late in a weekday window. 2^25 scored 1.166631 on the million, the lowest so far (2^24 1.166653; paired difference -0.00002, interval -0.00012 to +0.00008), so the arms add the further threshold 2^26. Amendment_2 meant 2^26 to land within the night, but the job as started scored 2^22 first and the further threshold only after it, which would have put 2^26 across the window's close; 2^22, started at 00:41:43Z, is stopped unscored after about 6 minutes, and the job now scores 2^26 first, then 2^22. A threshold now starts only while DeepSeek is stopped and, on weekdays, not from 02:00 to 07:00 UTC: a scoring takes about four hours and holds about 23 GiB without a memory cap, which must not stand beside DeepSeek's model after the close, so 2^22 waits for the window of 2026-11-26. 2^21 is still scored if 2^22 turns out the lowest; no threshold beyond 2^26 is scored, as the arms say. The thresholds, bytes, streams, pieces, pairing and reading are unchanged.",
+  "seen_before_amendment": "teach-24 (1.166653), teach-23 (1.168208) and teach-25 (1.166631) with their pairings against 2^24; no score at 2^22 or 2^26."
+ },
+ "scores_so_far": {
+  "recorded_utc": "2026-11-26T04:57:02Z",
+  "scores": {
+   "2^23": 1.168208,
+   "2^24": 1.166653,
+   "2^25": 1.166631,
+   "2^26": 1.167058
+  },
+  "pairings": {
+   "2^23 against 2^24": "+0.00155 [+0.00141, +0.00170] over 17,552 pieces of 64 bytes",
+   "2^25 against 2^24": "-0.00002 [-0.00012, +0.00008] over 17,552 pieces of 64 bytes",
+   "2^26 against 2^24": "+0.00040 [+0.00024, +0.00057] over 17,552 pieces of 64 bytes"
+  },
+  "state": "Four of the five thresholds are scored: the curve is flat from 2^24 to 2^25 and rises on both sides (2^23 0.0016 worse, 2^26 0.0004 worse), so no threshold scored so far is 0.001 below 2^24; 2^25, the lowest, now lies inside the scanned range, so the scan reaches no further up. 2^22 waits for the window of Thursday 2026-11-26 (amendment_3) and the record's result is written when it lands; until then fsp-lift is scored at 2^24, as full-pair3.sh does."
+ },
+ "result": {
+  "recorded_utc": "2026-11-26T22:15:07Z",
+  "scores": {
+   "2^22": 1.17404,
+   "2^23": 1.168208,
+   "2^24": 1.166653,
+   "2^25": 1.166631,
+   "2^26": 1.167058
+  },
+  "pairings": {
+   "2^22 against 2^24": "+0.00739 [+0.00704, +0.00773] over 17,552 pieces of 64 bytes",
+   "2^23 against 2^24": "+0.00155 [+0.00141, +0.00170] over 17,552 pieces of 64 bytes",
+   "2^25 against 2^24": "-0.00002 [-0.00012, +0.00008] over 17,552 pieces of 64 bytes",
+   "2^26 against 2^24": "+0.00040 [+0.00024, +0.00057] over 17,552 pieces of 64 bytes"
+  },
+  "last threshold": "2^22 was scored on the server's CPU in the window of Thursday 2026-11-26, as amendment_3 set (started 16:50Z, written 21:41Z). The other four scores and their pairings are those of scores_so_far.",
+  "reading": "2^24 stays and nothing is rescored. The threshold with the fewest bits on the million is 2^25 (1.166631), which is 0.00002 below 2^24 (1.166653) with the paired interval across zero (-0.00012 to +0.00008): it is not 0.001 below 2^24, and its interval is not clear of zero. 2^22 scored 1.174040, 0.0074 above 2^24 (interval 0.0070 to 0.0077), the highest of the five; it is not the lowest, so 2^21 is not scored, and with 2^26 scored the arms are complete. The curve is flat from 2^24 to 2^25 and rises on both sides: 0.0004 at 2^26, 0.0016 at 2^23 and 0.0074 at 2^22. fsp-loop's test and validation are not rescored, its pre-registered scores at 2^24 remain its only reading, and the later looped stacks are scored at 2^24 alone, as fsp-lift was.",
+  "what it shows": "The threshold that v15 tuned on the plain stack's 11 levels is as good as any for the 18 passes of fsp-loop: one step up changes nothing that the million bytes can tell, a lower threshold costs more than a higher one, and no threshold here is worth 0.001. The scan is of one looped stack, fsp-loop, on the first million validation bytes; no threshold has been scanned on a loop under the lifting pool."
+ }
+}

@@ -1,0 +1,291 @@
+{
+ "study": "sleep_closed_gates_screen",
+ "recorded_utc": "2026-11-25T06:07:59Z",
+ "kind": "A screen on the laptop's GPU, one seed, 6,000 and 24,000 updates: sleep whose gate cells start closed, so that the stack starts as the one without sleep and the replay rewrites only the cells where it helps.",
+ "why": "sleep_with_data's first finished seed at 24,000 updates (sl-24k-s1, 1.489476) is 0.0031 behind the plain bed (bed24-lr12-s1, 1.486381; interval 0.0022 to 0.0041), from 0.0076 behind at 6,000. By what each byte's context offers it is 0.019 better on near copies and 0.108 better where the eight bytes before ran earlier with another follower (5% of the bytes), and 0.009 worse on new contexts. By a byte's place in its window (experiments/window_place.py) the cost sits after the window boundary: the first byte after a replayed window was 0.023 worse after 6,000 updates and 0.011 after 24,000, later places about 0.002. These are the boundary spikes against which the paper sets its gate. The gates as built start halfway open, so every replay at first replaces half of every stored cell, the newest ones too, on which the next bytes lean most. Gates that start closed (--stack-sleep-keep 0.9, c519644: a deaf gate cell fires round(4 x 0.9) = 4 quarters and keeps every stored cell) make sleep start as the plain stack; a gate opens where the gradient finds the replay's cell better than the stored one.",
+ "arms": {
+  "sleep-closed": "--stack-sleep 64 --stack-sleep-keep 0.9 --pulse-budget 226000 on the laptop's delayed test bed at 1.2e-3, seed 20003"
+ },
+ "base": "rd-base-6k-s3 1.628284 and rd-base-24k-s3 1.482467 (the laptop's delayed bed at 1.2e-3, seed 20003); beside them the open-gated sleep of the same seed, sl-6k-s3 1.621763 (no 24,000-update run of it on the laptop).",
+ "runs": "slc-6k-s3 and slc-24k-s3 on the laptop's GPU after the loop-phase seeds, on a frozen copy of c519644.",
+ "measure": "experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes (the laptop runner's score), paired with the base of its length (experiments/compare_stream_scores.py), split by context (experiments/gap_by_piece.py, near 240, far 8,192) and by a byte's place in its window (experiments/window_place.py); how far the gates opened (the share of quarters kept, by level).",
+ "reading": "A screen with one seed. Closed gates earn two server seeds of the same arm and its loop form (sleep on --stack-loop 1,4,3) at 6,000 and 24,000 updates, in a record written then, if at 24,000 updates slc-24k-s3 leads rd-base-24k-s3 by at least 0.005 with the paired interval clear of zero. Otherwise they are reported, and sleep stops with sleep_with_data's own verdict. Recorded either way: both leads, their split by context and by place in the window, and the gates' openings.",
+ "seen_before_recording": "sleep_with_data.json's 6,000-update runs (sl, lsl, two server seeds and laptop sl-6k-s3), its first 24,000-update run sl-24k-s1 with its pairing, split by context and by place in the window, as cited; window_place on sl-6k-s1. No run with closed gates has trained.",
+ "result": {
+  "recorded_utc": "2026-11-25T20:31:32Z",
+  "bpb": {
+   "slc-6k-s3": 1.620282,
+   "slc-24k-s3": 1.476411,
+   "rd-base-6k-s3": 1.628284,
+   "rd-base-24k-s3": 1.482467
+  },
+  "lead over the plain bed of its length (paired, compare_stream_scores; above zero sleep with closed gates is better)": {
+   "6,000 updates": {
+    "lead": 0.008,
+    "interval_95": [
+     0.00689,
+     0.00907
+    ]
+   },
+   "24,000 updates": {
+    "lead": 0.00606,
+    "interval_95": [
+     0.00515,
+     0.00701
+    ]
+   }
+  },
+  "by context, sleep minus plain (gap_by_piece, near 240, far 8,192; below zero favours sleep)": {
+   "6,000 updates": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.1054,
+     "interval_95": [
+      -0.1195,
+      -0.0932
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0153,
+     "interval_95": [
+      -0.0045,
+      0.0339
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0133,
+     "interval_95": [
+      -0.0846,
+      0.0815
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0015,
+     "interval_95": [
+      -0.0055,
+      0.0018
+     ]
+    }
+   },
+   "24,000 updates": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": 0.0008,
+     "interval_95": [
+      -0.0108,
+      0.0115
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.0181,
+     "interval_95": [
+      -0.0341,
+      -0.0019
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0162,
+     "interval_95": [
+      -0.0903,
+      0.0624
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0042,
+     "interval_95": [
+      -0.0085,
+      -0.0006
+     ]
+    }
+   }
+  },
+  "parameters": {
+   "slc": 5256788,
+   "rd-base": 5249060
+  },
+  "pulses_a_byte": {
+   "slc-6k-s3": 231311,
+   "slc-24k-s3": 230166,
+   "note": "the plain bed fires about 116,000: the replay doubles the pulses, which the budget of 226,000 allows"
+  },
+  "reading": "Pass: after 24,000 updates slc-24k-s3 leads rd-base-24k-s3 by 0.0061 [0.0052, 0.0070], at least 0.005 with the interval clear of zero, so closed gates earn two server seeds of the same arm and its loop form at 6,000 and 24,000 updates (sleep_closed_gates_with_data.json). The lead shrank from 0.0080 after 6,000 updates, and where it sits moved: after 6,000 updates on near copies (-0.1054), after 24,000 on far copies (-0.0181 [-0.0341, -0.0019]) and new contexts (-0.0042 [-0.0085, -0.0006], 76% of the bytes), where the open-gated sleep of sl-24k-s1 had lost 0.009. Against the open-gated sleep of the same seed after 6,000 updates (sl-6k-s3 1.621763) the closed gates are 0.0015 better, unpaired. One seed.",
+  "owed": "The split by place in the window (experiments/window_place.py, both models over the 2,000,000 bytes) and the gates' openings (the share of quarters kept, by level) are not measured yet; no tool measures the sleep gates' quarters yet. They are added to this result when measured, before any server seed of sleep_closed_gates_with_data.json is read."
+ },
+ "result_owed_measures": {
+  "recorded_utc": "2026-11-25T20:42:33Z",
+  "by place in the window, slc-24k-s3 minus rd-base-24k-s3 (experiments/window_place.py on the 2,000,000 validation bytes as 16 streams, window 64; below zero favours sleep)": {
+   "first four places": [
+    0.006,
+    0.0041,
+    -0.0081,
+    -0.0024
+   ],
+   "last four places": [
+    -0.0059,
+    -0.0065,
+    -0.0087,
+    -0.0061
+   ],
+   "places 1 to 63, mean": -0.0062,
+   "first quarter": -0.005,
+   "last quarter": -0.0066
+  },
+  "gates' openings (experiments/sleep_gates.py on the first 262,144 validation bytes as 16 streams after 8,192 lead bytes; the share of a replayed window's stored cells that the gates keep, by read)": {
+   "slc-6k-s3": {
+    "level 0": {
+     "tags": {
+      "mean_share_kept": 0.8041,
+      "share_keeping_all": 0.3384,
+      "share_replaced_whole": 0.0
+     },
+     "payloads": {
+      "mean_share_kept": 0.838,
+      "share_keeping_all": 0.3797,
+      "share_replaced_whole": 0.0
+     }
+    },
+    "level 1": {
+     "tags": {
+      "mean_share_kept": 0.7071,
+      "share_keeping_all": 0.0719,
+      "share_replaced_whole": 0.0
+     },
+     "payloads": {
+      "mean_share_kept": 0.8975,
+      "share_keeping_all": 0.5901,
+      "share_replaced_whole": 0.0
+     }
+    },
+    "level 2": {
+     "tags": {
+      "mean_share_kept": 0.7067,
+      "share_keeping_all": 0.0514,
+      "share_replaced_whole": 0.0
+     },
+     "payloads": {
+      "mean_share_kept": 0.8538,
+      "share_keeping_all": 0.4153,
+      "share_replaced_whole": 0.0
+     }
+    },
+    "level 3": {
+     "tags": {
+      "mean_share_kept": 0.8978,
+      "share_keeping_all": 0.7004,
+      "share_replaced_whole": 0.0
+     },
+     "payloads": {
+      "mean_share_kept": 0.8888,
+      "share_keeping_all": 0.619,
+      "share_replaced_whole": 0.0
+     }
+    },
+    "level 4": {
+     "tags": {
+      "mean_share_kept": 0.7653,
+      "share_keeping_all": 0.3948,
+      "share_replaced_whole": 0.0001
+     },
+     "payloads": {
+      "mean_share_kept": 0.8529,
+      "share_keeping_all": 0.4513,
+      "share_replaced_whole": 0.0
+     }
+    },
+    "level 5": {
+     "tags": {
+      "mean_share_kept": 0.5148,
+      "share_keeping_all": 0.2522,
+      "share_replaced_whole": 0.2544
+     },
+     "payloads": {
+      "mean_share_kept": 0.6558,
+      "share_keeping_all": 0.2952,
+      "share_replaced_whole": 0.0199
+     }
+    }
+   },
+   "slc-24k-s3": {
+    "level 0": {
+     "tags": {
+      "mean_share_kept": 0.817,
+      "share_keeping_all": 0.3986,
+      "share_replaced_whole": 0.0
+     },
+     "payloads": {
+      "mean_share_kept": 0.8866,
+      "share_keeping_all": 0.5939,
+      "share_replaced_whole": 0.0
+     }
+    },
+    "level 1": {
+     "tags": {
+      "mean_share_kept": 0.7869,
+      "share_keeping_all": 0.2435,
+      "share_replaced_whole": 0.0
+     },
+     "payloads": {
+      "mean_share_kept": 0.9612,
+      "share_keeping_all": 0.8449,
+      "share_replaced_whole": 0.0
+     }
+    },
+    "level 2": {
+     "tags": {
+      "mean_share_kept": 0.7939,
+      "share_keeping_all": 0.3042,
+      "share_replaced_whole": 0.0
+     },
+     "payloads": {
+      "mean_share_kept": 0.9195,
+      "share_keeping_all": 0.6791,
+      "share_replaced_whole": 0.0
+     }
+    },
+    "level 3": {
+     "tags": {
+      "mean_share_kept": 0.7465,
+      "share_keeping_all": 0.2673,
+      "share_replaced_whole": 0.0006
+     },
+     "payloads": {
+      "mean_share_kept": 0.8024,
+      "share_keeping_all": 0.3067,
+      "share_replaced_whole": 0.0003
+     }
+    },
+    "level 4": {
+     "tags": {
+      "mean_share_kept": 0.8935,
+      "share_keeping_all": 0.7189,
+      "share_replaced_whole": 0.0002
+     },
+     "payloads": {
+      "mean_share_kept": 0.9448,
+      "share_keeping_all": 0.7876,
+      "share_replaced_whole": 0.0
+     }
+    },
+    "level 5": {
+     "tags": {
+      "mean_share_kept": 0.5647,
+      "share_keeping_all": 0.3686,
+      "share_replaced_whole": 0.274
+     },
+     "payloads": {
+      "mean_share_kept": 0.6085,
+      "share_keeping_all": 0.3835,
+      "share_replaced_whole": 0.1712
+     }
+    }
+   }
+  },
+  "reading": "The cost after a window boundary is smaller with closed gates: the first byte after a replayed window is 0.0060 worse than the plain bed's after 24,000 updates (open gates on sl-24k-s1: 0.011), the second 0.0041, and from the third place on sleep is ahead: over the 63 places after the first it is 0.0062 better on the mean, about alike early and late in the window (0.0050 in the first quarter, 0.0066 in the last). Training opened the gates at every level and most at the top: in levels 0 to 4 the gates keep 75% to 89% of the stored tags and 80% to 96% of the payloads, in level 5 they keep 57% of the tags and 61% of the payloads and replace 27% and 17% of the cells whole. From 6,000 to 24,000 updates the gates of levels 0, 1, 2 and 4 closed a little (their payload gates keep 84% to 90% after 6,000 updates and 89% to 96% after 24,000), level 3's opened (payloads 89% to 80%), and the top stayed the most open."
+ }
+}

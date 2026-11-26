@@ -1,0 +1,65 @@
+{
+ "study": "power_cells_screen",
+ "recorded_utc": "2026-11-25T10:26:44Z",
+ "kind": "A screen on the laptop's GPU, one seed, 6,000 and 24,000 updates: power-law cells on the delayed test bed at its best rate.",
+ "why": "A cortical neuron's rate grows with a power of about two of how far its membrane stands past the threshold, once noise has smoothed the threshold (Priebe and Ferster; Miller and Troyer 2002). The stack's plain threshold cell grows in a line, as a rectifier does, and in floats the plain rectifier is the one unit that falls behind as data grows: 0.0149 behind the gated reference after 24,000 updates on the mean of two seeds, growth 0.0293 (plain_units_with_data.json), where gated units and the product of two drives keep up (bounded_gates_in_floats.json). v15's walk found that a squared rectifier recovers what plain units lose: 1.5087 at 9,000 updates against GELU's 1.5094 and the plain rectifier's 1.5249 (docs/LONG_STREAMS.md). Every spiking gate tried since has failed on the bed; the signed gate, the spike form of the product, was 0.018 to 0.026 behind the plain cell after 24,000 updates (signed_gates_with_data.json). The spike form of a square that v15 tried was a self-gated cell firing k * k spikes for k thresholds with no scale, and it collapsed within 1,500 updates. A power-law cell (f876392, --granule-power P) fires round(k * k / P) spikes for k thresholds of charge above its rest, in whole numbers and capped as a plain cell is, so it fires as a plain cell does at P thresholds, fewer spikes below and more above; it learns from the slope of the same square of its smooth threshold. It has a plain cell's synapses and nothing more. P = 8 puts that point between the median (4 to 10 by level) and the 90th percentile (9 to 27) of the spikes of a firing cell on the trained bed (experiments/cell_activity.py on rd-base-24k-s3, the first 16,384 validation bytes), and a cell reaches its cap of 128 spikes at 32 thresholds.",
+ "arms": {
+  "pw8": "--granule-power 8 on the laptop's delayed bed at 1.2e-3; 5,249,060 parameters, as the base"
+ },
+ "base": "rd-base-6k-s3 1.628284 and rd-base-24k-s3 1.482467: the laptop's delayed bed at 1.2e-3, seed 20003, plain cells.",
+ "runs": "pw8-6k-s3 and pw8-24k-s3 on the laptop's GPU through its runner's recipe (--lr 1.2e-3 --seed 20003, and --steps 6000), on the frozen copy of f876392, after grid10-24k-s3; sl-24k-s3, a third seed reported beside a verdict already read, moves behind them.",
+ "measure": "The laptop runner's score: experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, paired with the base of its length (experiments/compare_stream_scores.py) and split by context (experiments/gap_by_piece.py, near 240, far 8,192); the pulses a byte and the cells' firing (experiments/cell_activity.py).",
+ "reading": "A screen with one seed. Power-law cells fix late learning if at 24,000 updates pw8 leads the base by at least 0.005 with the paired interval clear of zero and its lead has grown by at least 0.005 since 6,000 updates; they then earn two server seeds at 6,000 and 24,000 updates at 1.2e-3 against bed24-lr12 and rd-base-6k, and a full-size pilot of the lifted loop with power-law cells, in a record written then. A lead at 24,000 updates of at least 0.005 without the growth earns the two server seeds only. Otherwise power-law cells are reported as no gain at this scale, with their leads at both lengths and on new contexts.",
+ "seen_before_recording": "plain_units_with_data.json, bounded_gates_in_floats.json and signed_gates_with_data.json with their results; v15's walk; the cells' firing on rd-base-24k-s3; the arm's code with its tests; 300 updates of the arm and of the plain bed on the laptop's CPU at 4 windows a batch, seed 20003, where the arm's validation streams scored 2.3668 against the plain bed's 2.5196 (2.7488 and 2.8382 in windows, each on two batches). No run of this record has trained on the GPU.",
+ "amendment": {
+  "recorded_utc": "2026-11-25T13:51:13Z",
+  "change": "The runs' order on the laptop, before any of them has trained: pw8-6k-s3 and pw8-24k-s3 run next, ahead of slc-24k-s3, which is paused at a stream boundary with its state saved and resumes after them, and of the decay and grid seeds, so that the screen reads before tonight's GPU window rather than on Thursday morning. The arm, base, measure and reading are unchanged.",
+  "seen_before_amendment": "slc-6k-s3 1.620282 (sleep_closed_gates_screen.json); no run of this record has trained."
+ },
+ "result": {
+  "recorded_utc": "2026-11-25T16:15:17Z",
+  "bpb": {
+   "pw8-6k-s3": 1.602131,
+   "pw8-24k-s3": 1.477919,
+   "rd-base-6k-s3": 1.628284,
+   "rd-base-24k-s3": 1.482467
+  },
+  "paired with the plain bed, plain minus power (compare_stream_scores; by context gap_by_piece, near 240, far 8,192)": {
+   "6,000 updates": {
+    "lead": 0.0262,
+    "interval_95": [
+     0.0249,
+     0.0273
+    ],
+    "by context (power minus plain; below zero power is better)": {
+     "copyable near": -0.1338,
+     "copyable far only": 0.0247,
+     "seen, other follower": -0.0386,
+     "new": -0.0221
+    }
+   },
+   "24,000 updates": {
+    "lead": 0.0045,
+    "interval_95": [
+     0.0036,
+     0.0055
+    ],
+    "by context (power minus plain; below zero power is better)": {
+     "copyable near": 0.0294,
+     "copyable far only": -0.0404,
+     "seen, other follower": 0.0952,
+     "new": -0.0098
+    }
+   }
+  },
+  "growth of the lead from 6,000 to 24,000 updates": -0.0217,
+  "pulses a byte (the trainer's last reading)": {
+   "pw8-6k-s3": 115640,
+   "rd-base-6k-s3": 116491,
+   "pw8-24k-s3": 115921,
+   "rd-base-24k-s3": 116193
+  },
+  "along the 24,000-update run (the trainer's stream readings on its validation sample, power minus plain)": "ahead by 0.018 at 1,500 updates, behind by 0.003 to 0.010 from 6,000 to 10,500, level at 12,000, ahead by 0.004 to 0.007 from 13,500 to the end",
+  "reading": "No gain at this scale by the screen's mark: the lead at 24,000 updates is 0.0045, under 0.005, though its interval is clear of zero, and it fell by 0.0217 from 6,000 updates instead of growing. The large lead after 6,000 updates belongs to a short schedule: power-law cells learn faster early, and the plain cells catch up when the rate decays later. At 24,000 updates power-law cells are still 0.010 better on new contexts and 0.040 better on far copies, and lose it on contexts seen before with another follower (0.095 worse on their 5% of bytes) and on near copies (0.029 worse). They do not earn the server seeds by this reading; power_cells_with_data.json, recorded before this score, reads its own two seeds."
+ }
+}

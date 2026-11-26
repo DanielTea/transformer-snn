@@ -1,6 +1,6 @@
 # A scaling law the other way around
 
-*The study of Volley v18 and v19. Every number here is from a finished run. The verdicts are those of the records in
+*The study of Volley v18 to v21. Every number here is from a finished run. The verdicts are those of the records in
 `results/event_lm/knowledge_gap/`, which were committed before their runs. What still runs is listed at the end.*
 
 v17 found that the stack's gap to the Transformer is knowledge, and that on the test bed it reopens with more data:
@@ -462,19 +462,115 @@ of 2,250 updates on the laptop's GPU, at the design stage and not pre-registered
 pulses a byte, no runaway) but reads 1.7776 on streams with averaged weights where the plain lifted stack reads
 1.7105, and 1.7863 with gate steps that fire: 0.067 and 0.076 behind. It earned no run.
 
+## The ceiling lifted at full length
+
+The looped stack trained once more for 90,000 updates beside the pair, under the pool that lifts the ceiling
+(`--pool-lifts-ceiling`: every population's pool divides a neuron's charge before the membrane bounds it) and with
+nothing else changed (`full_size_lifted_loop_run.json`). Two pilots decided its form before it was queued. A third
+pass through the loop is 0.0008 better for 1.39 times the pulses (`full_size_loop_passes.json`), and under the
+lifting pool the Transformer's rate is 0.0031 better, where the Transformer gains 0.0075 from the same step
+(`full_size_loop_variants.json`): each short of the 0.005 that would have changed the run. Twice the pulse budget is
+0.0005 worse at 1.51 times the pulses (`full_size_loop_budget.json`).
+
+| Reading | Lifted loop | Looped stack (v20) | Lifted over loop | Transformer | Behind the Transformer |
+|---|---:|---:|---:|---:|---:|
+| Test, reach 8,192, taught output synapses | 1.0817 | 1.1039 | 0.0222 better (0.0216 to 0.0228) | 1.0790 | 0.0028 (0.0017 to 0.0038) |
+| Validation, reach 8,192, taught output synapses | 1.1136 | 1.1387 | 0.0251 better (0.0245 to 0.0257) | 1.1048 | 0.0088 (0.0077 to 0.0098) |
+| Test, reach 8,192 | 1.0827 | 1.1076 | 0.0250 better | | 0.0037 (0.0027 to 0.0047) |
+| Validation, reach 8,192 | 1.1128 | 1.1404 | 0.0276 better | | 0.0080 (0.0071 to 0.0090) |
+| Test, as trained | 1.0983 | 1.1260 | 0.0277 better | | 0.0193 |
+
+The pilot's gain after 24,000 updates was 0.0095, so this gain grew with data, to 2.3 times its pilot's. All of it is
+knowledge: on new contexts the lifted loop is 0.0340 better than v20's stack on test and 0.0371 on validation, and
+against the Transformer the distance there falls from 0.078 to 0.044 and from 0.090 to 0.052. It loses where the
+eight bytes before a byte ran earlier with another follower (0.057 and 0.098 worse than v20's stack on about 5% of
+the bytes) and, on test, on copies that only its reach finds (0.020). No membrane is held at a bound: 0.036% of the
+top cells' entries reach the cap of their count, where 26.7% of v20's sat at the membrane's bound. The fast output
+synapses add 0.0009 on test and cost 0.0007 on validation, where they added 0.0037 and 0.0017 to v20's stack; a scan
+on v20's stack kept their threshold at 2^24 (`fast_synapse_threshold_loop.json`). The parameters, the pulses
+(506,746 a byte) and the training time are v20's. The stack does not beat the Transformer: 0.0028 and 0.0088 are
+left, and 0.0046 and 0.0092 against the Transformer with fast output synapses of its own. One seed.
+
+## Power-law cells keep their gain with data
+
+A cortical neuron's rate grows with a power of about two of how far its membrane stands past the threshold. The
+stack's plain cell grows in a line, as a rectifier does, and in floats the plain rectifier is the unit that falls
+behind with data (above). A power-law cell (`--granule-power 8`) fires round(k * k / 8) spikes for k thresholds of
+charge, up to its cap: a plain cell's synapses, no gate and no new parameters.
+
+| Test | Lead of power-law cells over plain cells |
+|---|---|
+| Test bed, four seeds, 6,000 updates (`power_cells_with_data.json`) | 0.0176 on the mean |
+| Test bed, four seeds, 24,000 updates | 0.0125 on the mean (0.0100, 0.0156, 0.0100, 0.0143) |
+| Looped test bed, the laptop's seed, 24,000 updates (`power_cells_in_loop_screen.json`) | 0.0095 (0.0086 to 0.0105) |
+| Full size, the lifted loop, 24,000 updates (`full_size_power_cells.json`) | 0.0137 (0.0129 to 0.0145) |
+
+On the bed the lead shrinks by about 0.005 from 6,000 to 24,000 updates and holds at 0.010 or more on every seed, at
+the bed's parameters and pulses: a constant gain by the shared reading. At full size it is on new contexts (0.018)
+and far copies (0.019), for 0.4% more pulses, and the code is sparser: about half as many cells fire at a byte, and
+those that fire have a longer tail. The lifted loop with power-law cells trains for 90,000 updates as this is written
+(`full_size_lifted_loop_second.json`).
+
+## What the pool costs is its division, and how it trains
+
+Four fifths of the distance at full size belongs to the layout (above). Walked in floats at full size, 24,000
+updates, each change made to the Transformer:
+
+| Change to the Transformer | Cost after 24,000 updates |
+|---|---:|
+| Plain units shut below zero, the stack's kind (`full_size_units_in_floats.json`) | 0.0077 (0.0068 to 0.0086) |
+| Output weights of its own (`full_size_layout_in_floats.json`) | 0.0084 better |
+| The stack's pool in place of every LayerNorm | 0.0691 (0.0682 to 0.0701) |
+| A centred pool (`full_size_centring_in_floats.json`) | 0.0636 (0.0627 to 0.0646) |
+| A pool that divides by the root mean square (`energy_pool.json`) | 0.0020 |
+
+So the pool's price is its division by the mean absolute activity: 97% of it goes with a division by the root mean
+square. In spikes the same change does not pay: pools that hear the stream's energy (`--pool-energy`) trail the bed
+by 0.0030 on the mean of two seeds, and the lifted loop with them is 0.0040 behind at full size. The trained streams
+say why the division itself cannot be the price. In both trained models the stream is dense and close to Gaussian,
+its root mean square 1.25 times its mean absolute activity at every token within a few percent, so the two
+divisions differ by a constant that the gains absorb (`stream_loudness.json`). What costs is how the division
+trains. Pools that fire as before and train with the energy's gradient (`--pool-energy-gradient`) are on test in
+floats, on the bed and at full size (`pool_gradient.json`).
+
+## Tried since v20, each by its mark
+
+| Idea | Record | Result |
+|---|---|---|
+| Weight decay on synapses only | `decay_synapses_only_with_data.json`, `full_size_decay_synapses_only.json` | Fails: a lead of 0.0003 on the bed's mean with one seed ahead; 0.0017 worse at full size |
+| Phases for the loop's passes | `loop_phases_with_data.json` | Fails: behind on three of three seeds (0.0023, 0.0043, 0.0037) |
+| The homeostatic gate at 96,000 updates | `homeostatic_gate_at_length.json` | Fails: 0.0097 behind on the mean of two seeds; no form of the gated cell is open |
+| A charge grid four times finer | `charge_grid_at_best_rate.json` | No limit at this length: 0.0066 behind after 24,000 updates |
+| Pools that hear the energy | `energy_pool.json` | Fail on the bed and at full size |
+| A racing loop, the output summing every pass | `racing_loop_screen.json` | Fails: summing costs 0.031; a third of the bytes settle before the last pass, and the best pass for each byte would gain 0.013 |
+| Sleep alone | `sleep_with_data.json` | Fails: 0.0034 ahead on the mean of two seeds, one behind |
+| Sleep with gates that start closed | `sleep_closed_gates_screen.json` | Passes its screen: 0.0061 ahead (0.0052 to 0.0070) on the laptop's seed, for twice the pulses; its server seeds wait |
+
+## The same spikes in less time
+
+The stack trained about ten times slower than its Transformer (16 hours against 1.6 for 90,000 updates), almost all
+of it in the stream stage. Two changes cut a full-size stream update from 0.81 s to 0.18 s on the server's GPU, with
+the same spikes at every weight. A read by age works each byte out against the cells in its reach only
+(`tests/test_read_by_age.py`): 0.42 s. Fused reads (`snnformer/race_kernel.py`, `--fused-reads`) run the race,
+forward and backward, in four GPU kernels: 0.18 s, in 9 GiB of memory for 41, the gradient within 7e-6 of each
+tensor's largest entry. A read that rounds its gradient differently makes another run, as another seed does: two
+reads part within two updates, each repeats itself to the bit, and a trained model scores the same bits by either.
+The data-slope test's new stack runs train with fused reads after a registered check on the deployed copy
+(`full_size_data_slope.json`); this release's checkpoint trained without them.
+
 ## Still running
 
 | Record | Question |
 |---|---|
+| `full_size_lifted_loop_second.json` | The lifted loop with power-law cells for 90,000 updates (fsp-lift2), read against the lifted loop (pre-registered) |
+| `full_size_data_slope.json` | The gap's slope with data at full size: that stack and the Transformer at 45,000, 90,000 and 180,000 updates (pre-registered) |
+| `pool_gradient.json` | Pools that fire as before and train with the energy's gradient: in floats, on the bed's two seeds and in a full-size pilot (pre-registered) |
+| `full_size_power_loop_variants.json` | Skip fibres and the Transformer's rate on the lifted loop with power-law cells, full-size pilots (pre-registered) |
+| `cubic_cells_with_data.json` | Power-law cells whose count grows with the cube of their charge: the bed's two seeds and a full-size pilot (pre-registered) |
+| `sleep_closed_gates_with_data.json` | Sleep with gates that start closed, alone and on the loop, two server seeds at 6,000 and 24,000 updates (pre-registered) |
 | `data_scaling_long.json` | The curves: the Transformer, the delayed stack and the plain stack at 6,000 to 96,000 updates, at each model's best rate |
 | `weight_precision_with_data.json` | Finer charge grids and quantal release, at 6,000 and 24,000 updates |
 | `cell_dither_with_data.json` | Stochastic firing of the threshold cells, alone and with quantal release |
 | `randomness_at_best_rate.json` | Quantal release and stochastic firing at the best rate, 1.2e-3; a third seed on the laptop |
-| `plain_units_with_data.json` | A diagnostic in floats on the server's CPU: the test bed's Transformer with plain or gated units, hard or smooth, at 6,000 and 24,000 updates: which property of the unit falls behind with data (pre-registered) |
-| `full_size_loop_variants.json` | The lifted loop at the Transformer's rate, 1.2e-3 (fs-loop12-lift), against the lifted loop at 6e-4; the old budget and the lifting pool are read (pre-registered) |
-| `sleep_with_data.json` | Sleep (`--stack-sleep 64`): the stack replays every finished window of its stream and rewrites its reads' cells; alone and on the loop, two seeds at 6,000 and 24,000 updates (pre-registered) |
-| `homeostatic_gate_at_length.json` | The homeostatic gate against the plain cell at 96,000 updates on two seeds: does a gate that catches up with data pass it (pre-registered) |
-| `full_size_spikes_late.json` | The second night: half stand-ins with softmax reads only and with real-valued cells only, and the stand-in at the Transformer's rate, 1.2e-3 (diagnostics, never a path) |
+| `sleep_with_data.json` | Sleep (`--stack-sleep 64`) on the loop, two seeds at 6,000 and 24,000 updates; sleep alone is read (pre-registered) |
 | `subthreshold_slope_with_data.json` | The slope far below the threshold (`--granule-slope-tail`): the server's two seeds of the bed at 6,000 and 24,000 updates with a knee arm, and full-size pilots at 6e-4 and 1.2e-3 (pre-registered) |
-| `full_size_units_in_floats.json` | A diagnostic in floats at full size: the Transformer with plain hard, plain smooth and hard gated units in place of its own, 24,000 updates at 3e-4: how much of the layout's distance is the unit (pre-registered) |
-| `full_size_loop_passes.json` | A full-size pilot of a third pass through the loop's middle levels (levels 2 to 8 three times, 2.27 times the plain stack's pulses), 24,000 updates at 6e-4 (pre-registered) |

@@ -1,0 +1,425 @@
+{
+ "study": "written_chains",
+ "recorded_utc": "2026-11-26T17:24:06Z",
+ "kind": "A screen with one seed on the laptop's GPU: the test bed's stack and its Transformer trained on the hop corpus of hop_generalization.json with every query's chain written out before its answer (?zt=mx=qa=7), then tested, writing greedily, on chains of up to 16 hops.",
+ "why": "Trained on direct answers, no arm of hop_generalization.json learned chains of 1 to 4 hops in 24,000 updates: the stack looks up one hop in every line and two in most, the Transformer not even one. In practice_hops.json reward alone did not make the stack write a chain (it wrote a name in 0.5% of its attempts). The one-model plan needs a model that reasons by writing, as a language model does after reading reasoning written out; here a program writes the chains, as a teacher would for language, and the model must learn to write its own. With the chain written, every byte after the query's '=' is one lookup of the name just written, the step the stack already makes in every line; a model that has learned the step should chain as far as it is asked, since the step does not change with the chain's length. This screen asks whether written chains let each model chain at all, and further than the 4 hops it is trained on.",
+ "arms": {
+  "chain-stack": "the laptop's delayed test bed (5,249,060 parameters) trained on streams of 10 windows, as hop-stack-24k",
+  "chain-tf": "the test bed's Transformer (--variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 4; 4,792,320 parameters) trained in windows of 256, as hop-tf-24k"
+ },
+ "corpus": "data/onemodel/hops/hops-1-4-written.bin, from experiments/hop_tasks.py corpus --hops 1 2 3 4 --seed 1 --written-chains: the lines of hops-1-4.bin (the same seed draws the same assignments) with each query's chain written out; sha256 6e095de16ba0bdbd7cf7f24c0ab858b6febe46f5b6b44bc7b8fd136cb78b9828, 64,000,029 train, 2,000,098 validation and 2,000,029 test bytes.",
+ "training": "As hop-stack-24k and hop-tf-24k, with only the corpus changed: experiments/train_event_lm.py --corpus data/onemodel/hops/hops-1-4-written.bin --ctx 256 --bs 16 --steps 24000 --warmup 300 --lr 1.2e-3 --wd 0.05 --seed 20001 --rotated-adam 50 --weight-average 0.999, the bed's other settings unchanged, on the frozen code copy of the hop runs (4d64208); on the laptop's GPU after the bed queue (the cubic cells' laptop seed), one run at a time, chain-stack first.",
+ "measure": "experiments/practice_loop.py --evaluate 1 2 3 4 6 8 12 16 --evaluate-tasks 200 --max-bytes 64 --seed 0 on the averaged weights, from a frozen copy of the commit that records this: for every hop count the 200 tasks that practice_hops.json evaluated, each answered greedily up to a newline or 64 bytes (a chain of 16 hops takes 47); the accuracy of the last byte before the newline with its 95% Wilson interval, the share of answers that write a name, the share that write the query's whole chain right (wrote_the_chain), and the mean bytes. The same evaluation of hop-stack-24k and hop-tf-24k, the bases trained on direct answers, as the reference: practice_hops.json evaluated them before practice with room for 48 bytes, and their accuracies must come out the same here (a check of the evaluator's code); if any differs, the evaluation is examined before anything is read.",
+ "reading": "(1) An arm has learned to chain in writing if its mean accuracy over 1 to 4 hops is at least 0.80. (2) For an arm that has, its written chains reach past the trained length if its accuracy at 8 hops is at least 0.50; reported at 6, 12 and 16 as well, with the share of answers that write the whole chain right. (3) For an arm that has, writing the chain takes it further than answering directly if its accuracy at 8 hops is at least 0.20 above its own architecture's base trained on direct answers (hop-stack-24k, hop-tf-24k) in the same evaluation, with the two 95% intervals apart. (4) If both arms have learned, the stack chains further in writing than the Transformer if at 8 hops and at 16 its accuracy is at least 0.10 above the Transformer's, with the intervals apart. One seed, synthetic: a screen of whether a written chain carries lookups further, not a claim about reasoning in language. If an arm meets (1) but not (2), a practice screen from it (whether reward lengthens written chains) is the next registration.",
+ "seen_before_recording": "hop_generalization.json and practice_hops.json with their results. The new corpus's first five lines, to check its form. No model has trained on it.",
+ "result": {
+  "recorded_utc": "2026-11-26T22:08:23Z",
+  "runs": "chain-stack and chain-tf as registered: trained 24,000 updates each on the written corpus with the frozen code copy 4d64208, one at a time on the laptop's GPU on 2026-11-26 (chain-stack 19:39Z to 21:28Z, chain-tf 21:28Z to 21:47Z), then they and the two bases hop-stack-24k and hop-tf-24k were evaluated on their averaged weights by experiments/practice_loop.py of the frozen copy be42570 (21:48Z), 200 tasks a hop count, greedily, with room for 64 bytes.",
+  "evaluator check": "Passed. hop-stack-24k and hop-tf-24k come out here exactly as practice_hops.json evaluated them before practice, at every one of the eight hop counts: the same accuracy (hop-stack-24k 0.985, 0.865, 0.42, 0.245, 0.305, 0.24, 0.315, 0.395; hop-tf-24k 0.085, 0.105, 0.075, 0.075, 0.065, 0.095, 0.135, 0.105 at 1, 2, 3, 4, 6, 8, 12 and 16 hops), the same share of answers with a name (none) and the same mean bytes (2.0). So the evaluation is read.",
+  "greedy answers, 200 tasks a hop count (right answers; accuracy of the last byte with its 95% Wilson interval; share writing a name; share writing the query's whole chain right; mean bytes)": {
+   "chain-stack": {
+    "1": {
+     "answers": 200,
+     "right": 200,
+     "accuracy": 1.0,
+     "interval_95": [
+      0.9812,
+      1.0
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 1.0,
+     "mean_bytes": 2.0
+    },
+    "2": {
+     "answers": 200,
+     "right": 199,
+     "accuracy": 0.995,
+     "interval_95": [
+      0.9722,
+      0.9991
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.995,
+     "mean_bytes": 5.01
+    },
+    "3": {
+     "answers": 200,
+     "right": 198,
+     "accuracy": 0.99,
+     "interval_95": [
+      0.9643,
+      0.9973
+     ],
+     "wrote_names": 0.995,
+     "wrote_the_chain": 0.99,
+     "mean_bytes": 7.97
+    },
+    "4": {
+     "answers": 200,
+     "right": 199,
+     "accuracy": 0.995,
+     "interval_95": [
+      0.9722,
+      0.9991
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.995,
+     "mean_bytes": 11.0
+    },
+    "6": {
+     "answers": 200,
+     "right": 23,
+     "accuracy": 0.115,
+     "interval_95": [
+      0.0779,
+      0.1666
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.02,
+     "mean_bytes": 18.96
+    },
+    "8": {
+     "answers": 200,
+     "right": 21,
+     "accuracy": 0.105,
+     "interval_95": [
+      0.0697,
+      0.1552
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 17.51
+    },
+    "12": {
+     "answers": 200,
+     "right": 23,
+     "accuracy": 0.115,
+     "interval_95": [
+      0.0779,
+      0.1666
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 14.76
+    },
+    "16": {
+     "answers": 200,
+     "right": 23,
+     "accuracy": 0.115,
+     "interval_95": [
+      0.0779,
+      0.1666
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 14.94
+    }
+   },
+   "chain-tf": {
+    "1": {
+     "answers": 200,
+     "right": 199,
+     "accuracy": 0.995,
+     "interval_95": [
+      0.9722,
+      0.9991
+     ],
+     "wrote_names": 0.005,
+     "wrote_the_chain": 0.995,
+     "mean_bytes": 2.02
+    },
+    "2": {
+     "answers": 200,
+     "right": 198,
+     "accuracy": 0.99,
+     "interval_95": [
+      0.9643,
+      0.9973
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.985,
+     "mean_bytes": 5.01
+    },
+    "3": {
+     "answers": 200,
+     "right": 198,
+     "accuracy": 0.99,
+     "interval_95": [
+      0.9643,
+      0.9973
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.99,
+     "mean_bytes": 8.0
+    },
+    "4": {
+     "answers": 200,
+     "right": 198,
+     "accuracy": 0.99,
+     "interval_95": [
+      0.9643,
+      0.9973
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.985,
+     "mean_bytes": 10.97
+    },
+    "6": {
+     "answers": 200,
+     "right": 14,
+     "accuracy": 0.07,
+     "interval_95": [
+      0.0422,
+      0.1141
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 36.52
+    },
+    "8": {
+     "answers": 200,
+     "right": 18,
+     "accuracy": 0.09,
+     "interval_95": [
+      0.0577,
+      0.1378
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 35.92
+    },
+    "12": {
+     "answers": 200,
+     "right": 23,
+     "accuracy": 0.115,
+     "interval_95": [
+      0.0779,
+      0.1666
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 32.3
+    },
+    "16": {
+     "answers": 200,
+     "right": 21,
+     "accuracy": 0.105,
+     "interval_95": [
+      0.0697,
+      0.1552
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 23.64
+    }
+   },
+   "hop-stack-24k": {
+    "1": {
+     "answers": 200,
+     "right": 197,
+     "accuracy": 0.985,
+     "interval_95": [
+      0.9568,
+      0.9949
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.985,
+     "mean_bytes": 2.0
+    },
+    "2": {
+     "answers": 200,
+     "right": 173,
+     "accuracy": 0.865,
+     "interval_95": [
+      0.8107,
+      0.9055
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "3": {
+     "answers": 200,
+     "right": 84,
+     "accuracy": 0.42,
+     "interval_95": [
+      0.3537,
+      0.4893
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "4": {
+     "answers": 200,
+     "right": 49,
+     "accuracy": 0.245,
+     "interval_95": [
+      0.1906,
+      0.309
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "6": {
+     "answers": 200,
+     "right": 61,
+     "accuracy": 0.305,
+     "interval_95": [
+      0.2454,
+      0.372
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "8": {
+     "answers": 200,
+     "right": 48,
+     "accuracy": 0.24,
+     "interval_95": [
+      0.1861,
+      0.3037
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "12": {
+     "answers": 200,
+     "right": 63,
+     "accuracy": 0.315,
+     "interval_95": [
+      0.2546,
+      0.3823
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "16": {
+     "answers": 200,
+     "right": 79,
+     "accuracy": 0.395,
+     "interval_95": [
+      0.3298,
+      0.4641
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    }
+   },
+   "hop-tf-24k": {
+    "1": {
+     "answers": 200,
+     "right": 17,
+     "accuracy": 0.085,
+     "interval_95": [
+      0.0537,
+      0.1319
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.085,
+     "mean_bytes": 2.0
+    },
+    "2": {
+     "answers": 200,
+     "right": 21,
+     "accuracy": 0.105,
+     "interval_95": [
+      0.0697,
+      0.1552
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "3": {
+     "answers": 200,
+     "right": 15,
+     "accuracy": 0.075,
+     "interval_95": [
+      0.046,
+      0.12
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "4": {
+     "answers": 200,
+     "right": 15,
+     "accuracy": 0.075,
+     "interval_95": [
+      0.046,
+      0.12
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "6": {
+     "answers": 200,
+     "right": 13,
+     "accuracy": 0.065,
+     "interval_95": [
+      0.0384,
+      0.108
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "8": {
+     "answers": 200,
+     "right": 19,
+     "accuracy": 0.095,
+     "interval_95": [
+      0.0617,
+      0.1436
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "12": {
+     "answers": 200,
+     "right": 27,
+     "accuracy": 0.135,
+     "interval_95": [
+      0.0945,
+      0.1893
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    },
+    "16": {
+     "answers": 200,
+     "right": 21,
+     "accuracy": 0.105,
+     "interval_95": [
+      0.0697,
+      0.1552
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 2.0
+    }
+   }
+  },
+  "mean accuracy over 1 to 4 hops": {
+   "chain-stack": 0.995,
+   "chain-tf": 0.9912,
+   "hop-stack-24k": 0.6288,
+   "hop-tf-24k": 0.085
+  },
+  "learned to chain in writing (>= 0.80)": {
+   "chain-stack": true,
+   "chain-tf": true
+  },
+  "reading": "(1) Both arms have learned to chain in writing: the mean accuracy over 1 to 4 hops is 0.9950 for chain-stack (1.000, 0.995, 0.990, 0.995) and 0.9912 for chain-tf (0.995, 0.990, 0.990, 0.990), against the mark of 0.80, and at these lengths each writes the query's whole chain right in 0.985 to 1.000 of its answers. (2) Neither arm's written chains reach past the trained length: at 8 hops chain-stack answers 0.105 right [0.070, 0.155] and chain-tf 0.090 [0.058, 0.138], against the mark of 0.50. At 6, 12 and 16 hops chain-stack answers 0.115, 0.115 and 0.115 right and chain-tf 0.070, 0.115 and 0.105. Past 4 hops every answer of both arms writes a name, but the whole chain is right in 0.02 of chain-stack's answers at 6 hops, in none of its answers at 8, 12 and 16 hops, and in none of chain-tf's at any of the four. (3) Writing the chain does not take either arm further than answering directly: at 8 hops chain-stack's 0.105 is 0.135 below hop-stack-24k's 0.240 [0.186, 0.304], the two intervals apart with the written chains below, and chain-tf's 0.090 is 0.005 below hop-tf-24k's 0.095 [0.062, 0.144], the intervals overlapping; the mark is 0.20 above with the intervals apart. (4) Both arms have learned, and the stack does not chain further in writing than the Transformer: 0.105 against 0.090 at 8 hops (+0.015) and 0.115 against 0.105 at 16 (+0.010), the intervals overlapping at both, against the mark of 0.10 above at both with the intervals apart. Both arms meet (1) but not (2), so by the reading a practice screen from them (whether reward lengthens written chains) is the next registration. Not part of the reading: within the trained lengths the written chain is what lets each model make the lookups. In the same evaluation the bases trained on direct answers reach a mean of 0.6288 (hop-stack-24k: 0.985, 0.865, 0.420, 0.245) and 0.0850 (hop-tf-24k, near chance at every hop count); with the chains written out the stack's 3 and 4 hops rise from 0.420 and 0.245 to 0.990 and 0.995, and the Transformer learns the task at all. Past the trained lengths both arms answer about one line in ten right (0.070 to 0.115), the level of a guess among the ten digits and below the direct-answer stack's 0.240 to 0.395 there. The lengths show how they fail. A right chain takes 17, 23, 35 and 47 bytes at 6, 8, 12 and 16 hops; chain-stack writes 19.0, 17.5, 14.8 and 14.9 bytes on average, about the length of a chain of 5 to 7 hops whatever the query asks, and chain-tf writes 36.5, 35.9, 32.3 and 23.6, too many at 6 and 8 hops and too few at 16. So neither arm has learned a step that it repeats until the chain ends, the hope this screen was registered with: each has learned to write chains of the lengths in its text. One seed, synthetic lookups, 200 tasks a hop count: this shows that a spiking stack learns to write and use a chain of thought from text that writes chains out, as well as the Transformer does at the lengths it has read, and that neither carries it to longer chains; it is not a claim about reasoning in language."
+ }
+}

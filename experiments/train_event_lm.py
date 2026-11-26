@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 from contextlib import contextmanager
 from dataclasses import asdict, replace
 import hashlib
@@ -32,9 +33,12 @@ from common import (
     setup,
 )
 from snnformer import SNNConfig, count_params
+import snnformer.event_lm as event_lm_module
+from snnformer import whole_products
+from speed_options import GraphedWindows, compile_cells
 from snnformer.event_lm import (
-    EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES, echo_feedback,
-    weight_dither, cell_dither, cell_noise,
+    CONTROL_PARAMETERS, EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES,
+    echo_feedback, weight_dither, cell_dither, cell_noise,
 )
 from train_lm import DATA, ENWIK8_SHA1, load_splits, random_batch
 
@@ -60,6 +64,20 @@ EVENT_ROUTES = {
     "event_phase_delay": "steered_phase_delay",
     "event_balanced": "steered_balanced",
 }
+
+
+def load_corpus(path: Path):
+    """The train, validation and test bytes of a raw corpus whose sidecar ``path.json`` names their sizes."""
+    sidecar = json.loads(Path(f"{path}.json").read_text())
+    raw = path.read_bytes()
+    sizes = [int(sidecar[split]) for split in ("train", "validation", "test")]
+    if sum(sizes) != len(raw):
+        raise ValueError(f"{path}: {len(raw):,} bytes where its sidecar names {sum(sizes):,}")
+    if "sha256" in sidecar and hashlib.sha256(raw).hexdigest() != sidecar["sha256"]:
+        raise ValueError(f"{path}: checksum does not match its sidecar")
+    data = np.frombuffer(raw, dtype=np.uint8)
+    first, second = sizes[0], sizes[0] + sizes[1]
+    return data[:first], data[first:second], data[second:]
 
 
 def scoring_logits(output: torch.Tensor, event: bool, resolution: int = 1) -> torch.Tensor:
@@ -141,7 +159,9 @@ def guided_language_loss(logits, targets, teacher_logits, weight):
 
 # A continued run may change these without changing what it trains: where it stops, on what it runs and where it
 # writes. A saved state that is moved with its folder to another machine continues there.
-_RESUME_FREE = frozenset(("stop_at", "force", "threads", "device", "checkpoint", "results_dir"))
+# Settings that change how fast a run goes and not what it computes (speed_options.py): a run may resume with others.
+_SPEED_OPTIONS = frozenset(("fused_optimizer", "cuda_graph", "compile_cells", "fused_reads", "exact_products"))
+_RESUME_FREE = frozenset(("stop_at", "force", "threads", "device", "checkpoint", "results_dir")) | _SPEED_OPTIONS
 
 
 def _on_cpu(value):
@@ -363,7 +383,16 @@ def build_model(args):
                                         else tuple(map(int, args.stack_loop.split(",")))),
                             stack_skips=getattr(args, "stack_skips", EventLMConfig.stack_skips),
                             stack_sleep=getattr(args, "stack_sleep", EventLMConfig.stack_sleep),
+                            stack_sleep_keep=getattr(args, "stack_sleep_keep", EventLMConfig.stack_sleep_keep),
+                            stack_loop_phases=bool(getattr(args, "stack_loop_phases", False)),
+                            stack_loop_exits=bool(getattr(args, "stack_loop_exits", False)),
+                            balanced_synapses=bool(getattr(args, "balanced_synapses", False)),
+                            pool_energy=bool(getattr(args, "pool_energy", False)),
+                            pool_energy_gradient=bool(getattr(args, "pool_energy_gradient", False)),
                             granule_cap=getattr(args, "granule_cap", EventLMConfig.granule_cap),
+                            granule_power=getattr(args, "granule_power", EventLMConfig.granule_power),
+                            granule_power_exponent=getattr(args, "granule_power_exponent",
+                                                           EventLMConfig.granule_power_exponent),
                             read_cap=getattr(args, "read_cap", EventLMConfig.read_cap),
                             read_phases=getattr(args, "read_phases", EventLMConfig.read_phases),
                             read_turn=getattr(args, "read_turn", EventLMConfig.read_turn),
@@ -419,7 +448,8 @@ def build_model(args):
     cfg = replace(VARIANTS[args.variant], mlp_ratio=args.mlp_ratio, local_window=args.local_window,
                   feed_forward=getattr(args, "feed_forward", SNNConfig.feed_forward),
                   age_offsets=getattr(args, "age_offsets", SNNConfig.age_offsets),
-                  untied_output=getattr(args, "untied_output", SNNConfig.untied_output))
+                  untied_output=getattr(args, "untied_output", SNNConfig.untied_output),
+                  norm=getattr(args, "transformer_norm", SNNConfig.norm))
     if args.local_lookback is not None:
         per_layer, extra = divmod(args.local_lookback - 1, args.depth)
         model_kwargs["local_windows"] = tuple(1 + per_layer + (layer < extra) for layer in range(args.depth))
@@ -614,6 +644,9 @@ def main():
     parser.add_argument("--data", type=Path, default=Path(os.environ.get("ENWIK8_PATH", str(DATA))))
     parser.add_argument("--training-mixture", type=Path,
                         help="sample training windows from a pinned byte mixture catalogue")
+    parser.add_argument("--corpus", type=Path,
+                        help="train and validate on a raw byte file split by its sidecar FILE.json (train, validation "
+                             "and test bytes, in that order) instead of enwik8, such as experiments/hop_tasks.py writes")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda", "auto"), default="cpu")
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--seed", type=int, default=0)
@@ -712,6 +745,26 @@ def main():
                              "input and after each earlier level, through a gain for every channel that starts at "
                              "zero (level), or the read's probes, tags and payloads each through gains of their "
                              "own (parts); every pass of a loop has its own gains")
+    parser.add_argument("--stack-sleep-keep", type=float, default=EventLMConfig.stack_sleep_keep, metavar="SHARE",
+                        help="the share of a stored cell that a sleeping read's gates keep before they learn: 0.5, "
+                             "or near 1 for gates that start closed, where sleep starts as the stack without it")
+    parser.add_argument("--pool-energy", action="store_true",
+                        help="the inhibitory pools of a stack hear the stream's energy (the root of its summed squared "
+                             "counts times its width) in place of its summed counts: division by the stream's spread")
+    parser.add_argument("--pool-energy-gradient", action="store_true",
+                        help="the inhibitory pools of a stack hear the summed counts but train with the gradient of "
+                             "the stream's energy, scaled to the summed counts, in place of the counts' sign pattern")
+    parser.add_argument("--balanced-synapses", action="store_true",
+                        help="every neuron of a stack's reads, plain cells and output has synapses that sum to zero over "
+                             "the stream's channels: balanced excitation and inhibition, which centres what it hears")
+    parser.add_argument("--stack-loop-exits", action="store_true",
+                        help="a racing loop: the output neurons hear the end of every pass of the loop and sum it as "
+                             "evidence; the evidence after each earlier pass is trained as a prediction of its own")
+    parser.add_argument("--loop-exit-weight", type=float, default=1.0,
+                        help="the weight of the mean loss of a racing loop's earlier passes beside the top's")
+    parser.add_argument("--stack-loop-phases", action="store_true",
+                        help="every pass of a looped level after its first has its own resting charge for each cell "
+                             "and its own offset to each read head's gain, starting at zero")
     parser.add_argument("--stack-sleep", type=int, default=EventLMConfig.stack_sleep, metavar="WINDOW",
                         help="sleep: after every WINDOW bytes of a stream the stack replays the window, every level "
                              "once more from the stream at its top, its reads reaching the whole window, and each "
@@ -813,6 +866,15 @@ def main():
     parser.add_argument("--granule-cap", type=int, default=EventLMConfig.granule_cap,
                         help="most spikes a granule cell fires at a byte; a stream neuron's largest count when "
                              "omitted")
+    parser.add_argument("--granule-power", type=int, default=EventLMConfig.granule_power, metavar="THRESHOLDS",
+                        help="power-law cells: a plain cell fires round(k * k / THRESHOLDS) spikes for k thresholds "
+                             "of charge above its rest, up to its largest count, as a plain cell does at THRESHOLDS; "
+                             "plain cells when omitted or 0")
+    parser.add_argument("--granule-power-exponent", type=int, choices=(2, 3),
+                        default=EventLMConfig.granule_power_exponent, metavar="POWER",
+                        help="with --granule-power P: the power of a cell's count, round(k^POWER / P^(POWER-1)) "
+                             "spikes for k thresholds, as a plain cell fires at P thresholds; 2 (the square) when "
+                             "omitted, or 3 (the cube)")
     parser.add_argument("--granule-gate", type=int, default=EventLMConfig.granule_gate, metavar="SPIKES",
                         help="every granule cell has a gate dendrite and a value dendrite: each gate spike lets "
                              "the value dendrite's charge into the cell body once, and SPIKES of them are a "
@@ -1020,6 +1082,10 @@ def main():
     parser.add_argument("--untied-output", action="store_true",
                         help="as a control the Transformer's output layer has weights of its own in place of the "
                              "embedding's, as the output synapses of a stack have")
+    parser.add_argument("--transformer-norm", choices=("layer", "pool", "cpool", "spool", "gpool"), default=SNNConfig.norm,
+                        help="as a control the Transformer's LayerNorms become pools: the stream divided by its mean "
+                             "absolute activity and a learned rest, with a gain per channel and no centring, as a "
+                             "stack's inhibitory pool raises its thresholds")
     parser.add_argument("--local-window", type=int, default=32, help="local Transformer attention window")
     parser.add_argument("--local-lookback", type=int, help="effective context including the current byte")
     parser.add_argument("--ctx", type=int, default=256)
@@ -1062,12 +1128,30 @@ def main():
     parser.add_argument("--rotate-stacks", action="store_true",
                         help="with --rotated-adam, also turn every matrix of a three-dimensional weight, such as "
                              "the synapses of granule cells")
+    parser.add_argument("--decay-synapses-only", action="store_true",
+                        help="weight decay acts on synapses only: a stack's gains, grains, offsets by age, resting "
+                             "charges and other charges are not pulled toward their starting values")
     parser.add_argument("--lr-scale", type=_lr_scales, default=(), metavar="PART=FACTOR,...",
                         help="multiply the learning rate of every parameter whose name contains a part by that "
                              "part's factor; of several matching parts the longest counts")
     parser.add_argument("--weight-average", type=float,
                         help="also keep a running average of the weights with this decay, score it at every "
                              "evaluation and save it beside the checkpoint")
+    speed = parser.add_argument_group("speed (experiments/speed_options.py): the same updates in less time")
+    speed.add_argument("--fused-optimizer", action="store_true",
+                       help="the rotated optimizer's element-wise steps over all tensors at once")
+    speed.add_argument("--cuda-graph", action="store_true",
+                       help="capture an update on windows (the first stage) in a CUDA graph and replay it; the "
+                            "optimizer's step size then lives on the device (equal to rounding)")
+    speed.add_argument("--compile-cells", action="store_true",
+                       help="compile the cell layers' and the state reads' element-wise chains (torch.compile)")
+    speed.add_argument("--fused-reads", action="store_true",
+                       help="a stream's race reads in the fused kernels of snnformer/race_kernel.py")
+    speed.add_argument("--exact-products", action="store_true",
+                       help="the products of whole spike counts and whole synapse ticks on the tensor cores, to the "
+                            "bit (snnformer/whole_products.py): cuBLAS's tensor-core single precision, switched on "
+                            "for these products alone; an update and an evaluation now and then check every product "
+                            "against single precision")
     parser.add_argument("--eval-every", type=int, default=250)
     parser.add_argument("--eval-bs", type=int, default=12)
     parser.add_argument("--eval-batches", type=int, default=8)
@@ -1174,6 +1258,10 @@ def main():
         parser.error("pulse budget must be positive and finite")
     if args.cell_noise is not None and (not math.isfinite(args.cell_noise) or not 0 < args.cell_noise <= 4):
         parser.error("--cell-noise takes a width of more than 0 and at most 4 thresholds")
+    if args.granule_power and (args.cell_noise is not None or args.cell_dither):
+        parser.error("power-law cells count their charge without noise or dither")
+    if args.granule_power_exponent != 2 and not args.granule_power:
+        parser.error("--granule-power-exponent sets the power of power-law cells: it needs --granule-power")
     if args.cell_noise is not None and args.cell_dither:
         parser.error("--cell-noise and --cell-dither are two kinds of random firing; choose one")
     if args.cell_noise is not None and args.granule_slope_tail:
@@ -1199,6 +1287,8 @@ def main():
     if args.stream is not None and ((args.save_every and args.save_every % rounds) or args.stream_from % rounds):
         parser.error("the stretches of all --stream-groups take a number of updates that divides --save-every "
                      "and --stream-from")
+    if args.corpus is not None and args.training_mixture is not None:
+        parser.error("--corpus trains on its own bytes; drop --training-mixture")
     if args.stream_from and (args.stream is None or not 0 < args.stream_from < args.steps):
         parser.error("--stream-from needs --stream and an update below --steps")
     event = args.variant in EVENT_ROUTES
@@ -1210,7 +1300,8 @@ def main():
     try:
         device = resolve_device(args.device)
         checkpoint = checkpoint_path(args)
-        train, val, test = load_splits(args.data.expanduser())
+        train, val, test = (load_splits(args.data.expanduser()) if args.corpus is None
+                            else load_corpus(args.corpus.expanduser()))
         mixture = (None if args.training_mixture is None
                    else TrainingMixture(args.training_mixture.expanduser(), train, args.ctx))
         max_windows = args.eval_bs * max(args.eval_batches, args.final_eval_batches)
@@ -1326,7 +1417,9 @@ def main():
         parser.error("--stream trains a stack whose reads and cells carry their state, with a validation split "
                      "that holds its streams")
     optimizer = make_optimizer(model, args.lr, args.wd, betas=(0.9, args.adam_beta2), rotated=args.rotated_adam,
-                               stacks=args.rotate_stacks, scales=args.lr_scale)
+                               stacks=args.rotate_stacks, scales=args.lr_scale,
+                               exempt=CONTROL_PARAMETERS if args.decay_synapses_only else frozenset(),
+                               foreach=args.fused_optimizer or args.cuda_graph, capturable=args.cuda_graph)
     average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
     feedback = None if args.echo is None else EchoFeedback(args.echo_seed)
     if args.read_credit is not None:
@@ -1400,6 +1493,33 @@ def main():
         for number in (signal.SIGTERM, signal.SIGUSR1):
             signal.signal(number, ask)
     cycle = 1 if args.stream is None else args.stream * args.stream_groups
+    if args.fused_reads:
+        event_lm_module._READ_FUSED = True
+    if args.exact_products:
+        if device.type != "cuda":
+            parser.error("--exact-products takes the tensor cores of a CUDA device")
+        if args.compile_cells:
+            parser.error("--exact-products is not wired into --compile-cells yet")
+        whole_products.ON = True
+    # Every product on the tensor cores is checked against single precision in the first update and in the first
+    # one after each evaluation that the trainer runs kernel by kernel, and through each evaluation on windows.
+    audit_due = bool(args.exact_products)
+    if args.compile_cells:
+        compile_cells(model)
+    graphed = None
+    if args.cuda_graph:
+        refused = [flag for flag, on in (
+            ("--teacher-checkpoint", teacher is not None), ("--echo", args.echo is not None),
+            ("--bank-read-rank-weight", bool(args.bank_read_rank_weight)),
+            ("--code-loss-weight", bool(args.code_loss_weight)),
+            ("--early-readout-weight", bool(args.early_readout_weight)), ("--weight-dither", bool(args.weight_dither)),
+            ("--cell-dither", bool(args.cell_dither)), ("--cell-noise", bool(args.cell_noise)),
+            ("--stack-loop-exits", bool(getattr(model, "exit_counts", None)))) if on]
+        if refused or args.rotated_adam is None or not event:
+            parser.error("--cuda-graph trains an event model with --rotated-adam, without "
+                         + (", ".join(refused) or "a teacher, echoes, extra losses or dither"))
+        graphed = GraphedWindows(model, optimizer, args, device, average, pulse_counts,
+                                 spike_price if pulse_counts is not None else None)
     for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
@@ -1415,78 +1535,98 @@ def main():
         else:
             inputs, labels = drawn
         inputs = inputs.to(device)
-        if pulse_counts is not None:
-            pulse_counts.clear()
-        forward_options = {} if pulse_counts is None else {"memory_pulses": pulse_counts}
-        tape = None
-        if args.echo is not None:
-            tape = forward_options["echo"] = EchoTape(everywhere=args.echo == "all")
-        if args.bank_read_rank_weight:
-            bank_read_losses = []
-            forward_options["bank_read_losses"] = bank_read_losses
-        if args.early_readout_weight:
-            forward_options["early_readout"] = args.clock_start if args.early_readout is None else args.early_readout
-        # The cells' membrane noise falls with the learning rate, so that training ends on whole counts.
-        share = cosine_lr(step - 1, args.steps, args.warmup, args.lr) / args.lr
-        with weight_dither(args.weight_dither), cell_dither(args.cell_dither), cell_noise(args.cell_noise or 0.0, share):
-            if args.code_loss_weight:
-                counts, predicted, observed, *early = model(
-                    inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
-                )
-                if args.learn_context_keys:
-                    predicted = predicted[..., args.forecast_key_channels:]
-                    observed = observed[..., args.forecast_key_channels:]
-                resolution = args.spike_resolution
-                code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
-            elif args.early_readout_weight:
-                counts, *early = model(inputs, **forward_options)
-            elif on_streams:
-                # The state carries no gradient: a window learns from what it fires itself.
-                counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
-            else:
-                counts = model(inputs, **forward_options)
-        logits = scoring_logits(counts, event, args.spike_resolution)
-        targets = labels.to(device)
-        if teacher is None:
-            language_loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten())
-            loss = language_loss
+        if graphed is not None and not on_streams and graphed.ready():
+            # The update on windows replays its CUDA graph: the same kernels, none launched one by one.
+            average_share = 0.0 if average is None else 1 - min(args.weight_average, step / (step + 10))
+            whole_products.AUDIT = False
+            language_loss, pulses = graphed.run(inputs, labels.to(device), average_share)
+            if pulse_counts is not None:
+                spike_price = graphed.spike_price
         else:
-            with torch.no_grad():
-                guidance = scoring_logits(teacher(inputs), teacher_event, teacher_resolution)
-            loss, language_loss, teacher_fraction = guided_language_loss(logits, targets, guidance, args.teacher_weight)
-        if args.code_loss_weight:
-            loss = loss + args.code_loss_weight * code_loss
-        if args.early_readout_weight:
-            early_logits = scoring_logits(early[0], event, model.forecast_resolution)
-            early_loss = F.cross_entropy(early_logits.flatten(0, 1), targets.flatten())
-            loss = loss + args.early_readout_weight * early_loss
-        if args.bank_read_rank_weight:
-            (bank_read_loss,) = bank_read_losses
-            loss = loss + args.bank_read_rank_weight * bank_read_loss
-        if pulse_counts is not None:
-            pulses = torch.stack(pulse_counts).sum() / inputs.numel()
-            gap = pulses / args.pulse_budget - 1.0
-            loss = loss + spike_price * gap + 0.5 * gap.relu().square()
-            spike_price = (spike_price + 0.04 * gap.detach()).clamp_min(0)
-        optimizer.zero_grad(set_to_none=True)
-        if tape is None:
-            loss.backward()
-        else:
-            echo_backward(loss, logits, targets, tape, feedback, mirror=args.echo_feedback == "mirror")
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
-        if event:
-            # A neuron whose summed synapses left the range of exact sums shrinks them all by one factor.
-            scaled_neurons += model.synaptic_scaling()
-        if average is not None:
-            # The average follows the weights closely at first, so the starting weights do not linger in it.
-            decay = min(args.weight_average, step / (step + 10))
-            with torch.no_grad():
-                for mean, parameter in zip(average, model.parameters(), strict=True):
-                    mean.lerp_(parameter, 1 - decay)
+            whole_products.AUDIT, audit_due = audit_due, False
+            with graphed.warm() if graphed is not None and not on_streams else contextlib.nullcontext():
+                if pulse_counts is not None:
+                    pulse_counts.clear()
+                forward_options = {} if pulse_counts is None else {"memory_pulses": pulse_counts}
+                tape = None
+                if args.echo is not None:
+                    tape = forward_options["echo"] = EchoTape(everywhere=args.echo == "all")
+                if args.bank_read_rank_weight:
+                    bank_read_losses = []
+                    forward_options["bank_read_losses"] = bank_read_losses
+                if args.early_readout_weight:
+                    forward_options["early_readout"] = args.clock_start if args.early_readout is None else args.early_readout
+                # The cells' membrane noise falls with the learning rate, so that training ends on whole counts.
+                share = cosine_lr(step - 1, args.steps, args.warmup, args.lr) / args.lr
+                with weight_dither(args.weight_dither), cell_dither(args.cell_dither), cell_noise(args.cell_noise or 0.0, share):
+                    if args.code_loss_weight:
+                        counts, predicted, observed, *early = model(
+                            inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
+                        )
+                        if args.learn_context_keys:
+                            predicted = predicted[..., args.forecast_key_channels:]
+                            observed = observed[..., args.forecast_key_channels:]
+                        resolution = args.spike_resolution
+                        code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
+                    elif args.early_readout_weight:
+                        counts, *early = model(inputs, **forward_options)
+                    elif on_streams:
+                        # The state carries no gradient: a window learns from what it fires itself.
+                        counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
+                    else:
+                        counts = model(inputs, **forward_options)
+                logits = scoring_logits(counts, event, args.spike_resolution)
+                targets = labels.to(device)
+                if teacher is None:
+                    language_loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten())
+                    loss = language_loss
+                else:
+                    with torch.no_grad():
+                        guidance = scoring_logits(teacher(inputs), teacher_event, teacher_resolution)
+                    loss, language_loss, teacher_fraction = guided_language_loss(logits, targets, guidance, args.teacher_weight)
+                if args.code_loss_weight:
+                    loss = loss + args.code_loss_weight * code_loss
+                if event and getattr(model, "exit_counts", None):
+                    # The racing loop's earlier passes: each pass's summed evidence learns to predict the byte by itself.
+                    exit_loss = torch.stack([F.cross_entropy(scoring_logits(evidence, event, args.spike_resolution).flatten(0, 1),
+                                                             targets.flatten()) for evidence in model.exit_counts]).mean()
+                    loss = loss + args.loop_exit_weight * exit_loss
+                if args.early_readout_weight:
+                    early_logits = scoring_logits(early[0], event, model.forecast_resolution)
+                    early_loss = F.cross_entropy(early_logits.flatten(0, 1), targets.flatten())
+                    loss = loss + args.early_readout_weight * early_loss
+                if args.bank_read_rank_weight:
+                    (bank_read_loss,) = bank_read_losses
+                    loss = loss + args.bank_read_rank_weight * bank_read_loss
+                if pulse_counts is not None:
+                    pulses = torch.stack(pulse_counts).sum() / inputs.numel()
+                    gap = pulses / args.pulse_budget - 1.0
+                    loss = loss + spike_price * gap + 0.5 * gap.relu().square()
+                    spike_price = (spike_price + 0.04 * gap.detach()).clamp_min(0)
+                optimizer.zero_grad(set_to_none=True)
+                if tape is None:
+                    loss.backward()
+                else:
+                    echo_backward(loss, logits, targets, tape, feedback, mirror=args.echo_feedback == "mirror")
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+                if event:
+                    # A neuron whose summed synapses left the range of exact sums shrinks them all by one factor.
+                    scaled_neurons += model.synaptic_scaling()
+                if average is not None:
+                    # The average follows the weights closely at first, so the starting weights do not linger in it.
+                    decay = min(args.weight_average, step / (step + 10))
+                    with torch.no_grad():
+                        for mean, parameter in zip(average, model.parameters(), strict=True):
+                            mean.lerp_(parameter, 1 - decay)
         if step % args.eval_every == 0 or step == args.steps:
+            if graphed is not None:
+                scaled_neurons = scaled_neurons + graphed.take_scaled()
+                graphed.check_weights()
             scaled_neurons = int(scaled_neurons)
+            whole_products.AUDIT = audit_due = bool(args.exact_products)
             metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
+            whole_products.AUDIT = False
             flowing = evaluate_stream(model, val, batches=args.eval_batches, **evaluate_options) if streams else None
             averaged_metrics = averaged_flowing = None
             if average is not None:
@@ -1573,6 +1713,7 @@ def main():
     for label, score in stream_scores.items():
         print(f"{name} {label.replace('_', ' ')}: {score['bpb']:.4f} bpb", flush=True)
     args_record = dict(vars(args), data=str(args.data), results_dir=None if results_dir is None else str(results_dir),
+                       corpus=None if args.corpus is None else str(args.corpus),
                        synapse_readout=None if args.synapse_readout is None else str(args.synapse_readout),
                        head_readout=None if args.head_readout is None else str(args.head_readout),
                        load_weights=loaded_weights,

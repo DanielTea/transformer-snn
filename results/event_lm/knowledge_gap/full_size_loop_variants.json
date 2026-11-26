@@ -138,5 +138,70 @@
    "still owed": "fs-loop12-lift (the rate) on GPU 1 after fs-loop9."
   },
   "verdict": "The next full-length loop run trains at 507,000 pulses a byte under the lifting pool; its rate waits for fs-loop12-lift. One seed: a recipe choice, not a finding about the parts. fs-loop6-lift (1.30073) is the best spiking full-size pilot at 24,000 updates so far, 0.017 behind the Transformer at the same rate (fs-tf6 1.28370) and 0.005 ahead of the Transformer at 3e-4 (fs-tf3 1.30572)."
+ },
+ "result_rate": {
+  "recorded_utc": "2026-11-25T20:21:52Z",
+  "bpb": {
+   "fs-loop6-lift": 1.300729,
+   "fs-loop12-lift": 1.297606
+  },
+  "lead over fs-loop6-lift (paired, compare_stream_scores on the first 2,000,000 validation bytes as 16 streams; above zero the arm is better)": {
+   "fs-loop12-lift": {
+    "lead": 0.00312,
+    "interval_95": [
+     0.00233,
+     0.00395
+    ]
+   }
+  },
+  "by context, arm minus fs-loop6-lift (gap_by_piece, near 240, far 8,192; below zero favours the arm)": {
+   "fs-loop12-lift": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.0131,
+     "interval_95": [
+      -0.0216,
+      -0.0042
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": -0.015,
+     "interval_95": [
+      -0.0282,
+      -0.0018
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": 0.0064,
+     "interval_95": [
+      -0.0517,
+      0.0669
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": -0.0011,
+     "interval_95": [
+      -0.0037,
+      0.0015
+     ]
+    }
+   }
+  },
+  "beside the Transformer at the same rate": "fs-tf12 1.27625: fs-loop12-lift is 0.0214 behind it (unpaired), against fs-loop6-lift's 0.017 behind fs-tf6 at 6e-4",
+  "pulses_a_byte_at_24k": {
+   "fs-loop12-lift": 514133,
+   "fs-loop6-lift": 513300
+  },
+  "seconds_for_24k_updates": {
+   "fs-loop12-lift": 7298.3,
+   "note": "the run's own clock; trained beside fs-loop9 on GPU 1 under MPS, paused once at the close of 2026-11-25 and resumed at 16:45Z"
+  },
+  "saturation": "not measured in this reading; still owed",
+  "reading": "fs-loop12-lift is 0.0031 better than fs-loop6-lift [0.0023, 0.0040]: between 0.003 and 0.005, unclear and reported, and the rate stays 6e-4. The gain sits on copies (arm minus base: near -0.0131, far only -0.0150); on new contexts -0.0011 [-0.0037, 0.0015]. The Transformer gains 0.0075 from the same doubling (fs-tf6 1.28370 to fs-tf12 1.27625); the lifted loop gains 0.0031.",
+  "applied": "sched/bin/fll-decide.sh applied this reading at 2026-11-25T17:15Z: fsp-lift trains at 6e-4.",
+  "verdict": "The lifted loop's next full-length run trains at 6e-4. One seed: a recipe choice."
  }
 }

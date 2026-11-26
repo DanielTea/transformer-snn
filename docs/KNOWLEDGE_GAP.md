@@ -44,6 +44,13 @@ stack is behind by 0.05 on test and 0.10 on validation, completing words it has 
 
 Records: `gap_by_piece_test.json`, `gap_by_piece_validation.json`.
 
+For v20's looped stack against the Transformer at its best rate the same fit by kind of byte puts the gap in letters
+and markup: letters, 72% of the bytes, are 0.036 behind on test and 0.075 on validation, wiki and XML markup (6%)
+0.075 and 0.137, and the bytes of multi-byte characters (0.6%) 0.24 and 0.17, while the stack is far ahead on
+punctuation (0.25 and 0.30) and line breaks (0.66 and 0.69). Letters and spaces rise and fall together from piece to
+piece, so only the narrow intervals are read; the loop's own gain over the plain stack is mostly in letters (0.012
+on test). What the stack lacks is the knowledge of how words and markup go on, which its memory cannot copy.
+
 ## What was tried
 
 All test-bed arms have the test bed's parameters (about 5.25 million) within a few hundred, train on streams unless
@@ -163,8 +170,16 @@ stack, and nine tenths of that gain is on new contexts: 0.0116 better there on t
 distance on new contexts falls from 0.090 to 0.078 and the whole gap from 0.034 to 0.025. Depth by recurrence is the
 first part to narrow the knowledge gap at full length; it fires 1.63 times the pulses and adds no parameters.
 
+v21 trained that looped stack under the pool that lifts the ceiling, which divides a neuron's charge before its
+membrane bounds it, with nothing else changed (`full_size_lifted_loop_run.json`). It scores 1.0817 on test and 1.1136
+on validation, 0.0222 and 0.0251 better than v20's stack at the same parameters and pulses, and more than all of that
+gain is on new contexts: 0.0340 better there on test and 0.0371 on validation. Against the Transformer the distance
+on new contexts falls from 0.078 to 0.044 on test and from 0.090 to 0.052 on validation, and the whole gap from 0.025
+to 0.003 and from 0.034 to 0.009. The stack is still behind on both splits. What is left of the gap is knowledge: the
+stack is ahead wherever a context offers a copy (0.087 near, 0.44 far on test) and 0.044 behind where it offers none.
+
 Records: `full_size.json`, `full_size_word_heads.json`, `full_size_best_rate_pair.json`, `full_size_loop_run.json`,
-`results/event_lm/trained_plasticity/arms.json`.
+`full_size_lifted_loop_run.json`, `results/event_lm/trained_plasticity/arms.json`.
 
 ## What this means
 

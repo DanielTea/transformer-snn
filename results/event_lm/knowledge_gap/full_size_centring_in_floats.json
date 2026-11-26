@@ -1,0 +1,71 @@
+{
+ "study": "full_size_centring_in_floats",
+ "recorded_utc": "2026-11-25T22:12:07Z",
+ "kind": "A float diagnostic at full size, one seed, 24,000 updates at 3e-4: the Transformer with a pool that takes out the stream's mean before it divides, beside its LayerNorm and the plain pool.",
+ "why": "full_size_layout_in_floats.json: the stack's pool in place of every LayerNorm costs the Transformer 0.0691 [0.0682, 0.0701], mostly on new contexts, three times the distance that the layout's other parts were thought to hold. The pool differs from LayerNorm in two ways: it takes no mean out (no centring), and it divides by the mean absolute activity instead of the spread. A spiking stack can centre with balanced inhibition (each neuron inhibited by a pool that fires the stream's summed activity, through a synapse that matches the mean of the neuron's own synapses, as excitation and inhibition balance in cortex), or divide differently; this diagnostic says which of the two the price is before the stack is rebuilt.",
+ "arms": {
+  "fs-tf3-cpool": "sched/bin/full.sh transformer fs-tf3-cpool --transformer-norm cpool: every LayerNorm becomes the pool of fs-tf3-pool applied to the stream less its mean, divided by its mean absolute deviation and a learned rest, with a gain per channel; 34,740,247 parameters, as fs-tf3-pool"
+ },
+ "base": "fs-tf3 1.305716 (LayerNorm) and fs-tf3-pool 1.374858 (the pool without centring): the same recipe, seed and measure.",
+ "runs": "fs-tf3-cpool on GPU 0 at priority 36 in the window of 2026-11-25, on a new code copy of the commit that records this (v18e).",
+ "measure": "As full_size_layout_in_floats.json: averaged weights on the first 2,000,000 validation bytes in windows of 496 bytes of history before 16 scored, bits of every piece kept; paired with fs-tf3 and with fs-tf3-pool (experiments/compare_stream_scores.py), split by context (experiments/gap_by_piece.py, near 496, far 8,192).",
+ "reading": "One seed: this reading directs the next work. Centring is the pool's price if fs-tf3-cpool costs at most a quarter of the pool's 0.0691 against fs-tf3 (0.0173 or less): the next spiking work is balanced inhibition that centres every read, cell layer and output of the stack, in a record of its own written before its runs. The division is the price if fs-tf3-cpool still costs at least three quarters of it (0.0518 or more): the next spiking work is a pool that divides by the stream's spread. Between, both parts are reported with their shares and centring is built first.",
+ "seen_before_recording": "full_size_layout_in_floats.json with its result (fs-tf3-pool, fs-tf3-own). tests/test_transformer_reference.py for the centred pool. No run with it has trained.",
+ "result": {
+  "recorded_utc": "2026-11-25T22:51:28Z",
+  "bpb": {
+   "fs-tf3": 1.305716,
+   "fs-tf3-pool": 1.374858,
+   "fs-tf3-cpool": 1.369304
+  },
+  "fs-tf3-cpool minus fs-tf3 (paired over 132,688 pieces of 16 bytes; above zero the centred pool costs)": {
+   "gap": 0.06359,
+   "interval_95": [
+    0.06267,
+    0.06459
+   ]
+  },
+  "fs-tf3-cpool minus fs-tf3-pool (below zero centring helps)": {
+   "gap": -0.00555,
+   "interval_95": [
+    -0.00635,
+    -0.00475
+   ]
+  },
+  "by context, fs-tf3-cpool minus fs-tf3 (gap_by_piece, near 496, far 8,192)": {
+   "copyable near": {
+    "share_of_bytes": 0.0987,
+    "gap": 0.0022,
+    "interval_95": [
+     -0.0016,
+     0.0059
+    ]
+   },
+   "copyable far only": {
+    "share_of_bytes": 0.0862,
+    "gap": 0.0701,
+    "interval_95": [
+     0.064,
+     0.0758
+    ]
+   },
+   "seen, other follower": {
+    "share_of_bytes": 0.0546,
+    "gap": -0.0218,
+    "interval_95": [
+     -0.0357,
+     -0.0054
+    ]
+   },
+   "new": {
+    "share_of_bytes": 0.7605,
+    "gap": 0.0768,
+    "interval_95": [
+     0.0757,
+     0.0783
+    ]
+   }
+  },
+  "reading": "The division is the price: the centred pool still costs the Transformer 0.0636 [0.0627, 0.0646], at least three quarters of the pool's 0.0691 (the mark 0.0518); centring recovers 0.0056 of it (8%). The cost stays on new contexts (+0.0768) and far copies (+0.0701). By this reading the next spiking work is a pool that divides by the stream's spread, and balanced synapses (balanced_synapses.json) are not run."
+ }
+}
