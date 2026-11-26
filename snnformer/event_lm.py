@@ -2492,7 +2492,9 @@ def _ages_in_reach(kept, steps, reach, position, heads, device, dtype):
 
 
 # A read by age works through a window's bytes in blocks of this many, each against the cells within its reach.
-_AGE_BLOCK = 256
+# On the server's GPU a full-size update in windows of 2,048 bytes took 0.43 s in one block, 0.46 s in blocks of 512
+# and 0.53 s in blocks of 256 (0.81 s by cell); smaller blocks only save memory (39.6, 32.8 and 31.6 GiB).
+_AGE_BLOCK = 2048
 
 
 def _age_spans(steps, kept, reach, device):
