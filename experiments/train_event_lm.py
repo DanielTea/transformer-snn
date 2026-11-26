@@ -160,8 +160,7 @@ def guided_language_loss(logits, targets, teacher_logits, weight):
 # A continued run may change these without changing what it trains: where it stops, on what it runs and where it
 # writes. A saved state that is moved with its folder to another machine continues there.
 # Settings that change how fast a run goes and not what it computes (speed_options.py): a run may resume with others.
-_SPEED_OPTIONS = frozenset(("fused_optimizer", "cuda_graph", "compile_cells", "fused_reads", "exact_products",
-                            "split_gradients"))
+_SPEED_OPTIONS = frozenset(("fused_optimizer", "cuda_graph", "compile_cells", "fused_reads", "exact_products"))
 _RESUME_FREE = frozenset(("stop_at", "force", "threads", "device", "checkpoint", "results_dir")) | _SPEED_OPTIONS
 
 
@@ -1148,15 +1147,11 @@ def main():
                        help="compile the cell layers' and the state reads' element-wise chains (torch.compile)")
     speed.add_argument("--fused-reads", action="store_true",
                        help="a stream's race reads in the fused kernels of snnformer/race_kernel.py")
-    speed.add_argument("--exact-products", choices=("tf32", "half"),
+    speed.add_argument("--exact-products", action="store_true",
                        help="the products of whole spike counts and whole synapse ticks on the tensor cores, to the "
-                            "bit (snnformer/whole_products.py): tf32 switches cuBLAS's tensor-core single precision "
-                            "on for these products alone, half takes a kernel of half-precision factors and "
-                            "single-precision sums; an update and an evaluation now and then check every product "
+                            "bit (snnformer/whole_products.py): cuBLAS's tensor-core single precision, switched on "
+                            "for these products alone; an update and an evaluation now and then check every product "
                             "against single precision")
-    speed.add_argument("--split-gradients", action="store_true",
-                       help="with --exact-products half: the gradient's products on the tensor cores as well, each "
-                            "gradient split into two half-precision parts (equal to single precision's rounding)")
     parser.add_argument("--eval-every", type=int, default=250)
     parser.add_argument("--eval-bs", type=int, default=12)
     parser.add_argument("--eval-batches", type=int, default=8)
@@ -1503,15 +1498,9 @@ def main():
     if args.exact_products:
         if device.type != "cuda":
             parser.error("--exact-products takes the tensor cores of a CUDA device")
-        if args.exact_products == "half" and whole_products.triton is None:
-            parser.error("--exact-products half needs Triton")
         if args.compile_cells:
             parser.error("--exact-products is not wired into --compile-cells yet")
-        if args.split_gradients and args.exact_products != "half":
-            parser.error("--split-gradients splits the gradients of --exact-products half")
-        whole_products.MODE, whole_products.SPLIT = args.exact_products, args.split_gradients
-    elif args.split_gradients:
-        parser.error("--split-gradients splits the gradients of --exact-products half")
+        whole_products.ON = True
     # Every product on the tensor cores is checked against single precision in the first update and in the first
     # one after each evaluation that the trainer runs kernel by kernel, and through each evaluation on windows.
     audit_due = bool(args.exact_products)

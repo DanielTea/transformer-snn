@@ -102,6 +102,61 @@ def test_the_fused_race_learns_with_the_read_by_age_s_gradient(steps, kept, reac
         assert ((got[name] - grad).abs().max() / scale) < 1e-4, (name, ((got[name] - grad).abs().max() / scale))
 
 
+@pytest.mark.parametrize("steps,kept,reach,knowledge", CASES)
+def test_the_kernels_write_every_age_that_holds_a_cell(steps, kept, reach, knowledge, monkeypatch):
+    """The kernels are handed their tables by age unfilled, but for a stream's first bytes (race_kernel._by_age): with
+    every other row poisoned, the read and its gradient are still the read by age's."""
+    unfilled = race_kernel._by_age
+
+    def poisoned(probe, steps, kept, reach):
+        table = unfilled(probe, steps, kept, reach)
+        table[:, :, max(0, reach - 1 - kept):] = float("nan")
+        return table
+
+    monkeypatch.setattr(race_kernel, "_by_age", poisoned)
+    results = []
+    for run in (_reference, _fused):
+        t = _inputs(4, steps, kept, reach, knowledge)
+        for name in ("probe", "tag", "payload", "scale", "offset"):
+            t[name].requires_grad_(True)
+        packet, total, _ = run(t, kept, reach, 16.0)
+        weights = torch.linspace(-1, 1, packet.numel(), device=DEVICE).reshape(packet.shape)
+        (packet * weights).sum().backward()
+        results.append((packet.detach(), total.detach(), {name: t[name].grad for name in ("offset", "probe", "tag")}))
+    want, got = results
+    assert torch.equal(got[0], want[0]) and torch.equal(got[1], want[1])
+    for name, grad in want[2].items():
+        assert torch.isfinite(got[2][name]).all(), name
+        assert ((got[2][name] - grad).abs().max() / grad.abs().max().clamp_min(1e-12)) < 1e-4, name
+
+
+@pytest.mark.skipif(DEVICE != "cuda", reason="what this checks is the GPU's shared memory and its tensor cores")
+def test_the_kernels_fit_the_gpu_at_the_full_size_read_s_shape():
+    """Eight heads of 64 channels and 128 knowledge cells, as the full-size stack reads: the kernels fit the GPU's
+    shared memory (one whose tiles do not fit with its stages runs with fewer, race_kernel.STAGES) and read the same.
+    The gradient's products take the tensor cores in two parts: in one part they would be a thousandth off."""
+    steps, kept, reach, knowledge = 150, 100, 192, 128
+    results = []
+    for run in (_reference, _fused):
+        t = _inputs(3, steps, kept, reach, knowledge, batch=1, heads=8, channels=64, payload_channels=64)
+        for name in ("probe", "tag", "payload", "scale", "offset", "kn_tag", "kn_payload", "kn_off"):
+            t[name].requires_grad_(True)
+        packet, total, known = run(t, kept, reach, 256.0)
+        weights = torch.linspace(-1, 1, packet.numel(), device=DEVICE).reshape(packet.shape)
+        ((packet * weights).sum() + (total * torch.linspace(1, 2, total.numel(), device=DEVICE).reshape(
+            total.shape)).sum()).backward()
+        results.append((packet.detach(), total.detach(), known.detach(),
+                        {name: value.grad for name, value in t.items() if value.requires_grad}))
+    want, got = results
+    assert torch.equal(got[0], want[0]) and torch.equal(got[1], want[1]) and torch.equal(got[2], want[2])
+    assert want[1].sum() > steps
+    for name, grad in want[3].items():
+        scale = grad.abs().max().clamp_min(1e-12)
+        assert ((got[3][name] - grad).abs().max() / scale) < 2e-5, name
+    assert all(1 <= stages <= 3 for stages in race_kernel.STAGES.values()) and race_kernel.STAGES
+    assert all(race_kernel.SPLIT.values())
+
+
 import test_knowledge_gap_cells  # noqa: E402
 
 _DESIGNS = [dict(), dict(read_knowledge=16), dict(read_knowledge=16, read_forget=True),

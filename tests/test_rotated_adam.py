@@ -70,15 +70,20 @@ def test_tensors_without_a_basis_take_adam_steps(experiments):
 def test_a_stack_of_matrices_is_rotated_matrix_by_matrix(experiments):
     from rotated_adam import RotatedAdam
 
+    # Square matrices, whose first gradient (of 32 samples) has full rank on both sides. A tensor's first bases are
+    # the eigenvectors of that one gradient's moments; where the gradient has less rank than a side is wide (a
+    # matrix of 12 by 40: 28 directions of its columns), the directions without statistics get whatever basis the
+    # decomposition picks, and a library may pick another for a stack than for a single matrix: on the server's
+    # CPU (MKL) such a stack was 1.2e-2 from its matrices alone after five steps, on the laptop equal to the bit.
     generator = torch.Generator().manual_seed(4)
     problems = []
     for _ in range(3):
-        mix = torch.randn(40, 40, generator=generator) * 0.2 + 1
-        inputs = torch.randn(1024, 40, generator=generator) @ mix
-        problems.append((inputs, inputs @ (torch.randn(12, 40, generator=generator) * 0.1).T))
-    stack = torch.zeros(3, 12, 40, requires_grad=True)
-    single = [torch.zeros(12, 40, requires_grad=True) for _ in problems]
-    plain = torch.zeros(3, 12, 40, requires_grad=True)
+        mix = torch.randn(16, 16, generator=generator) * 0.2 + 1
+        inputs = torch.randn(1024, 16, generator=generator) @ mix
+        problems.append((inputs, inputs @ (torch.randn(16, 16, generator=generator) * 0.1).T))
+    stack = torch.zeros(3, 16, 16, requires_grad=True)
+    single = [torch.zeros(16, 16, requires_grad=True) for _ in problems]
+    plain = torch.zeros(3, 16, 16, requires_grad=True)
     stacked = RotatedAdam([stack], lr=3e-3, refresh=10, stacks=True)
     alone = [RotatedAdam([weight], lr=3e-3, refresh=10) for weight in single]
     unrotated = RotatedAdam([plain], lr=3e-3, refresh=10)
@@ -96,8 +101,8 @@ def test_a_stack_of_matrices_is_rotated_matrix_by_matrix(experiments):
     for index, weight in enumerate(single):
         assert torch.allclose(stack[index], weight, atol=2e-4)
         assert not torch.allclose(plain[index], weight, atol=1e-2)
-    assert stacked.state[stack]["row_basis"].shape == (3, 12, 12)
-    assert stacked.state[stack]["column_basis"].shape == (3, 40, 40)
+    assert stacked.state[stack]["row_basis"].shape == (3, 16, 16)
+    assert stacked.state[stack]["column_basis"].shape == (3, 16, 16)
     assert unrotated.state[plain]["row_basis"] is None
     # A stack of single lines or single weights has no basis to turn into.
     lines = [torch.zeros(4, 1, 1, requires_grad=True), torch.zeros(3, 5, 1, requires_grad=True)]

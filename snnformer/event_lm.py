@@ -714,14 +714,14 @@ class _Synapse(nn.Module):
         return self.weight if self.balance is None else _centred(self.weight, self.balance or None)
 
     def whole(self):
-        """Whether the ticks are whole numbers that the tensor cores' formats hold exactly (whole_products): the
+        """Whether the ticks are whole numbers that the tensor cores' format holds exactly (whole_products): the
         largest tick, twice that where the synapses are balanced, is at most 2,048."""
         limit = (_WEIGHT_LIMIT << (self.charge_bits - _CHARGE_BITS)) * (1 if self.balance is None else 2)
         return not self.continuous and limit <= whole_products.LARGEST
 
     def charge(self, counts, weight):
         """The charge that the ticks collect from whole counts: on the tensor cores where a speed option asks."""
-        if whole_products.MODE is not None and self.whole():
+        if whole_products.ON and self.whole():
             return whole_products.linear(counts, weight)
         return F.linear(counts, weight)
 
@@ -2483,7 +2483,10 @@ def _spread_phases(first, count, device, dtype):
     The golden ratio spreads the phases evenly over the cells. They are found in whole numbers, so that a cell
     has its phase however far into a stream it stands.
     """
-    cells = torch.arange(first + 1, first + count + 1)
+    # On the CPU, or on a CUDA device itself: the same whole numbers, without a copy from the host, which an update
+    # captured in a CUDA graph cannot hold.
+    where = device if torch.device(device).type == "cuda" else "cpu"
+    cells = torch.arange(first + 1, first + count + 1, device=where)
     return ((cells * _GOLDEN_STEP) % _PHASE_STEPS).to(dtype).div(_PHASE_STEPS).to(device)
 
 
@@ -2491,8 +2494,9 @@ def _spread_phases(first, count, device, dtype):
 # the work when a window is as long as the reach. Off, every read takes _StateRead._address's path by cell.
 _READ_BY_AGE = True
 # On a CUDA device with Triton, a read by age can run in fused kernels (snnformer/race_kernel.py): the same spikes and
-# payload pulses, the same gradient to rounding, without the tables of every byte's cells by age. Off until checked on
-# the server's GPU.
+# payload pulses, the same gradient to rounding, without the tables of every byte's cells by age. On the server's GPU
+# a full-size stream update took 0.179 s with them for 0.416 s by age, in 9 GiB for 41 GiB. Off by default: the
+# trainer's --fused-reads switches them on.
 _READ_FUSED = False
 
 
@@ -4596,7 +4600,7 @@ class _GranuleLayer(nn.Module):
         """What each cluster's whole ticks [clusters, cells, fan] collect from whole counts [batch, bytes, clusters,
         fan]: on the tensor cores where a speed option asks and the ticks suit them (whole_products)."""
         limit = (_WEIGHT_LIMIT << (self.bits - _CHARGE_BITS)) * (2 if self.balanced else 1)
-        if whole_products.MODE is not None and limit <= whole_products.LARGEST:
+        if whole_products.ON and limit <= whole_products.LARGEST:
             return whole_products.by_cluster(counts, ticks)
         return torch.einsum("btgk,gnk->btgn", counts, ticks)
 

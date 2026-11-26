@@ -3,13 +3,25 @@
   --fused-optimizer  the rotated optimizer's element-wise steps over all tensors at once (rotated_adam.RotatedAdam,
                      foreach): the same operations, a few dozen GPU kernels for thousands.
   --compile-cells    the cell layers' and the state reads' chains of element-wise operations compiled into fused
-                     kernels (torch.compile). Their spikes are whole numbers computed in whole numbers, so they come
-                     out the same; checked on the server's GPU before use.
+                     kernels (torch.compile). Their spikes are whole numbers computed in whole numbers, and came out
+                     the same on the server's GPU; the gradient's rounding differs.
   --cuda-graph       an update on windows (the first stage) captured in one CUDA graph and replayed (GraphedWindows):
                      the same kernels, none launched one by one.
-  --fused-reads      a stream's reads in the fused race kernels (snnformer/race_kernel.py).
+  --fused-reads      a stream's reads in the fused race kernels (snnformer/race_kernel.py): the same spikes, the
+                     gradient to rounding.
   --exact-products   the products of whole spike counts and whole synapse ticks on the tensor cores, to the bit
-                     (snnformer/whole_products.py); with --split-gradients the gradient's products as well.
+                     (snnformer/whole_products.py).
+
+Measured on an RTX PRO 6000 (2026-11-26, the full-size stack alone on the GPU, seconds an update, the fused optimizer
+in every row):
+  on windows (the first stage)   0.176 as it was; 0.167 with exact products; 0.157 from a CUDA graph (0.149 with
+                                 exact products); 0.129 with compiled cells
+  as a stream (the second)       0.416 with reads by age (0.405 with exact products); 0.179 with fused reads (0.173
+                                 with exact products, 0.140 with compiled cells)
+Exact products, the fused optimizer and the CUDA graph leave a run's weights as they were to the bit (the graph
+against the same optimizer with its steps on the device). Fused reads and compiled cells fire the same spikes at the
+same weights and round the gradient differently: a run with them repeats to the bit, and is another run than the
+one without.
 """
 from __future__ import annotations
 
