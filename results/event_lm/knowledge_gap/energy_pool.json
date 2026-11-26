@@ -12,5 +12,93 @@
  "runs": "fs-tf3-spool, fs-loop6-lift-en, en-6k-s1, en-6k-s2, en-24k-s1, en-24k-s2 on GPU 0 at priority 36 in the window of 2026-11-25, on a new code copy of the commit that records this (v18g, launch-checked on the server's CPU first): the float control and the full-size pilot first.",
  "measure": "The float control as full_size_layout_in_floats.json (windows of 496 bytes of history before 16 scored), paired with fs-tf3 and fs-tf3-pool. The stack's runs by arm.sh's and full.sh's scores (eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights), paired with the base of each seed and length and split by context (near 240, far 8,192); the pulses a byte.",
  "reading": "Float: dividing by the spread is the pool's price if fs-tf3-spool costs at most a quarter of the pool's 0.0691 against fs-tf3 (0.0173 or less); if it still costs three quarters (0.0518 or more), neither the mean nor the kind of division is the price, and the next diagnostic walks what else differs (the learned rest, the gain, the bias of a LayerNorm). Full size: energy pools join the next full-length run if fs-loop6-lift-en is at least 0.005 better than fs-loop6-lift with the paired interval clear of zero; between 0 and 0.005 better a second seed decides; worse, they stay off at full size whatever the bed shows. Test bed: the shared reading of experiments/read_lead_study.py (--arm energy en-24k-s1 en-24k-s2 --arm-short energy en-6k-s1 en-6k-s2 against bed24-lr12 and rd-base-6k): a fix, a constant gain or a fail; a mean lead of at least 0.005 after 24,000 updates with both seeds ahead adopts it on the bed. The stack's own readings decide for the stack; the float control says why.",
- "seen_before_recording": "full_size_layout_in_floats.json and full_size_centring_in_floats.json with their results; tests/test_pool_energy.py and the spread control's test (the whole suite passes). No run with an energy pool or a spread control has trained."
+ "seen_before_recording": "full_size_layout_in_floats.json and full_size_centring_in_floats.json with their results; tests/test_pool_energy.py and the spread control's test (the whole suite passes). No run with an energy pool or a spread control has trained.",
+ "result_float": {
+  "recorded_utc": "2026-11-26T00:53:42Z",
+  "runs": {
+   "fs-tf3-spool": 1.307705
+  },
+  "pairings": {
+   "fs-tf3-spool against fs-tf3 (LayerNorm)": "+0.0020 [+0.0011, +0.0028] over 132,688 pieces of 16 bytes",
+   "fs-tf3-spool against fs-tf3-pool (the pool dividing by the mean absolute activity)": "-0.0672 [-0.0681, -0.0662]",
+   "fs-tf3-spool against fs-tf3-cpool (the centred pool)": "-0.0616 [-0.0626, -0.0606]"
+  },
+  "gap_by_context_against_fs_tf3": {
+   "copyable near": -0.0096,
+   "copyable far only": 0.0118,
+   "seen, other follower": -0.0229,
+   "new": 0.0041
+  },
+  "parameters": 34740247,
+  "reading": "The kind of division is the pool's price. The pool dividing by the stream's root mean square costs the Transformer 0.0020 against its LayerNorm, within a quarter of the pool's 0.0691 (0.0173), so 0.0672 of the 0.0691, 97%, is the division by the mean absolute activity; without centring, with the pool's rest and gain. A pool must divide by the stream's energy: what the stack's own readings below say about whole spike counts is separate."
+ },
+ "result_bed": {
+  "recorded_utc": "2026-11-26T00:53:42Z",
+  "runs": {
+   "en-24k-s1": 1.496887,
+   "en-24k-s2": 1.488078,
+   "en-6k-s1": 1.637014,
+   "en-6k-s2": 1.630267
+  },
+  "pairings": {
+   "en-24k-s1 against bed24-lr12-s1": "+0.0105 [+0.0096, +0.0115] (behind)",
+   "en-24k-s2 against bed24-lr12-s2": "-0.0045 [-0.0055, -0.0035] (ahead)",
+   "en-6k-s1 against rd-base-6k-s1": "+0.0155 [+0.0145, +0.0165] (behind)",
+   "en-6k-s2 against rd-base-6k-s2": "+0.0020 [+0.0010, +0.0030] (behind)"
+  },
+  "gap_by_context": {
+   "en-24k-s1 against bed24-lr12-s1": {
+    "copyable near": 0.0032,
+    "copyable far only": 0.0151,
+    "seen, other follower": 0.0139,
+    "new": 0.0103
+   },
+   "en-24k-s2 against bed24-lr12-s2": {
+    "copyable near": -0.0038,
+    "copyable far only": -0.0117,
+    "seen, other follower": 0.0418,
+    "new": -0.0069
+   },
+   "en-6k-s1 against rd-base-6k-s1": {
+    "copyable near": 0.0767,
+    "copyable far only": 0.0359,
+    "seen, other follower": -0.0499,
+    "new": 0.0113
+   },
+   "en-6k-s2 against rd-base-6k-s2": {
+    "copyable near": 0.0292,
+    "copyable far only": 0.0047,
+    "seen, other follower": 0.1204,
+    "new": -0.0096
+   }
+  },
+  "pulses_a_byte": {
+   "en-24k-s1": 116067,
+   "bed24-lr12-s1": 115653,
+   "en-24k-s2": 115498,
+   "bed24-lr12-s2": 115737,
+   "en-6k-s1": 116410,
+   "rd-base-6k-s1": 116078,
+   "en-6k-s2": 116611,
+   "rd-base-6k-s2": 116802
+  },
+  "shared_reading": {
+   "long_leads": [
+    -0.01051,
+    0.00448
+   ],
+   "long_mean_lead": -0.00301,
+   "seeds_ahead": 1,
+   "a_lead": false,
+   "short_leads": [
+    -0.01545,
+    -0.00196
+   ],
+   "short_mean_lead": -0.00871,
+   "growth": 0.00569,
+   "b_growth": true,
+   "verdict": "fail"
+  },
+  "reading": "Fail. After 24,000 updates the energy pool trails the bed by 0.0030 on the mean, one seed 0.0045 ahead and one 0.0105 behind, far from a lead of 0.005 with both seeds ahead; after 6,000 it trailed by 0.0087. Pulses a byte within half a percent of the bed's. In floats the same division is nearly free (above), so the whole counts or the spiking pool's way of dividing keep the gain from the stack on the bed. The full-size pilot fs-loop6-lift-en still decides for full size by its own reading."
+ }
 }

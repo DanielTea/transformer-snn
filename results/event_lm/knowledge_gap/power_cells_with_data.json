@@ -20,5 +20,74 @@
   "recorded_utc": "2026-11-25T16:17:54Z",
   "change": "Before any run of this record: the laptop's 24,000-update seed of power_cells_screen.json leads the plain bed by 0.0045 only, from 0.0262 at 6,000 updates, under that screen's mark (its result, c42d071). The runs therefore move behind the night's pilots that decide the next full-length run's recipe: pw8-24k-s1, pw8-24k-s2, pw8-6k-s1 and pw8-6k-s2 to priority 37 (after the budget, decay and phases runs at 36, beside the layout diagnostics), the seeds 3 and 4 with their bases to priority 38; lsl-24k-s1 and lsl-24k-s2 return to priority 35, where they stood before amendment 89cb332 moved them for these runs. The readings, sched/bin/pw-decide.sh and the full-size pilot's conditions are unchanged.",
   "seen_before_amendment": "power_cells_screen.json's result (pw8-6k-s3 1.602131, pw8-24k-s3 1.477919). No server run of this record has trained."
+ },
+ "result_two_seeds": {
+  "recorded_utc": "2026-11-26T00:53:42Z",
+  "runs": {
+   "pw8-24k-s1": 1.476404,
+   "pw8-24k-s2": 1.476946,
+   "pw8-6k-s1": 1.608844,
+   "pw8-6k-s2": 1.609802
+  },
+  "pairings": {
+   "pw8-24k-s1 against bed24-lr12-s1": "-0.0100 [-0.0110, -0.0090]",
+   "pw8-24k-s2 against bed24-lr12-s2": "-0.0156 [-0.0166, -0.0146]",
+   "pw8-6k-s1 against rd-base-6k-s1": "-0.0127 [-0.0137, -0.0118]",
+   "pw8-6k-s2 against rd-base-6k-s2": "-0.0185 [-0.0196, -0.0175]"
+  },
+  "gap_by_context": {
+   "pw8-24k-s1 against bed24-lr12-s1": {
+    "copyable near": -0.0253,
+    "copyable far only": -0.0594,
+    "seen, other follower": 0.0758,
+    "new": -0.0075
+   },
+   "pw8-24k-s2 against bed24-lr12-s2": {
+    "copyable near": -0.0057,
+    "copyable far only": -0.0003,
+    "seen, other follower": -0.0263,
+    "new": -0.0181
+   },
+   "pw8-6k-s1 against rd-base-6k-s1": {
+    "copyable near": -0.0422,
+    "copyable far only": 0.0085,
+    "seen, other follower": -0.0109,
+    "new": -0.0129
+   },
+   "pw8-6k-s2 against rd-base-6k-s2": {
+    "copyable near": 0.0371,
+    "copyable far only": -0.0157,
+    "seen, other follower": 0.0556,
+    "new": -0.0297
+   }
+  },
+  "pulses_a_byte": {
+   "pw8-24k-s1": 115518,
+   "bed24-lr12-s1": 115653,
+   "pw8-24k-s2": 115132,
+   "bed24-lr12-s2": 115737,
+   "pw8-6k-s1": 115932,
+   "rd-base-6k-s1": 116078,
+   "pw8-6k-s2": 116047,
+   "rd-base-6k-s2": 116802
+  },
+  "shared_reading": {
+   "long_leads": [
+    0.00998,
+    0.01561
+   ],
+   "long_mean_lead": 0.01279,
+   "seeds_ahead": 2,
+   "a_lead": true,
+   "short_leads": [
+    0.01272,
+    0.01851
+   ],
+   "short_mean_lead": 0.01561,
+   "growth": -0.00282,
+   "b_growth": false,
+   "verdict": "a constant gain, not a fix for late learning"
+  },
+  "reading": "A constant gain, not a fix for late learning: after 24,000 updates power-law cells lead the bed by 0.0128 on the mean with both seeds ahead (0.0100 and 0.0156), at the bed's parameters and pulses; after 6,000 they led by 0.0156, so the lead did not grow. Most of it is on new contexts (0.0075 and 0.0181). sched/bin/pw-decide.sh read the same and queued the full-size pilot fs-loop6-lift-pw8 at 00:35:11Z (GPU 0, priority 34). Power-law cells join the next full-length run only if the four-seed reading of the amendment (seeds g3 and g4 with their bases, priority 38 tonight) is a fix or a constant gain and the pilot passes full_size_power_cells.json's mark. The laptop's seed (power_cells_screen.json, 0.0045 ahead at 24,000) stays beside."
  }
 }
