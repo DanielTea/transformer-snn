@@ -180,3 +180,11 @@ def test_a_cuda_graph_needs_a_cuda_device(trainer, tmp_path):
         pytest.skip("a CUDA device is here: the GPU check covers the graph")
     with pytest.raises((SystemExit, ValueError)):
         trainer(tmp_path, "--cuda-graph")
+
+
+@pytest.mark.parametrize("flags", [("--exact-products", "tf32"), ("--exact-products", "half"), ("--split-gradients",)])
+def test_exact_products_need_a_cuda_device(trainer, tmp_path, flags):
+    if torch.cuda.is_available():
+        pytest.skip("a CUDA device is here: the GPU check covers the tensor cores")
+    with pytest.raises(SystemExit):
+        trainer(tmp_path, *flags)

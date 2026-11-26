@@ -34,6 +34,7 @@ from common import (
 )
 from snnformer import SNNConfig, count_params
 import snnformer.event_lm as event_lm_module
+from snnformer import whole_products
 from speed_options import GraphedWindows, compile_cells
 from snnformer.event_lm import (
     CONTROL_PARAMETERS, EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES,
@@ -159,7 +160,8 @@ def guided_language_loss(logits, targets, teacher_logits, weight):
 # A continued run may change these without changing what it trains: where it stops, on what it runs and where it
 # writes. A saved state that is moved with its folder to another machine continues there.
 # Settings that change how fast a run goes and not what it computes (speed_options.py): a run may resume with others.
-_SPEED_OPTIONS = frozenset(("fused_optimizer", "cuda_graph", "compile_cells", "fused_reads"))
+_SPEED_OPTIONS = frozenset(("fused_optimizer", "cuda_graph", "compile_cells", "fused_reads", "exact_products",
+                            "split_gradients"))
 _RESUME_FREE = frozenset(("stop_at", "force", "threads", "device", "checkpoint", "results_dir")) | _SPEED_OPTIONS
 
 
@@ -1146,6 +1148,15 @@ def main():
                        help="compile the cell layers' and the state reads' element-wise chains (torch.compile)")
     speed.add_argument("--fused-reads", action="store_true",
                        help="a stream's race reads in the fused kernels of snnformer/race_kernel.py")
+    speed.add_argument("--exact-products", choices=("tf32", "half"),
+                       help="the products of whole spike counts and whole synapse ticks on the tensor cores, to the "
+                            "bit (snnformer/whole_products.py): tf32 switches cuBLAS's tensor-core single precision "
+                            "on for these products alone, half takes a kernel of half-precision factors and "
+                            "single-precision sums; an update and an evaluation now and then check every product "
+                            "against single precision")
+    speed.add_argument("--split-gradients", action="store_true",
+                       help="with --exact-products half: the gradient's products on the tensor cores as well, each "
+                            "gradient split into two half-precision parts (equal to single precision's rounding)")
     parser.add_argument("--eval-every", type=int, default=250)
     parser.add_argument("--eval-bs", type=int, default=12)
     parser.add_argument("--eval-batches", type=int, default=8)
@@ -1489,6 +1500,21 @@ def main():
     cycle = 1 if args.stream is None else args.stream * args.stream_groups
     if args.fused_reads:
         event_lm_module._READ_FUSED = True
+    if args.exact_products:
+        if device.type != "cuda":
+            parser.error("--exact-products takes the tensor cores of a CUDA device")
+        if args.exact_products == "half" and whole_products.triton is None:
+            parser.error("--exact-products half needs Triton")
+        if args.compile_cells:
+            parser.error("--exact-products is not wired into --compile-cells yet")
+        if args.split_gradients and args.exact_products != "half":
+            parser.error("--split-gradients splits the gradients of --exact-products half")
+        whole_products.MODE, whole_products.SPLIT = args.exact_products, args.split_gradients
+    elif args.split_gradients:
+        parser.error("--split-gradients splits the gradients of --exact-products half")
+    # Every product on the tensor cores is checked against single precision in the first update and in the first
+    # one after each evaluation that the trainer runs kernel by kernel, and through each evaluation on windows.
+    audit_due = bool(args.exact_products)
     if args.compile_cells:
         compile_cells(model)
     graphed = None
@@ -1523,10 +1549,12 @@ def main():
         if graphed is not None and not on_streams and graphed.ready():
             # The update on windows replays its CUDA graph: the same kernels, none launched one by one.
             average_share = 0.0 if average is None else 1 - min(args.weight_average, step / (step + 10))
+            whole_products.AUDIT = False
             language_loss, pulses = graphed.run(inputs, labels.to(device), average_share)
             if pulse_counts is not None:
                 spike_price = graphed.spike_price
         else:
+            whole_products.AUDIT, audit_due = audit_due, False
             with graphed.warm() if graphed is not None and not on_streams else contextlib.nullcontext():
                 if pulse_counts is not None:
                     pulse_counts.clear()
@@ -1607,7 +1635,9 @@ def main():
                 scaled_neurons = scaled_neurons + graphed.take_scaled()
                 graphed.check_weights()
             scaled_neurons = int(scaled_neurons)
+            whole_products.AUDIT = audit_due = bool(args.exact_products)
             metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
+            whole_products.AUDIT = False
             flowing = evaluate_stream(model, val, batches=args.eval_batches, **evaluate_options) if streams else None
             averaged_metrics = averaged_flowing = None
             if average is not None:

@@ -8,6 +8,8 @@
   --cuda-graph       an update on windows (the first stage) captured in one CUDA graph and replayed (GraphedWindows):
                      the same kernels, none launched one by one.
   --fused-reads      a stream's reads in the fused race kernels (snnformer/race_kernel.py).
+  --exact-products   the products of whole spike counts and whole synapse ticks on the tensor cores, to the bit
+                     (snnformer/whole_products.py); with --split-gradients the gradient's products as well.
 """
 from __future__ import annotations
 

@@ -12,7 +12,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from . import race_kernel
+from . import race_kernel, whole_products
 from .coasting_heads import CoastingHeads, HeadState
 from .fast_synapses import FastSynapses, SynapseState
 from .neurons import integer_spike
@@ -713,17 +713,29 @@ class _Synapse(nn.Module):
         """The weights whose summed sizes bound this neuron's charge: the balanced ones where they are."""
         return self.weight if self.balance is None else _centred(self.weight, self.balance or None)
 
+    def whole(self):
+        """Whether the ticks are whole numbers that the tensor cores' formats hold exactly (whole_products): the
+        largest tick, twice that where the synapses are balanced, is at most 2,048."""
+        limit = (_WEIGHT_LIMIT << (self.charge_bits - _CHARGE_BITS)) * (1 if self.balance is None else 2)
+        return not self.continuous and limit <= whole_products.LARGEST
+
+    def charge(self, counts, weight):
+        """The charge that the ticks collect from whole counts: on the tensor cores where a speed option asks."""
+        if whole_products.MODE is not None and self.whole():
+            return whole_products.linear(counts, weight)
+        return F.linear(counts, weight)
+
     def forward(self, spikes):
         weight = self.weight_ticks()
         if self.byte_input:
             # A byte addresses the single active afferent of a 256-way input population.
             return F.embedding(spikes, weight)
-        return F.linear(spikes, weight)
+        return self.charge(spikes, weight)
 
     def collect(self, heard):
         """The charge from a stream heard through skip fibres, whose counts are sixteenths of a spike."""
         weight = self.weight_ticks()
-        return _mixed_charge(lambda counts: F.linear(counts, weight), heard)
+        return _mixed_charge(lambda counts: self.charge(counts, weight), heard)
 
 
 class _IntegrateFire(nn.Module):
@@ -2526,7 +2538,7 @@ def _band_dots(probe, tag, kept, reach):
     parts = []
     for first, last, start, place in blocks:
         span = tag[:, :, start:start + last - first + reach - 1]
-        dots = probe[:, :, first:last] @ span.transpose(2, 3)
+        dots = whole_products.matmul(probe[:, :, first:last], span.transpose(2, 3))
         parts.append(dots.gather(-1, place.expand(*dots.shape[:-1], -1)))
     return parts[0] if len(parts) == 1 else torch.cat(parts, 2)
 
@@ -2543,7 +2555,7 @@ def _band_read(fired, payload, kept, reach):
         span = payload[:, :, start:start + last - first + reach - 1]
         block = fired[:, :, first:last]
         spread = block.new_zeros(*block.shape[:-1], span.shape[2]).scatter(-1, place.expand_as(block), block)
-        parts.append(spread @ span)
+        parts.append(whole_products.matmul(spread, span))
     return parts[0] if len(parts) == 1 else torch.cat(parts, 2)
 
 
@@ -2561,7 +2573,7 @@ class _ReadByAge:
     def read(self):
         """``fired @ payload`` of the read by cell, knowledge cells included."""
         packet = _band_read(self.band, self.payload, self.kept, self.reach)
-        return packet if self.known is None else packet + self.known @ self.known_payload
+        return packet if self.known is None else packet + whole_products.matmul(self.known, self.known_payload)
 
     def by_cell(self):
         """The spikes as the read by cell has them, [batch, heads, bytes, cells (+ knowledge)]."""
@@ -3392,7 +3404,7 @@ class _StateRead(nn.Module):
         # Pulse pairs charge a cell. The unit keeps the spread of the charge over cells near one at the start.
         unit = self.resolution * math.sqrt(probe.shape[-1]) * (_RACE_UNIT if self.signed else 0.5)
         scale = (stored * self.rate).exp() / unit
-        charge = probe @ tag.transpose(2, 3) * scale + offset
+        charge = whole_products.matmul(probe, tag.transpose(2, 3)) * scale + offset
         if self.budget is None:
             spacing = (self.spacing * self.rate).exp()
             behind = (charge.masked_fill(~visible, -torch.inf).amax(-1, keepdim=True) - charge) / spacing
@@ -3406,7 +3418,7 @@ class _StateRead(nn.Module):
             if self.knowledge:
                 # The knowledge cells are charged by the same probe, and every read reaches all of them.
                 known_tag, known_payload, known_offset = self.known()
-                known = probe @ known_tag.transpose(1, 2) * scale + known_offset[:, None]
+                known = whole_products.matmul(probe, known_tag.transpose(1, 2)) * scale + known_offset[:, None]
                 peak = torch.maximum(peak, known.amax(-1, keepdim=True))
             grown = (charge - peak).exp()
             back = place[kept:, None] - torch.arange(self.reach, device=spikes.device)
@@ -3596,7 +3608,10 @@ class _StateRead(nn.Module):
         """The stream after the read: the payloads that the cells' spikes pass on, counted by the read neurons and
         sent to the stream through the read's output synapses."""
         # Whole cell spikes pass whole payload pulses on, and their sum is the same in any order.
-        packet = fired.read() if isinstance(fired, (_ReadByAge, _ReadFused)) else fired @ payload
+        if isinstance(fired, (_ReadByAge, _ReadFused)):
+            packet = fired.read()
+        else:
+            packet = whole_products.matmul(fired, payload) if self.mode == "race" else fired @ payload
         if total is not None:
             packet = packet / total
         if self.mode == "race":
@@ -4577,6 +4592,14 @@ class _GranuleLayer(nn.Module):
         quarters = rest.clamp(0, _GRANULE_REST_LIMIT) * _PACKET_UNITS
         return quarters.detach().round() + (quarters - quarters.detach())
 
+    def charge(self, counts, ticks):
+        """What each cluster's whole ticks [clusters, cells, fan] collect from whole counts [batch, bytes, clusters,
+        fan]: on the tensor cores where a speed option asks and the ticks suit them (whole_products)."""
+        limit = (_WEIGHT_LIMIT << (self.bits - _CHARGE_BITS)) * (2 if self.balanced else 1)
+        if whole_products.MODE is not None and limit <= whole_products.LARGEST:
+            return whole_products.by_cluster(counts, ticks)
+        return torch.einsum("btgk,gnk->btgn", counts, ticks)
+
     def receive_ticks(self):
         """The cells' synapses in weight ticks, as [clusters, cells, fan]; balanced over the fan where they are."""
         ticks = _weight_ticks(self.receive, charge_bits=self.bits)
@@ -4749,7 +4772,7 @@ class _GranuleLayer(nn.Module):
     def opened(self, heard, quanta):
         """Whether every cell's group lets its spikes out, as [batch, bytes, clusters, cells] of zeros and ones that
         learn from the rates of the router cells' race. In training the router cells' thresholds follow their wins."""
-        charge = torch.einsum("btgk,gek->btge", heard, _weight_ticks(self.router, charge_bits=self.bits))
+        charge = self.charge(heard, _weight_ticks(self.router, charge_bits=self.bits))
         won = self.route(charge, quanta, bias=self.router_bias)
         if self.training and torch.is_grad_enabled():
             with torch.no_grad():
@@ -4779,7 +4802,7 @@ class _GranuleLayer(nn.Module):
             receive = self.receive_ticks()
 
             def collect(counts):
-                return torch.einsum("btgk,gnk->btgn", counts, receive)
+                return self.charge(counts, receive)
 
             charge = _mixed_charge(collect, heard) if mixed else collect(heard)
         # A quarter spike of rest is a quarter of the cell's present threshold.
@@ -4794,7 +4817,7 @@ class _GranuleLayer(nn.Module):
         if self.gated:
             # The gate dendrite fires above the rest, and its spikes let the value dendrite's charge into the body.
             # A cell that gates itself opens by its own charge.
-            opening = charge if self.gate is None else torch.einsum("btgk,gnk->btgn", heard, self.gate_ticks())
+            opening = charge if self.gate is None else self.charge(heard, self.gate_ticks())
             if self.home:
                 # The local rule's shift of the rest, in quarter spikes as the rest is counted.
                 rest = rest + (self.gate_shift * _PACKET_UNITS).round() * quanta * self.quarter()
@@ -4810,7 +4833,7 @@ class _GranuleLayer(nn.Module):
         charge = charge - rest
         if self.vetoed:
             # The veto dendrite's steps keep that many shares of the cell's charge from its body.
-            closing = torch.einsum("btgk,gnk->btgn", heard, _weight_ticks(self.veto, charge_bits=self.bits))
+            closing = self.charge(heard, _weight_ticks(self.veto, charge_bits=self.bits))
             return self.fire(charge, quanta, vetoed=self.shut(closing, quanta, smooth=self.vetoed),
                              smooth=self.slope * self.slope_width)
         if self.budget is None:
@@ -4836,7 +4859,9 @@ class _GranuleLayer(nn.Module):
         if fired is not None:
             # The fast output synapses hear the cells as fibres of their own. Trained ones pass their gradient on.
             fired.append(cells)
-        sent = torch.einsum("btgn,gkn->btgk", cells, _weight_ticks(self.send, charge_bits=self.bits))
+        send = _weight_ticks(self.send, charge_bits=self.bits)
+        # Soft cells fire no whole spikes: their products stay in single precision.
+        sent = torch.einsum("btgn,gkn->btgk", cells, send) if self.soft else self.charge(cells, send)
         arriving = torch.zeros_like(spikes).index_add_(spikes.ndim - 1, self.outputs.flatten(), sent.flatten(-2))
         current = spikes * self.emit.threshold + arriving
         return self.emit(current, reference=spikes) + spikes
