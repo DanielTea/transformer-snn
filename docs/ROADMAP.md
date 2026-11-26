@@ -349,6 +349,13 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    laptop's seed, after 24,000 updates, the looped bed with power-law cells leads the looped bed with plain cells
    by 0.0095 (interval 0.0086 to 0.0105) at equal pulses (`power_cells_in_loop_screen.json`), twice the same seed's
    lead on the plain bed, again on new contexts (0.015 better on 76% of bytes) with near copies 0.029 worse.
+   **Next on this line.** Cortical rates grow with powers of about 2 to 4, so the square is one point of a family:
+   cubic cells (`--granule-power-exponent 3`, round(k^3 / 64) spikes for k thresholds, the same as a square cell at 8
+   thresholds; `cubic_cells_with_data.json`) keep every cell under 4 thresholds silent. They run on two bed seeds, a
+   full-size pilot against the lifted loop with square cells (1.2870), and the laptop's seed. Two cheap full-size
+   pilots on the same loop need no new code (`full_size_power_loop_variants.json`): skip fibres, which gave the looped
+   bed a steady 0.006 under their own mark, and twice the rate, which gave the lifted loop 0.003. Whatever passes
+   joins the weekend's next full-length run.
 3. **What holds late learning back: the charge grid and weight decay.** Does the charge grid limit late learning
    (`weight_precision_with_data.json`; at the best rate `randomness_at_best_rate.json`)? A typical full-size synapse
    is about 8 ticks from zero, so a tick is an eighth of it, and on the test bed a float stand-in that was level
