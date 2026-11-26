@@ -14,7 +14,7 @@ from snnformer.transformer_reference import TransformerLM
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "experiments"))
 import hop_eval  # noqa: E402
-from hop_tasks import ASSIGNMENTS, example, resolve, write_corpus, write_tests  # noqa: E402
+from hop_tasks import ASSIGNMENTS, chain_of, example, resolve, write_chain, write_corpus, write_tests  # noqa: E402
 from train_event_lm import load_corpus  # noqa: E402
 
 
@@ -85,3 +85,23 @@ def test_both_kinds_of_model_are_scored_at_every_answer(tmp_path):
     whole = hop_eval.answer_logits(stack, stream, places, "cpu", 64, piece=4096)
     cut = hop_eval.answer_logits(stack, stream, places, "cpu", 64, piece=37)
     assert torch.equal(whole, cut)
+
+
+@pytest.mark.parametrize("hops", [1, 3, 16])
+def test_a_written_chain_is_the_query_s_chain_and_keeps_the_line_s_assignments(hops):
+    line = example(random.Random(3), hops)
+    steps = chain_of(line)
+    assert len(steps) == hops + 1 and steps[-1].isdigit() and steps[0] == line.rsplit(";?", 1)[1].split("=")[0]
+    written = write_chain(line)
+    assert written.startswith(line.rsplit(";?", 1)[0] + ";?") and written.endswith("=".join(steps) + "\n")
+    assert resolve(written) == resolve(line) == (steps[-1], hops) and write_chain(written) == written
+
+
+def test_a_corpus_of_written_chains_holds_the_same_lines_with_their_chains(tmp_path):
+    plain = write_corpus(tmp_path / "plain.bin", [1, 2, 3, 4], 5, 3000, 500, 500)
+    chains = write_corpus(tmp_path / "chains.bin", [1, 2, 3, 4], 5, 3000, 500, 500, written_chains=True)
+    a = (tmp_path / "plain.bin").read_text().splitlines()
+    b = (tmp_path / "chains.bin").read_text().splitlines()
+    assert len(b) > 20 and all(write_chain(x + "\n") == y + "\n" for x, y in zip(a, b))
+    assert chains["written_chains"] is True and "written_chains" not in plain
+    assert sum(chains[k] for k in ("train", "validation", "test")) == len("".join(y + "\n" for y in b))

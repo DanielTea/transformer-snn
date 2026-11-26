@@ -36,7 +36,7 @@ from torch.nn import functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import resolve_device  # noqa: E402
-from hop_tasks import example, resolve  # noqa: E402
+from hop_tasks import chain_of, example, resolve  # noqa: E402
 from snnformer.event_lm import EventLM  # noqa: E402
 from train_event_lm import load_checkpoint, scoring_logits  # noqa: E402
 
@@ -139,18 +139,26 @@ def policy_loss(model, tasks: list[Task], written: list[bytes], rewards: torch.T
     return -(advantages.to(device) * per_attempt).mean()
 
 
+def wrote_the_chain(task: Task, written: bytes) -> bool:
+    """The answer writes the query's whole chain and nothing else: ?zt= then mx=qa=7 and a newline (one hop: 7)."""
+    steps = chain_of(task.prompt.decode() + chr(task.answer) + "\n")
+    return written == "=".join(steps[1:]).encode() + b"\n"
+
+
 @torch.no_grad()
 def evaluate(model, hops_list, count: int, max_bytes: int, seed: int, device) -> dict:
     """Greedy answers with room to think: for every hop count, ``count`` tasks (drawn from ``seed``), the model
     writes its most likely bytes up to a newline; the accuracy of the last byte, the share of answers that write at
-    least one name, and the mean bytes written."""
+    least one name, the share that write the query's whole chain right (wrote_the_chain), and the mean bytes."""
     found = {}
     for hops in hops_list:
         rng = random.Random(seed * 1000 + hops)
         tasks = [generate(rng, hops) for _ in range(count)]
         written = attempts(model, tasks, 1, max_bytes, 1e-6, torch.Generator().manual_seed(seed), device)
+        chains = sum(wrote_the_chain(t, w) for t, w in zip(tasks, written))
         found[str(hops)] = {"accuracy": round(sum(grade(t, w) for t, w in zip(tasks, written)) / count, 4),
                             "wrote_names": round(sum(map(wrote_a_name, written)) / count, 4),
+                            "wrote_the_chain": round(chains / count, 4),
                             "mean_bytes": round(sum(len(w) for w in written) / count, 2)}
     return found
 

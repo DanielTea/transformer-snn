@@ -56,6 +56,18 @@ def test_greedy_evaluation_reports_every_hop_count():
     stack = EventLM(EventLMConfig(**_STACK)).eval()
     found = practice.evaluate(stack, [1, 3], 4, 5, 0, "cpu")
     assert set(found) == {"1", "3"} and all(0 <= row["accuracy"] <= 1 for row in found.values())
+    assert all(0 <= row["wrote_the_chain"] <= row["accuracy"] for row in found.values())
+
+
+def test_an_answer_wrote_the_chain_only_if_it_writes_every_name_and_the_digit():
+    task = practice.generate(random.Random(1), 3)
+    steps = practice.chain_of(task.prompt.decode() + chr(task.answer) + "\n")
+    right = "=".join(steps[1:]).encode() + b"\n"
+    assert len(steps) == 4 and practice.wrote_the_chain(task, right) and practice.grade(task, right) == 1.0
+    assert not practice.wrote_the_chain(task, bytes([task.answer]) + b"\n")
+    assert not practice.wrote_the_chain(task, right[:-1]) and not practice.wrote_the_chain(task, b"zz=" + right)
+    one = practice.generate(random.Random(2), 1)
+    assert practice.wrote_the_chain(one, bytes([one.answer]) + b"\n")
 
 
 @pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs Apple's GPU")
