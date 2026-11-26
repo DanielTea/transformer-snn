@@ -100,7 +100,7 @@ def attempts(model, tasks: list[Task], count: int, max_bytes: int, temperature: 
     # A stack carries its state from byte to byte; a Transformer reads its whole window again for every byte.
     counts, state = model.stream(heard, None) if stack else (model(heard), None)
     for _ in range(max_bytes):
-        logits = scores(model, counts)[:, -1].double().cpu()
+        logits = scores(model, counts)[:, -1].cpu().double()  # to the CPU first: Apple's GPU has no float64
         chances = (logits / temperature).softmax(-1)
         drawn = torch.multinomial(chances, 1, generator=generator).squeeze(-1)
         for row, byte in enumerate(drawn.tolist()):

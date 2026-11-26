@@ -3,6 +3,7 @@ import random
 import sys
 from pathlib import Path
 
+import pytest
 import torch
 
 from snnformer import SNNConfig
@@ -55,3 +56,19 @@ def test_greedy_evaluation_reports_every_hop_count():
     stack = EventLM(EventLMConfig(**_STACK)).eval()
     found = practice.evaluate(stack, [1, 3], 4, 5, 0, "cpu")
     assert set(found) == {"1", "3"} and all(0 <= row["accuracy"] <= 1 for row in found.values())
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="needs Apple's GPU")
+def test_both_kinds_of_model_attempt_and_learn_on_apples_gpu_which_has_no_float64():
+    torch.manual_seed(0)
+    stack = EventLM(EventLMConfig(**_STACK)).eval().to("mps")
+    transformer = TransformerLM(SNNConfig(neuron="ann", attn="transformer", position_embeddings=True),
+                                vocab=256, dim=32, depth=2, heads=4, ctx=256).eval().to("mps")
+    tasks = [practice.generate(random.Random(seed), 2) for seed in range(3)]
+    for model in (stack, transformer):
+        written = practice.attempts(model, tasks, 2, 6, 1.0, torch.Generator().manual_seed(0), "mps")
+        assert len(written) == 6 and all(0 < len(w) <= 6 for w in written)
+        model.train()
+        loss = practice.policy_loss(model, tasks, written, torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0, 1.0]), 2, "mps")
+        loss.backward()
+        assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters())

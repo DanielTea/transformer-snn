@@ -538,7 +538,9 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   predictable (a frozen sensor).
 - **Chains of thought learned from reward alone** (`practice_hops.json`, `experiments/practice_loop.py`): the
   models practise hop tasks with room to write before the answer; only the answer is checked; the difficulty
-  follows the solve rate so that a quarter to a half of the tasks are solved.
+  follows the solve rate so that a quarter to a half of the tasks are solved. Since no base learned the whole hop
+  task, an arm is read if its base looks up one hop (amended before any practice ran): the stack is read, the
+  Transformer practises as a control.
 
 ## How to continue
 
