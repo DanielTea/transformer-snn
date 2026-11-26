@@ -174,3 +174,55 @@ def test_named_weights_step_with_their_own_share_of_the_learning_rate(experiment
         optimizer.step()
     assert torch.allclose(twins[1].weight - start, 3 * (twins[0].weight - start), atol=1e-7)
     assert torch.allclose(twins[1].bias, twins[0].bias)
+
+
+def _fused_pair(seed, **options):
+    """The same tensors twice: matrices, a stack of matrices, a wide matrix that keeps one side, vectors; two groups
+    (with and without weight decay) at two learning rates."""
+    from rotated_adam import RotatedAdam
+
+    generator = torch.Generator().manual_seed(seed)
+    shapes = [(6, 5), (3, 4, 7), (2, 9), (1, 8), (11,), (4, 1)]
+    models = []
+    for _ in range(2):
+        tensors = [torch.nn.Parameter(torch.randn(shape, generator=torch.Generator().manual_seed(seed + i)))
+                   for i, shape in enumerate(shapes)]
+        models.append(tensors)
+    def groups(tensors):
+        return [{"params": tensors[:3], "weight_decay": 0.1, "lr": 3e-3},
+                {"params": tensors[3:], "weight_decay": 0.0, "lr": 1e-3}]
+    loop = RotatedAdam(groups(models[0]), lr=3e-3, refresh=3, stacks=True)
+    fused = RotatedAdam(groups(models[1]), lr=3e-3, refresh=3, stacks=True, **options)
+    return models, (loop, fused), generator
+
+
+def _steps(models, optimizers, generator, count):
+    for step in range(count):
+        grads = [torch.randn(t.shape, generator=generator) for t in models[0]]
+        for tensors, optimizer in zip(models, optimizers):
+            for tensor, grad in zip(tensors, grads):
+                tensor.grad = grad.clone()
+            if step == 4:
+                for group in optimizer.param_groups:
+                    group["lr"] *= 0.5
+            optimizer.step()
+
+
+def test_a_fused_step_gives_the_loop_s_bits_on_the_cpu(experiments):
+    models, optimizers, generator = _fused_pair(5, foreach=True)
+    _steps(models, optimizers, generator, 10)
+    for a, b in zip(*models):
+        assert torch.equal(a, b)
+    for a, b in zip(*models):
+        sa, sb = optimizers[0].state[a], optimizers[1].state[b]
+        assert sa["step"] == sb["step"] and torch.equal(sa["second"], sb["second"])
+        for key in ("row_basis", "column_basis", "rows", "columns"):
+            assert (sa[key] is None) == (sb[key] is None) and (sa[key] is None or torch.equal(sa[key], sb[key]))
+
+
+def test_a_capturable_step_matches_the_loop_to_rounding(experiments):
+    models, optimizers, generator = _fused_pair(6, capturable=True)
+    _steps(models, optimizers, generator, 10)
+    for a, b in zip(*models):
+        assert torch.allclose(a, b, rtol=1e-5, atol=1e-6)
+    assert optimizers[1]._held[0]["by_rank"] and "held" not in optimizers[1].param_groups[0]

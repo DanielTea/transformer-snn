@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 from contextlib import contextmanager
 from dataclasses import asdict, replace
 import hashlib
@@ -32,6 +33,8 @@ from common import (
     setup,
 )
 from snnformer import SNNConfig, count_params
+import snnformer.event_lm as event_lm_module
+from speed_options import GraphedWindows, compile_cells
 from snnformer.event_lm import (
     CONTROL_PARAMETERS, EventLM, EventLMConfig, EchoTape, _CLOCK_SOURCES, _TRACE_ARRIVAL_MODES, _TRACE_READ_DRIVE_SOURCES,
     echo_feedback, weight_dither, cell_dither, cell_noise,
@@ -155,7 +158,9 @@ def guided_language_loss(logits, targets, teacher_logits, weight):
 
 # A continued run may change these without changing what it trains: where it stops, on what it runs and where it
 # writes. A saved state that is moved with its folder to another machine continues there.
-_RESUME_FREE = frozenset(("stop_at", "force", "threads", "device", "checkpoint", "results_dir"))
+# Settings that change how fast a run goes and not what it computes (speed_options.py): a run may resume with others.
+_SPEED_OPTIONS = frozenset(("fused_optimizer", "cuda_graph", "compile_cells", "fused_reads"))
+_RESUME_FREE = frozenset(("stop_at", "force", "threads", "device", "checkpoint", "results_dir")) | _SPEED_OPTIONS
 
 
 def _on_cpu(value):
@@ -1131,6 +1136,16 @@ def main():
     parser.add_argument("--weight-average", type=float,
                         help="also keep a running average of the weights with this decay, score it at every "
                              "evaluation and save it beside the checkpoint")
+    speed = parser.add_argument_group("speed (experiments/speed_options.py): the same updates in less time")
+    speed.add_argument("--fused-optimizer", action="store_true",
+                       help="the rotated optimizer's element-wise steps over all tensors at once")
+    speed.add_argument("--cuda-graph", action="store_true",
+                       help="capture an update on windows (the first stage) in a CUDA graph and replay it; the "
+                            "optimizer's step size then lives on the device (equal to rounding)")
+    speed.add_argument("--compile-cells", action="store_true",
+                       help="compile the cell layers' and the state reads' element-wise chains (torch.compile)")
+    speed.add_argument("--fused-reads", action="store_true",
+                       help="a stream's race reads in the fused kernels of snnformer/race_kernel.py")
     parser.add_argument("--eval-every", type=int, default=250)
     parser.add_argument("--eval-bs", type=int, default=12)
     parser.add_argument("--eval-batches", type=int, default=8)
@@ -1397,7 +1412,8 @@ def main():
                      "that holds its streams")
     optimizer = make_optimizer(model, args.lr, args.wd, betas=(0.9, args.adam_beta2), rotated=args.rotated_adam,
                                stacks=args.rotate_stacks, scales=args.lr_scale,
-                               exempt=CONTROL_PARAMETERS if args.decay_synapses_only else frozenset())
+                               exempt=CONTROL_PARAMETERS if args.decay_synapses_only else frozenset(),
+                               foreach=args.fused_optimizer or args.cuda_graph, capturable=args.cuda_graph)
     average = None if args.weight_average is None else [p.detach().clone() for p in model.parameters()]
     feedback = None if args.echo is None else EchoFeedback(args.echo_seed)
     if args.read_credit is not None:
@@ -1471,6 +1487,24 @@ def main():
         for number in (signal.SIGTERM, signal.SIGUSR1):
             signal.signal(number, ask)
     cycle = 1 if args.stream is None else args.stream * args.stream_groups
+    if args.fused_reads:
+        event_lm_module._READ_FUSED = True
+    if args.compile_cells:
+        compile_cells(model)
+    graphed = None
+    if args.cuda_graph:
+        refused = [flag for flag, on in (
+            ("--teacher-checkpoint", teacher is not None), ("--echo", args.echo is not None),
+            ("--bank-read-rank-weight", bool(args.bank_read_rank_weight)),
+            ("--code-loss-weight", bool(args.code_loss_weight)),
+            ("--early-readout-weight", bool(args.early_readout_weight)), ("--weight-dither", bool(args.weight_dither)),
+            ("--cell-dither", bool(args.cell_dither)), ("--cell-noise", bool(args.cell_noise)),
+            ("--stack-loop-exits", bool(getattr(model, "exit_counts", None)))) if on]
+        if refused or args.rotated_adam is None or not event:
+            parser.error("--cuda-graph trains an event model with --rotated-adam, without "
+                         + (", ".join(refused) or "a teacher, echoes, extra losses or dither"))
+        graphed = GraphedWindows(model, optimizer, args, device, average, pulse_counts,
+                                 spike_price if pulse_counts is not None else None)
     for step in range(start + 1, args.steps + 1):
         for group in optimizer.param_groups:
             group["lr"] = cosine_lr(step - 1, args.steps, args.warmup, args.lr) * group["lr_scale"]
@@ -1486,81 +1520,92 @@ def main():
         else:
             inputs, labels = drawn
         inputs = inputs.to(device)
-        if pulse_counts is not None:
-            pulse_counts.clear()
-        forward_options = {} if pulse_counts is None else {"memory_pulses": pulse_counts}
-        tape = None
-        if args.echo is not None:
-            tape = forward_options["echo"] = EchoTape(everywhere=args.echo == "all")
-        if args.bank_read_rank_weight:
-            bank_read_losses = []
-            forward_options["bank_read_losses"] = bank_read_losses
-        if args.early_readout_weight:
-            forward_options["early_readout"] = args.clock_start if args.early_readout is None else args.early_readout
-        # The cells' membrane noise falls with the learning rate, so that training ends on whole counts.
-        share = cosine_lr(step - 1, args.steps, args.warmup, args.lr) / args.lr
-        with weight_dither(args.weight_dither), cell_dither(args.cell_dither), cell_noise(args.cell_noise or 0.0, share):
-            if args.code_loss_weight:
-                counts, predicted, observed, *early = model(
-                    inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
-                )
-                if args.learn_context_keys:
-                    predicted = predicted[..., args.forecast_key_channels:]
-                    observed = observed[..., args.forecast_key_channels:]
-                resolution = args.spike_resolution
-                code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
-            elif args.early_readout_weight:
-                counts, *early = model(inputs, **forward_options)
-            elif on_streams:
-                # The state carries no gradient: a window learns from what it fires itself.
-                counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
-            else:
-                counts = model(inputs, **forward_options)
-        logits = scoring_logits(counts, event, args.spike_resolution)
-        targets = labels.to(device)
-        if teacher is None:
-            language_loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten())
-            loss = language_loss
+        if graphed is not None and not on_streams and graphed.ready():
+            # The update on windows replays its CUDA graph: the same kernels, none launched one by one.
+            average_share = 0.0 if average is None else 1 - min(args.weight_average, step / (step + 10))
+            language_loss, pulses = graphed.run(inputs, labels.to(device), average_share)
+            if pulse_counts is not None:
+                spike_price = graphed.spike_price
         else:
-            with torch.no_grad():
-                guidance = scoring_logits(teacher(inputs), teacher_event, teacher_resolution)
-            loss, language_loss, teacher_fraction = guided_language_loss(logits, targets, guidance, args.teacher_weight)
-        if args.code_loss_weight:
-            loss = loss + args.code_loss_weight * code_loss
-        if event and getattr(model, "exit_counts", None):
-            # The racing loop's earlier passes: each pass's summed evidence learns to predict the byte by itself.
-            exit_loss = torch.stack([F.cross_entropy(scoring_logits(evidence, event, args.spike_resolution).flatten(0, 1),
-                                                     targets.flatten()) for evidence in model.exit_counts]).mean()
-            loss = loss + args.loop_exit_weight * exit_loss
-        if args.early_readout_weight:
-            early_logits = scoring_logits(early[0], event, model.forecast_resolution)
-            early_loss = F.cross_entropy(early_logits.flatten(0, 1), targets.flatten())
-            loss = loss + args.early_readout_weight * early_loss
-        if args.bank_read_rank_weight:
-            (bank_read_loss,) = bank_read_losses
-            loss = loss + args.bank_read_rank_weight * bank_read_loss
-        if pulse_counts is not None:
-            pulses = torch.stack(pulse_counts).sum() / inputs.numel()
-            gap = pulses / args.pulse_budget - 1.0
-            loss = loss + spike_price * gap + 0.5 * gap.relu().square()
-            spike_price = (spike_price + 0.04 * gap.detach()).clamp_min(0)
-        optimizer.zero_grad(set_to_none=True)
-        if tape is None:
-            loss.backward()
-        else:
-            echo_backward(loss, logits, targets, tape, feedback, mirror=args.echo_feedback == "mirror")
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
-        if event:
-            # A neuron whose summed synapses left the range of exact sums shrinks them all by one factor.
-            scaled_neurons += model.synaptic_scaling()
-        if average is not None:
-            # The average follows the weights closely at first, so the starting weights do not linger in it.
-            decay = min(args.weight_average, step / (step + 10))
-            with torch.no_grad():
-                for mean, parameter in zip(average, model.parameters(), strict=True):
-                    mean.lerp_(parameter, 1 - decay)
+            with graphed.warm() if graphed is not None and not on_streams else contextlib.nullcontext():
+                if pulse_counts is not None:
+                    pulse_counts.clear()
+                forward_options = {} if pulse_counts is None else {"memory_pulses": pulse_counts}
+                tape = None
+                if args.echo is not None:
+                    tape = forward_options["echo"] = EchoTape(everywhere=args.echo == "all")
+                if args.bank_read_rank_weight:
+                    bank_read_losses = []
+                    forward_options["bank_read_losses"] = bank_read_losses
+                if args.early_readout_weight:
+                    forward_options["early_readout"] = args.clock_start if args.early_readout is None else args.early_readout
+                # The cells' membrane noise falls with the learning rate, so that training ends on whole counts.
+                share = cosine_lr(step - 1, args.steps, args.warmup, args.lr) / args.lr
+                with weight_dither(args.weight_dither), cell_dither(args.cell_dither), cell_noise(args.cell_noise or 0.0, share):
+                    if args.code_loss_weight:
+                        counts, predicted, observed, *early = model(
+                            inputs, return_prediction=True, corrected_prediction=args.corrected_code_loss, **forward_options,
+                        )
+                        if args.learn_context_keys:
+                            predicted = predicted[..., args.forecast_key_channels:]
+                            observed = observed[..., args.forecast_key_channels:]
+                        resolution = args.spike_resolution
+                        code_loss = F.smooth_l1_loss(predicted[:, :-1] / resolution, observed[:, 1:].detach() / resolution)
+                    elif args.early_readout_weight:
+                        counts, *early = model(inputs, **forward_options)
+                    elif on_streams:
+                        # The state carries no gradient: a window learns from what it fires itself.
+                        counts, carried[group] = model.stream(inputs, carried[group], **forward_options)
+                    else:
+                        counts = model(inputs, **forward_options)
+                logits = scoring_logits(counts, event, args.spike_resolution)
+                targets = labels.to(device)
+                if teacher is None:
+                    language_loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten())
+                    loss = language_loss
+                else:
+                    with torch.no_grad():
+                        guidance = scoring_logits(teacher(inputs), teacher_event, teacher_resolution)
+                    loss, language_loss, teacher_fraction = guided_language_loss(logits, targets, guidance, args.teacher_weight)
+                if args.code_loss_weight:
+                    loss = loss + args.code_loss_weight * code_loss
+                if event and getattr(model, "exit_counts", None):
+                    # The racing loop's earlier passes: each pass's summed evidence learns to predict the byte by itself.
+                    exit_loss = torch.stack([F.cross_entropy(scoring_logits(evidence, event, args.spike_resolution).flatten(0, 1),
+                                                             targets.flatten()) for evidence in model.exit_counts]).mean()
+                    loss = loss + args.loop_exit_weight * exit_loss
+                if args.early_readout_weight:
+                    early_logits = scoring_logits(early[0], event, model.forecast_resolution)
+                    early_loss = F.cross_entropy(early_logits.flatten(0, 1), targets.flatten())
+                    loss = loss + args.early_readout_weight * early_loss
+                if args.bank_read_rank_weight:
+                    (bank_read_loss,) = bank_read_losses
+                    loss = loss + args.bank_read_rank_weight * bank_read_loss
+                if pulse_counts is not None:
+                    pulses = torch.stack(pulse_counts).sum() / inputs.numel()
+                    gap = pulses / args.pulse_budget - 1.0
+                    loss = loss + spike_price * gap + 0.5 * gap.relu().square()
+                    spike_price = (spike_price + 0.04 * gap.detach()).clamp_min(0)
+                optimizer.zero_grad(set_to_none=True)
+                if tape is None:
+                    loss.backward()
+                else:
+                    echo_backward(loss, logits, targets, tape, feedback, mirror=args.echo_feedback == "mirror")
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+                if event:
+                    # A neuron whose summed synapses left the range of exact sums shrinks them all by one factor.
+                    scaled_neurons += model.synaptic_scaling()
+                if average is not None:
+                    # The average follows the weights closely at first, so the starting weights do not linger in it.
+                    decay = min(args.weight_average, step / (step + 10))
+                    with torch.no_grad():
+                        for mean, parameter in zip(average, model.parameters(), strict=True):
+                            mean.lerp_(parameter, 1 - decay)
         if step % args.eval_every == 0 or step == args.steps:
+            if graphed is not None:
+                scaled_neurons = scaled_neurons + graphed.take_scaled()
+                graphed.check_weights()
             scaled_neurons = int(scaled_neurons)
             metrics = evaluate(model, val, batches=args.eval_batches, **evaluate_options)
             flowing = evaluate_stream(model, val, batches=args.eval_batches, **evaluate_options) if streams else None

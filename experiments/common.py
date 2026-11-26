@@ -164,7 +164,8 @@ def checkpoint_path(args) -> Path | None:
     return path
 
 
-def make_optimizer(model, lr, wd, betas=(0.9, 0.99), rotated=None, stacks=False, scales=(), exempt=frozenset()):
+def make_optimizer(model, lr, wd, betas=(0.9, 0.99), rotated=None, stacks=False, scales=(), exempt=frozenset(),
+                   foreach=False, capturable=False):
     """AdamW, or Adam in each weight matrix's gradient eigenbasis with ``rotated`` steps between basis updates.
 
     With ``stacks`` the rotated optimizer also turns every matrix of a three-dimensional weight. ``scales``
@@ -172,6 +173,7 @@ def make_optimizer(model, lr, wd, betas=(0.9, 0.99), rotated=None, stacks=False,
     rate times that part's factor, and of several such parts the longest counts, so ``age`` leaves ``beat_age``
     to a pair of its own. Every group keeps its factor as ``lr_scale`` for a schedule. Weight decay acts on the
     parameters of two or more dimensions, except those with a part of their dotted name in ``exempt``.
+    ``foreach`` and ``capturable`` pass to the optimizer (see rotated_adam.RotatedAdam).
     """
     groups = {}
     scales = sorted(scales, key=lambda pair: -len(pair[0]))
@@ -184,8 +186,9 @@ def make_optimizer(model, lr, wd, betas=(0.9, 0.99), rotated=None, stacks=False,
     if rotated is not None:
         from rotated_adam import RotatedAdam
 
-        return RotatedAdam(groups, lr=lr, betas=betas, refresh=rotated, stacks=stacks)
-    return torch.optim.AdamW(groups, lr=lr, betas=betas)
+        return RotatedAdam(groups, lr=lr, betas=betas, refresh=rotated, stacks=stacks, foreach=foreach,
+                           capturable=capturable)
+    return torch.optim.AdamW(groups, lr=lr, betas=betas, foreach=foreach or None, capturable=capturable)
 
 
 def cosine_lr(step: int, total: int, warmup: int, base: float) -> float:
