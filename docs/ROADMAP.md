@@ -540,7 +540,11 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   models practise hop tasks with room to write before the answer; only the answer is checked; the difficulty
   follows the solve rate so that a quarter to a half of the tasks are solved. Since no base learned the whole hop
   task, an arm is read if its base looks up one hop (amended before any practice ran): the stack is read, the
-  Transformer practises as a control.
+  Transformer practises as a control. It fails: after 300 rounds the stack's accuracy at 8 hops is 0.23 (0.24
+  before) and none of its answers writes a chain. It wrote a name in 0.5% of its attempts, so reward had almost
+  nothing to reinforce; practice only sharpened its direct answers at 3 hops (0.42 to 0.64). A chain of thought
+  did not arise from reward alone: the model needs written chains to start from (in its training text, or from a
+  teacher) before practice can lengthen them.
 
 ## How to continue
 
