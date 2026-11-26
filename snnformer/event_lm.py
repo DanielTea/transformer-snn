@@ -2579,21 +2579,22 @@ class _BudgetedRace(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, charge, known, valid, phase, known_phase, budget):
+        # Nothing here is differentiated, so each step may take its input's place: the same values, less memory.
         peak = charge.amax(-1, keepdim=True)
         if known is not None:
             peak = torch.maximum(peak, known.amax(-1, keepdim=True))
-        grown = (charge - peak).exp()
-        total = (grown * valid).sum(-1, keepdim=True)
+        grown = (charge - peak).exp_().mul_(valid)
+        total = grown.sum(-1, keepdim=True)
         known_rate = known_fired = None
         if known is not None:
-            known_grown = (known - peak).exp()
+            known_grown = (known - peak).exp_()
             total = total + known_grown.sum(-1, keepdim=True)
-            known_rate = known_grown / total * budget
-            known_fired = (known_rate + known_phase).floor()
-        rate = grown / total * budget
+            known_rate = known_grown.div_(total).mul_(budget)
+            known_fired = (known_rate + known_phase).floor_()
+        rate = grown.div_(total).mul_(budget)
         ctx.budget = budget
         ctx.save_for_backward(rate, known_rate)
-        return (rate + phase).floor(), known_fired
+        return (rate + phase).floor_(), known_fired
 
     @staticmethod
     def backward(ctx, grad_fired, grad_known):
