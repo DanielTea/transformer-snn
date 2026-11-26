@@ -334,7 +334,13 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    gain**: after 24,000 updates power-law cells lead the bed by 0.0100 and 0.0156 (0.0128 on the mean, both seeds
    ahead) at equal parameters and pulses, most of it on new contexts, after 0.0156 at 6,000 updates. The full-size
    pilot (`full_size_power_cells.json`) and two more seeds run the same night; power-law cells join the next
-   full-length run only if four seeds hold and the pilot is 0.005 better than the lifted loop.
+   full-length run only if four seeds hold and the pilot is 0.005 better than the lifted loop. **The full-size
+   pilot passes**: after 24,000 updates the lifted loop with power-law cells scores 1.2870, 0.0137 better than the
+   same loop with plain cells (interval -0.0145 to -0.0129) at equal parameters and 0.4% more pulses, on new
+   contexts (0.018) and far copies (0.019), at no cost in parameters and almost none in pulses. Its code is
+   sparser: in every level about half as many cells fire at a byte (5 to 25% against 10 to 44%), and the cells that
+   fire have a longer tail. That is 0.0033 behind the rate pilot's Transformer of the same length at the same rate,
+   and 0.0108 behind it at its best rate. The two more seeds decide whether power-law cells join fsp-lift2.
 3. **What holds late learning back: the charge grid and weight decay.** Does the charge grid limit late learning
    (`weight_precision_with_data.json`; at the best rate `randomness_at_best_rate.json`)? A typical full-size synapse
    is about 8 ticks from zero, so a tick is an eighth of it, and on the test bed a float stand-in that was level
