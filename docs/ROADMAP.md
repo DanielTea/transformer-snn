@@ -516,7 +516,10 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
 
 - **How many steps of lookup a model chains without writing them** (`hop_generalization.json`,
   `experiments/hop_tasks.py`, `experiments/hop_eval.py`): the test bed, its loop and its Transformer trained on
-  chains of 1 to 4 hops and tested on up to 16.
+  chains of 1 to 4 hops and tested on up to 16. At 12,000 updates none has learned it (mean accuracy over 1 to 4
+  hops: the stack 0.59, the loop 0.10, the Transformer 0.09, against a mark of 0.80). The stack looks up one hop in
+  every line and two in most; the loop and the Transformer do not look up even one. All three train again to
+  24,000 updates.
 - **Telemetry** (`telemetry_screen.json`, `experiments/pump_sim.py`, `experiments/telemetry_eval.py`): a simulated
   centrifugal pump with nine faults whose truth is kept, eight bytes a second; the stack's surprise as a fault
   detector beside a per-channel z-score detector (AUC 0.632 on the test pumps).
