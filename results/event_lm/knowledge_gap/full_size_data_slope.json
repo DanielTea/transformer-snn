@@ -20,5 +20,39 @@
   "recorded_utc": "2026-11-26T18:35:11Z",
   "change": "A further step of the same kind, written before its check runs: fused race kernels (snnformer/race_kernel.py, 32adeb0) compute a read by age's race and the payload pulses it passes on a block of bytes against a block of cells at a time, writing only the race's growth, once, for its total, which PyTorch still sums in the same layout. fsd-st-45k and fsd-st-180k train and are scored with fused reads (on v18l's code with the fused reads switched on, a commit that changes nothing else) instead of v18k if the CUDA check queued after speed-check-v18k (race-kernel-check) finds (i) the kernels' tests passing on CUDA, (ii) both windows of a full-size stream firing the same spikes with fused reads as by age, with the same loss, (iii) one update's gradients within 1e-4 of each tensor's largest entry, and (iv) a stream-stage update taking at most 0.8 times as long as by age. Otherwise the first amendment decides between v18k and v18c as written. fsp-lift2 stays on v18c and the Transformer arms are untouched; everything else is as registered.",
   "seen_before_amendment": "As at the first amendment, and: the kernels' tests in Triton's CPU interpreter (24 passed: the same spikes, payload pulses and tapes as the read by age; gradients within 1e-4), and a CPU run of the full-size stack at windows of 32 bytes, in which fused reads fired the same spikes with the same loss as reads by age, gradients within 2.1e-6. No GPU run of the kernels, no arm of this record trained."
+ },
+ "code_check": {
+  "recorded_utc": "2026-11-26T22:26:40Z",
+  "v18k (the first amendment's check)": {
+   "run": "2026-11-26 at 21:30Z, alone on GPU 1 after fsp-lift, an NVIDIA RTX PRO 6000 Blackwell Server Edition: the full-size stack's stream on two windows of 2,048 bytes, the second with the first one's state, by cell twice and by age twice on the code copy v18k (bfaebd2), reads by age in blocks of 2,048; then three stream-stage updates by age, timed.",
+   "by age against by cell": {
+    "first window identical": true,
+    "second window identical": true,
+    "counts that differ": "0 of 1,048,576",
+    "loss by cell": 5.776439666748047,
+    "loss by age": 5.776439666748047,
+    "gradient difference relative to each tensor's largest entry": {
+     "largest": 3.072e-06,
+     "median": 1.187e-06,
+     "largest in the reads": 3.072e-06
+    },
+    "identical gradient tensors": "8 of 156"
+   },
+   "run to run": {
+    "by cell": "both windows identical, 0 of 1,048,576 counts differ, losses 5.776439666748047 and 5.776439666748047, all 156 gradient tensors identical",
+    "by age": "both windows identical, 0 of 1,048,576 counts differ, losses 5.776439666748047 and 5.776439666748047, all 156 gradient tensors identical"
+   },
+   "read gradient tensors that are not zero": 121,
+   "peak GPU memory of the check": "47.5 GiB",
+   "a stream-stage update by age": "0.44 s (46,929 operator calls an update, GPU kernel time 395.2 of 440.4 ms), peak GPU memory 39.6 GiB; by cell, the amendment's profile of v18c measured 0.81 s",
+   "verdict": "(i) holds: both windows of the full-size stream fire the same spikes by age as by cell, 0 of 1,048,576 counts differing, with the same loss. (ii) holds: one update's gradients by age are within 3.1e-6 of each tensor's largest entry of the gradients by cell, against the mark of 1e-4. Two runs of the same read gave the same spikes and the same gradients to the bit on this GPU, so none of the 3.1e-6 is run-to-run noise: it is the two reads' different order of summing."
+  },
+  "fused reads (the second amendment's check)": {
+   "run": "2026-11-26 from 21:35Z, alone on GPU 1 after the first check, on the code copy of 41bffd4: the kernels of 32adeb0 beside the speed options, all off by default.",
+   "(i) the kernels' tests on CUDA": "The kernels' 24 tests (tests/test_race_kernel.py) passed. The same run held the optimizer's 8 tests (tests/test_rotated_adam.py), and one of them failed: test_a_stack_of_matrices_is_rotated_matrix_by_matrix, in which a matrix of a stack was not within 2e-4 of the same matrix trained alone (torch.allclose, atol=2e-4). The output does not show by how much. That test creates its tensors without a device, so it computes on the server's CPU in the GPU environment's PyTorch; it is not a test of the kernels.",
+   "(ii) to (iv)": "Not met. The fused read did not run a full-size update: its backward kernel by cells needs 124,416 bytes of shared memory where this GPU allows 101,376 (Triton: out of resource, shared memory). The check stopped in its first fused backward pass, and so did the two timed runs with fused reads, so no spikes, losses or gradients were compared and no fused update was timed. Reads by age on the same copy took 0.44 s an update.",
+   "verdict": "The second amendment's conditions are not met, so the first amendment decides between v18k and v18c."
+  },
+  "decision": "fsd-st-45k and fsd-st-180k train and are scored on the code copy v18k (bfaebd2), with reads by age. Both jobs were waiting and neither had started: on 2026-11-26 at 22:24:47Z their job files were switched from v18c (f876392) to v18k, the code copy's name in the command and nothing else. fsp-lift2, the 90,000-update point, stays on v18c, and the Transformer arms are untouched. The training times reported beside the scores are v18k's for the two new stacks."
  }
 }
