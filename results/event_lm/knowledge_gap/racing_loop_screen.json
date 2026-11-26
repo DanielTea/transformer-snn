@@ -10,5 +10,172 @@
  "runs": "race-24k-s1 and race-24k-s2 (seeds 20001 and 20002), 24,000 updates of 16 x 256 bytes on streams, on GPU 0 at priority 37, on a new code copy of the commit that records this (v18d, launch-checked on the server's CPU first).",
  "measure": "arm.sh's score (experiments/eval_stream.py on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, averaged weights): the evidence of all passes, paired with the base of its seed (compare_stream_scores.py) and split by context (gap_by_piece.py, near 240, far 8,192). Then experiments/loop_exits.py on the same streams: the bits of each pass's summed evidence, of the best pass for every byte, and the halting curve (mean bits and mean passes when each byte is decided at the first earlier pass whose margin reaches 0.5 to 12 bits). Every pass runs for every byte in this screen, so the curve measures how early bytes settle, not what a loop that stops saves.",
  "reading": "(1) Summing the passes costs nothing at the top if the mean paired gap to the base over the two seeds is no more than 0.003 against the racing loop; a lead of at least 0.005 on both seeds is a gain of its own and is reported as one. (2) Bytes settle early if on both seeds some margin decides with at most 2.5 passes on the mean (of 3) at no more than 0.002 bits above the racing loop's own score of all passes. If (1) and (2) hold, the loop that stops is built next (a decided byte's stream is held at every later pass and its pulses there are not spent) and is screened at equal mean pulses against the looped bed, in a record written then; its hop test joins hop_generalization.json by an amendment. If (2) fails, the racing loop rests, and only (1) is reported.",
- "seen_before_recording": "tests/test_loop_exits.py on small stacks (without exits the loop is unchanged; the exits' evidence is what the output neurons fire for each pass's stream; the stream is the same however it is cut; the earlier passes learn through their own evidence). No racing loop has trained."
+ "seen_before_recording": "tests/test_loop_exits.py on small stacks (without exits the loop is unchanged; the exits' evidence is what the output neurons fire for each pass's stream; the stream is the same however it is cut; the earlier passes learn through their own evidence). No racing loop has trained.",
+ "result": {
+  "recorded_utc": "2026-11-26T04:43:01Z",
+  "runs": {
+   "race-24k-s1": 1.49782,
+   "race-24k-s2": 1.498322
+  },
+  "pairings": {
+   "race-24k-s1 against lp-24k-s1": "+0.0314 [+0.0304, +0.0325]",
+   "race-24k-s2 against lp-24k-s2": "+0.0308 [+0.0298, +0.0319]"
+  },
+  "mean_paired_gap": 0.0311,
+  "gap_by_context": {
+   "race-24k-s1 against lp-24k-s1": {
+    "copyable near": 0.0256,
+    "copyable far only": 0.0619,
+    "seen, other follower": -0.1195,
+    "new": 0.0384
+   },
+   "race-24k-s2 against lp-24k-s2": {
+    "copyable near": 0.0108,
+    "copyable far only": 0.0264,
+    "seen, other follower": -0.0236,
+    "new": 0.0374
+   }
+  },
+  "exits": {
+   "race-24k-s1": {
+    "bits_per_byte_by_pass": [
+     1.510584,
+     1.498138,
+     1.49782
+    ],
+    "best_pass_for_every_byte": 1.452774,
+    "halting": [
+     {
+      "margin_bits": 0.5,
+      "bits_per_byte": 1.507827,
+      "above_all_passes": 0.01,
+      "mean_passes": 1.2876,
+      "decided_early": 0.8709
+     },
+     {
+      "margin_bits": 1.0,
+      "bits_per_byte": 1.505977,
+      "above_all_passes": 0.0082,
+      "mean_passes": 1.5011,
+      "decided_early": 0.7617
+     },
+     {
+      "margin_bits": 2.0,
+      "bits_per_byte": 1.503531,
+      "above_all_passes": 0.0057,
+      "mean_passes": 1.7867,
+      "decided_early": 0.6171
+     },
+     {
+      "margin_bits": 3.0,
+      "bits_per_byte": 1.501755,
+      "above_all_passes": 0.0039,
+      "mean_passes": 1.9801,
+      "decided_early": 0.5206
+     },
+     {
+      "margin_bits": 4.0,
+      "bits_per_byte": 1.500455,
+      "above_all_passes": 0.0026,
+      "mean_passes": 2.1296,
+      "decided_early": 0.4473
+     },
+     {
+      "margin_bits": 6.0,
+      "bits_per_byte": 1.499184,
+      "above_all_passes": 0.0014,
+      "mean_passes": 2.3774,
+      "decided_early": 0.3279
+     },
+     {
+      "margin_bits": 8.0,
+      "bits_per_byte": 1.498556,
+      "above_all_passes": 0.0007,
+      "mean_passes": 2.5691,
+      "decided_early": 0.2367
+     },
+     {
+      "margin_bits": 12.0,
+      "bits_per_byte": 1.497931,
+      "above_all_passes": 0.0001,
+      "mean_passes": 2.8453,
+      "decided_early": 0.115
+     }
+    ]
+   },
+   "race-24k-s2": {
+    "bits_per_byte_by_pass": [
+     1.509157,
+     1.498836,
+     1.498322
+    ],
+    "best_pass_for_every_byte": 1.454994,
+    "halting": [
+     {
+      "margin_bits": 0.5,
+      "bits_per_byte": 1.506837,
+      "above_all_passes": 0.0085,
+      "mean_passes": 1.289,
+      "decided_early": 0.8695
+     },
+     {
+      "margin_bits": 1.0,
+      "bits_per_byte": 1.505433,
+      "above_all_passes": 0.0071,
+      "mean_passes": 1.5019,
+      "decided_early": 0.7605
+     },
+     {
+      "margin_bits": 2.0,
+      "bits_per_byte": 1.50346,
+      "above_all_passes": 0.0051,
+      "mean_passes": 1.7864,
+      "decided_early": 0.6162
+     },
+     {
+      "margin_bits": 3.0,
+      "bits_per_byte": 1.502009,
+      "above_all_passes": 0.0037,
+      "mean_passes": 1.9798,
+      "decided_early": 0.5195
+     },
+     {
+      "margin_bits": 4.0,
+      "bits_per_byte": 1.500954,
+      "above_all_passes": 0.0026,
+      "mean_passes": 2.1306,
+      "decided_early": 0.4456
+     },
+     {
+      "margin_bits": 6.0,
+      "bits_per_byte": 1.499626,
+      "above_all_passes": 0.0013,
+      "mean_passes": 2.3823,
+      "decided_early": 0.3247
+     },
+     {
+      "margin_bits": 8.0,
+      "bits_per_byte": 1.498988,
+      "above_all_passes": 0.0007,
+      "mean_passes": 2.5791,
+      "decided_early": 0.2322
+     },
+     {
+      "margin_bits": 12.0,
+      "bits_per_byte": 1.498418,
+      "above_all_passes": 0.0001,
+      "mean_passes": 2.8474,
+      "decided_early": 0.113
+     }
+    ]
+   }
+  },
+  "pulses_a_byte": {
+   "race-24k-s1": 268541,
+   "lp-24k-s1": 268082,
+   "race-24k-s2": 268577,
+   "lp-24k-s2": 269750
+  },
+  "reading": "(1) fails: summing the passes costs the top 0.0311 bits a byte on the mean (0.0314 and 0.0308, both intervals far from zero), ten times the 0.003 allowed, at equal pulses, on new contexts (0.038 and 0.037) and far copies alike. (2) holds on both seeds: at a margin of 6 bits a byte is decided after 2.38 passes on the mean, a third of the bytes before the last pass, at 0.0014 and 0.0013 bits above the loop's own score of all passes. The loop that stops is built only if both hold, so it is not built in this form, and the racing loop as built here rests. What the screen shows besides: the passes do not agree on which bytes they know. Picking the best pass for every byte would score 1.4528 and 1.4550, better than the loop without exits by 0.0136 and 0.0125, while their sum is 0.031 worse; the price is in summing every pass's evidence into the one prediction and in asking the early passes to predict by themselves, not in the passes' knowledge. A racing loop in another form, with the top reading the last pass alone and the exits only deciding when to stop, would need a record of its own."
+ }
 }

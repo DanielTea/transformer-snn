@@ -433,7 +433,12 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    pass's sum learns to predict the byte by itself, and a byte can be decided at the first pass whose evidence
    leads by a margin. Two server seeds ask what summing costs at the top and how early bytes settle
    (`experiments/loop_exits.py`); if they settle early, the loop that stops is built and screened at equal mean
-   pulses.
+   pulses. **It fails in this form**: summing the passes costs the top 0.031 bits a byte on both seeds at equal
+   pulses, ten times what the screen allowed. Bytes do settle early (at a margin of 6 bits a third of them before the
+   last pass, 2.38 passes on the mean, for 0.0013 bits), but the loop that stops waits for both answers. The passes
+   know different bytes: picking each byte's best pass would beat the loop without exits by 0.013, so the price is in
+   summing every pass into one prediction and in making early passes predict alone. A loop whose top reads the last
+   pass and whose exits only decide when to stop is the form left to try.
 6. **Skip fibres** (`skip_fibres_with_data.json`, pre-registered): every part of the stack hears one stream, the
    running sum of all that came before, fired again as whole counts after every read and cell layer.
    DeepCrossAttention (arXiv 2502.06785) finds that a Transformer gains when each layer hears the earlier layers
@@ -491,7 +496,9 @@ denser with data (`learning_rate_by_context.json`), and the learning rate (`lear
 ## A second track: one model for language, reasoning and telemetry
 
 The plan (Volley-One) is one spiking model that writes and reasons in its own words with chains of thought and reads
-machine telemetry as a second sense, without a teacher model and without template-written answers. Knowledge is
+machine telemetry as a second sense, without template-written answers. Non-spiking teachers such as DeepSeek may
+help train it, but the model that ships is purely spiking, and the race against the Transformer stays free of any
+teacher. Knowledge is
 read from documents into the stream rather than memorized; reasoning is learned as people learn it, from human
 worked solutions, then by practice with feedback on checkable tasks kept at the edge of what the model can do,
 replayed in sleep, and internalized into silent passes of the racing loop. The first screens, pre-registered in
