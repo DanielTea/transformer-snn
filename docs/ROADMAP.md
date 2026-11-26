@@ -115,6 +115,12 @@ Both models gain from a higher learning rate, and about alike: over two seeds th
 Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The flattening is not an effect of the rate
 (`learning_rate_with_data.json`), and every comparison now takes each model at its best rate.
 
+Until now every full-size comparison has been at one length, 90,000 updates, which shows the gap's level but not
+its slope. The weekend of 2026-11-28 measures the slope at full size: fsp-lift2's stack and fsp-tf's Transformer,
+each trained for 45,000, 90,000 and 180,000 updates with nothing else changed (`full_size_data_slope.json`). If the
+gap shrinks by at least 0.005 per doubling, more data is the way past the Transformer; if it grows, the stack must
+change how it learns before it is scaled.
+
 ## Rules for claims
 
 1. **Spiking and streaming only.** The stack is built, trained and scored as
