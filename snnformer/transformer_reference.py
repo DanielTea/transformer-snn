@@ -181,8 +181,22 @@ class _SpreadPoolNorm(_PoolNorm):
         return self.weight * x / (self.rest.abs() + x.square().mean(-1, keepdim=True).sqrt())
 
 
+class _EnergyGradientPoolNorm(_PoolNorm):
+    """The pool control that divides by the mean absolute activity, as the pool does, but trains as a division by the
+    root mean square would: the gradient through the divisor is that of the root mean square, scaled to the mean
+    absolute activity, in place of the stream's sign pattern. What it computes is the pool's; only how it trains
+    differs."""
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        mean = x.abs().mean(-1, keepdim=True)
+        spread = (x.square().mean(-1, keepdim=True) + 1e-12).sqrt()
+        heard = mean.detach() + (mean / spread).detach() * (spread - spread.detach())
+        return self.weight * x / (self.rest.abs() + heard)
+
+
 def _norm(dim: int, kind: str) -> nn.Module:
-    return {"layer": nn.LayerNorm, "pool": _PoolNorm, "cpool": _CentredPoolNorm, "spool": _SpreadPoolNorm}[kind](dim)
+    return {"layer": nn.LayerNorm, "pool": _PoolNorm, "cpool": _CentredPoolNorm, "spool": _SpreadPoolNorm,
+            "gpool": _EnergyGradientPoolNorm}[kind](dim)
 
 
 class _TransformerBlock(nn.Module):
@@ -272,9 +286,9 @@ class TransformerLM(nn.Module):
         if cfg.feed_forward not in _UNITS or cfg.age_offsets < 0:
             raise ValueError("the feed-forward units are swiglu, reglu, gelu or relu, or a control gate (rampglu, "
                              "shuntglu, sigglu, bilinear), and the rate of the age offsets is not negative")
-        if cfg.norm not in ("layer", "pool", "cpool", "spool"):
-            raise ValueError("the reference's normalization is a LayerNorm or, as a control, a pool, a centred pool or "
-                             "a pool of the spread")
+        if cfg.norm not in ("layer", "pool", "cpool", "spool", "gpool"):
+            raise ValueError("the reference's normalization is a LayerNorm or, as a control, a pool, a centred pool, "
+                             "a pool of the spread or a pool that trains with the spread's gradient")
         if (cfg.feed_forward != "swiglu" or cfg.age_offsets or cfg.untied_output or cfg.norm != "layer") \
                 and cfg.attn != "transformer":
             raise ValueError("other units, age offsets, an output layer of its own and a pool in place of the norm "

@@ -309,11 +309,16 @@ Transformer 0.053 at 2.4e-3, a difference of 0.010 where 0.020 was asked. The fl
    **and at full size**: with the membranes' ceiling lifted, so that a stronger pool takes no range from the
    neurons, the lifted loop with energy pools is 0.0040 behind the same loop (new contexts 0.008, far copies 0.012),
    and energy pools stay off. What a Transformer loses with the stack's pool is not what the stack loses with it,
-   so the layout walk's largest part is not yet a recipe for the stack. A likely reason, not yet measured: a
-   Transformer's stream is signed and dense with a few channels far louder than the rest, which a division by mean
-   activity leaves loud, while the stack's counts are whole and capped, so no channel can be far louder, and
-   dividing them by their energy mostly inhibits sparse patterns more. The ratio of energy to summed activity, token
-   by token, in both trained streams tells.
+   so the layout walk's largest part is not yet a recipe for the stack. The guess that a Transformer's stream has a
+   few loud channels the stack's capped counts lack is wrong (`stream_loudness.json`): both trained streams are
+   dense and close to Gaussian, and the ratio of their root mean square to their mean absolute value stays within a
+   few percent of 1.25 from token to token, so after training a division by mean activity is a division by the
+   root mean square times a constant. The pool's price lies in how it trains. A division by mean activity passes
+   the stream's sign pattern back through its divisor, a division by the root mean square the stream itself.
+   **Pools that train with the energy's gradient** (`--pool-energy-gradient`, `pool_gradient.json`) hear the summed
+   counts as before, so the stack fires the same spikes, and pass the energy's gradient: a float control with the
+   pool's forward and the root mean square's gradient (`gpool`), a full-size pilot and two bed seeds run on GPU 1
+   once fsp-lift is scored.
    **Power-law cells** (`--granule-power P`, `power_cells_screen.json`, on the laptop tonight): a cortical neuron's
    rate grows with a power of about two of how far its membrane stands past the threshold. A power-law cell fires
    round(k * k / P) spikes for k thresholds of charge, up to its cap, as a plain cell does at P thresholds: the

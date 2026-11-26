@@ -307,6 +307,12 @@ class EventLMConfig:
     # is divided by its spread, as cortical normalization divides a neuron's response by the pooled squared activity
     # of its neighbours (Heeger's normalization model) and as a Transformer's norm divides by the root mean square.
     pool_energy: bool = False
+    # Pools that hear the summed counts, as plain pools do, but train as energy pools would: the gradient that reaches
+    # the stream through what a pool hears is that of the energy, scaled to the summed counts' size, in place of the
+    # summed counts' own gradient, the sign pattern of the stream. What the stack fires is unchanged; only how it
+    # learns differs (stream_loudness.json: the trained divisions by mean activity and by energy agree within a
+    # constant, so a pool's price lies in how it trains).
+    pool_energy_gradient: bool = False
     granule_cap: int | None = None
     # Power-law cells: a plain threshold cell fires round(k * k / granule_power) spikes for k thresholds of charge
     # above its rest, up to its largest count, as a cortical neuron's rate grows with a power of how far its membrane
@@ -841,7 +847,14 @@ def _heard_activity(spikes, energy=False):
     """What a stream's inhibitory pool hears at every byte, as [..., 1]: the summed counts of the stream's channels,
     or with ``energy`` the whole part of the square root of their summed squares times their number, which equals the
     summed counts where the active channels fire alike. Whole numbers for whole counts, with the gradient of the
-    smooth root while training."""
+    smooth root while training. With ``energy="gradient"`` the pool hears the summed counts and passes the gradient
+    of the smooth root, scaled by the summed counts over the root, in place of the counts' sign pattern."""
+    if energy == "gradient":
+        summed = spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)
+        if not spikes.is_floating_point() or not spikes.requires_grad:
+            return summed
+        smooth = (spikes.square().sum(-1, keepdim=True) * spikes.shape[-1] + 1e-6).sqrt()
+        return summed.detach() + (summed / smooth).detach() * (smooth - smooth.detach())
     if not energy:
         return spikes.abs().sum(-1, keepdim=True, dtype=spikes.dtype)
     channels = spikes.shape[-1]
@@ -850,6 +863,12 @@ def _heard_activity(spikes, energy=False):
         return whole
     smooth = (spikes.square().sum(-1, keepdim=True) * channels + 1e-6).sqrt()
     return whole + (smooth - smooth.detach())
+
+
+def _pool_hearing(cfg):
+    """How the pools of a stack hear its stream, as _heard_activity takes it: summed counts (False), energy (True) or
+    summed counts that train with the energy's gradient ("gradient")."""
+    return "gradient" if cfg.pool_energy_gradient else bool(cfg.pool_energy)
 
 
 def _stream_pool(cfg):
@@ -2735,7 +2754,7 @@ class _StateRead(nn.Module):
                                        quanta_per_threshold=cfg.pool_quanta, capped=True)
             self.fire.lifted = cfg.pool_lifts_ceiling
             self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
-            self.energy = bool(cfg.pool_energy)
+            self.energy = _pool_hearing(cfg)
             self.budget = cfg.read_budget
             if self.budget is None:
                 # Cells fire once more for every ``spacing`` of charge they come closer to the most charged cell.
@@ -4258,7 +4277,7 @@ class _GranuleLayer(nn.Module):
         # a whole threshold.
         self.tail, self.tail_local = cfg.granule_slope_tail * cfg.pool_fine, cfg.granule_slope_tail_local
         self.pool, self.rest_quanta = _stream_pool(cfg), cfg.pool_rest_quanta
-        self.energy = bool(cfg.pool_energy)
+        self.energy = _pool_hearing(cfg)
         self.emit = _IntegrateFire(cap, self.bits, False)
 
     def rest_quarters(self, offset=None):
@@ -4647,6 +4666,9 @@ class EventLM(nn.Module):
             raise ValueError("phases belong to the later passes of a loop of a stack without kept cells")
         if not isinstance(cfg.pool_energy, bool) or (cfg.pool_energy and not cfg.stack):
             raise ValueError("an energy pool belongs to the reads, cells and output of a stack")
+        if not isinstance(cfg.pool_energy_gradient, bool) or (cfg.pool_energy_gradient and (
+                not cfg.stack or cfg.pool_energy)):
+            raise ValueError("pools that train with the energy's gradient belong to a stack whose pools hear summed counts")
         if not isinstance(cfg.balanced_synapses, bool) or (cfg.balanced_synapses and (
                 not cfg.stack or cfg.granule_gate or cfg.granule_veto)):
             raise ValueError("balanced synapses belong to the reads, plain cells and output of a stack")
@@ -6223,7 +6245,7 @@ class EventLM(nn.Module):
         if self.output_pool is not None:
             # One quantum of threshold at rest and one more for every spike of the pool.
             counts = self.output_emit(
-                current, 1 + self.output_pool(_heard_activity(spikes, self.cfg.pool_energy)))
+                current, 1 + self.output_pool(_heard_activity(spikes, _pool_hearing(self.cfg))))
         else:
             counts = self.output_emit(current, reference=self._reference_counts(current))
         if self.output_step > 1:
