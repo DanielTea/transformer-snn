@@ -94,5 +94,82 @@
   "recorded_utc": "2026-11-26T00:57:25Z",
   "change": "The seeds 3 and 4 and their bases (pw8-24k-g3, pw8-24k-g4, pw8-6k-g3, pw8-6k-g4, bed24-lr12-g3, bed24-lr12-g4, rd-base-6k-g3, rd-base-6k-g4) move from priority 38 to 36 on GPU 0: behind the full-size pilot fs-loop6-lift-pw8 (34) and the running fs-loop6-lift-en, ahead of the racing loop's runs (37) and the sleep runs (38, 39). Amendment_2 moved them back because the laptop's seed had shrunk to 0.0045; the two server seeds have since read a constant gain and the pilot is queued, and power-law cells join fsp-lift2, which starts at 16:45 UTC on 2026-11-26, only if the four-seed reading also passes. At 38 that reading would most likely miss tonight's window and land after fsp-lift2 has started; at 36 it lands by about 05:00 UTC. The runs, flags, code copy, bases and every reading are unchanged.",
   "seen_before_amendment": "result_two_seeds (pw8-24k-s1 and -s2, pw8-6k-s1 and -s2 with their pairings) and pw-decide's decision; no run of seeds 3 and 4 or of their bases has trained."
+ },
+ "result_four_seeds": {
+  "recorded_utc": "2026-11-26T04:03:20Z",
+  "runs": {
+   "pw8-24k-g3": 1.478239,
+   "bed24-lr12-g3": 1.48823,
+   "pw8-24k-g4": 1.474268,
+   "bed24-lr12-g4": 1.48855,
+   "pw8-6k-g3": 1.610834,
+   "rd-base-6k-g3": 1.628257,
+   "pw8-6k-g4": 1.603872,
+   "rd-base-6k-g4": 1.625764
+  },
+  "pairings": {
+   "pw8-24k-g3 against bed24-lr12-g3": "-0.0100 [-0.0110, -0.0090]",
+   "pw8-24k-g4 against bed24-lr12-g4": "-0.0143 [-0.0152, -0.0133]",
+   "pw8-6k-g3 against rd-base-6k-g3": "-0.0174 [-0.0184, -0.0165]",
+   "pw8-6k-g4 against rd-base-6k-g4": "-0.0219 [-0.0229, -0.0209]"
+  },
+  "gap_by_context": {
+   "pw8-24k-g3 against bed24-lr12-g3": {
+    "copyable near": 0.0447,
+    "copyable far only": -0.0223,
+    "seen, other follower": 0.0348,
+    "new": -0.0168
+   },
+   "pw8-24k-g4 against bed24-lr12-g4": {
+    "copyable near": -0.0308,
+    "copyable far only": -0.0088,
+    "seen, other follower": 0.0057,
+    "new": -0.0149
+   },
+   "pw8-6k-g3 against rd-base-6k-g3": {
+    "copyable near": -0.0698,
+    "copyable far only": -0.0525,
+    "seen, other follower": 0.1783,
+    "new": -0.0212
+   },
+   "pw8-6k-g4 against rd-base-6k-g4": {
+    "copyable near": -0.0597,
+    "copyable far only": -0.0019,
+    "seen, other follower": -0.0378,
+    "new": -0.02
+   }
+  },
+  "pulses_a_byte": {
+   "pw8-24k-g3": 116132,
+   "bed24-lr12-g3": 116244,
+   "pw8-24k-g4": 115491,
+   "bed24-lr12-g4": 116002,
+   "pw8-6k-g3": 115808,
+   "rd-base-6k-g3": 116717,
+   "pw8-6k-g4": 117392,
+   "rd-base-6k-g4": 117256
+  },
+  "shared_reading_four_seeds": {
+   "long_leads": [
+    0.00998,
+    0.01561,
+    0.00999,
+    0.01428
+   ],
+   "long_mean_lead": 0.01247,
+   "seeds_ahead": 4,
+   "a_lead": true,
+   "short_leads": [
+    0.01272,
+    0.01851,
+    0.01742,
+    0.02189
+   ],
+   "short_mean_lead": 0.01763,
+   "growth": -0.00517,
+   "b_growth": false,
+   "verdict": "a constant gain, not a fix for late learning"
+  },
+  "reading": "A constant gain on four seeds, so the amendment's condition holds: after 24,000 updates power-law cells lead the bed on every seed (0.0100, 0.0156, 0.0100 and 0.0143; 0.0125 on the mean) at the bed's parameters and pulses, most of it on new contexts (0.015 to 0.017 on seeds 3 and 4). After 6,000 updates they led by 0.0176 on the mean, so the lead shrinks by about 0.005 with data on the server's seeds, as it shrank to 0.0045 on the laptop's (power_cells_screen.json): power-law cells learn faster early and the plain cells catch up part of the way. With the full-size pilot 0.0137 better (full_size_power_cells.json), power-law cells join the next full-length run, fsp-lift2 (full_size_lifted_loop_second.json), where 90,000 updates test how much of the gain survives."
  }
 }
