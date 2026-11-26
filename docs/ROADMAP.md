@@ -121,6 +121,13 @@ each trained for 45,000, 90,000 and 180,000 updates with nothing else changed (`
 gap shrinks by at least 0.005 per doubling, more data is the way past the Transformer; if it grows, the stack must
 change how it learns before it is scaled.
 
+The stack trained about ten times slower than the Transformer (16 hours against 1.6 for 90,000 updates), almost all
+of it in the stream stage, where each race read compared every byte with every cell of its table. A read by age
+(`snnformer/event_lm.py`, `tests/test_read_by_age.py`) works each byte out only against the cells within its reach:
+the same pulses, spike for spike, at half the work. On the server's GPU a stream-stage update takes 0.43 s instead of
+0.81 s, a full-size run about 9 hours instead of 16, and a trained model is scored to the same bits. The scaling
+test's two new stack runs move to it if a CUDA check confirms the same spikes (amendment of 2026-11-26).
+
 ## Rules for claims
 
 1. **Spiking and streaming only.** The stack is built, trained and scored as
@@ -545,6 +552,11 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   nothing to reinforce; practice only sharpened its direct answers at 3 hops (0.42 to 0.64). A chain of thought
   did not arise from reward alone: the model needs written chains to start from (in its training text, or from a
   teacher) before practice can lengthen them.
+- **Written chains** (`written_chains.json`, `hop_tasks.py corpus --written-chains`): the same hop lines with every
+  chain written out before the answer (?zt=mx=qa=7), so that each byte after the query is one lookup of the name
+  just written. The stack and the Transformer train on them for 24,000 updates and answer greedily with room to
+  write; the screen asks whether they learn to chain in writing and whether the chain carries them past the 4 hops
+  they trained on (accuracy at 8 hops of at least 0.50). On the laptop tonight, after the cubic cells' seed.
 
 ## How to continue
 
