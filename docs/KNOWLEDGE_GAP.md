@@ -170,8 +170,16 @@ stack, and nine tenths of that gain is on new contexts: 0.0116 better there on t
 distance on new contexts falls from 0.090 to 0.078 and the whole gap from 0.034 to 0.025. Depth by recurrence is the
 first part to narrow the knowledge gap at full length; it fires 1.63 times the pulses and adds no parameters.
 
+v21 trained that looped stack under the pool that lifts the ceiling, which divides a neuron's charge before its
+membrane bounds it, with nothing else changed (`full_size_lifted_loop_run.json`). It scores 1.0817 on test and 1.1136
+on validation, 0.0222 and 0.0251 better than v20's stack at the same parameters and pulses, and more than all of that
+gain is on new contexts: 0.0340 better there on test and 0.0371 on validation. Against the Transformer the distance
+on new contexts falls from 0.078 to 0.044 on test and from 0.090 to 0.052 on validation, and the whole gap from 0.025
+to 0.003 and from 0.034 to 0.009. The stack is still behind on both splits. What is left of the gap is knowledge: the
+stack is ahead wherever a context offers a copy (0.087 near, 0.44 far on test) and 0.044 behind where it offers none.
+
 Records: `full_size.json`, `full_size_word_heads.json`, `full_size_best_rate_pair.json`, `full_size_loop_run.json`,
-`results/event_lm/trained_plasticity/arms.json`.
+`full_size_lifted_loop_run.json`, `results/event_lm/trained_plasticity/arms.json`.
 
 ## What this means
 
