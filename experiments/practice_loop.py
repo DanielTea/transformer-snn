@@ -31,6 +31,12 @@ stay as large as they were, and after some hundred rounds a model can lose what 
 (practice_within_reach.json). --rehearse adds to every round what the written corpus taught: fresh tasks of the
 corpus's lengths with their chains written as the corpus writes them, learned as the corpus was (rehearsal_loss).
 
+A model that was trained on several families of tasks (task_families.py) practises them in one loop. --families
+names the families it knows: each is evaluated, and with --rehearse each is rehearsed. --practise names those that
+are practised for reward (all of them unless given), each with its own staircase and its own --tasks tasks a round;
+the round's step adds the families' losses. A family that is rehearsed and not practised shows what practice in
+another family does to it.
+
 On a CUDA device two of the trainer's speed options apply (experiments/speed_options.py). --exact-products takes a
 stack's products of whole numbers on the tensor cores: the same attempts, losses and weights to the bit, checked
 against single precision in the first round and in the round after every evaluation along the way. --fused-reads
@@ -39,7 +45,7 @@ differently, so a run with it is another run, as another seed is.
 
 usage: python experiments/practice_loop.py --checkpoint run/model.pt.averaged --out practice/ --rounds 200 \\
     [--device mps] [--longest-hops 8] [--evaluate-every 50 --evaluate-hops 4 6 8] [--dips 0] [--rehearse 16] \\
-    [--exact-products] [--fused-reads]
+    [--families hops offs sums] [--practise hops] [--exact-products] [--fused-reads]
 """
 from __future__ import annotations
 
@@ -56,7 +62,7 @@ from torch.nn import functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import resolve_device  # noqa: E402
-from hop_tasks import chain_of, example, resolve  # noqa: E402
+from task_families import FAMILIES  # noqa: E402
 import snnformer.event_lm as event_lm_module  # noqa: E402
 from snnformer import whole_products  # noqa: E402
 from snnformer.event_lm import EventLM  # noqa: E402
@@ -76,21 +82,23 @@ def scores(model, output):
 class Task:
     prompt: bytes      # the line up to and with the query's '='
     answer: int        # the answer digit's byte
-    hops: int
+    hops: int          # the steps of its chain
+    family: str = "hops"
 
 
-def generate(rng: random.Random, hops: int) -> Task:
-    line = example(rng, hops)
+def generate(rng: random.Random, hops: int, family: str = "hops") -> Task:
+    line = FAMILIES[family].example(rng, hops)
     cut = line.rindex("=") + 1
-    return Task(line[:cut].encode(), ord(line[cut]), hops)
+    return Task(line[:cut].encode(), ord(line[cut]), hops, family)
 
 
 def verify(task: Task) -> bool:
-    """The reference answer follows from the task's own assignments, and the query is not a digit itself."""
+    """The reference answer follows from the task's own items in as many steps as were asked, and the query is not
+    a digit itself."""
     text = task.prompt.decode() + chr(task.answer) + "\n"
-    answer, hops = resolve(text)
-    query = task.prompt.decode().rsplit(";?", 1)[1][:-1]
-    return answer == chr(task.answer) and hops == task.hops and not query.isdigit()
+    family = FAMILIES[task.family]
+    query = text[text.rindex(";") + 2:].split("=", 1)[0]
+    return family.chain(text)[-1] == chr(task.answer) and family.steps(text) == task.hops and not query.isdigit()
 
 
 def grade(task: Task, written: bytes) -> float:
@@ -175,10 +183,10 @@ def written_likelihood(model, prompts: list[bytes], written: list[bytes], device
 
 
 def chain_written(task: Task) -> bytes:
-    """What the written corpus writes after a task's prompt: the names its query leads through, the digit and a
-    newline (?zt= then mx=qa=7; one hop: 7)."""
-    steps = chain_of(task.prompt.decode() + chr(task.answer) + "\n")
-    return "=".join(steps[1:]).encode() + b"\n"
+    """What the written corpus writes after a task's prompt: the steps of its family's chain, the answer and a
+    newline (hops: ?zt= then mx=qa=7; one hop: 7)."""
+    steps = FAMILIES[task.family].chain(task.prompt.decode() + chr(task.answer) + "\n")
+    return "=".join(steps).encode() + b"\n"
 
 
 def rehearsal_loss(model, tasks: list[Task], device):
@@ -194,14 +202,15 @@ def wrote_the_chain(task: Task, written: bytes) -> bool:
 
 
 @torch.no_grad()
-def evaluate(model, hops_list, count: int, max_bytes: int, seed: int, device) -> dict:
-    """Greedy answers with room to think: for every hop count, ``count`` tasks (drawn from ``seed``), the model
-    writes its most likely bytes up to a newline; the accuracy of the last byte, the share of answers that write at
-    least one name, the share that write the query's whole chain right (wrote_the_chain), and the mean bytes."""
+def evaluate(model, hops_list, count: int, max_bytes: int, seed: int, device, family: str = "hops") -> dict:
+    """Greedy answers with room to think: for every hop count, ``count`` tasks of the family (drawn from ``seed``),
+    the model writes its most likely bytes up to a newline; the accuracy of the last byte, the share of answers that
+    write at least one name, the share that write the query's whole chain right (wrote_the_chain), and the mean
+    bytes."""
     found = {}
     for hops in hops_list:
         rng = random.Random(seed * 1000 + hops)
-        tasks = [generate(rng, hops) for _ in range(count)]
+        tasks = [generate(rng, hops, family) for _ in range(count)]
         written = attempts(model, tasks, 1, max_bytes, 1e-6, torch.Generator().manual_seed(seed), device)
         chains = sum(wrote_the_chain(t, w) for t, w in zip(tasks, written))
         found[str(hops)] = {"accuracy": round(sum(grade(t, w) for t, w in zip(tasks, written)) / count, 4),
@@ -216,15 +225,22 @@ def wrote_a_name(written: bytes) -> bool:
     return any(chr(b).isalpha() for b in body)
 
 
-def keep_evaluation(model, checkpoint, out: Path, round_: int, hops: int, hops_list, count: int, max_bytes: int,
-                    seed: int, device) -> dict:
+def keep_evaluation(model, checkpoint, out: Path, round_: int, hops, hops_list, count: int, max_bytes: int,
+                    seed: int, device, families=("hops",)) -> dict:
     """Score the model's greedy answers after ``round_`` rounds of practice (evaluate, on the tasks that the
     evaluation of a finished run draws from the same seed), append the row to OUT/evaluations.jsonl and keep the
     scored model as OUT/model-rROUND.pt. The evaluation draws from generators of its own, so the practice that
-    follows is the practice without it."""
+    follows is the practice without it. With several families the row holds every family's evaluation (by_family)
+    and ``hops`` is every practised family's place on its staircase."""
     was_training = model.training
     model.eval()
-    row = {"round": round_, "hops": hops, "by_hops": evaluate(model, hops_list, count, max_bytes, seed, device)}
+    if len(families) == 1:
+        row = {"round": round_, "hops": hops,
+               "by_hops": evaluate(model, hops_list, count, max_bytes, seed, device, families[0])}
+    else:
+        row = {"round": round_, "hops": hops,
+               "by_family": {family: evaluate(model, hops_list, count, max_bytes, seed, device, family)
+                             for family in families}}
     model.train(was_training)
     with (out / "evaluations.jsonl").open("a") as log:
         log.write(json.dumps(row) + "\n")
@@ -266,6 +282,12 @@ def main():
                         help="the lengths rehearsed, drawn evenly: those of the written corpus")
     parser.add_argument("--rehearse-weight", type=float, default=1.0,
                         help="weight of the rehearsal's loss beside the practice's")
+    parser.add_argument("--families", nargs="+", choices=sorted(FAMILIES), default=["hops"],
+                        help="the task families the model was trained on (task_families.py): each is evaluated, and "
+                             "with --rehearse each is rehearsed")
+    parser.add_argument("--practise", nargs="+", choices=sorted(FAMILIES), default=None,
+                        help="the families practised for reward, each with its own staircase and --tasks tasks a "
+                             "round (default: every family of --families)")
     parser.add_argument("--exact-products", action="store_true",
                         help="a stack's products of whole numbers on a CUDA device's tensor cores, to the bit "
                              "(snnformer/whole_products.py)")
@@ -276,14 +298,21 @@ def main():
     device = resolve_device(args.device)
     if (args.exact_products or args.fused_reads) and device.type != "cuda":
         parser.error("--exact-products and --fused-reads take a CUDA device")
+    families = list(dict.fromkeys(args.families))
+    practised = list(dict.fromkeys(args.practise or families))
+    if not set(practised) <= set(families):
+        parser.error("--practise names families of --families")
+    single = len(families) == 1
     whole_products.ON = args.exact_products
     event_lm_module._READ_FUSED = args.fused_reads
     model, checkpoint = load_checkpoint(args.checkpoint, device)
     if args.evaluate:
         args.out.mkdir(parents=True, exist_ok=True)
-        found = evaluate(model, args.evaluate, args.evaluate_tasks, args.max_bytes, args.seed + 7, device)
-        (args.out / "evaluate.json").write_text(json.dumps({"checkpoint": str(args.checkpoint), "by_hops": found},
-                                                           indent=1) + "\n")
+        found = {family: evaluate(model, args.evaluate, args.evaluate_tasks, args.max_bytes, args.seed + 7, device,
+                                  family) for family in families}
+        found = found[families[0]] if single else found
+        (args.out / "evaluate.json").write_text(json.dumps(
+            {"checkpoint": str(args.checkpoint), "by_hops" if single else "by_family": found}, indent=1) + "\n")
         print(json.dumps(found), flush=True)
         return
     optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=args.lr)
@@ -291,12 +320,15 @@ def main():
     rehearsing = random.Random(args.seed + 13)  # rehearsal draws its own tasks: the practice's stay as they were
     args.out.mkdir(parents=True, exist_ok=True)
     log = (args.out / "rounds.jsonl").open("a")
-    hops = args.start_hops
+    hops = {family: args.start_hops for family in practised}  # every practised family's place on its staircase
+
+    def places():
+        return hops[practised[0]] if single else dict(hops)
 
     def scored(round_):
         if args.evaluate_every and round_ % args.evaluate_every == 0:
-            row = keep_evaluation(model, checkpoint, args.out, round_, hops, args.evaluate_hops, args.evaluate_tasks,
-                                  args.max_bytes, args.seed + 7, device)
+            row = keep_evaluation(model, checkpoint, args.out, round_, places(), args.evaluate_hops,
+                                  args.evaluate_tasks, args.max_bytes, args.seed + 7, device, families)
             print(json.dumps(row), flush=True)
 
     scored(0)
@@ -305,42 +337,58 @@ def main():
         # after each evaluation along the way, so that a factor too large for them does not go unseen.
         whole_products.AUDIT = args.exact_products and (
             round_ == 1 or bool(args.evaluate_every) and round_ % args.evaluate_every == 1)
-        tasks = [task for task in (generate(rng, hops) for _ in range(args.tasks)) if verify(task)]
-        model.eval()
-        written = attempts(model, tasks, args.attempts, args.max_bytes, args.temperature, generator, device)
-        rewards = torch.tensor([grade(tasks[i // args.attempts], w) for i, w in enumerate(written)])
-        solve_rate = float(rewards.mean())
-        model.train()
-        loss = policy_loss(model, tasks, written, rewards, args.attempts, device, args.dips)
-        rehearsal = None
+        losses, rows, solved = [], {}, {}
+        for family in practised:
+            tasks = [task for task in (generate(rng, hops[family], family) for _ in range(args.tasks)) if verify(task)]
+            model.eval()
+            written = attempts(model, tasks, args.attempts, args.max_bytes, args.temperature, generator, device)
+            rewards = torch.tensor([grade(tasks[i // args.attempts], w) for i, w in enumerate(written)])
+            solved[family] = float(rewards.mean())
+            model.train()
+            loss = policy_loss(model, tasks, written, rewards, args.attempts, device, args.dips)
+            if loss is not None:
+                losses.append(loss)
+            rows[family] = {"hops": hops[family], "tasks": len(tasks), "solve_rate": round(solved[family], 4),
+                            "wrote_names": round(sum(map(wrote_a_name, written)) / len(written), 4),
+                            "wrote_the_chain": round(sum(wrote_the_chain(tasks[i // args.attempts], w)
+                                                         for i, w in enumerate(written)) / len(written), 4),
+                            "mean_bytes": round(sum(len(w) for w in written) / len(written), 2),
+                            "loss": None if loss is None else round(float(loss.detach()), 5),
+                            "example": (tasks[0].prompt[-12:] + written[0]).decode("latin-1")}
+        rehearsals = []
         if args.rehearse:
-            again = [generate(rehearsing, rehearsing.choice(args.rehearse_hops)) for _ in range(args.rehearse)]
-            rehearsal = rehearsal_loss(model, again, device)
-        step = [part for part in (loss, None if rehearsal is None else args.rehearse_weight * rehearsal)
-                if part is not None]
+            for family in families:
+                again = [generate(rehearsing, rehearsing.choice(args.rehearse_hops), family)
+                         for _ in range(args.rehearse)]
+                rehearsal = rehearsal_loss(model, again, device)
+                rehearsals.append(rehearsal)
+                row = rows.setdefault(family, {})
+                example_ = row.pop("example", None)  # the rehearsal's loss is logged before the example, as it was
+                row["rehearsal"] = round(float(rehearsal.detach()), 5)
+                if example_ is not None:
+                    row["example"] = example_
+        step = losses + [args.rehearse_weight * rehearsal for rehearsal in rehearsals]
         if step:
             optimizer.zero_grad(set_to_none=True)
-            (step[0] if len(step) == 1 else step[0] + step[1]).backward()
+            total = step[0]
+            for part in step[1:]:
+                total = total + part
+            total.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             if hasattr(model, "synaptic_scaling"):
                 model.synaptic_scaling()
-        row = {"round": round_, "hops": hops, "tasks": len(tasks), "solve_rate": round(solve_rate, 4),
-               "wrote_names": round(sum(map(wrote_a_name, written)) / len(written), 4),
-               "wrote_the_chain": round(sum(wrote_the_chain(tasks[i // args.attempts], w)
-                                            for i, w in enumerate(written)) / len(written), 4),
-               "mean_bytes": round(sum(len(w) for w in written) / len(written), 2),
-               "loss": None if loss is None else round(float(loss.detach()), 5),
-               **({} if rehearsal is None else {"rehearsal": round(float(rehearsal.detach()), 5)}),
-               "example": (tasks[0].prompt[-12:] + written[0]).decode("latin-1")}
-        log.write(json.dumps(row) + "\n")
+        for family in families:  # one row a round; with several families one row a round and family
+            row = {"round": round_, **({} if single else {"family": family}), **rows.get(family, {})}
+            log.write(json.dumps(row) + "\n")
+            print(json.dumps(row), flush=True)
         log.flush()
-        print(json.dumps(row), flush=True)
-        hops = staircase(hops, solve_rate, longest=args.longest_hops)
+        for family in practised:
+            hops[family] = staircase(hops[family], solved[family], longest=args.longest_hops)
         scored(round_)
         if round_ % 50 == 0 or round_ == args.rounds:
             torch.save({**checkpoint, "state_dict": model.state_dict(), "practice_rounds": round_,
-                        "practice_hops": hops}, args.out / "model.pt")
+                        "practice_hops": places()}, args.out / "model.pt")
     log.close()
 
 

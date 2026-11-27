@@ -12,7 +12,9 @@ from snnformer.event_lm import EventLM, EventLMConfig
 from snnformer.transformer_reference import TransformerLM
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "experiments"))
+import hop_tasks  # noqa: E402
 import practice_loop as practice  # noqa: E402
+import task_families  # noqa: E402
 from test_hop_tasks import _STACK  # noqa: E402
 
 
@@ -148,7 +150,7 @@ def test_greedy_evaluation_reports_every_hop_count():
 
 def test_an_answer_wrote_the_chain_only_if_it_writes_every_name_and_the_digit():
     task = practice.generate(random.Random(1), 3)
-    steps = practice.chain_of(task.prompt.decode() + chr(task.answer) + "\n")
+    steps = hop_tasks.chain_of(task.prompt.decode() + chr(task.answer) + "\n")
     right = "=".join(steps[1:]).encode() + b"\n"
     assert len(steps) == 4 and practice.wrote_the_chain(task, right) and practice.grade(task, right) == 1.0
     assert not practice.wrote_the_chain(task, bytes([task.answer]) + b"\n")
@@ -180,3 +182,36 @@ def test_the_speed_options_are_refused_without_a_cuda_device(tmp_path, monkeypat
         with pytest.raises(SystemExit):
             practice.main()
         assert "take a CUDA device" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("family", ["hops", "offs", "sums"])
+def test_every_family_gives_tasks_the_loop_can_verify_grade_and_rehearse(family):
+    task = practice.generate(random.Random(3), 3, family)
+    assert task.family == family and task.hops == 3 and task.prompt.endswith(b"=") and practice.verify(task)
+    right = practice.chain_written(task)
+    line = task.prompt.decode() + chr(task.answer) + "\n"
+    assert right == "=".join(task_families.FAMILIES[family].chain(line)).encode() + b"\n"
+    assert right[-2] == task.answer and right.count(b"=") == 2
+    assert practice.wrote_the_chain(task, right) and practice.grade(task, right) == 1.0
+    assert not practice.wrote_the_chain(task, bytes([task.answer]) + b"\n")
+    wrong = practice.Task(task.prompt, ord("0") + (task.answer - ord("0") + 1) % 10, task.hops, family)
+    assert not practice.verify(wrong) and not practice.verify(practice.Task(task.prompt, task.answer, 2, family))
+
+
+def test_the_default_family_draws_the_hop_tasks_it_always_drew():
+    ours, theirs = random.Random(11), random.Random(11)
+    for hops in (1, 4, 9):
+        task, line = practice.generate(ours, hops), hop_tasks.example(theirs, hops)
+        assert task.prompt.decode() + chr(task.answer) + "\n" == line and task.family == "hops"
+        assert practice.chain_written(task) == hop_tasks.write_chain(line)[len(task.prompt):].encode()
+
+
+def test_an_evaluation_of_several_families_holds_each(tmp_path):
+    torch.manual_seed(0)
+    stack = EventLM(EventLMConfig(**_STACK)).eval()
+    row = practice.keep_evaluation(stack, {}, tmp_path, 3, {"hops": 4, "sums": 5}, [1, 2], 3, 5, 0, "cpu",
+                                   ["hops", "sums"])
+    assert row["hops"] == {"hops": 4, "sums": 5} and set(row["by_family"]) == {"hops", "sums"}
+    assert all(set(found) == {"1", "2"} for found in row["by_family"].values())
+    assert json.loads((tmp_path / "evaluations.jsonl").read_text()) == row
+    assert practice.evaluate(stack, [2], 3, 5, 0, "cpu", "sums") == {"2": row["by_family"]["sums"]["2"]}
