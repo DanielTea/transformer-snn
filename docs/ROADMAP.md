@@ -670,8 +670,12 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   and stopping for 700 of them. One of its three seeds left the corpus's form: it writes the right chain with a
   fresh question mark before every fourth name, turning a long chain into chains of the length it was taught, so
   its answers are right and none of its chains counts as whole. The Transformer's six runs with the cap at 12 and
-  16 run in the weekend's window. Why the stack's chains thin out with length where the Transformer's do not is
-  the open question this leaves.
+  16 run in the weekend's window. Why the stack's chains thin out with length where the Transformer's do not: a
+  diagnostic of the practised models says it is recall over distance, not the chain's step. At 20 hops the stack
+  writes a step right almost always while the assignment it needs stands within about 150 bytes back, and takes a
+  neighbouring name in 16% of the steps (cap 8) when it stands 150 to 200 bytes back. The Transformer misses 1.2%
+  there. With the cap at 16 this holds at every place in the chain alike; the cap at 12 holds far assignments best
+  (3.4%). A screen of the read's addressing by age and its reach comes next.
 - **Four families in one model** (`written_chains_four_families.json`, `experiments/task_families.py`, training on
   the laptop): before the loop can practise more than one kind of reasoning, a model must have learned to write
   each kind's chain. One corpus, four families, 1 to 4 steps each: the lookups along names; lookups that add as

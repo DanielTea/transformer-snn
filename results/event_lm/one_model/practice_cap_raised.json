@@ -3268,5 +3268,1101 @@
    "the stopped runs with the cap at 16 (reported, not read)": "What they showed before the stops is in the table. r16-tf-s0 answered only 0.895 and 0.725 of the tasks of 2 and 4 hops at round 100: of the fifteen runs here (the stack's nine, the Transformer's three with the cap at 8 and these three) it is the one evaluation at which rehearsal did not hold the trained lengths, the lowest of all the others being 0.965. At round 200 it had them again (0.990 and 0.980), and at round 400 it answered 0.795 of the 16-hop tasks with 0.670 whole chains. r16-tf-s1 took the same path as r8-tf-s1 to round 200 and wrote question marks as that run does in 66 of the logged attempts of rounds 201 to 300 and 60 of rounds 301 to 400 (0.610 right at 8 hops at round 300 with no whole chain, 0.265 at 6 hops at round 400), then in 3 of the 111 rounds after, and at round 500 it wrote the corpus's chains (0.665 right at 8 hops, 0.490 whole). r16-tf-s2 is r8-tf-s2 to round 700, evaluation for evaluation, and reached 16 hops by round 900 (0.815 right, 0.600 whole). The weekend's runs say where each of these ends."
   },
   "what follows": "Reading (3) stays open for the caps at 12 and 16 until the weekend's six runs are in, and nothing changes in what result_stack says follows. The stack is not ahead of the Transformer in this practice. It takes to the loop at once and evenly, with every seed; the Transformer takes 300 to 800 rounds and in one seed of three leaves the chain's form, and once it is there it carries the chains further past the practised length than the stack does. Two things go into the next registration, the practice of several families: its marks ask for reach after practice and, once an evaluation shows it, at every later one, since a model that reaches late has lost nothing; and whole chains stay its measure, with a run that answers in another form reported as such and its answers looked at. Why the stack's chains thin out with their length where the Transformer's do not is the question this leaves for the stack."
+ },
+ "diagnostic_where_chains_break": {
+  "recorded_utc": "2026-11-27T15:23:18Z",
+  "kind": "a diagnostic looked at after result_stack and result_tf_cap_8, not registered; reported, not read",
+  "why": "result_tf_cap_8 left open why the stack's chains thin out past the practised length where the Transformer's do not.",
+  "method": "checkpoints/scheduler/tools/practice/where-chains-break.py on the server's CPU (no GPU), with code copy v18q, for the twelve practised models of the stack's caps 8, 12, 16 and the Transformer's cap 8 (model.pt after 2,000 rounds), and for four-stack, chain-stack and chain-tf before practice: the tasks of the evaluation after practice (seed 0, 200 a hop count), greedy, room for 64 bytes. Each answer is compared with the right chain step by step (question marks dropped, so r8-tf-s1 is compared by its names). For the first error, its kind. For every step written up to and with the first error, how far back in the stream the assignment it needs stands (bytes from the place the step is written to the start of that assignment in the line), and whether the step is right. The CPU rounds differently from the GPU, so the counts are close to the evaluation's but not equal to it (20 hops, right answers: r8-stack 0.700/0.450/0.355 here against 0.705/0.440/0.380 on the GPU).",
+  "first errors at 20 hops, by kind (answers of 200)": {
+   "r8-stack-s0": {
+    "the whole chain right": 121,
+    "another name of the line": 55,
+    "a name not in the line": 14,
+    "a digit too early (stopped short)": 4,
+    "a name where the digit belongs (went on)": 3,
+    "a skipped step": 2,
+    "the previous name repeated": 1
+   },
+   "r8-stack-s1": {
+    "another name of the line": 106,
+    "the whole chain right": 71,
+    "a name not in the line": 12,
+    "a skipped step": 4,
+    "a digit too early (stopped short)": 2,
+    "the previous name repeated": 2,
+    "a step backwards": 2,
+    "a name where the digit belongs (went on)": 1
+   },
+   "r8-stack-s2": {
+    "another name of the line": 102,
+    "a name not in the line": 49,
+    "the whole chain right": 41,
+    "a skipped step": 4,
+    "a step backwards": 3,
+    "a digit too early (stopped short)": 1
+   },
+   "r12-stack-s0": {
+    "the whole chain right": 185,
+    "another name of the line": 9,
+    "a name where the digit belongs (went on)": 2,
+    "a name not in the line": 2,
+    "a wrong digit at the end": 1,
+    "a step backwards": 1
+   },
+   "r12-stack-s1": {
+    "the whole chain right": 180,
+    "another name of the line": 14,
+    "a skipped step": 2,
+    "a name where the digit belongs (went on)": 2,
+    "a name not in the line": 2
+   },
+   "r12-stack-s2": {
+    "the whole chain right": 127,
+    "a name not in the line": 59,
+    "another name of the line": 11,
+    "a wrong digit at the end": 1,
+    "a name where the digit belongs (went on)": 1,
+    "a skipped step": 1
+   },
+   "r16-stack-s0": {
+    "the whole chain right": 111,
+    "another name of the line": 57,
+    "a name not in the line": 18,
+    "a name where the digit belongs (went on)": 8,
+    "a step backwards": 2,
+    "a skipped step": 2,
+    "a digit too early (stopped short)": 1,
+    "the previous name repeated": 1
+   },
+   "r16-stack-s1": {
+    "the whole chain right": 92,
+    "another name of the line": 72,
+    "a name not in the line": 15,
+    "a name where the digit belongs (went on)": 10,
+    "a digit too early (stopped short)": 4,
+    "a step backwards": 4,
+    "the previous name repeated": 2,
+    "a skipped step": 1
+   },
+   "r16-stack-s2": {
+    "the whole chain right": 111,
+    "another name of the line": 55,
+    "a name not in the line": 16,
+    "a name where the digit belongs (went on)": 13,
+    "the previous name repeated": 2,
+    "a step backwards": 1,
+    "a skipped step": 1,
+    "a digit too early (stopped short)": 1
+   },
+   "r8-tf-s0": {
+    "the whole chain right": 182,
+    "a name where the digit belongs (went on)": 6,
+    "a name not in the line": 5,
+    "another name of the line": 4,
+    "a wrong digit at the end": 2,
+    "a step backwards": 1
+   },
+   "r8-tf-s1": {
+    "the whole chain right": 193,
+    "another name of the line": 6,
+    "a name not in the line": 1
+   },
+   "r8-tf-s2": {
+    "the whole chain right": 175,
+    "a name where the digit belongs (went on)": 12,
+    "another name of the line": 7,
+    "a name not in the line": 4,
+    "a wrong digit at the end": 2
+   }
+  },
+  "error rate of a step by the distance back to the assignment it needs (three seeds pooled: wrong, written, rate)": {
+   "16 hops": {
+    "the stack, cap 8": {
+     "0-50": [
+      3,
+      1449,
+      0.002
+     ],
+     "50-100": [
+      3,
+      3243,
+      0.001
+     ],
+     "100-150": [
+      6,
+      3263,
+      0.002
+     ],
+     "150-200": [
+      100,
+      1249,
+      0.08
+     ]
+    },
+    "the stack, cap 12": {
+     "0-50": [
+      6,
+      1445,
+      0.004
+     ],
+     "50-100": [
+      10,
+      3290,
+      0.003
+     ],
+     "100-150": [
+      11,
+      3297,
+      0.003
+     ],
+     "150-200": [
+      36,
+      1270,
+      0.028
+     ]
+    },
+    "the stack, cap 16": {
+     "0-50": [
+      2,
+      1420,
+      0.001
+     ],
+     "50-100": [
+      3,
+      3131,
+      0.001
+     ],
+     "100-150": [
+      11,
+      3135,
+      0.004
+     ],
+     "150-200": [
+      139,
+      1200,
+      0.116
+     ]
+    },
+    "the Transformer, cap 8": {
+     "0-50": [
+      1,
+      1464,
+      0.001
+     ],
+     "50-100": [
+      0,
+      3389,
+      0.0
+     ],
+     "100-150": [
+      3,
+      3383,
+      0.001
+     ],
+     "150-200": [
+      0,
+      1334,
+      0.0
+     ]
+    }
+   },
+   "20 hops": {
+    "the stack, cap 8": {
+     "0-50": [
+      0,
+      1324,
+      0.0
+     ],
+     "50-100": [
+      20,
+      3576,
+      0.006
+     ],
+     "100-150": [
+      60,
+      3629,
+      0.017
+     ],
+     "150-200": [
+      286,
+      1778,
+      0.161
+     ],
+     "200-250": [
+      1,
+      10,
+      0.1
+     ]
+    },
+    "the stack, cap 12": {
+     "0-50": [
+      3,
+      1329,
+      0.002
+     ],
+     "50-100": [
+      14,
+      3858,
+      0.004
+     ],
+     "100-150": [
+      19,
+      3963,
+      0.005
+     ],
+     "150-200": [
+      72,
+      2094,
+      0.034
+     ],
+     "200-250": [
+      0,
+      32,
+      0.0
+     ]
+    },
+    "the stack, cap 16": {
+     "0-50": [
+      1,
+      1286,
+      0.001
+     ],
+     "50-100": [
+      4,
+      3373,
+      0.001
+     ],
+     "100-150": [
+      12,
+      3542,
+      0.003
+     ],
+     "150-200": [
+      269,
+      1759,
+      0.153
+     ],
+     "200-250": [
+      0,
+      15,
+      0.0
+     ]
+    },
+    "the Transformer, cap 8": {
+     "0-50": [
+      2,
+      1347,
+      0.001
+     ],
+     "50-100": [
+      7,
+      4027,
+      0.002
+     ],
+     "100-150": [
+      8,
+      4142,
+      0.002
+     ],
+     "150-200": [
+      27,
+      2250,
+      0.012
+     ],
+     "200-250": [
+      6,
+      41,
+      0.146
+     ]
+    }
+   }
+  },
+  "the same by the step's place in the chain (groups of five steps) and the distance": {
+   "16 hops": {
+    "the stack, cap 8": {
+     "steps 0-4, 0-50": [
+      2,
+      841,
+      0.002
+     ],
+     "steps 0-4, 50-100": [
+      1,
+      1003,
+      0.001
+     ],
+     "steps 0-4, 100-150": [
+      1,
+      1070,
+      0.001
+     ],
+     "steps 0-4, 150-200": [
+      1,
+      76,
+      0.013
+     ],
+     "steps 5-9, 0-50": [
+      1,
+      451,
+      0.002
+     ],
+     "steps 5-9, 50-100": [
+      0,
+      1085,
+      0.0
+     ],
+     "steps 5-9, 100-150": [
+      0,
+      1053,
+      0.0
+     ],
+     "steps 5-9, 150-200": [
+      15,
+      358,
+      0.042
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      157,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      2,
+      1011,
+      0.002
+     ],
+     "steps 10-14, 100-150": [
+      5,
+      931,
+      0.005
+     ],
+     "steps 10-14, 150-200": [
+      82,
+      678,
+      0.121
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      144,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      0,
+      209,
+      0.0
+     ],
+     "steps 15-19, 150-200": [
+      2,
+      137,
+      0.015
+     ]
+    },
+    "the stack, cap 12": {
+     "steps 0-4, 0-50": [
+      3,
+      840,
+      0.004
+     ],
+     "steps 0-4, 50-100": [
+      0,
+      1006,
+      0.0
+     ],
+     "steps 0-4, 100-150": [
+      0,
+      1071,
+      0.0
+     ],
+     "steps 0-4, 150-200": [
+      2,
+      75,
+      0.027
+     ],
+     "steps 5-9, 0-50": [
+      3,
+      447,
+      0.007
+     ],
+     "steps 5-9, 50-100": [
+      3,
+      1091,
+      0.003
+     ],
+     "steps 5-9, 100-150": [
+      4,
+      1051,
+      0.004
+     ],
+     "steps 5-9, 150-200": [
+      8,
+      356,
+      0.022
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      158,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      7,
+      1034,
+      0.007
+     ],
+     "steps 10-14, 100-150": [
+      7,
+      951,
+      0.007
+     ],
+     "steps 10-14, 150-200": [
+      26,
+      685,
+      0.038
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      159,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      0,
+      224,
+      0.0
+     ],
+     "steps 15-19, 150-200": [
+      0,
+      154,
+      0.0
+     ]
+    },
+    "the stack, cap 16": {
+     "steps 0-4, 0-50": [
+      2,
+      840,
+      0.002
+     ],
+     "steps 0-4, 50-100": [
+      0,
+      1003,
+      0.0
+     ],
+     "steps 0-4, 100-150": [
+      4,
+      1071,
+      0.004
+     ],
+     "steps 0-4, 150-200": [
+      4,
+      76,
+      0.053
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      436,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      3,
+      1063,
+      0.003
+     ],
+     "steps 5-9, 100-150": [
+      4,
+      1016,
+      0.004
+     ],
+     "steps 5-9, 150-200": [
+      44,
+      352,
+      0.125
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      144,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      0,
+      932,
+      0.0
+     ],
+     "steps 10-14, 100-150": [
+      2,
+      855,
+      0.002
+     ],
+     "steps 10-14, 150-200": [
+      69,
+      630,
+      0.11
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      133,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      1,
+      193,
+      0.005
+     ],
+     "steps 15-19, 150-200": [
+      22,
+      142,
+      0.155
+     ]
+    },
+    "the Transformer, cap 8": {
+     "steps 0-4, 0-50": [
+      1,
+      843,
+      0.001
+     ],
+     "steps 0-4, 50-100": [
+      0,
+      1008,
+      0.0
+     ],
+     "steps 0-4, 100-150": [
+      0,
+      1070,
+      0.0
+     ],
+     "steps 0-4, 150-200": [
+      0,
+      78,
+      0.0
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      457,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      0,
+      1110,
+      0.0
+     ],
+     "steps 5-9, 100-150": [
+      2,
+      1060,
+      0.002
+     ],
+     "steps 5-9, 150-200": [
+      0,
+      362,
+      0.0
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      164,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      0,
+      1096,
+      0.0
+     ],
+     "steps 10-14, 100-150": [
+      0,
+      1002,
+      0.0
+     ],
+     "steps 10-14, 150-200": [
+      0,
+      723,
+      0.0
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      175,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      1,
+      251,
+      0.004
+     ],
+     "steps 15-19, 150-200": [
+      0,
+      171,
+      0.0
+     ]
+    }
+   },
+   "20 hops": {
+    "the stack, cap 8": {
+     "steps 0-4, 0-50": [
+      0,
+      744,
+      0.0
+     ],
+     "steps 0-4, 50-100": [
+      4,
+      1062,
+      0.004
+     ],
+     "steps 0-4, 100-150": [
+      3,
+      1079,
+      0.003
+     ],
+     "steps 0-4, 150-200": [
+      5,
+      96,
+      0.052
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      460,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      1,
+      1040,
+      0.001
+     ],
+     "steps 5-9, 100-150": [
+      0,
+      1059,
+      0.0
+     ],
+     "steps 5-9, 150-200": [
+      14,
+      359,
+      0.039
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      120,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      4,
+      961,
+      0.004
+     ],
+     "steps 10-14, 100-150": [
+      10,
+      887,
+      0.011
+     ],
+     "steps 10-14, 150-200": [
+      113,
+      747,
+      0.151
+     ],
+     "steps 15-19, 50-100": [
+      11,
+      513,
+      0.021
+     ],
+     "steps 15-19, 100-150": [
+      47,
+      604,
+      0.078
+     ],
+     "steps 15-19, 150-200": [
+      154,
+      576,
+      0.267
+     ],
+     "steps 15-19, 200-250": [
+      1,
+      10,
+      0.1
+     ]
+    },
+    "the stack, cap 12": {
+     "steps 0-4, 0-50": [
+      0,
+      744,
+      0.0
+     ],
+     "steps 0-4, 50-100": [
+      4,
+      1068,
+      0.004
+     ],
+     "steps 0-4, 100-150": [
+      4,
+      1080,
+      0.004
+     ],
+     "steps 0-4, 150-200": [
+      0,
+      96,
+      0.0
+     ],
+     "steps 5-9, 0-50": [
+      3,
+      459,
+      0.007
+     ],
+     "steps 5-9, 50-100": [
+      5,
+      1048,
+      0.005
+     ],
+     "steps 5-9, 100-150": [
+      6,
+      1064,
+      0.006
+     ],
+     "steps 5-9, 150-200": [
+      9,
+      356,
+      0.025
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      126,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      2,
+      984,
+      0.002
+     ],
+     "steps 10-14, 100-150": [
+      4,
+      897,
+      0.004
+     ],
+     "steps 10-14, 150-200": [
+      34,
+      769,
+      0.044
+     ],
+     "steps 15-19, 50-100": [
+      3,
+      758,
+      0.004
+     ],
+     "steps 15-19, 100-150": [
+      5,
+      922,
+      0.005
+     ],
+     "steps 15-19, 150-200": [
+      29,
+      873,
+      0.033
+     ],
+     "steps 15-19, 200-250": [
+      0,
+      32,
+      0.0
+     ]
+    },
+    "the stack, cap 16": {
+     "steps 0-4, 0-50": [
+      1,
+      742,
+      0.001
+     ],
+     "steps 0-4, 50-100": [
+      4,
+      1057,
+      0.004
+     ],
+     "steps 0-4, 100-150": [
+      5,
+      1074,
+      0.005
+     ],
+     "steps 0-4, 150-200": [
+      13,
+      96,
+      0.135
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      440,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      0,
+      983,
+      0.0
+     ],
+     "steps 5-9, 100-150": [
+      3,
+      998,
+      0.003
+     ],
+     "steps 5-9, 150-200": [
+      64,
+      347,
+      0.184
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      104,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      0,
+      804,
+      0.0
+     ],
+     "steps 10-14, 100-150": [
+      1,
+      792,
+      0.001
+     ],
+     "steps 10-14, 150-200": [
+      97,
+      665,
+      0.146
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      529,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      3,
+      678,
+      0.004
+     ],
+     "steps 15-19, 150-200": [
+      95,
+      651,
+      0.146
+     ],
+     "steps 15-19, 200-250": [
+      0,
+      15,
+      0.0
+     ]
+    },
+    "the Transformer, cap 8": {
+     "steps 0-4, 0-50": [
+      1,
+      746,
+      0.001
+     ],
+     "steps 0-4, 50-100": [
+      1,
+      1066,
+      0.001
+     ],
+     "steps 0-4, 100-150": [
+      1,
+      1087,
+      0.001
+     ],
+     "steps 0-4, 150-200": [
+      0,
+      95,
+      0.0
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      470,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      2,
+      1070,
+      0.002
+     ],
+     "steps 5-9, 100-150": [
+      1,
+      1080,
+      0.001
+     ],
+     "steps 5-9, 150-200": [
+      0,
+      363,
+      0.0
+     ],
+     "steps 10-14, 0-50": [
+      1,
+      131,
+      0.008
+     ],
+     "steps 10-14, 50-100": [
+      2,
+      1044,
+      0.002
+     ],
+     "steps 10-14, 100-150": [
+      0,
+      953,
+      0.0
+     ],
+     "steps 10-14, 150-200": [
+      9,
+      820,
+      0.011
+     ],
+     "steps 15-19, 50-100": [
+      2,
+      847,
+      0.002
+     ],
+     "steps 15-19, 100-150": [
+      6,
+      1022,
+      0.006
+     ],
+     "steps 15-19, 150-200": [
+      18,
+      972,
+      0.019
+     ],
+     "steps 15-19, 200-250": [
+      6,
+      41,
+      0.146
+     ]
+    }
+   }
+  },
+  "before practice (four-stack, chain-stack, chain-tf at 4 to 16 steps)": {
+   "four-stack": {
+    "4": {
+     "right answers": 0.99,
+     "answers by the first error's kind": {
+      "the whole chain right": 198,
+      "a digit too early (stopped short)": 1,
+      "another name of the line": 1
+     }
+    },
+    "6": {
+     "right answers": 0.945,
+     "answers by the first error's kind": {
+      "the whole chain right": 188,
+      "a digit too early (stopped short)": 7,
+      "another name of the line": 4,
+      "a name not in the line": 1
+     }
+    },
+    "8": {
+     "right answers": 0.935,
+     "answers by the first error's kind": {
+      "the whole chain right": 183,
+      "a digit too early (stopped short)": 12,
+      "another name of the line": 5
+     }
+    },
+    "12": {
+     "right answers": 0.76,
+     "answers by the first error's kind": {
+      "the whole chain right": 147,
+      "a digit too early (stopped short)": 29,
+      "another name of the line": 9,
+      "a wrong digit at the end": 8,
+      "a name not in the line": 6,
+      "a name where the digit belongs (went on)": 1
+     }
+    },
+    "16": {
+     "right answers": 0.155,
+     "answers by the first error's kind": {
+      "a digit too early (stopped short)": 149,
+      "a name not in the line": 19,
+      "another name of the line": 18,
+      "the whole chain right": 10,
+      "a step backwards": 2,
+      "a skipped step": 1,
+      "a wrong digit at the end": 1
+     }
+    }
+   },
+   "chain-stack": {
+    "4": {
+     "right answers": 0.99,
+     "answers by the first error's kind": {
+      "the whole chain right": 196,
+      "another name of the line": 3,
+      "a skipped step": 1
+     }
+    },
+    "6": {
+     "right answers": 0.12,
+     "answers by the first error's kind": {
+      "a name not in the line": 87,
+      "another name of the line": 56,
+      "a digit too early (stopped short)": 47,
+      "the whole chain right": 10
+     }
+    },
+    "8": {
+     "right answers": 0.08,
+     "answers by the first error's kind": {
+      "a name not in the line": 104,
+      "a digit too early (stopped short)": 63,
+      "another name of the line": 28,
+      "a skipped step": 4,
+      "a step backwards": 1
+     }
+    },
+    "12": {
+     "right answers": 0.095,
+     "answers by the first error's kind": {
+      "a name not in the line": 89,
+      "a digit too early (stopped short)": 77,
+      "another name of the line": 33,
+      "a skipped step": 1
+     }
+    },
+    "16": {
+     "right answers": 0.135,
+     "answers by the first error's kind": {
+      "a name not in the line": 91,
+      "a digit too early (stopped short)": 82,
+      "another name of the line": 25,
+      "a step backwards": 1,
+      "a skipped step": 1
+     }
+    }
+   },
+   "chain-tf": {
+    "4": {
+     "right answers": 0.99,
+     "answers by the first error's kind": {
+      "the whole chain right": 198,
+      "another name of the line": 2
+     }
+    },
+    "6": {
+     "right answers": 0.07,
+     "answers by the first error's kind": {
+      "a name not in the line": 167,
+      "another name of the line": 21,
+      "a digit too early (stopped short)": 11,
+      "a skipped step": 1
+     }
+    },
+    "8": {
+     "right answers": 0.105,
+     "answers by the first error's kind": {
+      "a name not in the line": 165,
+      "another name of the line": 23,
+      "a digit too early (stopped short)": 12
+     }
+    },
+    "12": {
+     "right answers": 0.07,
+     "answers by the first error's kind": {
+      "a name not in the line": 159,
+      "a digit too early (stopped short)": 23,
+      "another name of the line": 18
+     }
+    },
+    "16": {
+     "right answers": 0.12,
+     "answers by the first error's kind": {
+      "a name not in the line": 136,
+      "a digit too early (stopped short)": 38,
+      "another name of the line": 26
+     }
+    }
+   }
+  },
+  "what it shows": "The stack's long chains break where the assignment a step needs stands far back in the stream. At 20 hops, in the stack's runs with the cap at 8, a step whose assignment stands under 50 bytes back is never wrong, 50 to 100 bytes back it is wrong in 0.6% of the cases, 100 to 150 in 1.7%, 150 to 200 in 16.1%. The Transformer, from the same practice, is wrong in 0.1%, 0.2%, 0.2% and 1.2% at those distances. Under 50 bytes no run of the stack is wrong in more than 0.2%. The runs with the cap at 16 show the distance alone: under 150 bytes back their steps are wrong in at most 0.5% in every group of five steps from the first to the twentieth, and at 150 to 200 bytes in 13.5%, 18.4%, 14.6% and 14.6%, whatever the step's place. With the cap at 8 the place adds to the distance: steps 15 to 19, past anything practised, are wrong in 2.1% and 7.8% at 50 to 150 bytes and in 26.7% at 150 to 200. The cap at 12 holds far assignments best of the three (3.4% at 150 to 200 bytes), which is why it reached furthest. Of the 761 answers of the stack's nine runs at 20 hops that go wrong, 481 begin with another name of the line and 187 with a name that is not in the line; r12-stack-s2 writes names that are not in the line (59 of its errors, against 11 wrong names of the line), its own way of failing. So it is recall that fails, not the chain's step: the stack finds the right assignment while it stands within about 150 bytes, and beyond that it often takes a neighbour. A chain of 20 hops puts its later assignments that far back, since the line takes about 140 bytes and the chain written so far up to 59 more. Before practice the limits are others: four-stack stops early (149 of 200 answers at 16 steps write the digit too soon, after about twelve steps), and chain-stack and chain-tf go wrong from the fifth step on with names not in the line.",
+  "what follows": "A candidate cause, not yet tested: the test bed's state read addresses what it reads by age (race reads with stored age offsets, a window of 256 cells), and an address by age may lose its precision with the distance, which would hit a neighbouring assignment. A screen of its own, registered before it runs, varies the read (its addressing by age, its reach) and measures this distance curve on the same tasks, against the Transformer's. Until then the practice studies keep the line and the chains within about 150 bytes where they mean to read the step and not the recall."
  }
 }
