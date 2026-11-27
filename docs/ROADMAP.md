@@ -682,7 +682,12 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   it reads. Every learned family goes into the practice loop next (`practice_loop.py --families`). The
   Transformer's arm is in: with the 24,000 updates that teach it the lookups alone, it learned none of the four
   families, the lookups included. It writes each family's chain in its form, with names taken from the line, and
-  follows no binding. The stack's arm is training.
+  follows no binding. The stack learned two of the four: the lookups (0.9925 over 1 to 4 steps, no worse than the
+  stack trained on them alone) and the lookups that add (0.979). It learned neither running sum; there it writes a
+  digit or two and runs on into assignments instead of ending the line. And without any practice its lookups now
+  run past the trained length: 0.93 right at 8 steps and 0.775 at 12, where the stack trained on lookups alone
+  managed 0.105 at 8 and needed practice to get further. The two learned families go into the practice loop
+  together this weekend; the running sums need another way of writing their chains first.
 - **The Transformer again** (`four_families_transformer_again.json`, on the laptop): a comparison of practice
   needs a Transformer that has learned the chains, so it gets two further chances at the same corpus: four times
   the updates, and a start from the model that already follows names. The better of the two is the Transformer's
