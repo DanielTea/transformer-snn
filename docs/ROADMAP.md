@@ -688,6 +688,11 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   run past the trained length: 0.93 right at 8 steps and 0.775 at 12, where the stack trained on lookups alone
   managed 0.105 at 8 and needed practice to get further. The two learned families go into the practice loop
   together this weekend; the running sums need another way of writing their chains first.
+- **Practice of several families** (`practice_several_families.json`, on the server's GPU this weekend): the
+  stack's two learned families in one practice loop with rehearsal, capped at 12 steps: both practised in the
+  same rounds, and each practised alone while the other is only rehearsed, three seeds each. It asks whether one
+  loop lengthens both families' chains and keeps them, what sharing the loop costs a family, and whether practice
+  in one family carries over to the other. The Transformer's arms follow once its base is known.
 - **The Transformer again** (`four_families_transformer_again.json`, on the laptop): a comparison of practice
   needs a Transformer that has learned the chains, so it gets two further chances at the same corpus: four times
   the updates, and a start from the model that already follows names. The better of the two is the Transformer's
