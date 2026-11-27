@@ -171,3 +171,12 @@ def test_both_kinds_of_model_attempt_and_learn_on_apples_gpu_which_has_no_float6
         loss = practice.policy_loss(model, tasks, written, torch.tensor([1.0, 0.0, 0.0, 0.0, 1.0, 1.0]), 2, "mps")
         loss.backward()
         assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters())
+
+
+def test_the_speed_options_are_refused_without_a_cuda_device(tmp_path, monkeypatch, capsys):
+    for option in ("--exact-products", "--fused-reads"):
+        monkeypatch.setattr(sys, "argv", ["practice_loop.py", "--checkpoint", str(tmp_path / "none.pt"), "--out",
+                                          str(tmp_path / "out"), "--device", "cpu", option])
+        with pytest.raises(SystemExit):
+            practice.main()
+        assert "take a CUDA device" in capsys.readouterr().err

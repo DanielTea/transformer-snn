@@ -31,8 +31,15 @@ stay as large as they were, and after some hundred rounds a model can lose what 
 (practice_within_reach.json). --rehearse adds to every round what the written corpus taught: fresh tasks of the
 corpus's lengths with their chains written as the corpus writes them, learned as the corpus was (rehearsal_loss).
 
+On a CUDA device two of the trainer's speed options apply (experiments/speed_options.py). --exact-products takes a
+stack's products of whole numbers on the tensor cores: the same attempts, losses and weights to the bit, checked
+against single precision in the first round and in the round after every evaluation along the way. --fused-reads
+takes a stack's race reads in the fused kernels: the same spikes at the same weights and a gradient that rounds
+differently, so a run with it is another run, as another seed is.
+
 usage: python experiments/practice_loop.py --checkpoint run/model.pt.averaged --out practice/ --rounds 200 \\
-    [--device mps] [--longest-hops 8] [--evaluate-every 50 --evaluate-hops 4 6 8] [--dips 0] [--rehearse 16]
+    [--device mps] [--longest-hops 8] [--evaluate-every 50 --evaluate-hops 4 6 8] [--dips 0] [--rehearse 16] \\
+    [--exact-products] [--fused-reads]
 """
 from __future__ import annotations
 
@@ -50,6 +57,8 @@ from torch.nn import functional as F
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import resolve_device  # noqa: E402
 from hop_tasks import chain_of, example, resolve  # noqa: E402
+import snnformer.event_lm as event_lm_module  # noqa: E402
+from snnformer import whole_products  # noqa: E402
 from snnformer.event_lm import EventLM  # noqa: E402
 from train_event_lm import load_checkpoint, scoring_logits  # noqa: E402
 
@@ -257,8 +266,18 @@ def main():
                         help="the lengths rehearsed, drawn evenly: those of the written corpus")
     parser.add_argument("--rehearse-weight", type=float, default=1.0,
                         help="weight of the rehearsal's loss beside the practice's")
+    parser.add_argument("--exact-products", action="store_true",
+                        help="a stack's products of whole numbers on a CUDA device's tensor cores, to the bit "
+                             "(snnformer/whole_products.py)")
+    parser.add_argument("--fused-reads", action="store_true",
+                        help="a stack's race reads in the fused kernels (snnformer/race_kernel.py): the same spikes, "
+                             "a gradient that rounds differently, so another run")
     args = parser.parse_args()
     device = resolve_device(args.device)
+    if (args.exact_products or args.fused_reads) and device.type != "cuda":
+        parser.error("--exact-products and --fused-reads take a CUDA device")
+    whole_products.ON = args.exact_products
+    event_lm_module._READ_FUSED = args.fused_reads
     model, checkpoint = load_checkpoint(args.checkpoint, device)
     if args.evaluate:
         args.out.mkdir(parents=True, exist_ok=True)
@@ -282,6 +301,10 @@ def main():
 
     scored(0)
     for round_ in range(1, args.rounds + 1):
+        # Every product on the tensor cores is checked against single precision in the first round and in the round
+        # after each evaluation along the way, so that a factor too large for them does not go unseen.
+        whole_products.AUDIT = args.exact_products and (
+            round_ == 1 or bool(args.evaluate_every) and round_ % args.evaluate_every == 1)
         tasks = [task for task in (generate(rng, hops) for _ in range(args.tasks)) if verify(task)]
         model.eval()
         written = attempts(model, tasks, args.attempts, args.max_bytes, args.temperature, generator, device)
