@@ -18,6 +18,18 @@ in every row):
                                  exact products); 0.129 with compiled cells
   as a stream (the second)       0.416 with reads by age (0.405 with exact products); 0.179 with fused reads (0.173
                                  with exact products, 0.140 with compiled cells)
+On the test bed (2026-11-27: the bed's stack with power-law cells on streams, 600 updates beside one other job on the
+GPU, seconds an update between updates 300 and 600, each way twice):
+  the stack                      0.056 with reads by age; 0.053 with exact products (the weights after 600 updates
+                                 the same to the bit); 0.050 with fused reads beside them; 0.036 with fused reads and
+                                 compiled cells, whose compiling takes 14 to 39 s at the start
+  the looped, lifted stack       0.106 with reads by age; 0.095 with fused reads and exact products; 0.084 with fused
+                                 reads and compiled cells (55 s of compiling)
+A small model's update is spent launching kernels more than in them: the fused reads that more than halve a full-size
+stream's update take a tenth off the bed's, and compiled cells, which launch fewer kernels, take a fifth to a third
+off. The practice loop (experiments/practice_loop.py) takes exact products and fused reads too: a round of the bed's
+stack 0.72 s as it is, 0.68 and 0.65 s with them.
+
 Exact products, the fused optimizer and the CUDA graph leave a run's weights as they were to the bit (the graph
 against the same optimizer with its steps on the device). Fused reads and compiled cells fire the same spikes at the
 same weights and round the gradient differently: a run with them repeats to the bit, and is another run than the

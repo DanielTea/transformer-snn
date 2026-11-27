@@ -154,6 +154,15 @@ the same bits by either read. The scaling test's two new stack runs train with f
 code met the six conditions registered before it ran (`full_size_data_slope.json`, its third amendment and second
 code check).
 
+On the test bed the same options give less, because a small model's update is spent launching kernels more than in
+them (2026-11-27, 600 updates on streams, each way twice): 0.056 s an update with reads by age, 0.053 with exact
+products (the weights the same to the bit), 0.050 with fused reads beside them, and 0.036 with fused reads and
+compiled cells; the looped, lifted bed takes 0.106, 0.095 and 0.084. From that day every newly registered run trains
+on the fast path of its size, the base of its comparison included, since a run with fused reads or compiled cells is
+another run; runs registered earlier keep the path they were registered on. The practice loop of the one-model plan
+takes exact products and fused reads as well and has moved to the server's GPU, where a round of the bed's stack
+takes 0.65 s against 1.1 s on the laptop and many runs go side by side.
+
 ## Rules for claims
 
 1. **Spiking and streaming only.** The stack is built, trained and scored as
