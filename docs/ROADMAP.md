@@ -161,7 +161,9 @@ compiled cells; the looped, lifted bed takes 0.106, 0.095 and 0.084. From that d
 on the fast path of its size, the base of its comparison included, since a run with fused reads or compiled cells is
 another run; runs registered earlier keep the path they were registered on. The practice loop of the one-model plan
 takes exact products and fused reads as well and has moved to the server's GPU, where a round of the bed's stack
-takes 0.65 s against 1.1 s on the laptop and many runs go side by side.
+takes 0.65 s against 1.1 s on the laptop and several of the stack's runs share the GPU (six side by side took 0.8
+to 1.8 s a round each, nine 1.4 to 3.1 s). The two models take turns there: with the Transformer's runs beside
+them the stack's runs took 8 to 40 s a round.
 
 ## Rules for claims
 
