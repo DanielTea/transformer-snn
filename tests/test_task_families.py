@@ -18,13 +18,13 @@ def test_a_line_holds_its_items_and_a_chain_of_the_steps_asked(family, steps):
     line = families.FAMILIES[family].example(rng, steps)
     chain = families.FAMILIES[family].chain(line)
     assert len(chain) == steps == families.FAMILIES[family].steps(line)
-    assert line.endswith(chain[-1] + "\n") and chain[-1].isdigit() and len(chain[-1]) == 1
+    assert line.endswith(chain[-1][-1] + "\n") and chain[-1].isdigit() and families.answer_of(family, line) == line[-2]
     written = families.written(family, line)
     assert families.prompt_of(written) == families.prompt_of(line) == line[:-2]
     assert written == line[:-2] + "=".join(chain) + "\n"
-    assert families.FAMILIES[family].chain(written[:len(line) - 2] + chain[-1] + "\n") == chain
+    assert families.FAMILIES[family].chain(written[:len(line) - 2] + chain[-1][-1] + "\n") == chain
     body = line[:line.rindex(";")]
-    if family == "sums":
+    if family in ("sums", "tots"):
         assert sum(len(row.split(":")[1]) for row in body.split(";")) == families.ITEMS
     else:
         assert len(body.split(";")) == families.ITEMS
@@ -60,7 +60,15 @@ def test_sums_carry_the_last_digit_reading_by_reading():
     assert families.Sums.chain("qa:3152;mx:774;fb:4;+qa=1\n") == ["3", "4", "9", "1"]
 
 
-@pytest.mark.parametrize("family", ["offs", "sums"])
+def test_tots_copy_each_reading_and_write_the_total_beside_it():
+    line = "qa:3152;mx:774;fb:4;#mx=8\n"
+    assert families.Tots.chain(line) == ["77", "74", "48"]
+    assert families.written("tots", line) == "qa:3152;mx:774;fb:4;#mx=77=74=48\n"
+    assert families.Tots.chain("qa:3152;mx:774;fb:4;#fb=4\n") == ["44"]
+    assert [step[1] for step in families.Tots.chain(line)] == families.Sums.chain(line.replace("#", "+"))
+
+
+@pytest.mark.parametrize("family", ["offs", "sums", "tots"])
 def test_a_guess_is_right_a_tenth_of_the_time_from_two_steps_on(family):
     for steps in (2, 8, 20):
         floors = families.guess_floors(family, steps, count=1500, seed=5)
@@ -69,7 +77,7 @@ def test_a_guess_is_right_a_tenth_of_the_time_from_two_steps_on(family):
 
 def test_the_answers_are_even_over_the_digits():
     rng = random.Random(8)
-    for family in ("offs", "sums"):
+    for family in ("offs", "sums", "tots"):
         counts = [0] * 10
         for _ in range(4000):
             counts[int(families.answer_of(family, families.FAMILIES[family].example(rng, 6)))] += 1
@@ -77,19 +85,20 @@ def test_the_answers_are_even_over_the_digits():
 
 
 def test_a_corpus_draws_its_families_evenly_and_writes_their_chains(tmp_path):
-    out = tmp_path / "three.bin"
-    sidecar = families.write_corpus(out, ["hops", "offs", "sums"], [1, 2, 3, 4], 1, 60_000, 6_000, 6_000, True)
+    out = tmp_path / "four.bin"
+    sidecar = families.write_corpus(out, ["hops", "offs", "sums", "tots"], [1, 2, 3, 4], 1, 80_000, 6_000, 6_000, True)
     data = out.read_bytes()
     assert json.loads(Path(f"{out}.json").read_text()) == sidecar and sidecar["written_chains"] is True
-    assert len(data) == sidecar["train"] + sidecar["validation"] + sidecar["test"] and sidecar["train"] >= 60_000
+    assert len(data) == sidecar["train"] + sidecar["validation"] + sidecar["test"] and sidecar["train"] >= 80_000
     lines = data.decode().splitlines(keepends=True)
-    assert sum(sidecar["lines"].values()) == len(lines) and min(sidecar["lines"].values()) > len(lines) / 4
+    assert sum(sidecar["lines"].values()) == len(lines) and min(sidecar["lines"].values()) > len(lines) / 5
     for line in lines[:300]:
         items = line[:line.rindex(";")].split(";")  # a line of offs whose chains are all one hop long reads as hops
-        family = "sums" if ";+" in line else "offs" if any(len(i.split("=")[1]) == 3 for i in items) else "hops"
+        family = ("sums" if ";+" in line else "tots" if ";#" in line
+                  else "offs" if any(len(i.split("=")[1]) == 3 for i in items) else "hops")
         prompt = families.prompt_of(line)
         steps = line[len(prompt):-1].split("=")
-        assert families.FAMILIES[family].chain(prompt + steps[-1] + "\n") == steps and 1 <= len(steps) <= 4
-    again = families.write_corpus(tmp_path / "again.bin", ["hops", "offs", "sums"], [1, 2, 3, 4], 1, 60_000, 6_000,
-                                  6_000, True)
+        assert families.FAMILIES[family].chain(prompt + steps[-1][-1] + "\n") == steps and 1 <= len(steps) <= 4
+    again = families.write_corpus(tmp_path / "again.bin", ["hops", "offs", "sums", "tots"], [1, 2, 3, 4], 1, 80_000,
+                                  6_000, 6_000, True)
     assert again["sha256"] == sidecar["sha256"]

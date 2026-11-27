@@ -19,6 +19,9 @@ whatever the steps, so that a line's length does not tell them.
              qa:3152;mx:774;...;+mx=8                written: +mx=7=4=8
          Each written step is the last digit of the sum after one more reading. The step is found by its place in
          the row and not by a name, and the answer is even over the digits from two readings on.
+  tots   the same rows and the same question, with the chain written as a log: every step copies the next reading
+         and writes the total beside it, so that the place in the row stands in the chain itself.
+             qa:3152;mx:774;...;#mx=8                written: #mx=77=74=48
 
 In the other families as in hops, the items beside the query's are chains or rows of one to four steps, so the
 corpus of one to four steps shows nothing longer.
@@ -28,8 +31,8 @@ counts (raw bytes with a sidecar of its split sizes, as train_event_lm.py --corp
 of a family.
 
 usage:
-  python experiments/task_families.py corpus --out data/onemodel/chains/three-1-4-written.bin \
-      --families hops offs sums --steps 1 2 3 4 --seed 1 --written-chains
+  python experiments/task_families.py corpus --out data/onemodel/chains/four-1-4-written.bin \
+      --families hops offs sums tots --steps 1 2 3 4 --seed 1 --written-chains
   python experiments/task_families.py floors --family offs --steps 1 2 3 4 6 8 12 16 20 --count 4000 --seed 3
 """
 from __future__ import annotations
@@ -123,6 +126,28 @@ class Offs:
         return len(Offs.chain(line))
 
 
+def _rows(rng: random.Random, steps: int, items: int, mark: str) -> str:
+    """One line of rows: ``items`` readings in all, in random order, the query (led by ``mark``) of a row of
+    ``steps`` of them, the last digit of its sum."""
+    lengths = _lengths(rng, steps, items)
+    names = rng.sample(NAMES, len(lengths))
+    rows = [(name, "".join(str(rng.randrange(10)) for _ in range(length))) for name, length in zip(names, lengths)]
+    query, readings = rows[0]
+    rng.shuffle(rows)
+    return ";".join(f"{name}:{digits}" for name, digits in rows) + f";{mark}{query}={sum(map(int, readings)) % 10}\n"
+
+
+def _totals(line: str, mark: str) -> list[tuple[str, str]]:
+    """The readings of the row a line asks for, each with the last digit of the sum up to it."""
+    body, query = line.rstrip("\n").rsplit(f";{mark}", 1)
+    rows = dict(row.split(":", 1) for row in body.split(";"))
+    total, pairs = 0, []
+    for reading in rows[query.split("=", 1)[0]]:
+        total = (total + int(reading)) % 10
+        pairs.append((reading, str(total)))
+    return pairs
+
+
 class Sums:
     """The running sum of a channel's readings."""
     name = "sums"
@@ -130,32 +155,39 @@ class Sums:
 
     @staticmethod
     def example(rng: random.Random, steps: int, items: int = ITEMS) -> str:
-        """One line: rows of ``items`` readings in all, in random order, the query of a row of ``steps`` of them,
-        the last digit of its sum."""
-        lengths = _lengths(rng, steps, items)
-        names = rng.sample(NAMES, len(lengths))
-        rows = [(name, "".join(str(rng.randrange(10)) for _ in range(length))) for name, length in zip(names, lengths)]
-        query, readings = rows[0]
-        rng.shuffle(rows)
-        return ";".join(f"{name}:{digits}" for name, digits in rows) + f";+{query}={sum(map(int, readings)) % 10}\n"
+        return _rows(rng, steps, items, "+")
 
     @staticmethod
     def chain(line: str) -> list[str]:
         """What is written after the query's '=': the last digit of the sum after each reading (+mx= then 7, 4, 8)."""
-        body, query = line.rstrip("\n").rsplit(";+", 1)
-        rows = dict(row.split(":", 1) for row in body.split(";"))
-        total, written = 0, []
-        for reading in rows[query.split("=", 1)[0]]:
-            total = (total + int(reading)) % 10
-            written.append(str(total))
-        return written
+        return [total for _, total in _totals(line, "+")]
 
     @staticmethod
     def steps(line: str) -> int:
         return len(Sums.chain(line))
 
 
-FAMILIES = {family.name: family for family in (Hops, Offs, Sums)}
+class Tots:
+    """A channel's readings copied out with the running total beside each."""
+    name = "tots"
+    query = "#"
+
+    @staticmethod
+    def example(rng: random.Random, steps: int, items: int = ITEMS) -> str:
+        return _rows(rng, steps, items, "#")
+
+    @staticmethod
+    def chain(line: str) -> list[str]:
+        """What is written after the query's '=': each reading and the last digit of the sum up to it (#mx= then
+        77, 74, 48)."""
+        return [reading + total for reading, total in _totals(line, "#")]
+
+    @staticmethod
+    def steps(line: str) -> int:
+        return len(Tots.chain(line))
+
+
+FAMILIES = {family.name: family for family in (Hops, Offs, Sums, Tots)}
 
 
 def _query_at(line: str) -> int:
@@ -175,15 +207,15 @@ def written(family: str, line: str) -> str:
 
 
 def answer_of(family: str, line: str) -> str:
-    """The answer that a line's own items give its query."""
-    return FAMILIES[family].chain(line)[-1]
+    """The answer that a line's own items give its query: the last byte of its chain."""
+    return FAMILIES[family].chain(line)[-1][-1]
 
 
 def guess_floors(family: str, steps: int, count: int = 4000, seed: int = 3) -> dict[str, float]:
     """How often guesses that follow no chain answer a line of ``steps`` steps, as means over ``count`` lines: a
     digit drawn evenly from the digits the line holds; the digit the line holds most often (evenly among the most
-    frequent); and the nearest digit: for sums the last reading of the query's row, for the others a digit drawn
-    evenly from those that a name is bound to directly. Each guess is taken at its expectation, with no draw."""
+    frequent); and the nearest digit: for sums and tots the last reading of the query's row, for the others a digit
+    drawn evenly from those that a name is bound to directly. Each guess is taken at its expectation, with no draw."""
     rng = random.Random(seed * 1000 + steps)
     totals = {"a digit of the line": 0.0, "the line's most frequent digit": 0.0, "the nearest digit": 0.0}
     for _ in range(count):
@@ -195,7 +227,7 @@ def guess_floors(family: str, steps: int, count: int = 4000, seed: int = 3) -> d
         most = max(digits.count(d) for d in set(digits))
         modes = [d for d in set(digits) if digits.count(d) == most]
         totals["the line's most frequent digit"] += (answer in modes) / len(modes)
-        if family == "sums":
+        if family in ("sums", "tots"):
             name = line[_query_at(line) + 1:].split("=", 1)[0]
             rows = dict(row.split(":", 1) for row in body.rstrip(";").split(";"))
             totals["the nearest digit"] += float(rows[name][-1] == answer)

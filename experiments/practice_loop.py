@@ -45,7 +45,7 @@ differently, so a run with it is another run, as another seed is.
 
 usage: python experiments/practice_loop.py --checkpoint run/model.pt.averaged --out practice/ --rounds 200 \\
     [--device mps] [--longest-hops 8] [--evaluate-every 50 --evaluate-hops 4 6 8] [--dips 0] [--rehearse 16] \\
-    [--families hops offs sums] [--practise hops] [--exact-products] [--fused-reads]
+    [--families hops offs sums tots] [--practise hops] [--exact-products] [--fused-reads]
 """
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def verify(task: Task) -> bool:
     text = task.prompt.decode() + chr(task.answer) + "\n"
     family = FAMILIES[task.family]
     query = text[text.rindex(";") + 2:].split("=", 1)[0]
-    return family.chain(text)[-1] == chr(task.answer) and family.steps(text) == task.hops and not query.isdigit()
+    return family.chain(text)[-1][-1] == chr(task.answer) and family.steps(text) == task.hops and not query.isdigit()
 
 
 def grade(task: Task, written: bytes) -> float:
