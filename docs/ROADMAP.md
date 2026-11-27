@@ -699,8 +699,11 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   in one family carries over to the other. The Transformer's arms follow once its base is known.
 - **The Transformer again** (`four_families_transformer_again.json`, on the laptop): a comparison of practice
   needs a Transformer that has learned the chains, so it gets two further chances at the same corpus: four times
-  the updates, and a start from the model that already follows names. The better of the two is the Transformer's
-  base when the families are practised.
+  the updates, and a start from the model that already follows names. Each learned the lookups and nothing else
+  by the mark. The one with four times the updates came close on the lookups that add (0.91 over 1 to 4 steps);
+  the one started from the lookup model managed the running sum up to three readings. Neither reaches past the
+  trained length without practice, where the stack's lookups reach 8 steps. By the registered tie rule the
+  Transformer practises the lookups this weekend from the arm that started from the lookup model.
 
 ## How to continue
 
