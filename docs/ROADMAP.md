@@ -16,8 +16,8 @@ claims are made, and what to try next. Every number links to a record in
 
 | Scale | Stack | Transformer | Gap (bits per byte) |
 |---|---|---|---|
-| Full size, the looped stack under the pool that lifts the ceiling (fsp-lift: levels 2 to 8 run twice, 36.3M parameters, 1.63 times the pulses), enwik8 test | 1.0817 | 1.0790 (34.75M, at 1.2e-3) | **0.003 behind** (0.009 on validation) |
-| Full size, the looped stack (fsp-loop: the same without the lifting pool), enwik8 test | 1.1039 | 1.0790 (34.75M, at 1.2e-3) | 0.025 behind |
+| Full size, the looped stack under the pool that lifts the ceiling (v21, fsp-lift: levels 2 to 8 run twice, 36.3M parameters, 1.63 times the pulses), enwik8 test | 1.0817 | 1.0790 (34.75M, at 1.2e-3) | **0.003 behind** (0.009 on validation) |
+| Full size, the looped stack (v20, fsp-loop: the same without the lifting pool), enwik8 test | 1.1039 | 1.0790 (34.75M, at 1.2e-3) | 0.025 behind |
 | Full size, each model at its best rate (v19: fsp-st at 6e-4, 36.3M parameters), enwik8 test | 1.1129 | 1.0790 (34.75M, at 1.2e-3) | 0.034 behind |
 | The same pair against the Transformer with output synapses that learn while it reads | 1.1129 | 1.0771 | 0.036 behind |
 | Full size, both at 3e-4 (v18: l2048-word-st, 36.3M), enwik8 test | 1.1162 | 1.1067 (34.75M) | 0.0095 behind |
@@ -358,7 +358,12 @@ code check).
    **Pools that train with the energy's gradient** (`--pool-energy-gradient`, `pool_gradient.json`) hear the summed
    counts as before, so the stack fires the same spikes, and pass the energy's gradient: a float control with the
    pool's forward and the root mean square's gradient (`gpool`), a full-size pilot and two bed seeds run on GPU 1
-   once fsp-lift is scored.
+   once fsp-lift is scored. **The float control is read: the gradient is the pool's whole price.** The Transformer
+   whose every norm is the stack's pool, trained with the energy's gradient, scores 1.2973: 0.0084 better than with
+   its LayerNorms (0.0075 to 0.0092), where the same pool trained through its own divisor is 0.0691 worse. Both
+   pools compute the same division, so the 0.078 between them is the gradient that the divisor passes and nothing
+   else. That is the reason to expect a gain in the stack; the stack's pilot and the bed's seeds are training and
+   decide.
    **Power-law cells** (`--granule-power P`, `power_cells_screen.json`, on the laptop tonight): a cortical neuron's
    rate grows with a power of about two of how far its membrane stands past the threshold. A power-law cell fires
    round(k * k / P) spikes for k thresholds of charge, up to its cap, as a plain cell does at P thresholds: the
