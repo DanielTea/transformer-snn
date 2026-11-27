@@ -638,14 +638,17 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   rounds show two faults of the loop itself. The staircase climbed past 20 hops within 150 rounds, where a guess
   pays: a line holds 24 assignments whatever its hops, so a long chain leaves few other digits (`hop_tasks.py
   floors`). And GRPO's attempts below the mean push the likelihood of the model's own bytes down without a floor.
-- **Practice within reach** (`practice_within_reach.json`, running on the laptop): the same practice with the
-  staircase capped at 8 hops, with only rewarded attempts teaching, and with both, from both models. Its reading is
-  taken after 2,000 rounds. The stack's arm with both changes is done and fails it, in a way worth more than a
-  pass would have told: within 100 rounds it answered 0.96 of the tasks of 8 hops right with the whole chain in
-  0.93, and it held that for 700 rounds. The model kept at round 700 writes whole chains of 16 hops right in 0.72
-  of its answers, four times the length it read and twice the length it practised. Then, within about 50 rounds,
-  it lost the stop of a chain (it writes names until the room ends) and never returned. Reward on the answer alone
-  does lengthen a spiking model's written chains; the loop does not yet hold what it wins.
+- **Practice within reach** (`practice_within_reach.json`, on the laptop): the same practice with the staircase
+  capped at 8 hops, with only rewarded attempts teaching, and with both, from both models. Its reading is taken
+  after 2,000 rounds. The stack's three arms are done and none passes. The arm with both changes failed in a way
+  worth more than a pass would have told: within 100 rounds it answered 0.96 of the tasks of 8 hops right with the
+  whole chain in 0.93, and it held that for 700 rounds. The model kept at round 700 writes whole chains of 16 hops
+  right in 0.72 of its answers, four times the length it read and twice the length it practised. Then, within
+  about 50 rounds, it lost the stop of a chain (it writes names until the room ends) and never returned. The
+  capped arm that keeps GRPO's dips lost its chains between rounds 300 and 400. The uncapped arm in which only
+  rewarded attempts teach lost them between rounds 100 and 200, after its staircase had climbed to 24 hops, where
+  a guess pays. Reward on the answer alone does lengthen a spiking model's written chains; without rehearsal the
+  loop does not hold what it wins. The Transformer's three arms run on the laptop now.
 - **Practice with rehearsal** (`practice_with_rehearsal.json`, `practice_loop.py --rehearse`): the capped,
   reward-only practice with the written chains of 16 fresh tasks of 1 to 4 hops rehearsed in every round, as the
   brain replays old memories among new ones. The stack's arm passes: it meets the three marks after 2,000 rounds
