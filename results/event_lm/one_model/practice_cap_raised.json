@@ -4368,5 +4368,47 @@
  "diagnostic_where_chains_break_tool": {
   "recorded_utc": "2026-11-27T15:26:42Z",
   "note": "The tool that diagnostic_where_chains_break names by its working path is published as experiments/where_chains_break.py: the same code, with only its usage lines changed (it is run from the repository's root). The working path is outside the repository."
+ },
+ "diagnostic_age_offsets": {
+  "recorded_utc": "2026-11-27T16:56:08Z",
+  "kind": "diagnostic, not registered, reported: what the state reads of the stack's models learned about age",
+  "method": "experiments/read_age_offsets.py. A state read adds to every cell's charge in its race a learned offset for the cell's age in bytes, one for every head and age within its window of 256 bytes (snnformer/event_lm.py, _StateRead.aged). The offsets times the read address rate (64) are read from the checkpoints; no stream is run. Reported: their mean over the six reads and four heads in bands of age, and the first age from which that mean stays below zero for five ages in a row.",
+  "models": "chain-stack and four-stack (the laptop's), the nine practised runs of this record's stack arms (the server's), cap-bursts-stack of practice_within_reach.json and rehearse-bursts-stack of practice_with_rehearsal.json.",
+  "mean offset by age band in bytes": {
+   "chain-stack": {
+    "0-25": 3.61,
+    "25-50": 3.14,
+    "50-75": 2.29,
+    "75-100": 1.68,
+    "100-125": 0.41,
+    "125-140": -2.55,
+    "140-150": -4.59,
+    "150-175": -2.66,
+    "175-200": -1.49,
+    "200-256": -1.76
+   },
+   "four-stack": {
+    "0-25": 4.01,
+    "25-50": 3.36,
+    "50-75": 2.76,
+    "75-100": 1.96,
+    "100-125": 1.58,
+    "125-140": -0.71,
+    "140-150": -2.71,
+    "150-175": -2.82,
+    "175-200": -2.04,
+    "200-256": -2.89
+   }
+  },
+  "first age of five in a row below zero": {
+   "chain-stack": 121,
+   "four-stack": 129,
+   "every practised run, cap-bursts-stack, rehearse-bursts-stack": 121
+  },
+  "heads": "In chain-stack every one of the 24 heads has a negative mean offset at 140 to 150 bytes, and 21 have a positive one at 0 to 100 bytes; in four-stack 22 and 23 of the 24 are negative at 140 to 150 and at 150 to 175 bytes.",
+  "practice": "The practised runs' offsets differ from chain-stack's by at most 0.05 in any band: 2,000 rounds of practice at a rate of 3e-5 left them where training put them.",
+  "where the lines stand": "Up to its query's '=' a line of the corpus is 131 to 141 bytes long (24 assignments; 2,000 lines of 1 hop drawn with experiments/hop_tasks.py), so from a query the line's first byte stands 131 to 141 bytes back, and the query and written chain of the line before stand about 132 to 156 bytes back. The offsets turn negative at 121 bytes and are lowest at 140 to 150 bytes, where the line before ends.",
+  "what it suggests": "The reads learned to tell the present line from the one before by age alone: in the corpus every line is about as long as every other, and cells older than the line hold the bindings of another line. A chain written after the line pushes the line's first assignments past that age, and there the diagnostic above finds the errors: 16.1% of the steps whose assignment stands 150 to 200 bytes back (cap 8) against at most 1.7% nearer. Practice did not move the offsets, so what lets the cap of 12 hold far assignments better (3.4%) lies elsewhere in the weights. The Transformer hears the newline and the place of every byte and can find the line's start by content.",
+  "what follows": "Two steps, each registered before it runs. First a probe of recall by distance: one-hop lookups whose assignment stands at a set distance in lines of 24 and of 36 assignments, for the stack's and the Transformer's models. Then, if the stack's recall falls past the age at which its offsets turn negative where the Transformer's does not, a read that counts age in lines (a clock that beats at the start of every line, as the read's beats can count words), so that the present line has one age however long it is."
  }
 }
