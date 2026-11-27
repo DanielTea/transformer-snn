@@ -523,6 +523,7 @@ updates, each change made to the Transformer:
 | The stack's pool in place of every LayerNorm | 0.0691 (0.0682 to 0.0701) |
 | A centred pool (`full_size_centring_in_floats.json`) | 0.0636 (0.0627 to 0.0646) |
 | A pool that divides by the root mean square (`energy_pool.json`) | 0.0020 |
+| The stack's pool trained with the energy's gradient (`pool_gradient.json`) | 0.0084 better (0.0075 to 0.0092) |
 
 So the pool's price is its division by the mean absolute activity: 97% of it goes with a division by the root mean
 square. In spikes the same change does not pay: pools that hear the stream's energy (`--pool-energy`) trail the bed
@@ -530,8 +531,12 @@ by 0.0030 on the mean of two seeds, and the lifted loop with them is 0.0040 behi
 say why the division itself cannot be the price. In both trained models the stream is dense and close to Gaussian,
 its root mean square 1.25 times its mean absolute activity at every token within a few percent, so the two
 divisions differ by a constant that the gains absorb (`stream_loudness.json`). What costs is how the division
-trains. Pools that fire as before and train with the energy's gradient (`--pool-energy-gradient`) are on test in
-floats, on the bed and at full size (`pool_gradient.json`).
+trains, and the last row of the table measures it: the same pool, dividing as before and passing the gradient of a
+division by the root mean square through its divisor, is better than LayerNorm, so the gradient is the pool's whole
+price in a Transformer (`pool_gradient.json`). The stack does not pay that price. Pools that fire as before and
+train with the energy's gradient (`--pool-energy-gradient`) leave the lifted loop 0.0011 behind the same loop at
+full size (0.0003 to 0.0019) and fail on the bed, where after 24,000 updates one seed is 0.0027 behind and one
+0.0018 ahead. Twice, then, what the pool costs a Transformer has not been what it costs the stack.
 
 ## Tried since v20, each by its mark
 
@@ -564,7 +569,6 @@ The data-slope test's new stack runs train with fused reads after a registered c
 |---|---|
 | `full_size_lifted_loop_second.json` | The lifted loop with power-law cells for 90,000 updates (fsp-lift2), read against the lifted loop (pre-registered) |
 | `full_size_data_slope.json` | The gap's slope with data at full size: that stack and the Transformer at 45,000, 90,000 and 180,000 updates (pre-registered) |
-| `pool_gradient.json` | Pools that fire as before and train with the energy's gradient: in floats, on the bed's two seeds and in a full-size pilot (pre-registered) |
 | `full_size_power_loop_variants.json` | Skip fibres and the Transformer's rate on the lifted loop with power-law cells, full-size pilots (pre-registered) |
 | `cubic_cells_with_data.json` | Power-law cells whose count grows with the cube of their charge: the bed's two seeds and a full-size pilot (pre-registered) |
 | `sleep_closed_gates_with_data.json` | Sleep with gates that start closed, alone and on the loop, two server seeds at 6,000 and 24,000 updates (pre-registered) |
