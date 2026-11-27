@@ -640,10 +640,20 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   of its answers, four times the length it read and twice the length it practised. Then, within about 50 rounds,
   it lost the stop of a chain (it writes names until the room ends) and never returned. Reward on the answer alone
   does lengthen a spiking model's written chains; the loop does not yet hold what it wins.
-- **Practice with rehearsal** (`practice_with_rehearsal.json`, `practice_loop.py --rehearse`, running): the capped,
+- **Practice with rehearsal** (`practice_with_rehearsal.json`, `practice_loop.py --rehearse`): the capped,
   reward-only practice with the written chains of 16 fresh tasks of 1 to 4 hops rehearsed in every round, as the
-  brain replays old memories among new ones. It passes if the stack meets the three marks after 2,000 rounds and
-  at every evaluation on the way from round 100.
+  brain replays old memories among new ones. The stack's arm passes: it meets the three marks after 2,000 rounds
+  and held them at every one of the 20 evaluations on the way. After practice it answers 0.99 of the tasks of 8
+  hops right with the whole chain written right in 0.985, and it writes chains it never practised: whole chains
+  in 0.975 of its answers at 12 hops, 0.875 at 16 and 0.345 at 20, from a corpus that showed it 1 to 4. Rehearsal
+  costs nothing on the way up (0.955 at 8 hops by round 100). One seed; the Transformer's arm follows on the
+  laptop.
+- **The cap raised** (`practice_cap_raised.json`, running on the server's GPU): the same loop with its cap at 8,
+  12 and 16 hops, from both models, with three seeds each. The runs with the cap at 8 are the seeds the rehearsal
+  screen owes before anything is built on it. The others ask what the cap is still needed for: past 9 hops a
+  model that guesses is no longer sent back to shorter tasks, so only rehearsal and the chains' own higher pay
+  hold them. It passes if every run holds its chains and the share of whole chains at 16 or 20 hops rises by 0.10
+  over the cap at 8.
 
 ## How to continue
 
