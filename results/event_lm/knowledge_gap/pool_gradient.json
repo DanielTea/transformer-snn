@@ -62,5 +62,91 @@
   "checked": "The run trained with --transformer-norm gpool (its results name the norm gpool) at fs-tf3's rate and length, 98,304,000 targets. Its score is within 0.00001 of fs-tf3-own's 1.297332; the two are different models (34,740,247 against 34,883,072 parameters, and their bits differ piece by piece with the spread of any other pair, 2.37 bits a piece of 16 bytes), so the agreement is chance.",
   "reading": "The gradient is the pool's price, all of it. The reading asked whether fs-tf3-gpool costs 0.0173 or less against fs-tf3; it costs nothing: the Transformer whose every norm is the stack's pool, dividing by the mean absolute activity and trained through its divisor as a division by the root mean square, is 0.0084 better than the Transformer with its LayerNorms [0.0075, 0.0092], where the same pool trained through its own divisor is 0.0691 worse. The 0.0775 between the two pools is how the divisor passes its gradient and nothing else: both compute the same division. The gain against LayerNorm is on new contexts (0.0086 on 76% of the bytes) and near copies (0.0161). Beside the reading: it is also 0.0104 better than the pool that divides by the root mean square itself, whose trained division differs from this one by a constant (stream_loudness.json); that is one seed against one seed, and the spread between two full-size float runs of one recipe has not been measured, so it is reported and not read. For the stack the float control only says why: the stack's own runs decide (fs-loop6-lift-gr at full size, gr-6k and gr-24k on the bed).",
   "seen while reading": "gr-24k-s1's score on the server, 1.48907 (bed24-lr12-s1: 1.486381); the bed's reading waits for its four runs and fs-loop6-lift-gr for its scoring."
+ },
+ "result_stack": {
+  "recorded_utc": "2026-11-27T00:37:49Z",
+  "runs": {
+   "fs-loop6-lift-gr": 1.301847,
+   "gr-24k-s1": 1.489069,
+   "gr-24k-s2": 1.49075,
+   "gr-6k-s1": 1.626475,
+   "gr-6k-s2": 1.627744
+  },
+  "full size (compare_stream_scores over 4,160 pieces of 512 bytes; above zero the pools with the energy's gradient are worse)": {
+   "fs-loop6-lift-gr (1.301847) against fs-loop6-lift (1.300729)": "+0.0011 [+0.0003, +0.0019]",
+   "by context (gap_by_piece, near 240, far 8,192)": {
+    "copyable near": {
+     "share_of_bytes": 0.0747,
+     "gap": -0.0077,
+     "interval_95": [
+      -0.0144,
+      -0.0003
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.1102,
+     "gap": 0.0078,
+     "interval_95": [
+      -0.0048,
+      0.0186
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0546,
+     "gap": -0.0315,
+     "interval_95": [
+      -0.0878,
+      0.0273
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7605,
+     "gap": 0.0033,
+     "interval_95": [
+      0.0004,
+      0.006
+     ]
+    }
+   },
+   "pulses a byte after 24,000 updates": {
+    "fs-loop6-lift-gr": 513171,
+    "fs-loop6-lift": 513300
+   }
+  },
+  "test bed (the same pairing; above zero the arm is worse)": {
+   "gr-24k-s1 (1.489069) against bed24-lr12-s1 (1.486381)": "+0.0027 [+0.0017, +0.0036]",
+   "gr-24k-s2 (1.490750) against bed24-lr12-s2 (1.492556)": "-0.0018 [-0.0028, -0.0009]",
+   "gr-6k-s1 (1.626475) against rd-base-6k-s1 (1.621562)": "+0.0049 [+0.0041, +0.0058]",
+   "gr-6k-s2 (1.627744) against rd-base-6k-s2 (1.628309)": "-0.0006 [-0.0014, +0.0003]"
+  },
+  "test bed, the shared reading (read_lead_study.py; a lead is the base's score minus the arm's)": {
+   "long_leads": [
+    -0.00269,
+    0.00181
+   ],
+   "long_mean_lead": -0.00044,
+   "seeds_ahead": 1,
+   "a_lead": false,
+   "short_leads": [
+    -0.00491,
+    0.00056
+   ],
+   "short_mean_lead": -0.00217,
+   "growth": 0.00173,
+   "b_growth": false,
+   "verdict": "fail"
+  },
+  "pulses a byte on the bed": {
+   "gr-24k-s1": 115716,
+   "gr-24k-s2": 115859,
+   "bed24-lr12-s1": 115653,
+   "bed24-lr12-s2": 115737,
+   "gr-6k-s1": 116343,
+   "rd-base-6k-s1": 116078,
+   "rd-base-6k-s2": 116802,
+   "gr-6k-s2": 116582
+  },
+  "reading": "For the stack the gradient is not the pool's price. Full size: the lifted loop whose pools train with the energy's gradient is 0.0011 worse than the same loop [0.0003, 0.0019], at the same pulses, so by the registered rule these pools stay off at full size. The split by context is small in every part: 0.0033 worse on new contexts [0.0004, 0.0060], three quarters of the bytes, and 0.0077 better on near copies [0.0003, 0.0144]. Test bed: a fail by the shared reading. After 24,000 updates one seed is 0.0027 behind its base [0.0017, 0.0036] and the other 0.0018 ahead [0.0009, 0.0028], a mean lead of -0.0004 where 0.005 with both seeds ahead would adopt it; after 6,000 updates one is 0.0049 behind [0.0041, 0.0058] and the other level (0.0006 ahead, [-0.0003, 0.0014]). The stack fires the same spikes with either gradient and learns no better with the energy's. So the float control and the stack part: in a Transformer the stack's pool costs 0.0691 and all of it is the gradient its divisor passes (result_float: with the energy's gradient that pool is 0.0084 better than LayerNorm), and the stack, given that gradient, gains nothing. With energy_pool.json this is the second time that what the pool costs a Transformer is not what it costs the stack. The walk of the layout in floats measured what each part of the stack's layout costs a Transformer; for the pool that cost is now explained in full, and it is no recipe for the stack: neither pools that divide by the energy (energy_pool.json) nor pools that train with its gradient bring the stack closer.",
+  "seen while reading": "Nothing beyond the scores, pairings and logs given here. The four bed runs and the full-size pilot trained on GPU 1 in the window of 2026-11-26 as registered."
  }
 }

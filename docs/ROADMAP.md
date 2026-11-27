@@ -362,8 +362,12 @@ code check).
    whose every norm is the stack's pool, trained with the energy's gradient, scores 1.2973: 0.0084 better than with
    its LayerNorms (0.0075 to 0.0092), where the same pool trained through its own divisor is 0.0691 worse. Both
    pools compute the same division, so the 0.078 between them is the gradient that the divisor passes and nothing
-   else. That is the reason to expect a gain in the stack; the stack's pilot and the bed's seeds are training and
-   decide.
+   else. That was the reason to expect a gain in the stack, and **the stack gains nothing**: at full size the lifted
+   loop whose pools train with the energy's gradient is 0.0011 behind the same loop (0.0003 to 0.0019), and on the
+   bed after 24,000 updates one seed is 0.0027 behind and one 0.0018 ahead, a fail by the shared reading, so these
+   pools stay off. Twice now, with energy pools and with their gradient, what the stack's pool costs a Transformer
+   has not been what it costs the stack: the walk of the layout in floats explains the pool's price in a
+   Transformer in full, and it is no recipe for the stack.
    **Power-law cells** (`--granule-power P`, `power_cells_screen.json`, on the laptop tonight): a cortical neuron's
    rate grows with a power of about two of how far its membrane stands past the threshold. A power-law cell fires
    round(k * k / P) spikes for k thresholds of charge, up to its cap, as a plain cell does at P thresholds: the
@@ -615,7 +619,7 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
 
 ## How to continue
 
-- The newest handoff (`docs/V19_HANDOFF.md`) says how to restore checkpoints,
+- The newest handoff (`docs/V21_HANDOFF.md`) says how to restore checkpoints,
   rescore and retrain.
 - `experiments/train_event_lm.py` trains every arm; `experiments/eval_stream.py`
   scores streams, and `experiments/gap_by_piece.py` splits two scorings.
