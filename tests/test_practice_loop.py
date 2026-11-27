@@ -108,6 +108,36 @@ def test_without_dips_only_the_rewarded_attempts_teach():
     assert bursts == pytest.approx(float(-(weight * mean).mean()), abs=1e-4)
 
 
+def test_rehearsal_asks_for_the_chain_as_the_corpus_writes_it():
+    import hop_tasks
+
+    rng = random.Random(4)
+    lines = [hop_tasks.example(rng, hops) for hops in (1, 2, 4)]
+    tasks = [practice.Task(line[:line.rindex("=") + 1].encode(), ord(line[line.rindex("=") + 1]), hops)
+             for line, hops in zip(lines, (1, 2, 4))]
+    for line, task in zip(lines, tasks):
+        # the corpus's line with its chain written is the task's prompt followed by what rehearsal asks for
+        assert hop_tasks.write_chain(line).encode() == task.prompt + practice.chain_written(task)
+        assert practice.wrote_the_chain(task, practice.chain_written(task))
+    assert practice.chain_written(tasks[0]) == bytes([tasks[0].answer]) + b"\n"
+    torch.manual_seed(0)
+    stack = EventLM(EventLMConfig(**_STACK)).train()
+    loss = practice.rehearsal_loss(stack, tasks, "cpu")
+    loss.backward()
+    assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in stack.parameters())
+    # the loss is the mean over the tasks of the mean cost a byte of the chain, each task read as one window
+    with torch.no_grad():
+        texts = [task.prompt + practice.chain_written(task) for task in tasks]
+        width = max(map(len, texts))
+        tokens = torch.tensor([[practice.NEWLINE] * (width - len(t)) + list(t) for t in texts])
+        logits = practice.scores(stack, stack(tokens[:, :-1])).float()
+        logp = torch.log_softmax(logits, -1).gather(2, tokens[:, 1:, None])[..., 0]
+        costs = [-logp[row, width - 1 - len(practice.chain_written(task)):].mean() for row, task in enumerate(tasks)]
+    assert float(loss.detach()) == pytest.approx(float(torch.stack(costs).mean()), abs=1e-4)
+    # a model that already writes the chain has nothing to rehearse: the written bytes are all that is asked
+    assert practice.written_likelihood(stack, [tasks[0].prompt], [b""], "cpu").item() == 0.0
+
+
 def test_greedy_evaluation_reports_every_hop_count():
     torch.manual_seed(0)
     stack = EventLM(EventLMConfig(**_STACK)).eval()

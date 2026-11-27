@@ -26,8 +26,13 @@ greedy answers along the way, so that what practice does to the written chains i
 --dips weighs what an attempt without reward teaches (policy_loss): at 0 the model learns only from the attempts
 that were rewarded, as a synapse that is strengthened by a burst of dopamine and barely weakened by its pause.
 
+Practice alone holds nothing in place. Once a length is solved its rounds teach almost nothing, the optimizer's steps
+stay as large as they were, and after some hundred rounds a model can lose what it had, the stop of a chain first
+(practice_within_reach.json). --rehearse adds to every round what the written corpus taught: fresh tasks of the
+corpus's lengths with their chains written as the corpus writes them, learned as the corpus was (rehearsal_loss).
+
 usage: python experiments/practice_loop.py --checkpoint run/model.pt.averaged --out practice/ --rounds 200 \\
-    [--device mps] [--longest-hops 8] [--evaluate-every 50 --evaluate-hops 4 6 8] [--dips 0]
+    [--device mps] [--longest-hops 8] [--evaluate-every 50 --evaluate-hops 4 6 8] [--dips 0] [--rehearse 16]
 """
 from __future__ import annotations
 
@@ -141,23 +146,42 @@ def policy_loss(model, tasks: list[Task], written: list[bytes], rewards: torch.T
     if dips != 1.0:
         advantages = torch.where(advantages < 0, advantages * dips, advantages)
     rows = [index for index, keep in enumerate(useful.repeat_interleave(count).tolist()) if keep]
-    texts = [tasks[i // count].prompt + written[i] for i in rows]
+    per_attempt = written_likelihood(model, [tasks[i // count].prompt for i in rows], [written[i] for i in rows],
+                                     device)
+    return -(advantages.to(device) * per_attempt).mean()
+
+
+def written_likelihood(model, prompts: list[bytes], written: list[bytes], device):
+    """For every row, the mean log-likelihood a byte of what was written after its prompt, the row read as one
+    window (shorter rows are led by newlines, as the attempts were)."""
+    texts = [prompt + wrote for prompt, wrote in zip(prompts, written)]
     width = max(len(t) for t in texts)
     tokens = torch.tensor([[NEWLINE] * (width - len(t)) + list(t) for t in texts], dtype=torch.long, device=device)
-    mask = torch.zeros(len(rows), width - 1, device=device)
-    for row, index in enumerate(rows):
-        length = len(written[index])
-        mask[row, width - 1 - length:] = 1.0
+    mask = torch.zeros(len(texts), width - 1, device=device)
+    for row, wrote in enumerate(written):
+        mask[row, width - 1 - len(wrote):] = 1.0
     logits = scores(model, model(tokens[:, :-1])).float()
-    logp = -F.cross_entropy(logits.flatten(0, 1), tokens[:, 1:].flatten(), reduction="none").view(len(rows), -1)
-    per_attempt = (logp * mask).sum(1) / mask.sum(1).clamp_min(1)
-    return -(advantages.to(device) * per_attempt).mean()
+    logp = -F.cross_entropy(logits.flatten(0, 1), tokens[:, 1:].flatten(), reduction="none").view(len(texts), -1)
+    return (logp * mask).sum(1) / mask.sum(1).clamp_min(1)
+
+
+def chain_written(task: Task) -> bytes:
+    """What the written corpus writes after a task's prompt: the names its query leads through, the digit and a
+    newline (?zt= then mx=qa=7; one hop: 7)."""
+    steps = chain_of(task.prompt.decode() + chr(task.answer) + "\n")
+    return "=".join(steps[1:]).encode() + b"\n"
+
+
+def rehearsal_loss(model, tasks: list[Task], device):
+    """What the written corpus taught, asked again: the mean cost a byte of writing every task's chain as the corpus
+    writes it. No attempt and no reward: the lesson is the one the model was trained on before it practised."""
+    return -written_likelihood(model, [task.prompt for task in tasks], [chain_written(task) for task in tasks],
+                               device).mean()
 
 
 def wrote_the_chain(task: Task, written: bytes) -> bool:
     """The answer writes the query's whole chain and nothing else: ?zt= then mx=qa=7 and a newline (one hop: 7)."""
-    steps = chain_of(task.prompt.decode() + chr(task.answer) + "\n")
-    return written == "=".join(steps[1:]).encode() + b"\n"
+    return written == chain_written(task)
 
 
 @torch.no_grad()
@@ -226,6 +250,13 @@ def main():
     parser.add_argument("--dips", type=float, default=1.0,
                         help="weight of the attempts that did worse than their task's mean (1: GRPO; 0: only "
                              "rewarded attempts teach)")
+    parser.add_argument("--rehearse", type=int, default=0, metavar="TASKS",
+                        help="add to every round's step the written chains of TASKS fresh tasks of --rehearse-hops "
+                             "(0: practice alone)")
+    parser.add_argument("--rehearse-hops", type=int, nargs="+", default=[1, 2, 3, 4],
+                        help="the lengths rehearsed, drawn evenly: those of the written corpus")
+    parser.add_argument("--rehearse-weight", type=float, default=1.0,
+                        help="weight of the rehearsal's loss beside the practice's")
     args = parser.parse_args()
     device = resolve_device(args.device)
     model, checkpoint = load_checkpoint(args.checkpoint, device)
@@ -238,6 +269,7 @@ def main():
         return
     optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=args.lr)
     rng, generator = random.Random(args.seed), torch.Generator().manual_seed(args.seed)
+    rehearsing = random.Random(args.seed + 13)  # rehearsal draws its own tasks: the practice's stay as they were
     args.out.mkdir(parents=True, exist_ok=True)
     log = (args.out / "rounds.jsonl").open("a")
     hops = args.start_hops
@@ -257,9 +289,15 @@ def main():
         solve_rate = float(rewards.mean())
         model.train()
         loss = policy_loss(model, tasks, written, rewards, args.attempts, device, args.dips)
-        if loss is not None:
+        rehearsal = None
+        if args.rehearse:
+            again = [generate(rehearsing, rehearsing.choice(args.rehearse_hops)) for _ in range(args.rehearse)]
+            rehearsal = rehearsal_loss(model, again, device)
+        step = [part for part in (loss, None if rehearsal is None else args.rehearse_weight * rehearsal)
+                if part is not None]
+        if step:
             optimizer.zero_grad(set_to_none=True)
-            loss.backward()
+            (step[0] if len(step) == 1 else step[0] + step[1]).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             if hasattr(model, "synaptic_scaling"):
@@ -270,6 +308,7 @@ def main():
                                             for i, w in enumerate(written)) / len(written), 4),
                "mean_bytes": round(sum(len(w) for w in written) / len(written), 2),
                "loss": None if loss is None else round(float(loss.detach()), 5),
+               **({} if rehearsal is None else {"rehearsal": round(float(rehearsal.detach()), 5)}),
                "example": (tasks[0].prompt[-12:] + written[0]).decode("latin-1")}
         log.write(json.dumps(row) + "\n")
         log.flush()
