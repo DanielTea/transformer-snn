@@ -701,9 +701,17 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   binding in lines longer than any it read, the stack recalls it almost always up to 150 bytes back, but in only
   0.31 and 0.19 of the lines at 150 to 175 and 175 to 200 bytes, where the Transformer recalls 1.00 and 0.97.
   Practice with the cap at 8 or 12 had taught the stack to reach that far (0.92 to 0.98) without moving its age
-  offsets, so the practised runs' long chains break partly over the chain they write themselves. Heads that count
-  lines instead of bytes (`--read-word-unit line`: the read's word heads, which reach only the present word, made
-  to reach only the present line) are the fix to test next.
+  offsets, so the practised runs' long chains break partly over the chain they write themselves.
+- **Line heads** (`line_heads.json`, `--read-word-unit line`): two of every read's four heads count lines instead
+  of bytes. They are the read's word heads, which reach only the present word, made to reach only the present
+  line, as the brain cuts experience into events and recalls within them. **All three readings pass.** Asked for
+  one binding 150 to 200 bytes back, the stack with line heads answers 0.965 and 0.975, where the same recipe
+  without them answers 0.195 and 0.29. It keeps 1 to 4 hops (0.999), and without any practice it writes 0.975 of
+  8-hop chains whole (without line heads 0.655), 0.785 of 12-hop chains (0.205) and 0.455 of 16-hop chains
+  (0.015). Validation on the hop corpus is level, so the line heads cost nothing. Its plain heads still learned
+  the cliff at about 120 bytes; the far recall is the line heads'. As registered, line-stack goes into the
+  practice loop with rehearsal next, and line heads go into the four-family corpus. Records of telemetry are lines
+  too.
 - **Four families in one model** (`written_chains_four_families.json`, `experiments/task_families.py`, training on
   the laptop): before the loop can practise more than one kind of reasoning, a model must have learned to write
   each kind's chain. One corpus, four families, 1 to 4 steps each: the lookups along names; lookups that add as
