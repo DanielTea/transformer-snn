@@ -402,9 +402,12 @@ code check).
    cubic cells (`--granule-power-exponent 3`, round(k^3 / 64) spikes for k thresholds, the same as a square cell at 8
    thresholds; `cubic_cells_with_data.json`) keep every cell under 4 thresholds silent. They run on two bed seeds, a
    full-size pilot against the lifted loop with square cells (1.2870), and the laptop's seed. Two cheap full-size
-   pilots on the same loop need no new code (`full_size_power_loop_variants.json`): skip fibres, which gave the looped
-   bed a steady 0.006 under their own mark, and twice the rate, which gave the lifted loop 0.003. Whatever passes
-   joins the weekend's next full-length run.
+   pilots on the same loop needed no new code (`full_size_power_loop_variants.json`): skip fibres, which gave the
+   looped bed a steady 0.006 under their own mark, and twice the rate, which gave the lifted loop 0.003. **Neither
+   passes.** Skip fibres are 0.0011 better (interval 0.0003 to 0.0019), under the mark of 0.005, so they stay out.
+   Twice the rate is 0.0128 worse (0.0119 to 0.0136): plain cells gained 0.003 from it, and power-law cells, which
+   gain 0.0137 at 6e-4, cost 0.0022 at 1.2e-3. The cells' gain is tied to the rate, and the next full-length run
+   keeps fsp-lift2's recipe as it is.
 3. **What holds late learning back: the charge grid and weight decay.** Does the charge grid limit late learning
    (`weight_precision_with_data.json`; at the best rate `randomness_at_best_rate.json`)? A typical full-size synapse
    is about 8 ticks from zero, so a tick is an eighth of it, and on the test bed a float stand-in that was level
@@ -610,12 +613,28 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   writes 2% of the chains right and the Transformer none, and from 8 to 16 hops both answer as often as a guess
   among ten digits (0.09 to 0.12). The step is the same lookup at every length, but both learned it together with
   the lengths they saw.
-- **Practice from written chains** (`practice_written_chains.json`, running on the laptop): the two models practise
-  2,000 rounds from 4 hops, with only the answer checked, as in the practice screen. Now every attempt writes a chain
-  for the reward to grade, so the question is whether reward at the edge of what a model solves makes its chains
-  longer than any it has read: an accuracy of at least 0.50 at 6 hops with the whole chain written in half of the
-  answers, the same at 8 hops for twice the trained length, and the trained lengths kept. If neither model meets
-  the first mark, the next screen trains on written chains of more lengths (1 to 8 hops).
+- **Practice from written chains** (`practice_written_chains.json`): the two models practise 2,000 rounds from 4
+  hops, with only the answer checked, as in the practice screen. Now every attempt writes a chain for the reward to
+  grade, so the question is whether reward at the edge of what a model solves makes its chains longer than any it
+  has read: an accuracy of at least 0.50 at 6 hops with the whole chain written in half of the answers, the same at
+  8 hops for twice the trained length, and the trained lengths kept. The Transformer's chains grew: 0.71 right at 6
+  hops with 0.63 whole chains, 0.61 at 8 hops with 0.47 whole chains, just under the second mark. But it lost the
+  short ones (0.51 over 1 to 4 hops, from 0.99). The stack lost everything (0.05 at 6 hops, 0.11 over 1 to 4). The
+  rounds show two faults of the loop itself. The staircase climbed past 20 hops within 150 rounds, where a guess
+  pays: a line holds 24 assignments whatever its hops, so a long chain leaves few other digits (`hop_tasks.py
+  floors`). And GRPO's attempts below the mean push the likelihood of the model's own bytes down without a floor.
+- **Practice within reach** (`practice_within_reach.json`, running on the laptop): the same practice with the
+  staircase capped at 8 hops, with only rewarded attempts teaching, and with both, from both models. Its reading is
+  taken after 2,000 rounds. The stack's arm with both changes is done and fails it, in a way worth more than a
+  pass would have told: within 100 rounds it answered 0.96 of the tasks of 8 hops right with the whole chain in
+  0.93, and it held that for 700 rounds. The model kept at round 700 writes whole chains of 16 hops right in 0.72
+  of its answers, four times the length it read and twice the length it practised. Then, within about 50 rounds,
+  it lost the stop of a chain (it writes names until the room ends) and never returned. Reward on the answer alone
+  does lengthen a spiking model's written chains; the loop does not yet hold what it wins.
+- **Practice with rehearsal** (`practice_with_rehearsal.json`, `practice_loop.py --rehearse`, running): the capped,
+  reward-only practice with the written chains of 16 fresh tasks of 1 to 4 hops rehearsed in every round, as the
+  brain replays old memories among new ones. It passes if the stack meets the three marks after 2,000 rounds and
+  at every evaluation on the way from round 100.
 
 ## How to continue
 
