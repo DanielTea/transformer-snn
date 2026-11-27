@@ -654,12 +654,15 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   in 0.975 of its answers at 12 hops, 0.875 at 16 and 0.345 at 20, from a corpus that showed it 1 to 4. Rehearsal
   costs nothing on the way up (0.955 at 8 hops by round 100). One seed; the Transformer's arm follows on the
   laptop.
-- **The cap raised** (`practice_cap_raised.json`, running on the server's GPU): the same loop with its cap at 8,
-  12 and 16 hops, from both models, with three seeds each. The runs with the cap at 8 are the seeds the rehearsal
-  screen owes before anything is built on it. The others ask what the cap is still needed for: past 9 hops a
-  model that guesses is no longer sent back to shorter tasks, so only rehearsal and the chains' own higher pay
-  hold them. It passes if every run holds its chains and the share of whole chains at 16 or 20 hops rises by 0.10
-  over the cap at 8.
+- **The cap raised** (`practice_cap_raised.json`, on the server's GPU): the same loop with its cap at 8, 12 and
+  16 hops, from both models, with three seeds each. The stack's nine runs are in. Every one holds its chains at
+  every evaluation, so rehearsal keeps what practice wins with each seed and each cap. The cap at 12 reaches
+  furthest: from a corpus of 1 to 4 hops, two seeds of three write chains of 20 hops whole in 0.92 and 0.905 of
+  their answers (0.605 in the third), against 0.645, 0.35 and 0.22 with the cap at 8. The cap at 16 does not beat
+  the cap at 8: at 16 hops a guess is right in 0.37 of the tasks, one attempt in seven is rewarded without its
+  chain, and the reward teaches that too. Two runs began to lose their chains as the run without rehearsal had
+  lost them for good; the staircase took them down to 6 and 7 hops and both stood at their cap again within 40
+  rounds. The Transformer's nine runs follow.
 - **Four families in one model** (`written_chains_four_families.json`, `experiments/task_families.py`, training on
   the laptop): before the loop can practise more than one kind of reasoning, a model must have learned to write
   each kind's chain. One corpus, four families, 1 to 4 steps each: the lookups along names; lookups that add as
