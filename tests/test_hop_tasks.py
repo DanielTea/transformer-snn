@@ -14,7 +14,8 @@ from snnformer.transformer_reference import TransformerLM
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "experiments"))
 import hop_eval  # noqa: E402
-from hop_tasks import ASSIGNMENTS, chain_of, example, resolve, write_chain, write_corpus, write_tests  # noqa: E402
+from hop_tasks import (ASSIGNMENTS, LONGEST_DISTRACTOR, chain_of, chains_of, example, guess_floors, resolve,  # noqa: E402
+                       write_chain, write_corpus, write_tests)
 from train_event_lm import load_corpus  # noqa: E402
 
 
@@ -105,3 +106,29 @@ def test_a_corpus_of_written_chains_holds_the_same_lines_with_their_chains(tmp_p
     assert len(b) > 20 and all(write_chain(x + "\n") == y + "\n" for x, y in zip(a, b))
     assert chains["written_chains"] is True and "written_chains" not in plain
     assert sum(chains[k] for k in ("train", "validation", "test")) == len("".join(y + "\n" for y in b))
+
+
+@pytest.mark.parametrize("hops", [1, 3, 7, 24])
+def test_a_line_s_chains_are_its_assignments_and_the_query_s_is_among_them(hops):
+    rng = random.Random(hops)
+    for _ in range(20):
+        line = example(rng, hops)
+        chains = chains_of(line)
+        assert sum(length for length, _ in chains) == ASSIGNMENTS
+        assert (hops, resolve(line)[0]) in chains
+        assert sorted(length for length, _ in chains)[-2:][0] <= LONGEST_DISTRACTOR or len(chains) == 1
+
+
+def test_a_guess_pays_more_the_longer_the_chain():
+    floors = {hops: guess_floors(hops, count=600, seed=5) for hops in (1, 4, 8, 16, 22, 24)}
+    line, pointed, longest = (
+        [floors[hops][key] for hops in floors]
+        for key in ("a digit of the line", "a digit that a name points to", "the digit of the longest chain"))
+    assert line == sorted(line) and 0.12 < line[0] < 0.19 and line[-1] == 1.0
+    # a query of one hop is no name that another points to, so that guess is right only by a shared digit
+    assert pointed[0] < 0.13 and 0.17 < pointed[1] < 0.24 and pointed[1:] == sorted(pointed[1:]) and pointed[-1] == 1.0
+    # past the longest other chain the query's chain is the line's longest: its digit is the answer
+    assert longest[0] < 0.2 and longest[2:] == [1.0, 1.0, 1.0, 1.0]
+    # where the staircase of the practice loop steps down (a solve rate under a quarter) and up (above a half)
+    assert pointed[2] < 0.25 < pointed[3] < 0.5 < pointed[4]
+

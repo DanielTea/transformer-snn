@@ -18,8 +18,16 @@ The model may write anything before its answer. Between the query's '=' and the 
 the chain (?zt=mx=qa=7), each one lookup that a shallow model can make: a chain of thought in the task's own syntax,
 which no program writes for it. The share of attempts that write at least one name is reported every round.
 
+A guess pays more the longer the chain: a line holds 24 assignments whatever its hops, so a long chain leaves few
+other digits, and a guess among the digits that a name points to is right 0.20 of the time at 4 hops, 0.24 at 8, 0.37
+at 16 and more than half the time from 20 hops. A staircase that climbs there rewards the guess as it rewards the
+chain. --longest-hops caps it where a guess stays under the staircase's lower mark (8 hops). --evaluate-every scores
+greedy answers along the way, so that what practice does to the written chains is seen before the last round.
+--dips weighs what an attempt without reward teaches (policy_loss): at 0 the model learns only from the attempts
+that were rewarded, as a synapse that is strengthened by a burst of dopamine and barely weakened by its pause.
+
 usage: python experiments/practice_loop.py --checkpoint run/model.pt.averaged --out practice/ --rounds 200 \\
-    [--device mps]
+    [--device mps] [--longest-hops 8] [--evaluate-every 50 --evaluate-hops 4 6 8] [--dips 0]
 """
 from __future__ import annotations
 
@@ -117,14 +125,21 @@ def attempts(model, tasks: list[Task], count: int, max_bytes: int, temperature: 
     return [bytes(w) for w in written]
 
 
-def policy_loss(model, tasks: list[Task], written: list[bytes], rewards: torch.Tensor, count: int, device):
-    """The GRPO loss on the bytes written for the tasks whose attempts disagree, or None if none do."""
+def policy_loss(model, tasks: list[Task], written: list[bytes], rewards: torch.Tensor, count: int, device,
+                dips: float = 1.0):
+    """The GRPO loss on the bytes written for the tasks whose attempts disagree, or None if none do. An attempt
+    teaches by how far its reward came out above or below the mean of its task's attempts, in their standard
+    deviations: above it, its bytes become likelier (a burst); below it, less likely (a dip). ``dips`` weighs the
+    dips: 1 is GRPO, and at 0 only the attempts that were rewarded teach, an unexpected reward the most. A dip
+    lowers the likelihood of bytes the model itself drew, which has no floor; a burst raises one that ends at 1."""
     groups = rewards.view(len(tasks), count)
     spread = groups.std(1, unbiased=False)
     useful = spread > 0
     if not useful.any():
         return None
     advantages = ((groups - groups.mean(1, keepdim=True)) / (spread[:, None] + 1e-6))[useful].flatten()
+    if dips != 1.0:
+        advantages = torch.where(advantages < 0, advantages * dips, advantages)
     rows = [index for index, keep in enumerate(useful.repeat_interleave(count).tolist()) if keep]
     texts = [tasks[i // count].prompt + written[i] for i in rows]
     width = max(len(t) for t in texts)
@@ -168,6 +183,23 @@ def wrote_a_name(written: bytes) -> bool:
     return any(chr(b).isalpha() for b in body)
 
 
+def keep_evaluation(model, checkpoint, out: Path, round_: int, hops: int, hops_list, count: int, max_bytes: int,
+                    seed: int, device) -> dict:
+    """Score the model's greedy answers after ``round_`` rounds of practice (evaluate, on the tasks that the
+    evaluation of a finished run draws from the same seed), append the row to OUT/evaluations.jsonl and keep the
+    scored model as OUT/model-rROUND.pt. The evaluation draws from generators of its own, so the practice that
+    follows is the practice without it."""
+    was_training = model.training
+    model.eval()
+    row = {"round": round_, "hops": hops, "by_hops": evaluate(model, hops_list, count, max_bytes, seed, device)}
+    model.train(was_training)
+    with (out / "evaluations.jsonl").open("a") as log:
+        log.write(json.dumps(row) + "\n")
+    torch.save({**checkpoint, "state_dict": model.state_dict(), "practice_rounds": round_, "practice_hops": hops},
+               out / f"model-r{round_:05d}.pt")
+    return row
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkpoint", type=Path, required=True)
@@ -184,6 +216,16 @@ def main():
     parser.add_argument("--evaluate", type=int, nargs="*",
                         help="only score greedy answers with room to think at these hop counts, into OUT/evaluate.json")
     parser.add_argument("--evaluate-tasks", type=int, default=200)
+    parser.add_argument("--longest-hops", type=int, default=24,
+                        help="the staircase never asks for more hops than this (24 assignments a line; from 9 hops a "
+                             "guess among the line's digits is right more than a quarter of the time)")
+    parser.add_argument("--evaluate-every", type=int, default=0, metavar="ROUNDS",
+                        help="while practising, score greedy answers before the first round and after every ROUNDS "
+                             "rounds at --evaluate-hops (OUT/evaluations.jsonl) and keep each scored model")
+    parser.add_argument("--evaluate-hops", type=int, nargs="+", default=[4, 6, 8])
+    parser.add_argument("--dips", type=float, default=1.0,
+                        help="weight of the attempts that did worse than their task's mean (1: GRPO; 0: only "
+                             "rewarded attempts teach)")
     args = parser.parse_args()
     device = resolve_device(args.device)
     model, checkpoint = load_checkpoint(args.checkpoint, device)
@@ -199,6 +241,14 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     log = (args.out / "rounds.jsonl").open("a")
     hops = args.start_hops
+
+    def scored(round_):
+        if args.evaluate_every and round_ % args.evaluate_every == 0:
+            row = keep_evaluation(model, checkpoint, args.out, round_, hops, args.evaluate_hops, args.evaluate_tasks,
+                                  args.max_bytes, args.seed + 7, device)
+            print(json.dumps(row), flush=True)
+
+    scored(0)
     for round_ in range(1, args.rounds + 1):
         tasks = [task for task in (generate(rng, hops) for _ in range(args.tasks)) if verify(task)]
         model.eval()
@@ -206,7 +256,7 @@ def main():
         rewards = torch.tensor([grade(tasks[i // args.attempts], w) for i, w in enumerate(written)])
         solve_rate = float(rewards.mean())
         model.train()
-        loss = policy_loss(model, tasks, written, rewards, args.attempts, device)
+        loss = policy_loss(model, tasks, written, rewards, args.attempts, device, args.dips)
         if loss is not None:
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -216,13 +266,16 @@ def main():
                 model.synaptic_scaling()
         row = {"round": round_, "hops": hops, "tasks": len(tasks), "solve_rate": round(solve_rate, 4),
                "wrote_names": round(sum(map(wrote_a_name, written)) / len(written), 4),
+               "wrote_the_chain": round(sum(wrote_the_chain(tasks[i // args.attempts], w)
+                                            for i, w in enumerate(written)) / len(written), 4),
                "mean_bytes": round(sum(len(w) for w in written) / len(written), 2),
-               "loss": None if loss is None else round(float(loss), 5),
+               "loss": None if loss is None else round(float(loss.detach()), 5),
                "example": (tasks[0].prompt[-12:] + written[0]).decode("latin-1")}
         log.write(json.dumps(row) + "\n")
         log.flush()
         print(json.dumps(row), flush=True)
-        hops = staircase(hops, solve_rate)
+        hops = staircase(hops, solve_rate, longest=args.longest_hops)
+        scored(round_)
         if round_ % 50 == 0 or round_ == args.rounds:
             torch.save({**checkpoint, "state_dict": model.state_dict(), "practice_rounds": round_,
                         "practice_hops": hops}, args.out / "model.pt")
