@@ -662,7 +662,16 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   the cap at 8: at 16 hops a guess is right in 0.37 of the tasks, one attempt in seven is rewarded without its
   chain, and the reward teaches that too. Two runs began to lose their chains as the run without rehearsal had
   lost them for good; the staircase took them down to 6 and 7 hops and both stood at their cap again within 40
-  rounds. The Transformer's nine runs follow.
+  rounds. The Transformer's three runs with the cap at 8 are in as well. At 6 and 8 hops neither model is ahead.
+  Past the practised length the Transformer carries further: after practice up to 8 hops it answers 0.975, 0.995
+  and 0.92 of the 20-hop tasks, the stack 0.705, 0.44 and 0.38 (the stack's best cap, 12, takes it to 0.945,
+  0.935 and 0.805). It got there later and less evenly. The stack stands at 8 hops within 28 rounds with every
+  seed and holds at every evaluation; the Transformer needed 71, 171 and 712 rounds, one seed writing four steps
+  and stopping for 700 of them. One of its three seeds left the corpus's form: it writes the right chain with a
+  fresh question mark before every fourth name, turning a long chain into chains of the length it was taught, so
+  its answers are right and none of its chains counts as whole. The Transformer's six runs with the cap at 12 and
+  16 run in the weekend's window. Why the stack's chains thin out with length where the Transformer's do not is
+  the open question this leaves.
 - **Four families in one model** (`written_chains_four_families.json`, `experiments/task_families.py`, training on
   the laptop): before the loop can practise more than one kind of reasoning, a model must have learned to write
   each kind's chain. One corpus, four families, 1 to 4 steps each: the lookups along names; lookups that add as
