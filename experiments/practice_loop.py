@@ -346,7 +346,12 @@ def main():
         # after each evaluation along the way, so that a factor too large for them does not go unseen.
         whole_products.AUDIT = args.exact_products and (
             round_ == 1 or bool(args.evaluate_every) and round_ % args.evaluate_every == 1)
-        losses, rows, solved = [], {}, {}
+        # One family: the step is taken on the sum of its losses, as the loop always took it. Several: every loss
+        # sends its gradient back as soon as it is known and the gradients add up, so that one family's graph is
+        # held at a time and a round needs no more memory than a round of one family.
+        losses, rows, solved, sent = [], {}, {}, False
+        if not single:
+            optimizer.zero_grad(set_to_none=True)
         for family in practised:
             tasks = [task for task in (generate(rng, hops[family], family) for _ in range(args.tasks)) if verify(task)]
             model.eval()
@@ -355,8 +360,11 @@ def main():
             solved[family] = float(rewards.mean())
             model.train()
             loss = policy_loss(model, tasks, written, rewards, args.attempts, device, args.dips)
-            if loss is not None:
+            if loss is not None and single:
                 losses.append(loss)
+            elif loss is not None:
+                loss.backward()
+                sent = True
             rows[family] = {"hops": hops[family], "tasks": len(tasks), "solve_rate": round(solved[family], 4),
                             "wrote_names": round(sum(map(wrote_a_name, written)) / len(written), 4),
                             "wrote_the_chain": round(sum(wrote_the_chain(tasks[i // args.attempts], w)
@@ -370,7 +378,11 @@ def main():
                 again = [generate(rehearsing, rehearsing.choice(args.rehearse_hops), family)
                          for _ in range(args.rehearse)]
                 rehearsal = rehearsal_loss(model, again, device)
-                rehearsals.append(rehearsal)
+                if single:
+                    rehearsals.append(rehearsal)
+                else:
+                    (args.rehearse_weight * rehearsal).backward()
+                    sent = True
                 row = rows.setdefault(family, {})
                 example_ = row.pop("example", None)  # the rehearsal's loss is logged before the example, as it was
                 row["rehearsal"] = round(float(rehearsal.detach()), 5)
@@ -379,10 +391,8 @@ def main():
         step = losses + [args.rehearse_weight * rehearsal for rehearsal in rehearsals]
         if step:
             optimizer.zero_grad(set_to_none=True)
-            total = step[0]
-            for part in step[1:]:
-                total = total + part
-            total.backward()
+            (step[0] if len(step) == 1 else step[0] + step[1]).backward()
+        if step or sent:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             if hasattr(model, "synaptic_scaling"):
