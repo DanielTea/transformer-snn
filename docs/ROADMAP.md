@@ -404,8 +404,17 @@ them the stack's runs took 8 to 40 s a round.
    every seed (0.0100, 0.0156, 0.0100, 0.0143; 0.0125 on the mean) at equal pulses, a constant gain. After 6,000
    updates they led by 0.0176, so the plain cells catch up part of the way with data. Power-law cells therefore join
    the next full-length run, **fsp-lift2** (`full_size_lifted_loop_second.json`): the lifted loop with power-law
-   cells, on GPU 0 alone from the evening of 2026-11-26, read against fsp-lift, fsp-loop and the Transformer. Its
-   90,000 updates show how much of the gain survives at full length. **In the loop the gain is larger**: on the
+   cells, on GPU 0 alone from the evening of 2026-11-26, read against fsp-lift, fsp-loop and the Transformer.
+   **By its registered measure it fails; without the fast output synapses it is the best stack yet.** Read with
+   fast output synapses at 2^24, as every full-size stack since v19, fsp-lift2 is 0.0027 worse than fsp-lift on
+   test and 0.0034 on validation, and 0.0055 and 0.0121 behind the Transformer. The synapses cost this run 0.0092
+   and 0.0115: they still help copies, and they cost new contexts 0.026 to 0.028. Read without them, at the reach
+   of 8,192, fsp-lift2 scores 1.0752 on test and 1.1054 on validation. Power-law cells are then 0.0074 better than
+   plain cells on both splits, mostly on new contexts, so the bed's gain did carry to full length. Against the
+   Transformer, neither model using fast synapses, the stack is 0.0038 ahead on test (interval 0.0027 to 0.0047)
+   and 0.0006 behind on validation (0.0004 ahead to 0.0016 behind). That is not the measure the record named, so
+   it decides nothing. A second seed is registered with this measure fixed in advance
+   (`full_size_power_cells_second_seed.json`), trained on the fast path. **In the loop the gain is larger**: on the
    laptop's seed, after 24,000 updates, the looped bed with power-law cells leads the looped bed with plain cells
    by 0.0095 (interval 0.0086 to 0.0105) at equal pulses (`power_cells_in_loop_screen.json`), twice the same seed's
    lead on the plain bed, again on new contexts (0.015 better on 76% of bytes) with near copies 0.029 worse.
@@ -512,8 +521,9 @@ them the stack's runs took 8 to 40 s a round.
    membrane is held at a bound any more (0.04% of the top cells' entries reach their cap, where 27% of fsp-loop's sat
    at the bound). The fast output synapses now add little: 0.0009 on test, and on validation they cost 0.0007 (a
    scan on fsp-loop kept their threshold at 2^24, `fast_synapse_threshold_loop.json`). The lifted loop is the
-   stack's recipe from here on; fsp-lift2, the same loop with power-law cells, trains on GPU 0 and is read against
-   it.
+   stack's recipe from here on. fsp-lift2, the same loop with power-law cells, is worse than it by the registered
+   measure. Without fast output synapses it is ahead of it and of the Transformer on test (see power-law cells
+   above); a second seed tests that with the measure fixed in advance.
 
    Built and pre-registered next: **a racing loop** (`--stack-loop-exits`, d837b6c, `racing_loop_screen.json`).
    A uniform third pass helps hard bytes and hurts copies, so it nets nothing. In cortex a decision is a race:
