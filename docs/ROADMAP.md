@@ -678,7 +678,18 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   writes a step right almost always while the assignment it needs stands within about 150 bytes back, and takes a
   neighbouring name in 16% of the steps (cap 8) when it stands 150 to 200 bytes back. The Transformer misses 1.2%
   there. With the cap at 16 this holds at every place in the chain alike; the cap at 12 holds far assignments best
-  (3.4%). A screen of the read's addressing by age and its reach comes next.
+  (3.4%). The stack's own weights say why. Its memory reads weigh every earlier byte by its age as well as by
+  what it holds, and every head learned to turn against bytes older than about 120, most of all at 140 to 150
+  bytes back: in the corpus that is where the line before ends (a line is 131 to 141 bytes up to its question).
+  The reads tell the present line from the one before by age alone, and a long chain written after the line
+  pushes the line's first assignments past that age. Practice did not move these weights. A probe of recall by
+  distance bears it out (`recall_over_distance.json`, `experiments/recall_over_distance.py`): asked for one
+  binding in lines longer than any it read, the stack recalls it almost always up to 150 bytes back, but in only
+  0.31 and 0.19 of the lines at 150 to 175 and 175 to 200 bytes, where the Transformer recalls 1.00 and 0.97.
+  Practice with the cap at 8 or 12 had taught the stack to reach that far (0.92 to 0.98) without moving its age
+  offsets, so the practised runs' long chains break partly over the chain they write themselves. Heads that count
+  lines instead of bytes (`--read-word-unit line`: the read's word heads, which reach only the present word, made
+  to reach only the present line) are the fix to test next.
 - **Four families in one model** (`written_chains_four_families.json`, `experiments/task_families.py`, training on
   the laptop): before the loop can practise more than one kind of reasoning, a model must have learned to write
   each kind's chain. One corpus, four families, 1 to 4 steps each: the lookups along names; lookups that add as
