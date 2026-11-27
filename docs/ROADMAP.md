@@ -710,11 +710,21 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   run past the trained length: 0.93 right at 8 steps and 0.775 at 12, where the stack trained on lookups alone
   managed 0.105 at 8 and needed practice to get further. The two learned families go into the practice loop
   together this weekend; the running sums need another way of writing their chains first.
-- **Practice of several families** (`practice_several_families.json`, on the server's GPU this weekend): the
+- **Practice of several families** (`practice_several_families.json`, on the server's GPU on 2026-11-27): the
   stack's two learned families in one practice loop with rehearsal, capped at 12 steps: both practised in the
-  same rounds, and each practised alone while the other is only rehearsed, three seeds each. It asks whether one
-  loop lengthens both families' chains and keeps them, what sharing the loop costs a family, and whether practice
-  in one family carries over to the other. The Transformer's arms follow once its base is known.
+  same rounds, and each practised alone while the other is only rehearsed, three seeds each. **Four of the nine
+  stack runs fall.** The five that hold write 0.78 to 0.985 of their practised 12-step chains whole (the base
+  wrote 0.715 for the lookups and 0.105 for the lookups that add), the run that practised both in seed 0 writes
+  0.98 and 0.895 of its 16-step chains, and practice in one family lengthened the other's chains too. But two of
+  the three runs that practised both families, and one run of each single arm, lost everything past the
+  rehearsed lengths. They write the first steps right, then fill the room with one name repeated or with equals
+  signs, and end on one digit whatever the task. Once a run has fallen, its staircase goes between 4 and 5 steps,
+  and nothing in the loss makes the filler less likely, because only paid attempts teach. The Transformer
+  practised its one learned family, the lookups, with three seeds. Two runs write every chain of 5 to 12 steps
+  whole and 0.99 of those of 16 steps. The third never got past the corpus's longest form: it writes three names
+  and a guessed digit at every length. Neither model practises further by the reading. Every run that fell, of
+  either model, broke just past the longest chain the rehearsed corpus writes. So the choice between practising
+  families together and in turns must wait: first the loop has to keep every run standing.
 - **The Transformer again** (`four_families_transformer_again.json`, on the laptop): a comparison of practice
   needs a Transformer that has learned the chains, so it gets two further chances at the same corpus: four times
   the updates, and a start from the model that already follows names. Each learned the lookups and nothing else
