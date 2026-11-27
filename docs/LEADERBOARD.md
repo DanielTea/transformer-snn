@@ -5,6 +5,32 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
 <!-- hand-written:start -->
+## Power-law cells at full length · 368,640,000 training targets · seed 20001
+
+| Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
+|---|---:|---|---:|---:|---:|---:|
+| 36.26M SNN stack, levels 2 to 8 run twice under the lifting pool, power-law cells, trained on streams at 6e-4 | 36,263,956 | Stream, reach 8,192 | **1.07524** | 1 | — | — |
+| 34.75M full attention, windows of 2,048 bytes, at 1.2e-3 | 34,752,000 | Windows with 2,032 bytes of history, taught output synapses | 1.07714 | 2 | — | — |
+| 34.75M full attention, windows of 2,048 bytes, at 1.2e-3 | 34,752,000 | Windows with 2,032 bytes of history | 1.07899 | 3 | — | — |
+| 36.26M SNN stack, levels 2 to 8 run twice under the lifting pool, trained on streams at 6e-4 (v21) | 36,263,956 | Stream, reach 8,192, taught output synapses | 1.08175 | 4 | — | — |
+| 36.26M SNN stack, levels 2 to 8 run twice under the lifting pool, trained on streams at 6e-4 (v21) | 36,263,956 | Stream, reach 8,192 | 1.08266 | 5 | — | — |
+| 36.26M SNN stack, levels 2 to 8 run twice under the lifting pool, power-law cells, trained on streams at 6e-4 | 36,263,956 | Stream, reach 8,192, taught output synapses | 1.08448 | 6 | — | — |
+| 36.26M SNN stack, levels 2 to 8 run twice under the lifting pool, power-law cells, trained on streams at 6e-4 | 36,263,956 | Stream, as trained | 1.09017 | 7 | — | — |
+
+v21's lifted loop with power-law cells (`--granule-power 8`) and nothing else changed: the same parameters, pulses
+(506,607 a byte, 1.63 times v19's) and schedule. Its record registered the reading with taught output synapses, and
+by it the stack is 0.0027 behind v21's on test (paired 95% interval 0.0022 to 0.0033) and 0.0055 behind the
+Transformer (`results/event_lm/knowledge_gap/full_size_lifted_loop_second.json`). Read without fast output
+synapses it ranks first on test: 0.0038 ahead of the Transformer read without them (0.0027 to 0.0047) and 0.0019
+ahead of the Transformer with them. On validation it is level, 1.10540 against 1.10480 (0.0006 behind, interval
+0.0004 ahead to 0.0016 behind). That measure was chosen after the scores were seen, so it is not claimed; a second
+seed is registered with it (`full_size_power_cells_second_seed.json`). One seed of each model.
+[Model card](../models/spiking-byte-lm-v22/README.md) · [Scaling-law study](SCALING_LAW.md)
+
+![Release by release, the spiking stack against the Transformer](../results/figures/event_lm_full_size_line.png)
+<!-- hand-written:end -->
+
+<!-- hand-written:start -->
 ## The lifted loop at full length · 368,640,000 training targets · seed 20001
 
 | Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
@@ -24,7 +50,6 @@ It is the best spike-only stack so far, 0.0222 ahead of v20's on test (paired 95
 (`results/event_lm/knowledge_gap/full_size_lifted_loop_run.json`).
 [Model card](../models/spiking-byte-lm-v21/README.md) · [Scaling-law study](SCALING_LAW.md)
 
-![Release by release, the spiking stack closes on the Transformer](../results/figures/event_lm_full_size_line.png)
 <!-- hand-written:end -->
 
 <!-- hand-written:start -->
