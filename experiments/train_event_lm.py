@@ -160,7 +160,8 @@ def guided_language_loss(logits, targets, teacher_logits, weight):
 # A continued run may change these without changing what it trains: where it stops, on what it runs and where it
 # writes. A saved state that is moved with its folder to another machine continues there.
 # Settings that change how fast a run goes and not what it computes (speed_options.py): a run may resume with others.
-_SPEED_OPTIONS = frozenset(("fused_optimizer", "cuda_graph", "compile_cells", "fused_reads", "exact_products"))
+_SPEED_OPTIONS = frozenset(("fused_optimizer", "cuda_graph", "compile_cells", "fused_reads", "exact_products",
+                            "read_by_cell"))
 _RESUME_FREE = frozenset(("stop_at", "force", "threads", "device", "checkpoint", "results_dir")) | _SPEED_OPTIONS
 
 
@@ -428,6 +429,7 @@ def build_model(args):
                             read_kept=getattr(args, "read_kept", EventLMConfig.read_kept),
                             read_word_heads=getattr(args, "read_word_heads", EventLMConfig.read_word_heads),
                             read_word_span=getattr(args, "read_word_span", EventLMConfig.read_word_span),
+                            read_word_unit=getattr(args, "read_word_unit", EventLMConfig.read_word_unit),
                             plastic_after=(None if getattr(args, "plastic_levels", None) is None
                                            else tuple(map(int, args.plastic_levels.split(",")))),
                             plastic_rule=getattr(args, "plastic_rule", EventLMConfig.plastic_rule),
@@ -821,6 +823,9 @@ def main():
                              "neuron with fixed synapses mark where words begin)")
     parser.add_argument("--read-word-span", type=int, default=EventLMConfig.read_word_span, metavar="PLACES",
                         help="places of a word that a word head weighs, each with an offset of its own")
+    parser.add_argument("--read-word-unit", choices=("word", "line"), default=EventLMConfig.read_word_unit,
+                        help="what a word head counts: words, or lines (every byte but the newline is inside, so a "
+                             "head reaches the present line alone, however long it is)")
     parser.add_argument("--read-kept", type=int, default=EventLMConfig.read_kept, metavar="SLOTS",
                         help="in a stream every head of a race read keeps SLOTS cells that have left its reach, chosen "
                              "by the spikes they won while it could reach them; kept cells race beside the stream's")
@@ -1147,6 +1152,10 @@ def main():
                        help="compile the cell layers' and the state reads' element-wise chains (torch.compile)")
     speed.add_argument("--fused-reads", action="store_true",
                        help="a stream's race reads in the fused kernels of snnformer/race_kernel.py")
+    speed.add_argument("--read-by-cell", action="store_true",
+                       help="every race read of a stream takes its path by cell, also where its path by age would "
+                            "serve (the same spikes, the gradient to rounding): for the arms of a comparison with "
+                            "reads that have no path by age, such as word or line heads")
     speed.add_argument("--exact-products", action="store_true",
                        help="the products of whole spike counts and whole synapse ticks on the tensor cores, to the "
                             "bit (snnformer/whole_products.py): cuBLAS's tensor-core single precision, switched on "
@@ -1495,6 +1504,10 @@ def main():
     cycle = 1 if args.stream is None else args.stream * args.stream_groups
     if args.fused_reads:
         event_lm_module._READ_FUSED = True
+    if getattr(args, "read_by_cell", False):
+        if args.fused_reads:
+            parser.error("--read-by-cell takes every read by cell; fused reads run by age")
+        event_lm_module._READ_BY_AGE = False
     if args.exact_products:
         if device.type != "cuda":
             parser.error("--exact-products takes the tensor cores of a CUDA device")

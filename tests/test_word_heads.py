@@ -100,3 +100,75 @@ def test_a_long_run_of_non_letters_keeps_the_own_byte():
 def test_refuses_what_it_cannot_wire(changes):
     with pytest.raises(ValueError):
         EventLM(EventLMConfig(**dict(_STACK, **changes)))
+
+
+_LINES = b"ab=7;cd=ab;ef=3;?cd=ab=7\nqx=1;?qx=1\nmn=ty;ty=5;ka=mn;?ka=mn=ty=5\n\nzz=2;?zz=2\n"
+
+
+def _lines(length=120, streams=2):
+    data = (_LINES * 3)[:length]
+    return torch.tensor(list(data), dtype=torch.long).view(1, -1).repeat(streams, 1)
+
+
+@pytest.mark.parametrize("cuts", [(120,), (7, 1, 53, 59), (1, 1, 1, 117), (24, 24, 24, 24, 24)])
+def test_line_heads_stream_exactly_under_any_cut(cuts):
+    model = _stack(read_word_heads=2, read_word_span=48, read_word_unit="line").eval()
+    tokens = _lines()
+    with torch.no_grad():
+        whole, _ = model.stream(tokens, None)
+        state, parts, start = None, [], 0
+        for length in cuts:
+            out, state = model.stream(tokens[:, start:start + length], state)
+            parts.append(out)
+            start += length
+    assert torch.equal(whole, torch.cat(parts, 1))
+
+
+def test_a_line_head_reaches_only_the_present_line():
+    model = _stack(read_word_heads=1, read_word_span=48, read_word_unit="line").eval()
+    read = next(iter(model.state_reads.values()))
+    tokens = torch.tensor([list(b"ab=7;?ab=7\ncd ef;?cd=")], dtype=torch.long)
+    spikes = torch.randint(-8, 9, (1, tokens.shape[1], 64)).float()
+    with torch.no_grad():
+        fired, _, _, _ = read._address(spikes, tokens)
+    # At the last byte (20) the present line began at byte 11, after the newline: the line head fires there only,
+    # spaces and signs included, and not on the line before or its newline.
+    line_head = fired[0, 0, 20]
+    assert line_head[:11].abs().sum() == 0 and line_head[11:21].sum() > 0
+    # The other heads reach the line before as well.
+    assert fired[0, 1:, 20, :11].sum() > 0
+
+
+def test_the_word_unit_keeps_its_letters():
+    model = _stack(read_word_heads=1, read_word_span=16)
+    read = next(iter(model.state_reads.values()))
+    letters = torch.zeros(256, dtype=torch.bool)
+    letters[ord("A"):ord("Z") + 1] = letters[ord("a"):ord("z") + 1] = letters[128:] = True
+    assert torch.equal(read.letters, letters)
+    lines = next(iter(_stack(read_word_heads=1, read_word_span=16, read_word_unit="line").state_reads.values()))
+    assert lines.letters.sum() == 255 and not lines.letters[ord("\n")]
+
+
+@pytest.mark.parametrize("changes", [dict(read_word_heads=1, read_word_unit="sentence"),
+                                     dict(read_word_unit="line")])
+def test_refuses_a_unit_it_cannot_count(changes):
+    with pytest.raises(ValueError):
+        EventLM(EventLMConfig(**dict(_STACK, **changes)))
+
+
+def test_reads_by_cell_and_by_age_fire_alike():
+    import snnformer.event_lm as module
+    model = _stack().eval()
+    tokens = _lines(length=96)
+    before = module._READ_BY_AGE
+    try:
+        with torch.no_grad():
+            module._READ_BY_AGE = True
+            by_age, state = model.stream(tokens[:, :40], None)
+            by_age_rest, _ = model.stream(tokens[:, 40:], state)
+            module._READ_BY_AGE = False
+            by_cell, state = model.stream(tokens[:, :40], None)
+            by_cell_rest, _ = model.stream(tokens[:, 40:], state)
+    finally:
+        module._READ_BY_AGE = before
+    assert torch.equal(by_age, by_cell) and torch.equal(by_age_rest, by_cell_rest)
