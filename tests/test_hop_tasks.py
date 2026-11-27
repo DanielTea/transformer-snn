@@ -14,8 +14,8 @@ from snnformer.transformer_reference import TransformerLM
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "experiments"))
 import hop_eval  # noqa: E402
-from hop_tasks import (ASSIGNMENTS, LONGEST_DISTRACTOR, chain_of, chains_of, example, guess_floors, resolve,  # noqa: E402
-                       write_chain, write_corpus, write_tests)
+from hop_tasks import ASSIGNMENTS, LONGEST_DISTRACTOR, chain_of, chains_of, example, guess_floors  # noqa: E402
+from hop_tasks import resolve, write_chain, write_corpus, write_tests  # noqa: E402
 from train_event_lm import load_corpus  # noqa: E402
 
 
