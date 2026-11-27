@@ -670,7 +670,14 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   (`+mx=7=4=8`), found by its place in a row as telemetry is; and the same sum written as a log that copies each
   reading (`#mx=77=74=48`). It asks which families the stack and the Transformer learn, what sharing a model costs
   the lookups, and whether a chain that keeps its place silently is learned as well as one that writes down what
-  it reads. Every learned family goes into the practice loop next (`practice_loop.py --families`).
+  it reads. Every learned family goes into the practice loop next (`practice_loop.py --families`). The
+  Transformer's arm is in: with the 24,000 updates that teach it the lookups alone, it learned none of the four
+  families, the lookups included. It writes each family's chain in its form, with names taken from the line, and
+  follows no binding. The stack's arm is training.
+- **The Transformer again** (`four_families_transformer_again.json`, on the laptop): a comparison of practice
+  needs a Transformer that has learned the chains, so it gets two further chances at the same corpus: four times
+  the updates, and a start from the model that already follows names. The better of the two is the Transformer's
+  base when the families are practised.
 
 ## How to continue
 

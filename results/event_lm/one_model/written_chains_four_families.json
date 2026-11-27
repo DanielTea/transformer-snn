@@ -12,5 +12,216 @@
  "measure": "experiments/practice_loop.py --families hops offs sums tots --evaluate 1 2 3 4 5 6 8 12 16 --evaluate-tasks 200 --max-bytes 64 --seed 0 on the averaged weights, from a frozen copy of aedf5cc: for every family and step count 200 tasks, each answered greedily up to a newline or 64 bytes (16 steps take 47 bytes of hops, 62 of offs, 32 of sums and 48 of tots, the newline counted); the accuracy of the last byte before the newline with its 95% Wilson interval, the share of answers that write the whole chain right, the mean bytes. A check of the evaluator before anything is read: the same code with --families hops must give chain-stack and chain-tf the accuracies, whole-chain shares and mean bytes that written_chains.json recorded for them at 1, 2, 3, 4, 6, 8, 12 and 16 hops; if any differs, the evaluation is examined first.",
  "guess floors": "How often a guess that follows no chain is right (task_families.py floors, 4,000 lines): for offs, sums and tots 0.10 at 2, 4, 8 and 16 steps for each of three guesses (a digit of the line, the line's most frequent digit, the nearest digit); at 1 step sums and tots copy their one reading. For hops a digit that a name points to is right 0.19 at 2 hops, 0.20 at 4, 0.23 at 8 and 0.37 at 16 (hop_tasks.py floors).",
  "reading": "(1) Learned: an arm has learned a family if its mean accuracy over 1 to 4 steps is at least 0.95 and its mean share of whole chains over 1 to 4 steps at least 0.90, the mark a model needs before it practises. Read for each of the eight pairs of arm and family. (2) Sharing: one model for four families costs the hop family nothing if the arm's mean accuracy over 1 to 4 hops is within 0.02 of its one-family base (chain-stack 0.995, chain-tf 0.9912). (3) Reach without practice, for every learned pair: its chains reach past the trained length if at 8 steps the accuracy is at least 0.50 with at least half of the answers writing the whole chain right; reported at 5, 6, 12 and 16 steps as well. The hop family did not (chain-stack 0.105 at 8 hops) and practice took it there. (4) How a row's chain is written: the log carries further than the silent place if, for an arm that learned both, the accuracy of tots at 6 steps is at least 0.10 above that of sums with the two 95% intervals apart, and the other way round for sums; reported at 5 and 8 steps. If an arm learned only one of the two, that is the finding. (5) The stack against the Transformer: reported for every family at every step count; a family that one arm learns and the other does not is stated. One seed and synthetic tasks: a screen of which chains a small model learns to write, not a claim about reasoning in language. What follows: every family that an arm has learned goes into the practice loop with rehearsal from that arm, practised together with the others and one at a time, which is the next registration, on the server's GPU in the weekend's window. A family that neither arm learns is not practised: how its chain is written is changed first, and that is recorded.",
- "seen_before_recording": "The corpus's first 900 bytes and its sidecar; the guess floors above; the lines the tests draw. The loop's code was run for three rounds on the CPU from chain-stack, which was trained on hops alone, with hops and sums practised and offs rehearsed (4 tasks, 4 attempts, evaluations of 4 tasks): a check that the loop runs with several families; what that model answered in families it never saw is not read. No model has been trained on this corpus or on any line of the three new families."
+ "seen_before_recording": "The corpus's first 900 bytes and its sidecar; the guess floors above; the lines the tests draw. The loop's code was run for three rounds on the CPU from chain-stack, which was trained on hops alone, with hops and sums practised and offs rehearsed (4 tasks, 4 attempts, evaluations of 4 tasks): a check that the loop runs with several families; what that model answered in families it never saw is not read. No model has been trained on this corpus or on any line of the three new families.",
+ "result_tf": {
+  "recorded_utc": "2026-11-27T05:17:52Z",
+  "run": "four-tf: 24,000 updates on the laptop's GPU, 04:38:37 to 04:57:52 UTC on 2026-11-27, with code-4d64208; validation 2.7362 bits a byte with the averaged weights. Evaluated by family at 04:59 with a frozen copy of aedf5cc. four-stack is training as this is recorded; its result and reading (5) are appended when it is evaluated.",
+  "evaluator check": "Passed before the training: with --families hops the evaluator gives chain-stack and chain-tf the accuracies, whole-chain shares and mean bytes of written_chains.json at 1, 2, 3, 4, 6, 8, 12 and 16 hops, in every number.",
+  "by family and steps: accuracy, whole chain, mean bytes (200 tasks a cell)": {
+   "hops": {
+    "1": [
+     0.11,
+     0.0,
+     9.43
+    ],
+    "2": [
+     0.115,
+     0.0,
+     9.81
+    ],
+    "3": [
+     0.09,
+     0.0,
+     9.96
+    ],
+    "4": [
+     0.115,
+     0.0,
+     9.96
+    ],
+    "5": [
+     0.12,
+     0.0,
+     10.19
+    ],
+    "6": [
+     0.115,
+     0.0,
+     10.41
+    ],
+    "8": [
+     0.125,
+     0.0,
+     10.67
+    ],
+    "12": [
+     0.12,
+     0.0,
+     10.94
+    ],
+    "16": [
+     0.105,
+     0.0,
+     11.0
+    ]
+   },
+   "offs": {
+    "1": [
+     0.155,
+     0.0,
+     12.24
+    ],
+    "2": [
+     0.11,
+     0.0,
+     12.85
+    ],
+    "3": [
+     0.12,
+     0.0,
+     13.1
+    ],
+    "4": [
+     0.09,
+     0.0,
+     13.08
+    ],
+    "5": [
+     0.1,
+     0.0,
+     13.58
+    ],
+    "6": [
+     0.095,
+     0.0,
+     13.62
+    ],
+    "8": [
+     0.105,
+     0.0,
+     13.95
+    ],
+    "12": [
+     0.12,
+     0.0,
+     14.0
+    ],
+    "16": [
+     0.1,
+     0.0,
+     14.0
+    ]
+   },
+   "sums": {
+    "1": [
+     0.02,
+     0.0,
+     43.76
+    ],
+    "2": [
+     0.05,
+     0.0,
+     24.38
+    ],
+    "3": [
+     0.065,
+     0.0,
+     19.79
+    ],
+    "4": [
+     0.075,
+     0.0,
+     24.7
+    ],
+    "5": [
+     0.035,
+     0.0,
+     43.1
+    ],
+    "6": [
+     0.05,
+     0.0,
+     20.44
+    ],
+    "8": [
+     0.08,
+     0.0,
+     11.19
+    ],
+    "12": [
+     0.03,
+     0.0,
+     37.35
+    ],
+    "16": [
+     0.1,
+     0.0,
+     9.96
+    ]
+   },
+   "tots": {
+    "1": [
+     0.0,
+     0.0,
+     52.87
+    ],
+    "2": [
+     0.075,
+     0.0,
+     35.77
+    ],
+    "3": [
+     0.045,
+     0.0,
+     30.59
+    ],
+    "4": [
+     0.06,
+     0.0,
+     36.64
+    ],
+    "5": [
+     0.02,
+     0.0,
+     55.62
+    ],
+    "6": [
+     0.08,
+     0.0,
+     32.37
+    ],
+    "8": [
+     0.065,
+     0.0,
+     21.2
+    ],
+    "12": [
+     0.025,
+     0.0,
+     51.05
+    ],
+    "16": [
+     0.05,
+     0.0,
+     32.72
+    ]
+   }
+  },
+  "mean accuracy over 1 to 4 steps": {
+   "hops": 0.1075,
+   "offs": 0.1187,
+   "sums": 0.0525,
+   "tots": 0.045
+  },
+  "reading": {
+   "(1)": "four-tf learned none of the four families: over 1 to 4 steps it answers 0.1075 of the hop tasks, 0.1187 of offs, 0.0525 of sums and 0.0450 of tots, and it writes no whole chain in any of the 36 cells. That is the guess floor or under it.",
+   "(2)": "Sharing cost the Transformer the hop family altogether: 0.1075 over 1 to 4 hops against 0.9912 for chain-tf, which had the same 24,000 updates on that family alone.",
+   "(3)": "Not read: the arm has no learned pair.",
+   "(4)": "It learned neither sums nor tots, so the two ways of writing a row's chain are not compared for it.",
+   "(5)": "Waits for four-stack."
+  },
+  "what it writes (looked at after the evaluation, not registered)": "100 tasks of 3 steps a family, answered greedily on the CPU with room for 48 bytes. hops: all 100 answers end with a newline and have the family's form (names, then a digit); each of the 257 names written is a name of the task's line; the first step is right in 5 answers, where a line holds 24 names. offs: all 100 end and have the form, all 286 names are the line's, the first step is right in 1. sums: 58 end, 43 have the form, the first digit is right in 9. tots: 42 end, 25 have the form, the first step is right in 1. The right chain costs it 1.5 to 3.1 bits a byte (32 tasks a cell at 1, 2 and 4 steps). It has learned how each family's chain looks and that its names come from the line; it follows no binding and finds no row.",
+  "the training curve (reported)": "Validation in bits a byte: 3.079 at 750 updates, 3.044 at 5,250, 2.794 at 6,000, 2.736 at the end. chain-tf on the hop corpus: 3.060 at 2,250, 2.812 at 3,000, 2.669 at 3,750, 2.549 at the end, with 0.99 of its tasks right. four-tf took one step, twice as late, and it was not the lookup.",
+  "what follows": "By the registration no family is practised from this arm. The registration's rule for a family that is not learned, to change how its chain is written, was written for a family that fails on its own; here the arm missed even the family it learns alone in under 4,000 updates, so the mixture kept it from the lookup and not a chain's writing, and no chain's writing is changed on this arm's account. The one-model plan compares every step with a Transformer of the same size, so the Transformer gets two further chances at the same corpus before the families are practised: four times the updates, and a start from chain-tf's weights (four_families_transformer_again.json, registered with this result)."
+ }
 }
