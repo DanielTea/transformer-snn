@@ -672,8 +672,12 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   seed and holds at every evaluation; the Transformer needed 71, 171 and 712 rounds, one seed writing four steps
   and stopping for 700 of them. One of its three seeds left the corpus's form: it writes the right chain with a
   fresh question mark before every fourth name, turning a long chain into chains of the length it was taught, so
-  its answers are right and none of its chains counts as whole. The Transformer's six runs with the cap at 12 and
-  16 run in the weekend's window. Why the stack's chains thin out with length where the Transformer's do not: a
+  its answers are right and none of its chains counts as whole. With the cap at 12 and 16 it is the same picture.
+  Neither model practises further at 6 and 8 hops under any cap. Past it, five of the Transformer's nine runs
+  write 0.91 to 0.975 of the 20-hop chains whole, against the stack's best 0.92 (cap 12), but four of its nine
+  runs fall short: two write the chain with question marks in it, one loses its chains, and one reaches 8 hops
+  only at the end.
+  Every one of the stack's nine runs holds. Why the stack's chains thin out with length where the Transformer's do not: a
   diagnostic of the practised models says it is recall over distance, not the chain's step. At 20 hops the stack
   writes a step right almost always while the assignment it needs stands within about 150 bytes back, and takes a
   neighbouring name in 16% of the steps (cap 8) when it stands 150 to 200 bytes back. The Transformer misses 1.2%
