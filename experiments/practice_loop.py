@@ -34,7 +34,7 @@ corpus's lengths with their chains written as the corpus writes them, learned as
 A model that was trained on several families of tasks (task_families.py) practises them in one loop. --families
 names the families it knows: each is evaluated, and with --rehearse each is rehearsed. --practise names those that
 are practised for reward (all of them unless given), each with its own staircase and its own --tasks tasks a round;
-the round's step adds the families' losses. A family that is rehearsed and not practised shows what practice in
+the round's step adds the families' losses. --longest gives a family its own cap on the staircase. A family that is rehearsed and not practised shows what practice in
 another family does to it.
 
 On a CUDA device two of the trainer's speed options apply (experiments/speed_options.py). --exact-products takes a
@@ -288,6 +288,9 @@ def main():
     parser.add_argument("--practise", nargs="+", choices=sorted(FAMILIES), default=None,
                         help="the families practised for reward, each with its own staircase and --tasks tasks a "
                              "round (default: every family of --families)")
+    parser.add_argument("--longest", nargs="+", default=[], metavar="FAMILY=STEPS",
+                        help="a family's own longest chain on its staircase, in place of --longest-hops (a family "
+                             "whose answer cannot be guessed needs no cap below its line's 24 items)")
     parser.add_argument("--exact-products", action="store_true",
                         help="a stack's products of whole numbers on a CUDA device's tensor cores, to the bit "
                              "(snnformer/whole_products.py)")
@@ -303,6 +306,12 @@ def main():
     if not set(practised) <= set(families):
         parser.error("--practise names families of --families")
     single = len(families) == 1
+    longest = dict.fromkeys(practised, args.longest_hops)
+    for pair in args.longest:
+        family, _, steps = pair.partition("=")
+        if family not in practised or not steps.isdigit() or not 1 <= int(steps) <= 24:
+            parser.error(f"--longest {pair}: a practised family and 1 to 24 steps, as FAMILY=STEPS")
+        longest[family] = int(steps)
     whole_products.ON = args.exact_products
     event_lm_module._READ_FUSED = args.fused_reads
     model, checkpoint = load_checkpoint(args.checkpoint, device)
@@ -384,7 +393,7 @@ def main():
             print(json.dumps(row), flush=True)
         log.flush()
         for family in practised:
-            hops[family] = staircase(hops[family], solved[family], longest=args.longest_hops)
+            hops[family] = staircase(hops[family], solved[family], longest=longest[family])
         scored(round_)
         if round_ % 50 == 0 or round_ == args.rounds:
             torch.save({**checkpoint, "state_dict": model.state_dict(), "practice_rounds": round_,

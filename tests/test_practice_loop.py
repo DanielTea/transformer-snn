@@ -215,3 +215,13 @@ def test_an_evaluation_of_several_families_holds_each(tmp_path):
     assert all(set(found) == {"1", "2"} for found in row["by_family"].values())
     assert json.loads((tmp_path / "evaluations.jsonl").read_text()) == row
     assert practice.evaluate(stack, [2], 3, 5, 0, "cpu", "sums") == {"2": row["by_family"]["sums"]["2"]}
+
+
+def test_a_family_s_own_cap_must_name_a_practised_family(tmp_path, monkeypatch, capsys):
+    for pair in ("sums=12", "hops=0", "hops=x", "hops"):
+        monkeypatch.setattr(sys, "argv", ["practice_loop.py", "--checkpoint", str(tmp_path / "none.pt"), "--out",
+                                          str(tmp_path / "out"), "--families", "hops", "sums", "--practise", "hops",
+                                          "--longest", pair])
+        with pytest.raises(SystemExit):
+            practice.main()
+        assert "--longest" in capsys.readouterr().err
