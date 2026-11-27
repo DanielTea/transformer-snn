@@ -18,11 +18,16 @@ before the answer, the same lines otherwise (the same seed draws the same assign
 
 so that each byte after the query's '=' is a lookup of one hop: a chain of thought in the task's own syntax.
 
+A guess is not a tenth at every length. A line holds the same number of assignments whatever its hops, so a long
+chain leaves few others and few other digits, and no chain beside the query's is longer than four hops. `floors`
+measures how often three guesses that follow no chain are right at each hop count (guess_floors).
+
 usage:
   python experiments/hop_tasks.py corpus --out data/onemodel/hops/hops-1-4.bin --hops 1 2 3 4 --seed 1
   python experiments/hop_tasks.py corpus --out data/onemodel/hops/hops-1-4-written.bin --hops 1 2 3 4 --seed 1 \
       --written-chains
   python experiments/hop_tasks.py tests --out data/onemodel/hops/tests --hops 1 2 3 4 6 8 12 16 --count 1000 --seed 2
+  python experiments/hop_tasks.py floors --hops 1 2 3 4 5 6 7 8 10 12 16 20 24 --count 4000 --seed 3
 """
 from __future__ import annotations
 
@@ -88,6 +93,43 @@ def write_chain(line: str) -> str:
     return f"{body};?{'='.join(chain_of(line))}\n"
 
 
+def chains_of(line: str) -> list[tuple[int, str]]:
+    """Every chain of a line as (its hops, the digit it ends in), the query's among them."""
+    body = line.rstrip("\n").rsplit(";?", 1)[0]
+    bound = dict(pair.split("=", 1) for pair in body.split(";"))
+    pointed_to = {value for value in bound.values() if not value.isdigit()}
+    chains = []
+    for name in bound:
+        if name in pointed_to:
+            continue
+        length = 0
+        while not name.isdigit():
+            name = bound[name]
+            length += 1
+        chains.append((length, name))
+    return chains
+
+
+def guess_floors(hops: int, count: int = 4000, seed: int = 3, assignments: int = ASSIGNMENTS) -> dict[str, float]:
+    """How often three guesses that follow no chain answer a line of ``hops`` hops, as means over ``count`` lines:
+    a digit drawn evenly from the digits of the line; a digit drawn evenly from those that a name points to (the
+    ends of chains of two hops or more; from all the line's digits if it has none); and the digit that ends the
+    line's longest chain, drawn evenly among the longest. Each guess is taken at its expectation, with no draw."""
+    rng = random.Random(seed * 1000 + hops)
+    totals = {"a digit of the line": 0.0, "a digit that a name points to": 0.0, "the digit of the longest chain": 0.0}
+    for _ in range(count):
+        line = example(rng, hops, assignments)
+        answer = resolve(line)[0]
+        chains = chains_of(line)
+        longest = max(length for length, _ in chains)
+        every = {digit for _, digit in chains}
+        pointed = {digit for length, digit in chains if length >= 2} or every
+        ends = {digit for length, digit in chains if length == longest}
+        for key, digits in zip(totals, (every, pointed, ends)):
+            totals[key] += (answer in digits) / len(digits)
+    return {key: round(total / count, 4) for key, total in totals.items()}
+
+
 def write_corpus(out: Path, hops: list[int], seed: int, train: int, validation: int, test: int,
                  written_chains: bool = False):
     """Lines of the given hop counts, drawn evenly, until each split holds at least its bytes; split at line ends.
@@ -143,10 +185,16 @@ def main():
     tests.add_argument("--hops", type=int, nargs="+", required=True)
     tests.add_argument("--count", type=int, default=1000)
     tests.add_argument("--seed", type=int, default=2)
+    floors = sub.add_parser("floors")
+    floors.add_argument("--hops", type=int, nargs="+", required=True)
+    floors.add_argument("--count", type=int, default=4000)
+    floors.add_argument("--seed", type=int, default=3)
     args = parser.parse_args()
     if args.what == "corpus":
         print(json.dumps(write_corpus(args.out, args.hops, args.seed, args.train_bytes, args.validation_bytes,
                                       args.test_bytes, args.written_chains)))
+    elif args.what == "floors":
+        print(json.dumps({str(h): guess_floors(h, args.count, args.seed) for h in args.hops}, indent=1))
     else:
         print(json.dumps({str(h): s for h, s in write_tests(args.out, args.hops, args.count, args.seed).items()}))
 

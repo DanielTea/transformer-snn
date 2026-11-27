@@ -11,5 +11,793 @@
  "code": "The frozen code copy be42570, which evaluated written_chains.json; its experiments/practice_loop.py and experiments/hop_tasks.py are those of the commit that records this. On the laptop's GPU, one arm at a time, practice-chain-stack first.",
  "measure": "Before and after practice, experiments/practice_loop.py --evaluate 1 2 3 4 5 6 7 8 10 12 16 --evaluate-tasks 200 --max-bytes 64 --seed 0: for every hop count 200 tasks answered greedily up to a newline or 64 bytes; the accuracy of the last byte before the newline with its 95% Wilson interval, the share of answers that write a name, the share that write the query's whole chain right (wrote_the_chain) and the mean bytes. At 1, 2, 3, 4, 6, 8, 12 and 16 hops the tasks are those of written_chains.json, and the evaluation before practice must repeat that record's numbers for both arms; if any differs, the evaluation is examined before anything is read. And the rounds' log: the hops of every round, its solve rate, its mean bytes.",
  "reading": "Both bases meet written_chains.json's mark (1), so both arms are read. (a) Reward lengthens an arm's written chains if after practice its accuracy at 6 hops is at least 0.50 and at least half of its answers at 6 hops write the whole chain right (before: chain-stack 0.115 and 0.02, chain-tf 0.07 and none). (b) They reach twice the trained length if the same two marks hold at 8 hops. (c) Practice keeps what was trained if the arm's mean accuracy over 1 to 4 hops is at least 0.95 after practice (before: 0.995 and 0.991). (d) One arm practises further than the other if at 6 hops and at 8 its accuracy is at least 0.10 above the other's with the two 95% intervals apart. Reported and not read: the accuracies at 5, 7, 10, 12 and 16 hops, the rounds at each hop count, the longest chain the staircase reached and its mean hops over the last 200 rounds. One seed, synthetic: a screen of whether reward lengthens chains of thought that were first read, not a claim about reasoning in language. If neither arm meets (a), the next registration is training on written chains of more lengths (1 to 8 hops, tested to 16), which asks whether the step is learned as a step once the lengths vary.",
- "seen_before_recording": "written_chains.json and practice_hops.json with their results. Of practice from these two models: the wall time of 6 rounds and of 1 round for each arm with another seed (99) on the frozen copy, about 2 seconds a round, to set the number of rounds; their outputs were deleted unread."
+ "seen_before_recording": "written_chains.json and practice_hops.json with their results. Of practice from these two models: the wall time of 6 rounds and of 1 round for each arm with another seed (99) on the frozen copy, about 2 seconds a round, to set the number of rounds; their outputs were deleted unread.",
+ "result": {
+  "recorded_utc": "2026-11-27T02:51:57Z",
+  "runs": "practice-chain-stack and practice-chain-tf as registered: 2,000 rounds each, seed 0, one after the other on the laptop's GPU with the frozen code copy be42570 (the stack's arm ended 2026-11-27T00:23:58Z, the Transformer's 01:55:44Z), each evaluated before and after practice at the eleven hop counts.",
+  "evaluator check": "Passed. Before practice both arms come out at 1, 2, 3, 4, 6, 8, 12 and 16 hops exactly as written_chains.json recorded chain-stack and chain-tf: the same accuracy, share of answers with a name, share of whole chains and mean bytes. So the evaluation is read.",
+  "before practice (accuracy of the last byte with its 95% Wilson interval; share writing the query's whole chain right; share writing a name; mean bytes; 200 tasks a hop count)": {
+   "practice-chain-stack": {
+    "1": {
+     "accuracy": 1.0,
+     "interval_95": [
+      0.981,
+      1.0
+     ],
+     "wrote_the_chain": 1.0,
+     "wrote_names": 0.0,
+     "mean_bytes": 2.0
+    },
+    "2": {
+     "accuracy": 0.995,
+     "interval_95": [
+      0.972,
+      0.999
+     ],
+     "wrote_the_chain": 0.995,
+     "wrote_names": 1.0,
+     "mean_bytes": 5.01
+    },
+    "3": {
+     "accuracy": 0.99,
+     "interval_95": [
+      0.964,
+      0.997
+     ],
+     "wrote_the_chain": 0.99,
+     "wrote_names": 0.995,
+     "mean_bytes": 7.97
+    },
+    "4": {
+     "accuracy": 0.995,
+     "interval_95": [
+      0.972,
+      0.999
+     ],
+     "wrote_the_chain": 0.995,
+     "wrote_names": 1.0,
+     "mean_bytes": 11.0
+    },
+    "5": {
+     "accuracy": 0.32,
+     "interval_95": [
+      0.259,
+      0.388
+     ],
+     "wrote_the_chain": 0.215,
+     "wrote_names": 1.0,
+     "mean_bytes": 17.98
+    },
+    "6": {
+     "accuracy": 0.115,
+     "interval_95": [
+      0.078,
+      0.167
+     ],
+     "wrote_the_chain": 0.02,
+     "wrote_names": 1.0,
+     "mean_bytes": 18.96
+    },
+    "7": {
+     "accuracy": 0.095,
+     "interval_95": [
+      0.062,
+      0.144
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 16.64
+    },
+    "8": {
+     "accuracy": 0.105,
+     "interval_95": [
+      0.07,
+      0.155
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 17.51
+    },
+    "10": {
+     "accuracy": 0.1,
+     "interval_95": [
+      0.066,
+      0.149
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 16.32
+    },
+    "12": {
+     "accuracy": 0.115,
+     "interval_95": [
+      0.078,
+      0.167
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 14.76
+    },
+    "16": {
+     "accuracy": 0.115,
+     "interval_95": [
+      0.078,
+      0.167
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 14.94
+    }
+   },
+   "practice-chain-tf": {
+    "1": {
+     "accuracy": 0.995,
+     "interval_95": [
+      0.972,
+      0.999
+     ],
+     "wrote_the_chain": 0.995,
+     "wrote_names": 0.005,
+     "mean_bytes": 2.02
+    },
+    "2": {
+     "accuracy": 0.99,
+     "interval_95": [
+      0.964,
+      0.997
+     ],
+     "wrote_the_chain": 0.985,
+     "wrote_names": 1.0,
+     "mean_bytes": 5.01
+    },
+    "3": {
+     "accuracy": 0.99,
+     "interval_95": [
+      0.964,
+      0.997
+     ],
+     "wrote_the_chain": 0.99,
+     "wrote_names": 1.0,
+     "mean_bytes": 8.0
+    },
+    "4": {
+     "accuracy": 0.99,
+     "interval_95": [
+      0.964,
+      0.997
+     ],
+     "wrote_the_chain": 0.985,
+     "wrote_names": 1.0,
+     "mean_bytes": 10.97
+    },
+    "5": {
+     "accuracy": 0.095,
+     "interval_95": [
+      0.062,
+      0.144
+     ],
+     "wrote_the_chain": 0.005,
+     "wrote_names": 1.0,
+     "mean_bytes": 38.12
+    },
+    "6": {
+     "accuracy": 0.07,
+     "interval_95": [
+      0.042,
+      0.114
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 36.52
+    },
+    "7": {
+     "accuracy": 0.105,
+     "interval_95": [
+      0.07,
+      0.155
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 31.59
+    },
+    "8": {
+     "accuracy": 0.09,
+     "interval_95": [
+      0.058,
+      0.138
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 35.92
+    },
+    "10": {
+     "accuracy": 0.09,
+     "interval_95": [
+      0.058,
+      0.138
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 30.73
+    },
+    "12": {
+     "accuracy": 0.115,
+     "interval_95": [
+      0.078,
+      0.167
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 32.3
+    },
+    "16": {
+     "accuracy": 0.105,
+     "interval_95": [
+      0.07,
+      0.155
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 1.0,
+     "mean_bytes": 23.64
+    }
+   }
+  },
+  "after practice": {
+   "practice-chain-stack": {
+    "1": {
+     "accuracy": 0.205,
+     "interval_95": [
+      0.155,
+      0.266
+     ],
+     "wrote_the_chain": 0.175,
+     "wrote_names": 0.355,
+     "mean_bytes": 28.36
+    },
+    "2": {
+     "accuracy": 0.13,
+     "interval_95": [
+      0.09,
+      0.184
+     ],
+     "wrote_the_chain": 0.075,
+     "wrote_names": 0.695,
+     "mean_bytes": 41.79
+    },
+    "3": {
+     "accuracy": 0.065,
+     "interval_95": [
+      0.038,
+      0.108
+     ],
+     "wrote_the_chain": 0.01,
+     "wrote_names": 0.545,
+     "mean_bytes": 38.46
+    },
+    "4": {
+     "accuracy": 0.03,
+     "interval_95": [
+      0.014,
+      0.064
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 0.435,
+     "mean_bytes": 34.04
+    },
+    "5": {
+     "accuracy": 0.035,
+     "interval_95": [
+      0.017,
+      0.07
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 0.64,
+     "mean_bytes": 43.74
+    },
+    "6": {
+     "accuracy": 0.045,
+     "interval_95": [
+      0.024,
+      0.083
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 0.49,
+     "mean_bytes": 36.35
+    },
+    "7": {
+     "accuracy": 0.045,
+     "interval_95": [
+      0.024,
+      0.083
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 0.415,
+     "mean_bytes": 32.96
+    },
+    "8": {
+     "accuracy": 0.06,
+     "interval_95": [
+      0.035,
+      0.102
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 0.56,
+     "mean_bytes": 39.45
+    },
+    "10": {
+     "accuracy": 0.045,
+     "interval_95": [
+      0.024,
+      0.083
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 0.33,
+     "mean_bytes": 28.34
+    },
+    "12": {
+     "accuracy": 0.045,
+     "interval_95": [
+      0.024,
+      0.083
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 0.415,
+     "mean_bytes": 32.7
+    },
+    "16": {
+     "accuracy": 0.045,
+     "interval_95": [
+      0.024,
+      0.083
+     ],
+     "wrote_the_chain": 0.0,
+     "wrote_names": 0.16,
+     "mean_bytes": 20.66
+    }
+   },
+   "practice-chain-tf": {
+    "1": {
+     "accuracy": 0.345,
+     "interval_95": [
+      0.283,
+      0.413
+     ],
+     "wrote_the_chain": 0.335,
+     "wrote_names": 0.03,
+     "mean_bytes": 41.31
+    },
+    "2": {
+     "accuracy": 0.27,
+     "interval_95": [
+      0.213,
+      0.335
+     ],
+     "wrote_the_chain": 0.255,
+     "wrote_names": 0.995,
+     "mean_bytes": 45.7
+    },
+    "3": {
+     "accuracy": 0.605,
+     "interval_95": [
+      0.536,
+      0.67
+     ],
+     "wrote_the_chain": 0.595,
+     "wrote_names": 0.975,
+     "mean_bytes": 25.74
+    },
+    "4": {
+     "accuracy": 0.81,
+     "interval_95": [
+      0.75,
+      0.858
+     ],
+     "wrote_the_chain": 0.795,
+     "wrote_names": 0.95,
+     "mean_bytes": 15.8
+    },
+    "5": {
+     "accuracy": 0.835,
+     "interval_95": [
+      0.777,
+      0.88
+     ],
+     "wrote_the_chain": 0.77,
+     "wrote_names": 0.995,
+     "mean_bytes": 15.72
+    },
+    "6": {
+     "accuracy": 0.71,
+     "interval_95": [
+      0.644,
+      0.768
+     ],
+     "wrote_the_chain": 0.625,
+     "wrote_names": 0.97,
+     "mean_bytes": 18.91
+    },
+    "7": {
+     "accuracy": 0.57,
+     "interval_95": [
+      0.501,
+      0.637
+     ],
+     "wrote_the_chain": 0.48,
+     "wrote_names": 0.975,
+     "mean_bytes": 22.5
+    },
+    "8": {
+     "accuracy": 0.605,
+     "interval_95": [
+      0.536,
+      0.67
+     ],
+     "wrote_the_chain": 0.47,
+     "wrote_names": 0.995,
+     "mean_bytes": 24.33
+    },
+    "10": {
+     "accuracy": 0.375,
+     "interval_95": [
+      0.311,
+      0.444
+     ],
+     "wrote_the_chain": 0.22,
+     "wrote_names": 0.95,
+     "mean_bytes": 28.98
+    },
+    "12": {
+     "accuracy": 0.405,
+     "interval_95": [
+      0.339,
+      0.474
+     ],
+     "wrote_the_chain": 0.195,
+     "wrote_names": 0.985,
+     "mean_bytes": 28.33
+    },
+    "16": {
+     "accuracy": 0.345,
+     "interval_95": [
+      0.283,
+      0.413
+     ],
+     "wrote_the_chain": 0.02,
+     "wrote_names": 0.935,
+     "mean_bytes": 29.87
+    }
+   }
+  },
+  "mean accuracy over 1 to 4 hops": {
+   "practice-chain-stack": {
+    "before": 0.995,
+    "after": 0.1075
+   },
+   "practice-chain-tf": {
+    "before": 0.9912,
+    "after": 0.5075
+   }
+  },
+  "marks": {
+   "practice-chain-stack": {
+    "(a) 6 hops": false,
+    "(b) 8 hops": false,
+    "(c) keeps 1 to 4 hops": false
+   },
+   "practice-chain-tf": {
+    "(a) 6 hops": true,
+    "(b) 8 hops": false,
+    "(c) keeps 1 to 4 hops": false
+   },
+   "(d) one arm further": "practice-chain-tf"
+  },
+  "reading": "(a) Reward lengthened the Transformer's written chains and not the stack's. After practice practice-chain-tf answers 0.710 right at 6 hops [0.644, 0.768] and writes the whole chain right in 0.625 of its answers (0.07 and none before): both marks of 0.50 are met. practice-chain-stack answers 0.045 right at 6 hops [0.024, 0.083] and writes no whole chain (0.115 and 0.02 before): it fails. (b) Neither arm reaches twice the trained length by the mark. practice-chain-tf answers 0.605 right at 8 hops [0.536, 0.670], but the whole chain is right in 0.470 of its answers, under the 0.50 that the mark asks; practice-chain-stack answers 0.060 right at 8 hops with no whole chain. (c) Neither arm keeps what it was trained on. The mean accuracy over 1 to 4 hops falls from 0.991 to 0.508 for practice-chain-tf (0.345, 0.270, 0.605, 0.810) and from 0.995 to 0.108 for practice-chain-stack (0.205, 0.130, 0.065, 0.030), against the mark of 0.95. (d) The Transformer's arm practises further than the stack's: 0.710 against 0.045 at 6 hops and 0.605 against 0.060 at 8, more than 0.10 apart at both with the intervals apart. Reported and not read: practice-chain-tf answers 0.835 right at 5 hops (whole chain 0.770), 0.570 at 7 (0.480), 0.375 at 10 (0.220), 0.405 at 12 (0.195) and 0.345 at 16 (0.020); practice-chain-stack 0.035, 0.045, 0.045, 0.045 and 0.045 with no whole chain. The staircase reached 22 hops for the stack (round 149) and 23 for the Transformer (round 105); over the last 200 rounds the stack practised at 1 hop in every round and the Transformer at 5.34 hops on average. One seed, synthetic tasks. Since the Transformer's arm meets (a), this record's condition for training on written chains of more lengths (neither arm meets (a)) is not met, and that registration does not follow from it.",
+  "reported and not read: the staircase": {
+   "practice-chain-stack": {
+    "rounds at each hop count": {
+     "1": 1004,
+     "2": 359,
+     "3": 111,
+     "4": 32,
+     "5": 24,
+     "6": 30,
+     "7": 21,
+     "8": 23,
+     "9": 17,
+     "10": 15,
+     "11": 21,
+     "12": 21,
+     "13": 21,
+     "14": 27,
+     "15": 21,
+     "16": 38,
+     "17": 49,
+     "18": 81,
+     "19": 42,
+     "20": 13,
+     "21": 26,
+     "22": 4
+    },
+    "longest chain reached": 22,
+    "mean hops over the last 200 rounds": 1.0,
+    "the round that first reached each hop count": {
+     "5": 2,
+     "6": 7,
+     "7": 22,
+     "8": 29,
+     "9": 34,
+     "10": 39,
+     "11": 42,
+     "12": 49,
+     "13": 57,
+     "14": 66,
+     "15": 74,
+     "16": 77,
+     "17": 81,
+     "18": 93,
+     "19": 101,
+     "20": 138,
+     "21": 144,
+     "22": 149
+    },
+    "by 200 rounds (mean hops; solve rate; share of attempts with a name; mean bytes; loss)": {
+     "1-200": [
+      15.43,
+      0.396,
+      0.999,
+      36.2,
+      -0.297
+     ],
+     "201-400": [
+      13.47,
+      0.36,
+      0.997,
+      29.9,
+      -1.153
+     ],
+     "401-600": [
+      7.12,
+      0.375,
+      0.865,
+      17.4,
+      -0.908
+     ],
+     "601-800": [
+      1.96,
+      0.41,
+      0.637,
+      12.6,
+      -2.079
+     ],
+     "801-1000": [
+      2.38,
+      0.381,
+      0.498,
+      9.2,
+      -2.024
+     ],
+     "1001-1200": [
+      1.42,
+      0.364,
+      0.262,
+      12.1,
+      -3.337
+     ],
+     "1201-1400": [
+      1.0,
+      0.196,
+      0.398,
+      27.1,
+      -3.001
+     ],
+     "1401-1600": [
+      1.0,
+      0.138,
+      0.335,
+      26.0,
+      -2.23
+     ],
+     "1601-1800": [
+      1.0,
+      0.118,
+      0.442,
+      32.2,
+      -2.485
+     ],
+     "1801-2000": [
+      1.0,
+      0.162,
+      0.311,
+      25.6,
+      -1.992
+     ]
+    }
+   },
+   "practice-chain-tf": {
+    "rounds at each hop count": {
+     "1": 60,
+     "2": 79,
+     "3": 103,
+     "4": 176,
+     "5": 280,
+     "6": 267,
+     "7": 189,
+     "8": 164,
+     "9": 129,
+     "10": 134,
+     "11": 91,
+     "12": 34,
+     "13": 51,
+     "14": 64,
+     "15": 31,
+     "16": 26,
+     "17": 33,
+     "18": 46,
+     "19": 4,
+     "20": 9,
+     "21": 13,
+     "22": 14,
+     "23": 3
+    },
+    "longest chain reached": 23,
+    "mean hops over the last 200 rounds": 5.34,
+    "the round that first reached each hop count": {
+     "5": 2,
+     "6": 33,
+     "7": 50,
+     "8": 61,
+     "9": 64,
+     "10": 71,
+     "11": 76,
+     "12": 80,
+     "13": 81,
+     "14": 82,
+     "15": 83,
+     "16": 85,
+     "17": 87,
+     "18": 90,
+     "19": 91,
+     "20": 93,
+     "21": 95,
+     "22": 96,
+     "23": 105
+    },
+    "by 200 rounds (mean hops; solve rate; share of attempts with a name; mean bytes; loss)": {
+     "1-200": [
+      12.39,
+      0.417,
+      0.99,
+      20.8,
+      -0.113
+     ],
+     "201-400": [
+      12.2,
+      0.355,
+      0.936,
+      17.9,
+      -0.13
+     ],
+     "401-600": [
+      10.03,
+      0.378,
+      0.893,
+      17.1,
+      -0.197
+     ],
+     "601-800": [
+      9.83,
+      0.373,
+      0.856,
+      17.2,
+      -0.43
+     ],
+     "801-1000": [
+      7.54,
+      0.367,
+      0.827,
+      17.3,
+      -0.56
+     ],
+     "1001-1200": [
+      6.42,
+      0.393,
+      0.799,
+      18.6,
+      -0.566
+     ],
+     "1201-1400": [
+      3.56,
+      0.327,
+      0.664,
+      25.5,
+      -0.316
+     ],
+     "1401-1600": [
+      4.5,
+      0.377,
+      0.85,
+      19.2,
+      -0.221
+     ],
+     "1601-1800": [
+      5.74,
+      0.372,
+      0.86,
+      20.1,
+      -0.365
+     ],
+     "1801-2000": [
+      5.34,
+      0.391,
+      0.837,
+      20.5,
+      -0.609
+     ]
+    }
+   }
+  },
+  "seen while reading (beside the registered reading, not part of it)": {
+   "what a guess earns at each hop count (experiments/hop_tasks.py floors --count 4000 --seed 3: a digit of the line; a digit that a name points to; the digit of the longest chain)": {
+    "1": [
+     0.1523,
+     0.0975,
+     0.0946
+    ],
+    "2": [
+     0.1554,
+     0.1908,
+     0.0996
+    ],
+    "3": [
+     0.1602,
+     0.1959,
+     0.1082
+    ],
+    "4": [
+     0.1629,
+     0.2013,
+     0.469
+    ],
+    "5": [
+     0.1683,
+     0.2087,
+     1.0
+    ],
+    "6": [
+     0.1729,
+     0.2171,
+     1.0
+    ],
+    "8": [
+     0.1837,
+     0.2335,
+     1.0
+    ],
+    "12": [
+     0.2161,
+     0.2802,
+     1.0
+    ],
+    "16": [
+     0.2696,
+     0.3661,
+     1.0
+    ],
+    "20": [
+     0.4005,
+     0.5502,
+     1.0
+    ],
+    "22": [
+     0.4684,
+     0.7685,
+     1.0
+    ]
+   },
+   "the staircase climbed to where a guess pays": "The staircase steps up when more than half of a round's attempts end in the right digit, whatever is written before it. From 5 hops on the digit of the line's longest chain is the answer in every one of 4,000 sampled tasks, and a digit that some name points to is right in 0.21 of the tasks at 5 hops, 0.28 at 12, 0.44 at 18 and 0.77 at 22. Both arms climbed past 20 hops within 150 rounds (a chain of 22 hops takes 65 bytes, one more than an attempt may write) with mean solve rates of 0.35 to 0.48 over the first 200 rounds, rates that such a guess can earn at those lengths. This code copy's log of the rounds does not say whether a chain was followed, so the share of guesses is not measured; what is measured is that the reward stopped asking for the chain there.",
+   "the stack's arm stopped writing chains": "From about round 500 practice-chain-stack's attempts lose their form: the share of attempts that write a name falls from 1.00 (rounds 1 to 400) to 0.87, 0.64, 0.50 and 0.26 (rounds 401 to 1,200), the staircase falls to 1 hop and stays there for the last 600 rounds with a solve rate of 0.12 to 0.16 (a guessed digit of the line earns 0.15 at 1 hop), and the loss runs to -2 and -3. In a GRPO step the attempts under their task's mean push the likelihood of the model's own bytes down, and nothing bounds that push: that is the step's part that removes behaviour without naming a better one. practice-chain-tf's loss stays between -0.1 and -0.6 and it keeps writing names in 0.66 to 0.99 of its attempts.",
+   "the Transformer's arm moved its chains and did not add to them": "After practice practice-chain-tf is best at 5 hops (0.835) and worse the further a task is from the lengths it practised last (5.3 hops on average over the last 200 rounds). At 1 and 2 hops it answers 0.345 and 0.270 right and its answers take 41 and 46 bytes on average where a right one takes 2 and 5: the short chains it was trained on went while the longer ones came. Nothing in the loop rehearses a length that the staircase has left.",
+   "what was registered from this": "practice_within_reach.json (3341a42, recorded before the Transformer's arm ended and before its rounds were read): a cap on the staircase where a guess does not pay (8 hops) and no teaching from the attempts under the mean, each alone and both, from the same two models."
+  }
+ }
 }

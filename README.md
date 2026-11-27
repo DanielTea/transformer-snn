@@ -13,28 +13,31 @@ can. In the game, a volley answers the ball before it bounces, as
 the model answers each byte when it comes. Releases up to v17 were
 published as ShuntFormer; their tags and files keep that name.
 
-The newest release, **v21**, lifts the ceiling of the looped
-stack: every population's inhibitory pool divides a neuron's
-charge before its membrane bounds it, so no neuron is held at its
-bound. Trained for the full 90,000 updates beside v19's pair, it
-reaches **1.082 bits per byte** on the enwik8 test and 1.114 on
-validation, 0.022 and 0.025 better than v20's loop with the same
-36.26M parameters, the same pulses and the same training time. The
-Transformer at its best rate reaches 1.079 and 1.105, so the gap
-falls from 0.025 to 0.003 on test and from 0.034 to 0.009 on
-validation. The stack does not beat it yet. The gain is knowledge:
-on new contexts the distance to the Transformer falls from 0.078
-to 0.044. v21 also finds a cell that keeps its gain with data, the
-power-law cell, whose full-length run is training; runs a stream
-update of its training in 0.18 s where it took 0.81 s, firing the
-same spikes; and opens a second track, one model that reasons in
-writing and reads telemetry. The v21 weights are release assets,
+The newest release, **v22**, trains v21's lifted loop with
+power-law cells, which fire about the square of how far their
+membrane stands past threshold, for the full 90,000 updates.
+Read as its record registered, with fast output synapses, it is
+0.003 worse than v21's stack and the Transformer stays ahead. But
+those synapses cost this stack 0.009 to 0.012. Read without them,
+the stack scores **1.0752 bits per byte** on the enwik8 test and
+1.1054 on validation with the same 36.26M parameters: 0.0074
+better than v21's read the same way, **0.0038 ahead of the
+Transformer on test** (1.0790; paired interval 0.0027 to 0.0047)
+and level with it on validation (1.1048; 0.0006 behind, within the
+interval). That measure was chosen after the scores were seen, so
+nothing is claimed: a second seed, read without fast synapses as
+fixed in advance, is training. v22 also gives the stack heads that
+count lines instead of bytes, so that it recalls a binding as far
+back as the Transformer and writes chains of 12 steps unpractised.
+It finds where its practice of written chains breaks: just past
+the lengths it rehearses. The v22 weights are release assets,
 and the model that runs from a clone is v11.
 
-![Release by release, the spiking stack closes on the Transformer](results/figures/event_lm_full_size_line.png)
+![Release by release, the spiking stack against the Transformer](results/figures/event_lm_full_size_line.png)
 
 | Release | Adds | enwik8 test | Transformer | Scored in |
 |---|---|---:|---:|---|
+| [v22](#v22-power-law-cells-at-full-length-and-practice-that-has-to-stand) | Power-law cells at full length (1.075 on test without fast output synapses, not the registered reading), heads that count lines, where practice of written chains breaks | 1.084 | **1.079** | Unbroken streams; windows of 2,048 bytes |
 | [v21](#v21-the-ceiling-lifted-at-full-length) | The ceiling lifted at full length, power-law cells, what the pool costs, fused reads, first screens of one model that reasons in writing | 1.082 | **1.079** | Unbroken streams; windows of 2,048 bytes |
 | [v20](#v20-depth-by-recurrence-at-full-length) | Depth by recurrence at full length, the loop's form, gated cells that catch up, sleep | 1.104 | **1.079** | Unbroken streams; windows of 2,048 bytes |
 | [v19](#v19-each-model-at-its-best-rate) | Each model at its best rate for 90,000 updates, where the distance lies, depth by recurrence with data | 1.113 | **1.079** | Unbroken streams; windows of 2,048 bytes |
@@ -48,15 +51,15 @@ and the model that runs from a clone is v11.
 | [v11](#v11-surprise-clock-and-fast-synapses) | Fast synapses written by error spikes | 1.645 | 1.704 | One continuous stream |
 
 Each Transformer has the size and the training of its row. The
-Transformers of v21, v20, v19, v18, v17 and v16 trained on windows
+Transformers of v22, v21, v20, v19, v18, v17 and v16 trained on windows
 of 2,048 bytes from 24,000 updates, as their stacks did, and read
-2,048; every other one reads 512 bytes. v21, v20 and v19 share
+2,048; every other one reads 512 bytes. v22, v21, v20 and v19 share
 their Transformer, and their stacks and it trained at each model's
 best peak rate, the stacks at 6e-4 and the Transformer at 1.2e-3;
-the earlier ones at 3e-4. The stacks of v21, v20, v19, v18 and v17
+the earlier ones at 3e-4. The stacks of v22, v21, v20, v19, v18 and v17
 have 36.26M parameters, 4.2% more than their Transformer, for
 their knowledge cells; v18's word heads add 352 more. The stacks
-of v21 and v20 run their levels 2 to 8 twice and fire 1.63 times
+of v22, v21 and v20 run their levels 2 to 8 twice and fire 1.63 times
 v19's pulses. v16 to v12 have about 34.8M parameters and
 368.64M training targets from random weights. The Transformer of
 v15 has the standard shape and trained under the rotated
@@ -74,10 +77,10 @@ the v11 Transformer scores 1.578. Every arm is one seed.
 [Knowledge-gap study](docs/KNOWLEDGE_GAP.md) ·
 [Roadmap](docs/ROADMAP.md) ·
 [Scaling-law study](docs/SCALING_LAW.md) ·
-[Model card](models/spiking-byte-lm-v21/README.md) ·
+[Model card](models/spiking-byte-lm-v22/README.md) ·
 [Leaderboard](docs/LEADERBOARD.md) ·
-[Research handoff](docs/V21_HANDOFF.md) ·
-[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v21)
+[Research handoff](docs/V22_HANDOFF.md) ·
+[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v22)
 
 ## How Volley works
 
@@ -114,6 +117,112 @@ from every byte after it was predicted, so the model adapts while
 it reads. Training uses gradients through surrogate slopes; the
 trained network fires whole counts, and its pulses are counted
 against a budget.
+
+## v22: power-law cells at full length, and practice that has to stand
+
+v21 found a cell that keeps its gain with data on the test bed, the
+power-law cell, which fires round(k * k / 8) spikes for k
+thresholds of charge (`--granule-power 8`). v22 trains v21's lifted
+loop with power-law cells for the full 90,000 updates, scored as
+v21's stack was (`full_size_lifted_loop_second.json`). It also
+takes the one-model track's practice of written chains further:
+what keeps it, where it breaks, and why the stack's long chains
+thinned out. Every test was recorded before its runs
+(`results/event_lm/`).
+
+**Read as registered, the power-law cells lose 0.003.** The record
+read the stack as every full-size stack since v19: at a reach of
+8,192 bytes with fast output synapses on all 18 passes. Read that
+way the new stack scores 1.0845 bits per byte on the enwik8 test
+and 1.1169 on validation, 0.0027 and 0.0034 worse than v21's
+(paired 95% intervals 0.0022 to 0.0033 and 0.0028 to 0.0040), and
+0.0055 and 0.0121 behind the Transformer. By the record, v21's
+lifted loop stays the recipe.
+
+**Without fast output synapses it is ahead of the Transformer on
+test and level on validation.** The fast output synapses, which
+learn from each byte after it was predicted, cost this stack 0.0092
+on test and 0.0115 on validation: they still help copies and cost
+new contexts 0.026 to 0.028. Read without them, the stack scores
+1.0752 on test and 1.1054 on validation. That is 0.0074 better
+than v21's stack read the same way, on both splits (0.0069 to
+0.0080), so the power-law cells' gain carried to full length, most
+of it on new contexts. Against the Transformer, with neither model
+using fast synapses, the stack is 0.0038 ahead on test (0.0027 to
+0.0047) and 0.0006 behind on validation (0.0004 ahead to 0.0016
+behind). On new contexts the distance falls to 0.026 and 0.029,
+from v21's 0.044 and 0.052. It spends 506,607 pulses a byte, 1.63
+times the plain stack's.
+
+**This is reported, not claimed.** The measure without fast
+synapses was chosen after the scores were seen, and on validation
+the stack is level, not ahead. A second seed of the same recipe is
+registered with that measure fixed in advance
+(`full_size_power_cells_second_seed.json`). It beats the
+Transformer only if it is ahead on test and on validation, each
+interval clear of zero, and the mean of the two seeds must agree.
+It trains now on the fast path, the fused race kernels of v21,
+after a check that the fast code scores this checkpoint to the same
+bits.
+
+**Practice holds with rehearsal, and breaks just past what is
+rehearsed.** The second track trains one model to write its own
+chains of thought. Trained on chains of 1 to 4 lookups written out,
+a model practises longer ones and is paid only for the right
+answer. Without rehearsal of the written corpus every arm of both
+models lost its chains (`practice_within_reach.json`). With 16
+written tasks rehearsed every round, all nine of the stack's runs
+held under caps of 8, 12 and 16 steps (`practice_cap_raised.json`).
+Up to 8 steps the Transformer practised as far. Past that, five of
+its nine runs wrote 0.91 to 0.975 of 20-step chains whole, against
+the stack's best 0.92, and four fell short: two found a form with
+question marks, one lost its chains, one arrived late. With two
+families of tasks in one loop, four of the stack's nine runs fell
+(`practice_several_families.json`). Each kept 1 to 4 steps, wrote
+one step more, then filled the room with one name repeated and
+ended on one digit whatever the task. The Transformer's run that
+fell stopped at the corpus's longest form and guessed; its other
+two wrote every chain of up to 12 steps whole. The loop teaches
+only from paid attempts, so nothing makes the filler less likely.
+`practice_that_stands.json` tests the other half of dopamine's
+signal: attempts below their task's mean made less likely, as the
+striatum's indirect pathway learns from a dopamine pause.
+
+**The stack's reads counted bytes, so its memory ended at a line.**
+Why did the stack's long chains thin out where the Transformer's
+did not? Its state reads weigh every stored byte by its age, and
+they learned to turn against bytes older than about 121, the
+length of one line of the corpus. Asked to recall one binding a set
+number of bytes back, the stack answered 0.985 near and 0.305 and
+0.190 at 150 to 200 bytes; the Transformer stayed at 0.97 to 1.00
+(`recall_over_distance.json`). The brain cuts experience into
+events and recalls within them, so two of every read's four heads
+now count lines instead of bytes: they reach only the present line
+and weigh each byte by its place in it (`line_heads.json`). With
+them the stack recalls a binding 150 to 200 bytes back in 0.965 and
+0.975 of lines, against 0.195 and 0.29 without. Without any
+practice it writes 0.975 of 8-step chains whole and 0.785 of
+12-step chains, against 0.655 and 0.205, and it loses nothing on
+what it was trained on. Practice with line heads is next.
+
+**Tried and failed since v21, each by its mark.** Pools trained
+with the energy's gradient: no gain in the stack, although in
+floats such a pool beats the Transformer's LayerNorm by 0.008
+(`pool_gradient.json`). Power-law cells at twice the rate: 0.013
+worse; skip fibres: 0.001 better, under the mark
+(`full_size_power_loop_variants.json`). Cubic cells: 0.03 behind
+square ones on the bed (`cubic_cells_with_data.json`).
+
+**Running as this is published.** The second seed of the power-law
+stack; the gap's slope with data at full size, that stack and the
+Transformer at 45,000, 90,000 and 180,000 updates
+(`full_size_data_slope.json`); and practice that stands.
+
+**Limits.** One seed at full size, of the stack and of the
+Transformer; how far two seeds lie apart at full size is not known
+yet. The win on test is on a measure chosen after the fact. The
+pulses a byte are the trainer's count, not audited by a native
+decoder. The practice tasks are synthetic lookups, not language.
 
 ## v21: the ceiling lifted at full length
 
@@ -1290,9 +1399,9 @@ signed gate and sleep.
 [Restore and rescore](docs/V20_HANDOFF.md#restore-the-checkpoint) ·
 [Exact manifest](models/spiking-byte-lm-v20/manifest.json)
 
-The v21 archive holds the best spike-only stack so far, v20's
-looped stack trained under the pool that lifts the ceiling for
-90,000 updates. A second asset holds the bits of every scoring
+The v21 archive holds the best spike-only stack by the registered
+reading, v20's looped stack trained under the pool that lifts the
+ceiling for 90,000 updates. A second asset holds the bits of every scoring
 recorded since v20. Its handoff has the restore command, the
 scoring of the lifted loop and its pairing with v20's stack and
 v19's pair, the saturation probe, the flags of power-law cells,
@@ -1300,6 +1409,17 @@ energy pools and the racing loop, and the flags that train faster
 with the same spikes.
 [Restore and rescore](docs/V21_HANDOFF.md#restore-the-checkpoint) ·
 [Exact manifest](models/spiking-byte-lm-v21/manifest.json)
+
+The v22 archive holds v21's lifted loop with power-law cells after
+90,000 updates: behind v21's stack read with fast output synapses,
+the best spike-only stack read without them. A second asset holds
+the bits of every scoring recorded since v21. Its handoff has the
+restore command, the scoring of the stack with and without fast
+output synapses and its pairing with v21's stack and v19's
+Transformer, the runner of the second seed on the fast path, and
+the flags of line heads and of the practice loop.
+[Restore and rescore](docs/V22_HANDOFF.md#restore-the-checkpoint) ·
+[Exact manifest](models/spiking-byte-lm-v22/manifest.json)
 
 Regenerate the leaderboards, scientific figures and browser report
 from the checked-in records.

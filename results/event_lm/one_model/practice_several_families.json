@@ -1,0 +1,5557 @@
+{
+ "study": "Practice of several families in one loop",
+ "recorded_utc": "2026-11-27T15:00:36Z",
+ "kind": "pre-registration of practice runs on the server's GPU, in the weekend's window",
+ "why": "The practice loop with rehearsal holds and lengthens the written chains of one family of tasks with every seed tried, and a cap of 12 steps took them furthest (practice_cap_raised.json result_stack: from a corpus of 1 to 4 hops, whole chains of 20 hops in 0.92 and 0.905 of the answers in two seeds of three). The one-model plan needs the loop to carry several kinds of reasoning at once. four-stack of written_chains_four_families.json learned to write the chains of 2 families from one corpus of 1 to 4 steps (hops offs; it learned neither running sum), and that registration names this study as what follows: every family an arm learned goes into the practice loop with rehearsal, practised together with the others and one at a time. Three questions. Does one loop lengthen every family's chains at once and keep all of them? What does a family lose or gain when the others are practised beside it? And does practice in one family lengthen the chains of a family that was only rehearsed, which would say that what practice teaches is to go on, and not only the one family's step? The base's lookups already run on to 8 steps without practice (0.930 right with 0.910 of the chains whole), the lookups that add just reach 8 (0.535 with 0.500): the loop starts from a model that goes on further than the hop model did.",
+ "base": "four-stack (written_chains_four_families.json): the laptop's delayed test bed, 5,249,060 parameters, 24,000 updates on the corpus of four families, its averaged weights. Before practice it answers, by family and steps (accuracy, whole chain; 200 tasks a cell, the screen's evaluation): hops 4: 0.980/0.970, 5: 0.985/0.965, 6: 0.910/0.905, 8: 0.930/0.910, 12: 0.775/0.715, 16: 0.180/0.040; offs 4: 0.945/0.945, 5: 0.835/0.815, 6: 0.745/0.715, 8: 0.535/0.500, 12: 0.165/0.105, 16: 0.120/0.010.",
+ "loop": "experiments/practice_loop.py as in practice_cap_raised.json, with several families (commit d0f53e2): in every round, for each practised family, 16 tasks at that family's place on its own staircase with 8 attempts each at temperature 1, the reward 1 if the last byte before the newline is the answer, only rewarded attempts teaching (--dips 0); and for every family of the run, practised or not, the written chains of 16 fresh tasks of 1 to 4 steps rehearsed (--rehearse 16). Every loss sends its gradient back as it is known, the gradients add up, and one step is taken a round (Adam 3e-5, clipped at 1). A staircase starts at 4 steps, goes up a step above a solve rate of 0.5 and down under 0.25, and is capped at 12 steps for every family (--longest-hops 12): the cap that took the hop family furthest, a choice made after seeing practice_cap_raised.json and named there. 2,000 rounds, room for 64 bytes (12 steps take 35 bytes of hops and 46 of offs, 16 steps 47 and 62, the newline counted).",
+ "arms": {
+  "all": "every family practised in the same rounds (--families hops offs)",
+  "hops": "hops practised alone, the other family rehearsed only (--practise hops)",
+  "offs": "offs practised alone, the other family rehearsed only (--practise offs)",
+  "seeds": "0, 1 and 2 for each arm: 9 runs from four-stack.",
+  "the Transformer": "The same arms from the Transformer's base, if it has one: four-tf learned no family, four-tf-chain kept the lookups alone, and four_families_transformer_again.json names the base by its rule when its two arms are evaluated. The base, the families it learned and its runs are added to this record as an amendment before any of them starts; they follow the stack's runs on the same GPU, three side by side. If the Transformer learns no family it has no arms here."
+ },
+ "code": "Server code copy v18q = d0f53e2 (snnformer and experiments). The stack's runs take --exact-products --fused-reads, the fast path of practice runs; fused reads round the gradient differently from the laptop's reads, so these are runs of their own and no seed repeats a laptop run. Runs side by side on one GPU, the stack's at most nine at a time, the Transformer's three at a time (three of its runs side by side made 90 to 100 rounds a minute each where six made 29 to 39), the stack's and the Transformer's never together (practice-study.sh; the order on the GPU is in the journal). A run that a window's end cuts starts from its first round again in the next window. A smoke test of the loop with two families ran on the GPU before this was recorded (six rounds from the hop models); nothing of it is read.",
+ "measure": "Along the way: before the first round and after every 100 rounds, for every family of the run 200 tasks each of 2, 4, 8 and 12 steps answered greedily (--evaluate-every 100 --evaluate-hops 2 4 8 12 --evaluate-tasks 200), drawn from the run's seed. After the last round, for every family: --evaluate 1 2 3 4 5 6 8 12 16 --evaluate-tasks 200 --max-bytes 64 --seed 0, the tasks of the screen, so that a run is compared with its base on the same 200 tasks a cell: the accuracy of the last byte and the share of answers that write the whole chain right, each with its 95% Wilson interval, the mean bytes. The base is evaluated on the server's GPU by the same command first; if it does not repeat the screen's numbers, the server's are the base and the difference is reported. The rounds' log with each family's staircase, solve rate, whole-chain share and rehearsal loss.",
+ "marks": "For a family of a run. kept: after practice a mean accuracy over 1 to 4 steps of at least 0.95. held: at every one of the 20 evaluations from round 100 to round 2,000 at least 0.90 of the tasks of 2 steps and of 4 steps. The bar is 0.90 where practice_cap_raised.json asked 0.95 because the base answers only 0.945 of the offs tasks of 4 steps: 0.95 would be missed by chance, while a real loss of the trained lengths falls far below 0.90 (the run without rehearsal fell to 0.1 to 0.3; the one evaluation of the cap's runs that lost them read 0.725). reach: after practice, at 8 steps an accuracy of at least 0.50 with at least half of the answers writing the whole chain right. reach kept: each of the last five evaluations along the way (rounds 1,600 to 2,000) shows reach at 8 steps. A run holds if every family of it is kept and held, and every practised family has reach and keeps it. This replaces mark (h) of practice_cap_raised.json, which asked for reach at every evaluation from round 100: the lookups that add start at the edge of reach (0.500 whole chains at 8 steps), where the first evaluations would cross the line by chance, and a run that reaches late has lost nothing. A share is ahead of another if it is at least 0.10 higher with the two 95% intervals apart. The whole chain is the chain as the corpus writes it, byte for byte; a run whose answers are right in another form (as r8-tf-s1 of practice_cap_raised.json, which writes a question mark before every fourth name) has no whole chains by this measure, is reported with its accuracy beside the reading, and what it writes is looked at and reported.",
+ "reading": "(1) Together: one loop carries the families at once if the three runs of the arm all hold. If one does not, its rounds are read before anything is built on practising families together. (2) Practice lengthens each family's chains: for a family, in the arm that practises it alone and in all, the share of whole chains at 12 steps after practice is ahead of the base's in at least two of the three seeds and behind it in none. A family whose base already writes 0.90 of its 12-step chains has no room there and is read at 16 steps. Read for each family and both arms. (3) What sharing the loop costs: for a family, the arm that practises it alone against all, by the share of whole chains at 12 steps and at 16: one is the better practice for the family if it is ahead at either length in at least two of the three seeds (the same seed in both arms) and the other is ahead at neither length in any seed. (4) Carry-over: in the arm that practises one family alone, another family gained from that practice if its share of whole chains at 8 steps is ahead of the base's in at least two of the three seeds, and lost if the base is ahead in at least two; read for every ordered pair of families and reported at 12 steps; a family whose base already writes 0.90 of its 8-step chains has no room there and is read at 12 steps (the lookups: 0.910). The base has had no rounds of rehearsal, so a gain is a gain of the loop (one family practised, all rehearsed at 1 to 4 steps) and not of the practice alone. (5) The stack against the Transformer, if the Transformer has arms: for each arm and seed, one practises further in a family if its share of whole chains at 12 steps is ahead; it stands for an arm and family if it holds in at least two of the three seeds and the other model is ahead in none. The bases differ in more than the model (the Transformer's has had more updates or a start from the hop model), which is said with every such line. Reported and not read: every cell of every run after practice, the evaluations along the way, the staircases with the rounds at which a family left its cap, the share of attempts rewarded without the whole chain, the rehearsal's loss. Synthetic tasks of two families: whether one practice loop holds and lengthens several kinds of written chains at once, not a claim about reasoning in language. What follows: if (1) passes and (2) passes for every family in all, the one-model plan practises its families together, and the next family is drawn from the telemetry sense once the running sums have a way of writing that a model learns. If all fails where the single arms hold, families are practised in turns and the order of turns is the next registration. If (4) finds a family that gains from another's practice, the next registration asks how few families need practice of their own.",
+ "seen_before_recording": "written_chains_four_families.json result_tf and result_stack (the screen's evaluation of four-tf and four-stack, what four-stack writes in the running sums); the evaluation of four-tf-chain (four_families_transformer_again.json: it kept the lookups and learned no other family by the mark) and the training log of four-tf-96k, not yet evaluated; practice_cap_raised.json result_stack and result_tf_cap_8 (the Transformer's three runs with the cap at 8, which reached 8 hops only after 300 to 800 rounds, one of them in another form, and the evaluations along the way of its three stopped runs with the cap at 16); the smoke test's log lines (that rounds, evaluations by family and the evaluation after practice are written on the GPU with fused reads). No practice round has been run from four-stack.",
+ "amendment_1": {
+  "recorded_utc": "2026-11-27T15:35:33Z",
+  "what changed": "The Transformer's base, its families and its arms, named as the registration says, before any of its runs starts.",
+  "the base": "four-tf-chain of four_families_transformer_again.json (result there). It learned hops; four-tf-96k learned hops. The rule: the arm that learned more of the families the stack learned (hops and offs), a tie going to four-tf-chain, which has half the other's updates (24,000 on the hop corpus as chain-tf and 24,000 on the four families).",
+  "its families and arms": "It practises the families it learned, with rehearsal of the same families: hops (= all: with one family the two are the same runs). Seeds 0, 1 and 2 for each arm, 3 runs. The loop, the cap at 12, the marks and the measure are the stack's; the evaluation after practice asks --families hops --evaluate 1 2 3 4 5 6 8 12 16. With one family the loop writes its rounds and evaluations in the one-family form (by hop count, as practice_cap_raised.json's runs); the runs are read by this record's marks all the same.",
+  "code": "v18q, as the stack's runs, without --exact-products and --fused-reads (switches of the stack). Three runs side by side, after every stack run has ended (practice-families-b, arms-families-tf-?.txt); the base is evaluated on the server's GPU first.",
+  "reading (5) for these arms": "For each family both models practised and each seed: the Transformer's arm that practises the family (hops) against the stack's own arm of that family and its arm all, by the share of whole chains at 12 steps after practice; one practises further if its share is ahead, and it stands if that holds in at least two of the three seeds and the other model is ahead in none. The bases differ in more than the model: four-tf-chain began from chain-tf, which had 24,000 updates on the hop family alone, and then had 24,000 on the four families; four-stack had 24,000 on the four families only; and where the Transformer practises fewer families, its rounds rehearse fewer. Said with every line."
+ },
+ "result_stack": {
+  "recorded_utc": "2026-11-27T20:31:43Z",
+  "runs": "The stack's nine runs (all, hops and offs, seeds 0, 1 and 2) from four-stack, 2,000 rounds each, side by side under MPS on the server's GPU 1 in the weekend's window with code copy v18q (d0f53e2) and --exact-products --fused-reads, from 18:13:56 UTC to 20:16:05 UTC on 2026-11-27 (the last evaluation after practice); none was stopped. GPU 1 held 94.5 of its 97 GB with the nine runs; none failed. The Transformer's arm (hops-tf-s0 to -s2, amendment_1) started on the same GPU at 20:16:49 UTC, after every stack run had ended, and reading (5) is appended when it is done.",
+  "evaluator check": "four-stack evaluated on the server's GPU before the runs (base-four-stack) repeats the screen's evaluation (written_chains_four_families.json) in every cell of both families, so the base of every comparison is the screen's.",
+  "after practice (family: steps: accuracy, whole chain, mean bytes; 200 tasks a cell)": {
+   "all-stack-s0": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      8.0
+     ],
+     "4": [
+      1.0,
+      0.995,
+      11.01
+     ],
+     "5": [
+      1.0,
+      1.0,
+      14.0
+     ],
+     "6": [
+      1.0,
+      1.0,
+      17.0
+     ],
+     "8": [
+      1.0,
+      1.0,
+      23.0
+     ],
+     "12": [
+      0.995,
+      0.985,
+      34.88
+     ],
+     "16": [
+      0.985,
+      0.98,
+      47.2
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      6.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      10.0
+     ],
+     "4": [
+      0.995,
+      0.995,
+      14.0
+     ],
+     "5": [
+      1.0,
+      1.0,
+      18.0
+     ],
+     "6": [
+      1.0,
+      1.0,
+      22.0
+     ],
+     "8": [
+      0.99,
+      0.99,
+      29.98
+     ],
+     "12": [
+      0.94,
+      0.94,
+      45.8
+     ],
+     "16": [
+      0.895,
+      0.895,
+      61.5
+     ]
+    }
+   },
+   "all-stack-s1": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      8.0
+     ],
+     "4": [
+      1.0,
+      1.0,
+      11.0
+     ],
+     "5": [
+      0.125,
+      0.01,
+      62.1
+     ],
+     "6": [
+      0.1,
+      0.0,
+      62.92
+     ],
+     "8": [
+      0.08,
+      0.0,
+      62.94
+     ],
+     "12": [
+      0.07,
+      0.0,
+      62.94
+     ],
+     "16": [
+      0.09,
+      0.0,
+      63.01
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      6.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      10.0
+     ],
+     "4": [
+      0.99,
+      0.99,
+      13.98
+     ],
+     "5": [
+      0.165,
+      0.06,
+      59.74
+     ],
+     "6": [
+      0.115,
+      0.0,
+      62.54
+     ],
+     "8": [
+      0.065,
+      0.0,
+      62.51
+     ],
+     "12": [
+      0.09,
+      0.0,
+      61.52
+     ],
+     "16": [
+      0.085,
+      0.0,
+      61.7
+     ]
+    }
+   },
+   "all-stack-s2": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      1.0,
+      0.995,
+      8.0
+     ],
+     "4": [
+      1.0,
+      0.995,
+      10.98
+     ],
+     "5": [
+      0.025,
+      0.01,
+      63.38
+     ],
+     "6": [
+      0.025,
+      0.0,
+      63.91
+     ],
+     "8": [
+      0.035,
+      0.0,
+      63.28
+     ],
+     "12": [
+      0.06,
+      0.0,
+      63.85
+     ],
+     "16": [
+      0.025,
+      0.0,
+      63.74
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      6.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      10.0
+     ],
+     "4": [
+      1.0,
+      1.0,
+      14.0
+     ],
+     "5": [
+      0.085,
+      0.02,
+      55.59
+     ],
+     "6": [
+      0.06,
+      0.0,
+      56.27
+     ],
+     "8": [
+      0.07,
+      0.0,
+      54.47
+     ],
+     "12": [
+      0.07,
+      0.0,
+      55.77
+     ],
+     "16": [
+      0.07,
+      0.0,
+      55.42
+     ]
+    }
+   },
+   "hops-stack-s0": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      8.0
+     ],
+     "4": [
+      0.995,
+      0.995,
+      11.0
+     ],
+     "5": [
+      0.995,
+      0.995,
+      13.98
+     ],
+     "6": [
+      0.995,
+      0.99,
+      16.98
+     ],
+     "8": [
+      0.985,
+      0.985,
+      22.86
+     ],
+     "12": [
+      0.955,
+      0.935,
+      34.81
+     ],
+     "16": [
+      0.82,
+      0.75,
+      48.12
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      6.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      10.0
+     ],
+     "4": [
+      0.985,
+      0.985,
+      13.98
+     ],
+     "5": [
+      1.0,
+      1.0,
+      18.0
+     ],
+     "6": [
+      0.955,
+      0.945,
+      22.08
+     ],
+     "8": [
+      0.855,
+      0.845,
+      30.29
+     ],
+     "12": [
+      0.525,
+      0.48,
+      43.75
+     ],
+     "16": [
+      0.33,
+      0.26,
+      54.54
+     ]
+    }
+   },
+   "hops-stack-s1": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      8.0
+     ],
+     "4": [
+      0.995,
+      0.995,
+      10.98
+     ],
+     "5": [
+      1.0,
+      1.0,
+      14.0
+     ],
+     "6": [
+      0.995,
+      0.99,
+      17.15
+     ],
+     "8": [
+      0.97,
+      0.96,
+      23.28
+     ],
+     "12": [
+      0.83,
+      0.78,
+      37.9
+     ],
+     "16": [
+      0.385,
+      0.285,
+      51.09
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      6.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      10.0
+     ],
+     "4": [
+      0.995,
+      0.995,
+      14.0
+     ],
+     "5": [
+      0.975,
+      0.965,
+      18.04
+     ],
+     "6": [
+      0.935,
+      0.93,
+      22.5
+     ],
+     "8": [
+      0.725,
+      0.695,
+      30.48
+     ],
+     "12": [
+      0.295,
+      0.215,
+      40.66
+     ],
+     "16": [
+      0.105,
+      0.01,
+      43.66
+     ]
+    }
+   },
+   "hops-stack-s2": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      8.0
+     ],
+     "4": [
+      1.0,
+      1.0,
+      11.0
+     ],
+     "5": [
+      0.135,
+      0.005,
+      61.86
+     ],
+     "6": [
+      0.05,
+      0.0,
+      62.1
+     ],
+     "8": [
+      0.115,
+      0.0,
+      61.8
+     ],
+     "12": [
+      0.105,
+      0.0,
+      62.01
+     ],
+     "16": [
+      0.08,
+      0.0,
+      61.73
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      6.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      10.0
+     ],
+     "4": [
+      1.0,
+      1.0,
+      14.0
+     ],
+     "5": [
+      0.94,
+      0.935,
+      18.68
+     ],
+     "6": [
+      0.88,
+      0.88,
+      22.96
+     ],
+     "8": [
+      0.67,
+      0.64,
+      32.38
+     ],
+     "12": [
+      0.13,
+      0.075,
+      45.13
+     ],
+     "16": [
+      0.04,
+      0.0,
+      46.74
+     ]
+    }
+   },
+   "offs-stack-s0": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      8.0
+     ],
+     "4": [
+      1.0,
+      1.0,
+      11.0
+     ],
+     "5": [
+      1.0,
+      1.0,
+      14.0
+     ],
+     "6": [
+      1.0,
+      0.995,
+      16.97
+     ],
+     "8": [
+      0.995,
+      0.995,
+      23.0
+     ],
+     "12": [
+      0.985,
+      0.975,
+      35.1
+     ],
+     "16": [
+      0.97,
+      0.955,
+      47.0
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      6.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      10.0
+     ],
+     "4": [
+      0.995,
+      0.995,
+      14.0
+     ],
+     "5": [
+      0.995,
+      0.995,
+      18.0
+     ],
+     "6": [
+      1.0,
+      1.0,
+      22.0
+     ],
+     "8": [
+      0.995,
+      0.995,
+      30.0
+     ],
+     "12": [
+      0.95,
+      0.945,
+      45.61
+     ],
+     "16": [
+      0.955,
+      0.945,
+      61.76
+     ]
+    }
+   },
+   "offs-stack-s1": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      8.0
+     ],
+     "4": [
+      1.0,
+      0.995,
+      10.98
+     ],
+     "5": [
+      0.88,
+      0.865,
+      20.57
+     ],
+     "6": [
+      0.335,
+      0.26,
+      50.06
+     ],
+     "8": [
+      0.17,
+      0.115,
+      58.42
+     ],
+     "12": [
+      0.045,
+      0.0,
+      62.31
+     ],
+     "16": [
+      0.08,
+      0.0,
+      61.76
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      6.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      10.0
+     ],
+     "4": [
+      0.985,
+      0.985,
+      13.98
+     ],
+     "5": [
+      0.115,
+      0.105,
+      58.16
+     ],
+     "6": [
+      0.025,
+      0.015,
+      62.18
+     ],
+     "8": [
+      0.015,
+      0.0,
+      63.9
+     ],
+     "12": [
+      0.025,
+      0.0,
+      63.48
+     ],
+     "16": [
+      0.065,
+      0.0,
+      62.81
+     ]
+    }
+   },
+   "offs-stack-s2": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      0.995,
+      0.995,
+      8.2
+     ],
+     "4": [
+      1.0,
+      0.995,
+      10.98
+     ],
+     "5": [
+      1.0,
+      1.0,
+      14.0
+     ],
+     "6": [
+      1.0,
+      1.0,
+      17.0
+     ],
+     "8": [
+      1.0,
+      0.99,
+      22.97
+     ],
+     "12": [
+      0.995,
+      0.99,
+      34.88
+     ],
+     "16": [
+      0.96,
+      0.945,
+      47.06
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      0.995,
+      0.995,
+      6.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      10.0
+     ],
+     "4": [
+      1.0,
+      1.0,
+      14.0
+     ],
+     "5": [
+      1.0,
+      1.0,
+      18.0
+     ],
+     "6": [
+      1.0,
+      1.0,
+      22.0
+     ],
+     "8": [
+      0.98,
+      0.98,
+      29.9
+     ],
+     "12": [
+      0.945,
+      0.945,
+      45.8
+     ],
+     "16": [
+      0.935,
+      0.925,
+      61.67
+     ]
+    }
+   }
+  },
+  "marks": {
+   "all-stack-s0": {
+    "hops": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 1.0,
+     "held": true,
+     "reach kept": true
+    },
+    "offs": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9988,
+     "held": true,
+     "reach kept": true
+    }
+   },
+   "all-stack-s1": {
+    "hops": {
+     "reach": false,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 1.0,
+     "held": true,
+     "reach kept": false
+    },
+    "offs": {
+     "reach": false,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9975,
+     "held": true,
+     "reach kept": false
+    }
+   },
+   "all-stack-s2": {
+    "hops": {
+     "reach": false,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 1.0,
+     "held": false,
+     "reach kept": false
+    },
+    "offs": {
+     "reach": false,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 1.0,
+     "held": true,
+     "reach kept": false
+    }
+   },
+   "hops-stack-s0": {
+    "hops": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9988,
+     "held": true,
+     "reach kept": true
+    },
+    "offs": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9962,
+     "held": true,
+     "reach kept": true
+    }
+   },
+   "hops-stack-s1": {
+    "hops": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9988,
+     "held": true,
+     "reach kept": true
+    },
+    "offs": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9988,
+     "held": true,
+     "reach kept": true
+    }
+   },
+   "hops-stack-s2": {
+    "hops": {
+     "reach": false,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 1.0,
+     "held": true,
+     "reach kept": false
+    },
+    "offs": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 1.0,
+     "held": true,
+     "reach kept": true
+    }
+   },
+   "offs-stack-s0": {
+    "hops": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 1.0,
+     "held": true,
+     "reach kept": true
+    },
+    "offs": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9988,
+     "held": true,
+     "reach kept": true
+    }
+   },
+   "offs-stack-s1": {
+    "hops": {
+     "reach": false,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 1.0,
+     "held": true,
+     "reach kept": false
+    },
+    "offs": {
+     "reach": false,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9962,
+     "held": false,
+     "reach kept": false
+    }
+   },
+   "offs-stack-s2": {
+    "hops": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9988,
+     "held": true,
+     "reach kept": true
+    },
+    "offs": {
+     "reach": true,
+     "kept": true,
+     "mean accuracy over 1 to 4 steps": 0.9988,
+     "held": true,
+     "reach kept": true
+    }
+   }
+  },
+  "staircases": {
+   "all-stack-s0": {
+    "hops": {
+     "longest": 12,
+     "first round at its longest": 9,
+     "share of rounds at its longest": 0.983,
+     "rounds below its longest after reaching it": 26
+    },
+    "offs": {
+     "longest": 12,
+     "first round at its longest": 13,
+     "share of rounds at its longest": 0.866,
+     "rounds below its longest after reaching it": 256
+    }
+   },
+   "all-stack-s1": {
+    "hops": {
+     "longest": 12,
+     "first round at its longest": 9,
+     "share of rounds at its longest": 0.1395,
+     "rounds below its longest after reaching it": 1713
+    },
+    "offs": {
+     "longest": 12,
+     "first round at its longest": 129,
+     "share of rounds at its longest": 0.031,
+     "rounds below its longest after reaching it": 1810
+    }
+   },
+   "all-stack-s2": {
+    "hops": {
+     "longest": 12,
+     "first round at its longest": 9,
+     "share of rounds at its longest": 0.3165,
+     "rounds below its longest after reaching it": 1359
+    },
+    "offs": {
+     "longest": 12,
+     "first round at its longest": 179,
+     "share of rounds at its longest": 0.32,
+     "rounds below its longest after reaching it": 1182
+    }
+   },
+   "hops-stack-s0": {
+    "hops": {
+     "longest": 12,
+     "first round at its longest": 9,
+     "share of rounds at its longest": 0.7535,
+     "rounds below its longest after reaching it": 485
+    }
+   },
+   "hops-stack-s1": {
+    "hops": {
+     "longest": 12,
+     "first round at its longest": 9,
+     "share of rounds at its longest": 0.6455,
+     "rounds below its longest after reaching it": 701
+    }
+   },
+   "hops-stack-s2": {
+    "hops": {
+     "longest": 12,
+     "first round at its longest": 9,
+     "share of rounds at its longest": 0.078,
+     "rounds below its longest after reaching it": 1836
+    }
+   },
+   "offs-stack-s0": {
+    "offs": {
+     "longest": 12,
+     "first round at its longest": 143,
+     "share of rounds at its longest": 0.9035,
+     "rounds below its longest after reaching it": 51
+    }
+   },
+   "offs-stack-s1": {
+    "offs": {
+     "longest": 12,
+     "first round at its longest": 144,
+     "share of rounds at its longest": 0.145,
+     "rounds below its longest after reaching it": 1567
+    }
+   },
+   "offs-stack-s2": {
+    "offs": {
+     "longest": 12,
+     "first round at its longest": 49,
+     "share of rounds at its longest": 0.862,
+     "rounds below its longest after reaching it": 228
+    }
+   }
+  },
+  "reading by the registered rules": {
+   "(1) together: the three runs of all hold": {
+    "holds, by seed": [
+     true,
+     false,
+     false
+    ],
+    "marks, by seed": [
+     {
+      "hops": {
+       "reach": true,
+       "kept": true,
+       "mean accuracy over 1 to 4 steps": 1.0,
+       "held": true,
+       "reach kept": true
+      },
+      "offs": {
+       "reach": true,
+       "kept": true,
+       "mean accuracy over 1 to 4 steps": 0.9988,
+       "held": true,
+       "reach kept": true
+      }
+     },
+     {
+      "hops": {
+       "reach": false,
+       "kept": true,
+       "mean accuracy over 1 to 4 steps": 1.0,
+       "held": true,
+       "reach kept": false
+      },
+      "offs": {
+       "reach": false,
+       "kept": true,
+       "mean accuracy over 1 to 4 steps": 0.9975,
+       "held": true,
+       "reach kept": false
+      }
+     },
+     {
+      "hops": {
+       "reach": false,
+       "kept": true,
+       "mean accuracy over 1 to 4 steps": 1.0,
+       "held": false,
+       "reach kept": false
+      },
+      "offs": {
+       "reach": false,
+       "kept": true,
+       "mean accuracy over 1 to 4 steps": 1.0,
+       "held": true,
+       "reach kept": false
+      }
+     }
+    ],
+    "passes": false
+   },
+   "(1) the single arms, reported": {
+    "hops": [
+     true,
+     true,
+     false
+    ],
+    "offs": [
+     true,
+     false,
+     true
+    ]
+   },
+   "(2) practice lengthens each family's chains": {
+    "hops, arm hops": {
+     "read at steps": "12",
+     "base": 0.715,
+     "after practice, by seed": [
+      0.935,
+      0.78,
+      0.0
+     ],
+     "seeds ahead of the base": 1,
+     "seeds behind it": 1,
+     "passes": false
+    },
+    "hops, arm all": {
+     "read at steps": "12",
+     "base": 0.715,
+     "after practice, by seed": [
+      0.985,
+      0.0,
+      0.0
+     ],
+     "seeds ahead of the base": 1,
+     "seeds behind it": 2,
+     "passes": false
+    },
+    "offs, arm offs": {
+     "read at steps": "12",
+     "base": 0.105,
+     "after practice, by seed": [
+      0.945,
+      0.0,
+      0.945
+     ],
+     "seeds ahead of the base": 2,
+     "seeds behind it": 1,
+     "passes": false
+    },
+    "offs, arm all": {
+     "read at steps": "12",
+     "base": 0.105,
+     "after practice, by seed": [
+      0.94,
+      0.0,
+      0.0
+     ],
+     "seeds ahead of the base": 1,
+     "seeds behind it": 2,
+     "passes": false
+    }
+   },
+   "(3) what sharing the loop costs": {
+    "hops": {
+     "whole chains at 12 and 16, alone and in all, by seed": [
+      [
+       0.935,
+       0.75,
+       0.985,
+       0.98
+      ],
+      [
+       0.78,
+       0.285,
+       0.0,
+       0.0
+      ],
+      [
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     ],
+     "seeds with alone ahead": 1,
+     "seeds with all ahead": 1,
+     "the better practice": "neither"
+    },
+    "offs": {
+     "whole chains at 12 and 16, alone and in all, by seed": [
+      [
+       0.945,
+       0.945,
+       0.94,
+       0.895
+      ],
+      [
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      [
+       0.945,
+       0.925,
+       0.0,
+       0.0
+      ]
+     ],
+     "seeds with alone ahead": 1,
+     "seeds with all ahead": 0,
+     "the better practice": "neither"
+    }
+   },
+   "(4) carry-over": {
+    "practising hops, offs": {
+     "read at steps": "8",
+     "base": 0.5,
+     "after practice, by seed": [
+      0.845,
+      0.695,
+      0.64
+     ],
+     "gained": true,
+     "lost": false,
+     "reported at 12 steps (base, by seed)": [
+      0.105,
+      [
+       0.48,
+       0.215,
+       0.075
+      ]
+     ]
+    },
+    "practising offs, hops": {
+     "read at steps": "12",
+     "base": 0.715,
+     "after practice, by seed": [
+      0.975,
+      0.0,
+      0.99
+     ],
+     "gained": true,
+     "lost": false,
+     "reported at 12 steps (base, by seed)": [
+      0.715,
+      [
+       0.975,
+       0.0,
+       0.99
+      ]
+     ]
+    }
+   },
+   "(5) the stack against the Transformer": "no Transformer arm has its evaluation after practice"
+  },
+  "reading": {
+   "(1) together": "Fails. all-stack-s0 holds; all-stack-s1 and all-stack-s2 lose both families past four steps (neither has reach after practice, and all-stack-s2 also misses held for the hop family). Of the single arms, hops-stack-s0 and -s1 hold and hops-stack-s2 does not; offs-stack-s0 and -s2 hold and offs-stack-s1 does not. So four of the nine runs fall, one of every arm and two of all.",
+   "(2) practice lengthens each family's chains": "Fails for both families in both arms, for the runs that fell. Whole chains at 12 steps against the base (hops 0.715, offs 0.105): hops alone 0.935, 0.780 and 0.000; hops in all 0.985, 0.000 and 0.000; offs alone 0.945, 0.000 and 0.945; offs in all 0.940, 0.000 and 0.000 (seeds 0, 1, 2). Of the runs that hold, all but hops-stack-s1 (0.780 against 0.715) are ahead of the base at 12 steps in the families they practised.",
+   "(3) what sharing the loop costs": "Neither arm is the better practice for either family. For hops, all is ahead in seed 0 (0.980 against 0.750 whole chains at 16 steps) and alone in seed 1, where all-stack-s1 fell; for offs, alone is ahead in seed 2 only, where all-stack-s2 fell, and seed 0 shows no difference.",
+   "(4) carry-over": "By the letter both families gain from the other's practice: practising hops, offs writes 0.845, 0.695 and 0.640 of its 8-step chains whole against the base's 0.500, ahead in all three seeds; practising offs, hops writes 0.975, 0.000 and 0.990 of its 12-step chains against 0.715, ahead in two seeds and behind in the seed that fell (offs-stack-s1 lost the hop family's long chains with its own).",
+   "(5)": "Waits for the Transformer's arm."
+  },
+  "how four runs fell (reported)": {
+   "counted by": "experiments/forms_families.py on the server's CPU, from the code copy v18q, on each run's weights after its last round (model.pt, as the evaluation after practice), for both families at 5, 8 and 12 steps; the copy that ran differs from the published one only in its docstring and imports.",
+   "what they write": "Each of the four runs that fell keeps 1 to 4 steps (0.985 to 1.000 accuracy) and answers 0.115 or less of the tasks of 6, 8, 12 and 16 steps in the families it lost (offs-stack-s1 also lost most of the hop family's long chains, which it only rehearsed: 0.170 at 8 steps, 0.045 at 12). Counted greedily on the server's CPU over the evaluation's tasks: in the hop family, at 8 steps 186 to 193 of 200 answers write the chain's first four names right and the fifth wrong, and at 5 steps, where the step after the fourth name is the answer, 1 to 5 of 200 write the whole chain; in the offs family, at 8 steps 122 to 193 of 200 write the first three steps right and the fourth wrong (often its name without its digit: pu9=ig5=ty6=jt=====...). The corpus that is rehearsed writes at most three names or steps before the answer. Past that point they fill the room with one name written again and again (ry=of=pn=wf=ii=ii=ii=...=2) or with equals signs (qk=lt=ov=ka=====...=6) and end, if they end, on one digit whatever the task. The commonest last digit of the answers at 8 steps that end: all-stack-s1 2 in hops (127 of 195); all-stack-s1 2 in offs (181 of 192); all-stack-s2 6 in hops (97 of 98); all-stack-s2 6 in offs (86 of 112); hops-stack-s2 4 in hops (195 of 200); offs-stack-s1 5 in offs (17 of 20). Answers that run to the end of the room without a newline, of 200 at 8 steps: all-stack-s1 in hops 5, all-stack-s1 in offs 8, all-stack-s2 in hops 102, all-stack-s2 in offs 88, offs-stack-s1 in offs 180; the grader does not pay them.",
+   "when": "At round 100 every one of the four wrote 0.835 to 0.985 of its 8-step hop chains whole. The last evaluation with reach at 8 steps: hops-stack-s2 round 300; all-stack-s1 round 900 in both families; all-stack-s2 round 1,100 for hops and 1,400 for offs; offs-stack-s1 round 1,100 for offs and 1,800 for hops, which it only rehearsed. None came back.",
+   "the rounds after the fall": "Each staircase then went between 4 and 5 steps (4.55 to 5.32 on average over the rounds after the fall, 0.69 to 0.99 of them at 4 or 5). At 4 steps 0.977 to 0.995 of the sampled attempts are paid, and 35 to 79 per cent of those rounds teach nothing (no task's attempts disagree); at 5 steps 0.136 to 0.266 are paid and 0.063 to 0.200 write the whole chain, around and under the staircase's lower mark of a quarter, so it soon goes back to 4. The longer lengths are seldom practised again, and with --dips 0 an attempt that fills the room is never made less likely.",
+   "the numbers": {
+    "rounds after the fall (sampled attempts)": {
+     "hops-stack-s2, hops": {
+      "rounds": "600 to 2000",
+      "mean steps": 4.83,
+      "by steps": {
+       "4": {
+        "rounds": 591,
+        "solve rate": 0.992,
+        "attempts that write the whole chain": 0.991,
+        "rounds that teach nothing": 0.71
+       },
+       "5": {
+        "rounds": 700,
+        "solve rate": 0.156,
+        "attempts that write the whole chain": 0.082,
+        "rounds that teach nothing": 0.02
+       },
+       "6": {
+        "rounds": 44,
+        "solve rate": 0.197,
+        "attempts that write the whole chain": 0.108,
+        "rounds that teach nothing": 0.0
+       },
+       "7": {
+        "rounds": 16,
+        "solve rate": 0.356,
+        "attempts that write the whole chain": 0.265,
+        "rounds that teach nothing": 0.0
+       },
+       "8": {
+        "rounds": 6,
+        "solve rate": 0.43,
+        "attempts that write the whole chain": 0.358,
+        "rounds that teach nothing": 0.0
+       },
+       "9": {
+        "rounds": 8,
+        "solve rate": 0.422,
+        "attempts that write the whole chain": 0.343,
+        "rounds that teach nothing": 0.0
+       },
+       "10": {
+        "rounds": 4,
+        "solve rate": 0.377,
+        "attempts that write the whole chain": 0.268,
+        "rounds that teach nothing": 0.0
+       },
+       "11": {
+        "rounds": 12,
+        "solve rate": 0.396,
+        "attempts that write the whole chain": 0.308,
+        "rounds that teach nothing": 0.0
+       },
+       "12": {
+        "rounds": 20,
+        "solve rate": 0.382,
+        "attempts that write the whole chain": 0.287,
+        "rounds that teach nothing": 0.0
+       }
+      }
+     },
+     "offs-stack-s1, offs": {
+      "rounds": "1400 to 2000",
+      "mean steps": 5.32,
+      "by steps": {
+       "4": {
+        "rounds": 146,
+        "solve rate": 0.977,
+        "attempts that write the whole chain": 0.975,
+        "rounds that teach nothing": 0.35
+       },
+       "5": {
+        "rounds": 269,
+        "solve rate": 0.266,
+        "attempts that write the whole chain": 0.2,
+        "rounds that teach nothing": 0.0
+       },
+       "6": {
+        "rounds": 96,
+        "solve rate": 0.347,
+        "attempts that write the whole chain": 0.298,
+        "rounds that teach nothing": 0.0
+       },
+       "7": {
+        "rounds": 49,
+        "solve rate": 0.334,
+        "attempts that write the whole chain": 0.292,
+        "rounds that teach nothing": 0.0
+       },
+       "8": {
+        "rounds": 23,
+        "solve rate": 0.337,
+        "attempts that write the whole chain": 0.303,
+        "rounds that teach nothing": 0.0
+       },
+       "9": {
+        "rounds": 17,
+        "solve rate": 0.301,
+        "attempts that write the whole chain": 0.257,
+        "rounds that teach nothing": 0.0
+       },
+       "10": {
+        "rounds": 1,
+        "solve rate": 0.188,
+        "attempts that write the whole chain": 0.141,
+        "rounds that teach nothing": 0.0
+       }
+      }
+     },
+     "all-stack-s1, hops": {
+      "rounds": "1200 to 2000",
+      "mean steps": 4.65,
+      "by steps": {
+       "4": {
+        "rounds": 335,
+        "solve rate": 0.995,
+        "attempts that write the whole chain": 0.994,
+        "rounds that teach nothing": 0.79
+       },
+       "5": {
+        "rounds": 413,
+        "solve rate": 0.189,
+        "attempts that write the whole chain": 0.122,
+        "rounds that teach nothing": 0.0
+       },
+       "6": {
+        "rounds": 50,
+        "solve rate": 0.217,
+        "attempts that write the whole chain": 0.146,
+        "rounds that teach nothing": 0.0
+       },
+       "7": {
+        "rounds": 3,
+        "solve rate": 0.159,
+        "attempts that write the whole chain": 0.06,
+        "rounds that teach nothing": 0.0
+       }
+      }
+     },
+     "all-stack-s1, offs": {
+      "rounds": "1200 to 2000",
+      "mean steps": 4.64,
+      "by steps": {
+       "4": {
+        "rounds": 344,
+        "solve rate": 0.985,
+        "attempts that write the whole chain": 0.983,
+        "rounds that teach nothing": 0.42
+       },
+       "5": {
+        "rounds": 409,
+        "solve rate": 0.157,
+        "attempts that write the whole chain": 0.084,
+        "rounds that teach nothing": 0.0
+       },
+       "6": {
+        "rounds": 44,
+        "solve rate": 0.24,
+        "attempts that write the whole chain": 0.166,
+        "rounds that teach nothing": 0.0
+       },
+       "7": {
+        "rounds": 4,
+        "solve rate": 0.08,
+        "attempts that write the whole chain": 0.021,
+        "rounds that teach nothing": 0.0
+       }
+      }
+     },
+     "all-stack-s2, hops": {
+      "rounds": "1400 to 2000",
+      "mean steps": 4.55,
+      "by steps": {
+       "4": {
+        "rounds": 276,
+        "solve rate": 0.983,
+        "attempts that write the whole chain": 0.98,
+        "rounds that teach nothing": 0.47
+       },
+       "5": {
+        "rounds": 317,
+        "solve rate": 0.136,
+        "attempts that write the whole chain": 0.063,
+        "rounds that teach nothing": 0.02
+       },
+       "6": {
+        "rounds": 8,
+        "solve rate": 0.129,
+        "attempts that write the whole chain": 0.037,
+        "rounds that teach nothing": 0.0
+       }
+      }
+     },
+     "all-stack-s2, offs": {
+      "rounds": "1700 to 2000",
+      "mean steps": 4.77,
+      "by steps": {
+       "4": {
+        "rounds": 101,
+        "solve rate": 0.986,
+        "attempts that write the whole chain": 0.985,
+        "rounds that teach nothing": 0.42
+       },
+       "5": {
+        "rounds": 167,
+        "solve rate": 0.252,
+        "attempts that write the whole chain": 0.186,
+        "rounds that teach nothing": 0.0
+       },
+       "6": {
+        "rounds": 33,
+        "solve rate": 0.274,
+        "attempts that write the whole chain": 0.195,
+        "rounds that teach nothing": 0.03
+       }
+      }
+     }
+    },
+    "forms, greedy (model, family, steps)": {
+     "all-stack-s0, hops, 5": {
+      "model": "all-stack-s0",
+      "family": "hops",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 199,
+       "wrong answer": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "4": 199
+      },
+      "the last byte": {
+       "3": 23,
+       "5": 22,
+       "1": 22,
+       "7": 22,
+       "0": 21,
+       "8": 21,
+       "6": 20,
+       "4": 19,
+       "9": 16,
+       "2": 14
+      },
+      "examples": [
+       {
+        "right": "zr=od=kb=yn=5",
+        "written": "zr=od=kb=yn=5"
+       },
+       {
+        "right": "jr=er=ht=yo=0",
+        "written": "jr=er=ht=yo=0"
+       },
+       {
+        "right": "tu=vp=uh=ks=1",
+        "written": "tu=vp=uh=ks=1"
+       },
+       {
+        "right": "en=qd=kz=pz=4",
+        "written": "en=qd=kz=pz=4"
+       }
+      ]
+     },
+     "all-stack-s0, hops, 8": {
+      "model": "all-stack-s0",
+      "family": "hops",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 200
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "7": 200
+      },
+      "the last byte": {
+       "5": 29,
+       "0": 25,
+       "9": 24,
+       "7": 22,
+       "2": 20,
+       "1": 19,
+       "3": 17,
+       "4": 16,
+       "6": 16,
+       "8": 12
+      },
+      "examples": [
+       {
+        "right": "dj=bs=hp=ez=ou=op=iy=2",
+        "written": "dj=bs=hp=ez=ou=op=iy=2"
+       },
+       {
+        "right": "qk=lt=ov=ka=qr=bi=kn=5",
+        "written": "qk=lt=ov=ka=qr=bi=kn=5"
+       },
+       {
+        "right": "ry=of=pn=wf=so=do=ug=5",
+        "written": "ry=of=pn=wf=so=do=ug=5"
+       },
+       {
+        "right": "qf=yx=kx=kp=tw=ku=lm=2",
+        "written": "qf=yx=kx=kp=tw=ku=lm=2"
+       }
+      ]
+     },
+     "all-stack-s0, hops, 12": {
+      "model": "all-stack-s0",
+      "family": "hops",
+      "steps": 12,
+      "forms": {
+       "the chain as the corpus writes it": 196,
+       "wrong answer": 3,
+       "right answer, the chain otherwise": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "3": 1,
+       "5": 1,
+       "6": 1,
+       "11": 196
+      },
+      "the last byte": {
+       "2": 28,
+       "5": 28,
+       "3": 22,
+       "8": 19,
+       "9": 19,
+       "4": 19,
+       "1": 19,
+       "6": 18,
+       "0": 15,
+       "7": 13
+      },
+      "examples": [
+       {
+        "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+        "written": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8"
+       },
+       {
+        "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+        "written": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3"
+       },
+       {
+        "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+        "written": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9"
+       },
+       {
+        "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+        "written": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7"
+       }
+      ]
+     },
+     "all-stack-s0, offs, 5": {
+      "model": "all-stack-s0",
+      "family": "offs",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 199,
+       "wrong answer": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "2": 1,
+       "4": 199
+      },
+      "the last byte": {
+       "2": 30,
+       "7": 25,
+       "4": 23,
+       "5": 21,
+       "8": 18,
+       "3": 17,
+       "1": 17,
+       "0": 17,
+       "6": 16,
+       "9": 16
+      },
+      "examples": [
+       {
+        "right": "vk3=oz8=js2=sm4=6",
+        "written": "vk3=oz8=js2=sm4=6"
+       },
+       {
+        "right": "nz4=ue6=no7=sf9=3",
+        "written": "nz4=ue6=no7=sf9=3"
+       },
+       {
+        "right": "tj5=dn9=hc7=ni4=4",
+        "written": "tj5=dn9=hc7=ni4=4"
+       },
+       {
+        "right": "qj9=bk4=vp2=hq0=4",
+        "written": "qj9=bk4=vp2=hq0=4"
+       }
+      ]
+     },
+     "all-stack-s0, offs, 8": {
+      "model": "all-stack-s0",
+      "family": "offs",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 195,
+       "wrong answer": 5
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "4": 2,
+       "5": 1,
+       "6": 2,
+       "7": 195
+      },
+      "the last byte": {
+       "5": 27,
+       "0": 27,
+       "8": 24,
+       "2": 20,
+       "9": 20,
+       "1": 18,
+       "6": 17,
+       "3": 17,
+       "4": 16,
+       "7": 14
+      },
+      "examples": [
+       {
+        "right": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5",
+        "written": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5"
+       },
+       {
+        "right": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0",
+        "written": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0"
+       },
+       {
+        "right": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8",
+        "written": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8"
+       },
+       {
+        "right": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8",
+        "written": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8"
+       }
+      ]
+     },
+     "all-stack-s0, offs, 12": {
+      "model": "all-stack-s0",
+      "family": "offs",
+      "steps": 12,
+      "forms": {
+       "the chain as the corpus writes it": 192,
+       "wrong answer": 7,
+       "ran to the end of the room (64 bytes) without a newline": 1
+      },
+      "marks": {
+       "a name written twice": 1
+      },
+      "steps written right before the first wrong one": {
+       "3": 1,
+       "4": 1,
+       "6": 2,
+       "7": 1,
+       "10": 2,
+       "11": 193
+      },
+      "the last byte": {
+       "7": 27,
+       "2": 26,
+       "3": 22,
+       "6": 22,
+       "5": 20,
+       "8": 19,
+       "4": 17,
+       "0": 16,
+       "9": 15,
+       "1": 15,
+       "(no newline)": 1
+      },
+      "examples": [
+       {
+        "right": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3",
+        "written": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3"
+       },
+       {
+        "right": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3",
+        "written": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3"
+       },
+       {
+        "right": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0",
+        "written": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0"
+       },
+       {
+        "right": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0",
+        "written": "rm7=yn5=tf7=ig2=be0=gy2=ok0=rz7=nl4=7"
+       }
+      ]
+     },
+     "all-stack-s1, hops, 5": {
+      "model": "all-stack-s1",
+      "family": "hops",
+      "steps": 5,
+      "forms": {
+       "wrong answer": 175,
+       "right answer, the chain otherwise": 18,
+       "the chain as the corpus writes it": 5,
+       "ran to the end of the room (64 bytes) without a newline": 2
+      },
+      "marks": {
+       "a name written twice": 195,
+       "an empty step (==)": 180
+      },
+      "steps written right before the first wrong one": {
+       "4": 200
+      },
+      "the last byte": {
+       "2": 132,
+       "0": 58,
+       "8": 4,
+       "(no newline)": 2,
+       "7": 1,
+       "4": 1,
+       "9": 1,
+       "3": 1
+      },
+      "examples": [
+       {
+        "right": "zr=od=kb=yn=5",
+        "written": "zr=od=kb=yn==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "jr=er=ht=yo=0",
+        "written": "jr=er=ht=yo==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "tu=vp=uh=ks=1",
+        "written": "tu=vp=uh=ks==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "en=qd=kz=pz=4",
+        "written": "en=qd=kz=pz==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=0"
+       }
+      ]
+     },
+     "all-stack-s1, hops, 8": {
+      "model": "all-stack-s1",
+      "family": "hops",
+      "steps": 8,
+      "forms": {
+       "right answer, the chain otherwise": 23,
+       "wrong answer": 172,
+       "ran to the end of the room (64 bytes) without a newline": 5
+      },
+      "marks": {
+       "a name written twice": 199,
+       "an empty step (==)": 172
+      },
+      "steps written right before the first wrong one": {
+       "0": 1,
+       "3": 2,
+       "4": 193,
+       "5": 4
+      },
+      "the last byte": {
+       "2": 127,
+       "0": 66,
+       "(no newline)": 5,
+       "8": 2
+      },
+      "examples": [
+       {
+        "right": "dj=bs=hp=ez=ou=op=iy=2",
+        "written": "dj=bs=hp=ez==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "qk=lt=ov=ka=qr=bi=kn=5",
+        "written": "qk=lt=ov=ka==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "ry=of=pn=wf=so=do=ug=5",
+        "written": "ry=of=pn=wf=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "qf=yx=kx=kp=tw=ku=lm=2",
+        "written": "qf=yx=kx=kp==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=0"
+       }
+      ]
+     },
+     "all-stack-s1, hops, 12": {
+      "model": "all-stack-s1",
+      "family": "hops",
+      "steps": 12,
+      "forms": {
+       "wrong answer": 161,
+       "ran to the end of the room (64 bytes) without a newline": 14,
+       "right answer, the chain otherwise": 25
+      },
+      "marks": {
+       "a name written twice": 200,
+       "an empty step (==)": 180
+      },
+      "steps written right before the first wrong one": {
+       "4": 194,
+       "5": 6
+      },
+      "the last byte": {
+       "2": 147,
+       "0": 36,
+       "(no newline)": 14,
+       "8": 2,
+       "6": 1
+      },
+      "examples": [
+       {
+        "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+        "written": "ku=ta=ot=al==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+        "written": "eb=xx=ib=ph==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=0"
+       },
+       {
+        "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+        "written": "ke=yp=wl=wb=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2 ..."
+       },
+       {
+        "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+        "written": "ui=ir=lr=ra=hy=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=0"
+       }
+      ]
+     },
+     "all-stack-s1, offs, 5": {
+      "model": "all-stack-s1",
+      "family": "offs",
+      "steps": 5,
+      "forms": {
+       "wrong answer": 157,
+       "right answer, the chain otherwise": 28,
+       "the chain as the corpus writes it": 14,
+       "ran to the end of the room (64 bytes) without a newline": 1
+      },
+      "marks": {
+       "a name written twice": 185,
+       "an empty step (==)": 115
+      },
+      "steps written right before the first wrong one": {
+       "3": 115,
+       "4": 85
+      },
+      "the last byte": {
+       "2": 180,
+       "0": 6,
+       "4": 3,
+       "5": 3,
+       "8": 2,
+       "9": 1,
+       "6": 1,
+       "1": 1,
+       "7": 1,
+       "3": 1,
+       "(no newline)": 1
+      },
+      "examples": [
+       {
+        "right": "vk3=oz8=js2=sm4=6",
+        "written": "vk3=oz8=js2=ig1=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "nz4=ue6=no7=sf9=3",
+        "written": "nz4=ue6=no7=if6=9"
+       },
+       {
+        "right": "tj5=dn9=hc7=ni4=4",
+        "written": "tj5=dn9=hc7=ni4=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "qj9=bk4=vp2=hq0=4",
+        "written": "qj9=bk4=vp2=ib=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       }
+      ]
+     },
+     "all-stack-s1, offs, 8": {
+      "model": "all-stack-s1",
+      "family": "offs",
+      "steps": 8,
+      "forms": {
+       "wrong answer": 173,
+       "ran to the end of the room (64 bytes) without a newline": 8,
+       "right answer, the chain otherwise": 19
+      },
+      "marks": {
+       "a name written twice": 198,
+       "an empty step (==)": 149
+      },
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "3": 122,
+       "4": 76,
+       "5": 1
+      },
+      "the last byte": {
+       "2": 181,
+       "(no newline)": 8,
+       "0": 6,
+       "8": 3,
+       "9": 2
+      },
+      "examples": [
+       {
+        "right": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5",
+        "written": "pu9=ig5=ty6=jt==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0",
+        "written": "ov1=ka7=qr3=nn==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8",
+        "written": "zn1=rv9=ww5=eh==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8",
+        "written": "hs3=qv0=og8=ii==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=0"
+       }
+      ]
+     },
+     "all-stack-s1, offs, 12": {
+      "model": "all-stack-s1",
+      "family": "offs",
+      "steps": 12,
+      "forms": {
+       "wrong answer": 171,
+       "ran to the end of the room (64 bytes) without a newline": 5,
+       "right answer, the chain otherwise": 24
+      },
+      "marks": {
+       "a name written twice": 198,
+       "an empty step (==)": 139
+      },
+      "steps written right before the first wrong one": {
+       "2": 3,
+       "3": 122,
+       "4": 74,
+       "5": 1
+      },
+      "the last byte": {
+       "2": 171,
+       "8": 15,
+       "0": 8,
+       "(no newline)": 5,
+       "3": 1
+      },
+      "examples": [
+       {
+        "right": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3",
+        "written": "yp8=ab0=vz6=ih4=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3",
+        "written": "ir5=vr3=eb0=xx==i==ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0",
+        "written": "bd8=kb7=un0=lf6=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       },
+       {
+        "right": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0",
+        "written": "rm7=yn5=tf7=ig2=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=2"
+       }
+      ]
+     },
+     "all-stack-s2, hops, 5": {
+      "model": "all-stack-s2",
+      "family": "hops",
+      "steps": 5,
+      "forms": {
+       "wrong answer": 82,
+       "ran to the end of the room (64 bytes) without a newline": 108,
+       "right answer, the chain otherwise": 8,
+       "the chain as the corpus writes it": 2
+      },
+      "marks": {
+       "an empty step (==)": 198
+      },
+      "steps written right before the first wrong one": {
+       "3": 3,
+       "4": 197
+      },
+      "the last byte": {
+       "(no newline)": 108,
+       "6": 90,
+       "3": 1,
+       "7": 1
+      },
+      "examples": [
+       {
+        "right": "zr=od=kb=yn=5",
+        "written": "zr=od=kb=yn===================================================6"
+       },
+       {
+        "right": "jr=er=ht=yo=0",
+        "written": "jr=er=ht=yb====================================================6 ..."
+       },
+       {
+        "right": "tu=vp=uh=ks=1",
+        "written": "tu=vp=uh=ks===================================================== ..."
+       },
+       {
+        "right": "en=qd=kz=pz=4",
+        "written": "en=qd=kz=pz===================================================== ..."
+       }
+      ]
+     },
+     "all-stack-s2, hops, 8": {
+      "model": "all-stack-s2",
+      "family": "hops",
+      "steps": 8,
+      "forms": {
+       "wrong answer": 90,
+       "ran to the end of the room (64 bytes) without a newline": 102,
+       "right answer, the chain otherwise": 8
+      },
+      "marks": {
+       "an empty step (==)": 199,
+       "a name written twice": 2
+      },
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "3": 6,
+       "4": 193
+      },
+      "the last byte": {
+       "(no newline)": 102,
+       "6": 97,
+       "8": 1
+      },
+      "examples": [
+       {
+        "right": "dj=bs=hp=ez=ou=op=iy=2",
+        "written": "dj=bs=hp=ez==================================================6"
+       },
+       {
+        "right": "qk=lt=ov=ka=qr=bi=kn=5",
+        "written": "qk=lt=ov=ka===================================================6"
+       },
+       {
+        "right": "ry=of=pn=wf=so=do=ug=5",
+        "written": "ry=of=pn=wf===================================================6"
+       },
+       {
+        "right": "qf=yx=kx=kp=tw=ku=lm=2",
+        "written": "qf=yx=kx=kp==================================================6"
+       }
+      ]
+     },
+     "all-stack-s2, hops, 12": {
+      "model": "all-stack-s2",
+      "family": "hops",
+      "steps": 12,
+      "forms": {
+       "wrong answer": 95,
+       "ran to the end of the room (64 bytes) without a newline": 96,
+       "right answer, the chain otherwise": 9
+      },
+      "marks": {
+       "an empty step (==)": 199
+      },
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "2": 1,
+       "3": 4,
+       "4": 194
+      },
+      "the last byte": {
+       "6": 103,
+       "(no newline)": 96,
+       "2": 1
+      },
+      "examples": [
+       {
+        "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+        "written": "ku=ta=ot=al===================================================6"
+       },
+       {
+        "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+        "written": "eb=xx=ib=ph===================================================6"
+       },
+       {
+        "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+        "written": "ke=yp=wl=wb==================================================6"
+       },
+       {
+        "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+        "written": "ui=ir=lr=ra===================================================== ..."
+       }
+      ]
+     },
+     "all-stack-s2, offs, 5": {
+      "model": "all-stack-s2",
+      "family": "offs",
+      "steps": 5,
+      "forms": {
+       "wrong answer": 81,
+       "ran to the end of the room (64 bytes) without a newline": 109,
+       "right answer, the chain otherwise": 9,
+       "the chain as the corpus writes it": 1
+      },
+      "marks": {
+       "an empty step (==)": 175,
+       "a name written twice": 3
+      },
+      "steps written right before the first wrong one": {
+       "2": 1,
+       "3": 187,
+       "4": 12
+      },
+      "the last byte": {
+       "(no newline)": 109,
+       "6": 68,
+       "2": 9,
+       "4": 7,
+       "3": 5,
+       "9": 1,
+       "0": 1
+      },
+      "examples": [
+       {
+        "right": "vk3=oz8=js2=sm4=6",
+        "written": "vk3=oz8=js2=2"
+       },
+       {
+        "right": "nz4=ue6=no7=sf9=3",
+        "written": "nz4=ue6=no7==f================================================== ..."
+       },
+       {
+        "right": "tj5=dn9=hc7=ni4=4",
+        "written": "tj5=dn9=hc7==f================================================6"
+       },
+       {
+        "right": "qj9=bk4=vp2=hq0=4",
+        "written": "qj9=bk4=vp2==y================================================6"
+       }
+      ]
+     },
+     "all-stack-s2, offs, 8": {
+      "model": "all-stack-s2",
+      "family": "offs",
+      "steps": 8,
+      "forms": {
+       "ran to the end of the room (64 bytes) without a newline": 88,
+       "wrong answer": 103,
+       "right answer, the chain otherwise": 9
+      },
+      "marks": {
+       "an empty step (==)": 170
+      },
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "2": 1,
+       "3": 193,
+       "4": 5
+      },
+      "the last byte": {
+       "(no newline)": 88,
+       "6": 86,
+       "2": 9,
+       "4": 8,
+       "3": 4,
+       "1": 2,
+       "0": 1,
+       "9": 1,
+       "8": 1
+      },
+      "examples": [
+       {
+        "right": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5",
+        "written": "pu9=ig5=ty6=jt================================================== ..."
+       },
+       {
+        "right": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0",
+        "written": "ov1=ka7=qr3=2"
+       },
+       {
+        "right": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8",
+        "written": "zn1=rv9=ww5==p===============================================6"
+       },
+       {
+        "right": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8",
+        "written": "hs3=qv0=og8=cr===============================================6"
+       }
+      ]
+     },
+     "all-stack-s2, offs, 12": {
+      "model": "all-stack-s2",
+      "family": "offs",
+      "steps": 12,
+      "forms": {
+       "wrong answer": 134,
+       "ran to the end of the room (64 bytes) without a newline": 44,
+       "right answer, the chain otherwise": 22
+      },
+      "marks": {
+       "an empty step (==)": 171,
+       "a name written twice": 1
+      },
+      "steps written right before the first wrong one": {
+       "2": 2,
+       "3": 192,
+       "4": 6
+      },
+      "the last byte": {
+       "6": 126,
+       "(no newline)": 44,
+       "2": 15,
+       "4": 6,
+       "3": 5,
+       "=": 1,
+       "9": 1,
+       "8": 1,
+       "5": 1
+      },
+      "examples": [
+       {
+        "right": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3",
+        "written": "yp8=ab0=vz6=ff===============================================6"
+       },
+       {
+        "right": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3",
+        "written": "ir5=vr3=eb0=4"
+       },
+       {
+        "right": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0",
+        "written": "bd8=kb7=un0=y=================================================6"
+       },
+       {
+        "right": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0",
+        "written": "rm7=yn5=tf7=ff===============================================6"
+       }
+      ]
+     },
+     "hops-stack-s0, hops, 5": {
+      "model": "hops-stack-s0",
+      "family": "hops",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 198,
+       "wrong answer": 2
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "3": 1,
+       "4": 198
+      },
+      "the last byte": {
+       "3": 23,
+       "5": 22,
+       "0": 22,
+       "1": 22,
+       "7": 21,
+       "6": 20,
+       "4": 19,
+       "8": 19,
+       "9": 17,
+       "2": 15
+      },
+      "examples": [
+       {
+        "right": "zr=od=kb=yn=5",
+        "written": "zr=od=kb=yn=5"
+       },
+       {
+        "right": "jr=er=ht=yo=0",
+        "written": "jr=er=ht=yo=0"
+       },
+       {
+        "right": "tu=vp=uh=ks=1",
+        "written": "tu=vp=uh=ks=1"
+       },
+       {
+        "right": "en=qd=kz=pz=4",
+        "written": "en=qd=kz=pz=4"
+       }
+      ]
+     },
+     "hops-stack-s0, hops, 8": {
+      "model": "hops-stack-s0",
+      "family": "hops",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 199,
+       "wrong answer": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "2": 1,
+       "7": 199
+      },
+      "the last byte": {
+       "5": 29,
+       "9": 25,
+       "0": 25,
+       "7": 22,
+       "2": 19,
+       "1": 19,
+       "3": 17,
+       "4": 16,
+       "6": 16,
+       "8": 12
+      },
+      "examples": [
+       {
+        "right": "dj=bs=hp=ez=ou=op=iy=2",
+        "written": "dj=bs=hp=ez=ou=op=iy=2"
+       },
+       {
+        "right": "qk=lt=ov=ka=qr=bi=kn=5",
+        "written": "qk=lt=ov=ka=qr=bi=kn=5"
+       },
+       {
+        "right": "ry=of=pn=wf=so=do=ug=5",
+        "written": "ry=of=pn=wf=so=do=ug=5"
+       },
+       {
+        "right": "qf=yx=kx=kp=tw=ku=lm=2",
+        "written": "qf=yx=kx=kp=tw=ku=lm=2"
+       }
+      ]
+     },
+     "hops-stack-s0, hops, 12": {
+      "model": "hops-stack-s0",
+      "family": "hops",
+      "steps": 12,
+      "forms": {
+       "the chain as the corpus writes it": 196,
+       "wrong answer": 4
+      },
+      "marks": {
+       "a name written twice": 1
+      },
+      "steps written right before the first wrong one": {
+       "5": 1,
+       "9": 1,
+       "10": 1,
+       "11": 197
+      },
+      "the last byte": {
+       "5": 28,
+       "2": 27,
+       "3": 21,
+       "4": 21,
+       "1": 20,
+       "8": 19,
+       "9": 19,
+       "6": 18,
+       "0": 15,
+       "7": 12
+      },
+      "examples": [
+       {
+        "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+        "written": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8"
+       },
+       {
+        "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+        "written": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3"
+       },
+       {
+        "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+        "written": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9"
+       },
+       {
+        "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+        "written": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7"
+       }
+      ]
+     },
+     "hops-stack-s0, offs, 5": {
+      "model": "hops-stack-s0",
+      "family": "offs",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 199,
+       "wrong answer": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "4": 200
+      },
+      "the last byte": {
+       "2": 30,
+       "7": 24,
+       "4": 23,
+       "5": 21,
+       "1": 18,
+       "8": 18,
+       "3": 17,
+       "0": 17,
+       "6": 16,
+       "9": 16
+      },
+      "examples": [
+       {
+        "right": "vk3=oz8=js2=sm4=6",
+        "written": "vk3=oz8=js2=sm4=6"
+       },
+       {
+        "right": "nz4=ue6=no7=sf9=3",
+        "written": "nz4=ue6=no7=sf9=3"
+       },
+       {
+        "right": "tj5=dn9=hc7=ni4=4",
+        "written": "tj5=dn9=hc7=ni4=4"
+       },
+       {
+        "right": "qj9=bk4=vp2=hq0=4",
+        "written": "qj9=bk4=vp2=hq0=4"
+       }
+      ]
+     },
+     "hops-stack-s0, offs, 8": {
+      "model": "hops-stack-s0",
+      "family": "offs",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 167,
+       "wrong answer": 30,
+       "right answer, the chain otherwise": 3
+      },
+      "marks": {
+       "a name written twice": 5
+      },
+      "steps written right before the first wrong one": {
+       "3": 1,
+       "4": 4,
+       "5": 8,
+       "6": 13,
+       "7": 174
+      },
+      "the last byte": {
+       "0": 31,
+       "5": 26,
+       "8": 23,
+       "6": 19,
+       "2": 19,
+       "3": 19,
+       "4": 18,
+       "9": 17,
+       "7": 15,
+       "1": 13
+      },
+      "examples": [
+       {
+        "right": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5",
+        "written": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5"
+       },
+       {
+        "right": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0",
+        "written": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0"
+       },
+       {
+        "right": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8",
+        "written": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8"
+       },
+       {
+        "right": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8",
+        "written": "hs3=qv0=og8=uq1=7"
+       }
+      ]
+     },
+     "hops-stack-s0, offs, 12": {
+      "model": "hops-stack-s0",
+      "family": "offs",
+      "steps": 12,
+      "forms": {
+       "wrong answer": 71,
+       "the chain as the corpus writes it": 105,
+       "right answer, the chain otherwise": 6,
+       "ran to the end of the room (64 bytes) without a newline": 18
+      },
+      "marks": {
+       "a name written twice": 29
+      },
+      "steps written right before the first wrong one": {
+       "2": 3,
+       "3": 7,
+       "4": 9,
+       "5": 4,
+       "6": 12,
+       "7": 10,
+       "8": 16,
+       "9": 14,
+       "10": 16,
+       "11": 109
+      },
+      "the last byte": {
+       "2": 26,
+       "6": 24,
+       "5": 22,
+       "7": 22,
+       "9": 18,
+       "(no newline)": 18,
+       "8": 16,
+       "3": 15,
+       "0": 13,
+       "1": 13,
+       "4": 13
+      },
+      "examples": [
+       {
+        "right": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3",
+        "written": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=ri1=6"
+       },
+       {
+        "right": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3",
+        "written": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3"
+       },
+       {
+        "right": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0",
+        "written": "bd8=kb7=un0=lf6=ih2=rn1=zf7=uh3=mz3=ky7=bv6=5"
+       },
+       {
+        "right": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0",
+        "written": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0"
+       }
+      ]
+     },
+     "hops-stack-s1, hops, 5": {
+      "model": "hops-stack-s1",
+      "family": "hops",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 200
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "4": 200
+      },
+      "the last byte": {
+       "3": 23,
+       "5": 22,
+       "1": 22,
+       "7": 22,
+       "0": 21,
+       "6": 20,
+       "8": 20,
+       "4": 19,
+       "9": 17,
+       "2": 14
+      },
+      "examples": [
+       {
+        "right": "zr=od=kb=yn=5",
+        "written": "zr=od=kb=yn=5"
+       },
+       {
+        "right": "jr=er=ht=yo=0",
+        "written": "jr=er=ht=yo=0"
+       },
+       {
+        "right": "tu=vp=uh=ks=1",
+        "written": "tu=vp=uh=ks=1"
+       },
+       {
+        "right": "en=qd=kz=pz=4",
+        "written": "en=qd=kz=pz=4"
+       }
+      ]
+     },
+     "hops-stack-s1, hops, 8": {
+      "model": "hops-stack-s1",
+      "family": "hops",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 193,
+       "wrong answer": 4,
+       "ran to the end of the room (64 bytes) without a newline": 2,
+       "right answer, the chain otherwise": 1
+      },
+      "marks": {
+       "a name written twice": 4
+      },
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "3": 1,
+       "4": 1,
+       "5": 1,
+       "6": 2,
+       "7": 194
+      },
+      "the last byte": {
+       "5": 30,
+       "0": 26,
+       "9": 24,
+       "7": 21,
+       "2": 19,
+       "1": 18,
+       "3": 17,
+       "4": 16,
+       "6": 16,
+       "8": 11,
+       "(no newline)": 2
+      },
+      "examples": [
+       {
+        "right": "dj=bs=hp=ez=ou=op=iy=2",
+        "written": "dj=bs=hp=ez=ou=op=iy=2"
+       },
+       {
+        "right": "qk=lt=ov=ka=qr=bi=kn=5",
+        "written": "qk=lt=ov=ka=qr=bi=kn=5"
+       },
+       {
+        "right": "ry=of=pn=wf=so=do=ug=5",
+        "written": "ry=of=pn=wf=so=do=ug=5"
+       },
+       {
+        "right": "qf=yx=kx=kp=tw=ku=lm=2",
+        "written": "qf=yx=kx=kp=tw=ku=lm=2"
+       }
+      ]
+     },
+     "hops-stack-s1, hops, 12": {
+      "model": "hops-stack-s1",
+      "family": "hops",
+      "steps": 12,
+      "forms": {
+       "the chain as the corpus writes it": 159,
+       "wrong answer": 26,
+       "ran to the end of the room (64 bytes) without a newline": 11,
+       "right answer, the chain otherwise": 4
+      },
+      "marks": {
+       "a name written twice": 27,
+       "an empty step (==)": 1
+      },
+      "steps written right before the first wrong one": {
+       "3": 1,
+       "4": 3,
+       "7": 4,
+       "8": 4,
+       "9": 10,
+       "10": 11,
+       "11": 167
+      },
+      "the last byte": {
+       "2": 38,
+       "5": 26,
+       "3": 19,
+       "8": 18,
+       "4": 17,
+       "6": 17,
+       "9": 15,
+       "1": 15,
+       "0": 14,
+       "(no newline)": 11,
+       "7": 10
+      },
+      "examples": [
+       {
+        "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+        "written": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8"
+       },
+       {
+        "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+        "written": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3"
+       },
+       {
+        "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+        "written": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9"
+       },
+       {
+        "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+        "written": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7"
+       }
+      ]
+     },
+     "hops-stack-s1, offs, 5": {
+      "model": "hops-stack-s1",
+      "family": "offs",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 196,
+       "right answer, the chain otherwise": 1,
+       "ran to the end of the room (64 bytes) without a newline": 1,
+       "wrong answer": 2
+      },
+      "marks": {
+       "a name written twice": 2,
+       "an empty step (==)": 1
+      },
+      "steps written right before the first wrong one": {
+       "3": 2,
+       "4": 198
+      },
+      "the last byte": {
+       "2": 31,
+       "7": 24,
+       "4": 22,
+       "5": 22,
+       "8": 18,
+       "3": 17,
+       "1": 17,
+       "0": 17,
+       "6": 16,
+       "9": 15,
+       "(no newline)": 1
+      },
+      "examples": [
+       {
+        "right": "vk3=oz8=js2=sm4=6",
+        "written": "vk3=oz8=js2=sm4=6"
+       },
+       {
+        "right": "nz4=ue6=no7=sf9=3",
+        "written": "nz4=ue6=no7=sf9=3"
+       },
+       {
+        "right": "tj5=dn9=hc7=ni4=4",
+        "written": "tj5=dn9=hc7=ni4=4"
+       },
+       {
+        "right": "qj9=bk4=vp2=hq0=4",
+        "written": "qj9=bk4=vp2=hq0=4"
+       }
+      ]
+     },
+     "hops-stack-s1, offs, 8": {
+      "model": "hops-stack-s1",
+      "family": "offs",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 149,
+       "wrong answer": 45,
+       "right answer, the chain otherwise": 5,
+       "ran to the end of the room (64 bytes) without a newline": 1
+      },
+      "marks": {
+       "a name written twice": 12,
+       "an empty step (==)": 1
+      },
+      "steps written right before the first wrong one": {
+       "0": 1,
+       "1": 1,
+       "3": 3,
+       "4": 7,
+       "5": 14,
+       "6": 17,
+       "7": 157
+      },
+      "the last byte": {
+       "5": 28,
+       "0": 28,
+       "2": 25,
+       "8": 21,
+       "1": 18,
+       "3": 17,
+       "6": 16,
+       "4": 16,
+       "7": 15,
+       "9": 15,
+       "(no newline)": 1
+      },
+      "examples": [
+       {
+        "right": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5",
+        "written": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5"
+       },
+       {
+        "right": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0",
+        "written": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0"
+       },
+       {
+        "right": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8",
+        "written": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=gc7=gc6=gc5=gc0=gc4=ga=gk=6"
+       },
+       {
+        "right": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8",
+        "written": "hs3=qv0=og8=cs9=6"
+       }
+      ]
+     },
+     "hops-stack-s1, offs, 12": {
+      "model": "hops-stack-s1",
+      "family": "offs",
+      "steps": 12,
+      "forms": {
+       "wrong answer": 138,
+       "right answer, the chain otherwise": 16,
+       "the chain as the corpus writes it": 46
+      },
+      "marks": {
+       "a name written twice": 47
+      },
+      "steps written right before the first wrong one": {
+       "2": 5,
+       "3": 6,
+       "4": 15,
+       "5": 13,
+       "6": 18,
+       "7": 19,
+       "8": 25,
+       "9": 24,
+       "10": 20,
+       "11": 55
+      },
+      "the last byte": {
+       "2": 56,
+       "6": 25,
+       "1": 22,
+       "3": 19,
+       "4": 19,
+       "7": 18,
+       "8": 15,
+       "5": 10,
+       "9": 9,
+       "0": 7
+      },
+      "examples": [
+       {
+        "right": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3",
+        "written": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=ri1=6"
+       },
+       {
+        "right": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3",
+        "written": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=bg9=2"
+       },
+       {
+        "right": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0",
+        "written": "bd8=kb7=un0=lf6=aa2=bd0=kb9=un2=lf8=gaa=3"
+       },
+       {
+        "right": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0",
+        "written": "rm7=yn5=tf7=ig2=bb0=6"
+       }
+      ]
+     },
+     "hops-stack-s2, hops, 5": {
+      "model": "hops-stack-s2",
+      "family": "hops",
+      "steps": 5,
+      "forms": {
+       "wrong answer": 180,
+       "right answer, the chain otherwise": 19,
+       "the chain as the corpus writes it": 1
+      },
+      "marks": {
+       "a name written twice": 199,
+       "an empty step (==)": 8
+      },
+      "steps written right before the first wrong one": {
+       "3": 2,
+       "4": 198
+      },
+      "the last byte": {
+       "4": 197,
+       "2": 3
+      },
+      "examples": [
+       {
+        "right": "zr=od=kb=yn=5",
+        "written": "zr=od=kb=yn=tt=it=it=it=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       },
+       {
+        "right": "jr=er=ht=yo=0",
+        "written": "jr=er=ht=yo=tt=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       },
+       {
+        "right": "tu=vp=uh=ks=1",
+        "written": "tu=vp=uh=ks=td=tt=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       },
+       {
+        "right": "en=qd=kz=pz=4",
+        "written": "en=qd=kz=pz=tt=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       }
+      ]
+     },
+     "hops-stack-s2, hops, 8": {
+      "model": "hops-stack-s2",
+      "family": "hops",
+      "steps": 8,
+      "forms": {
+       "wrong answer": 186,
+       "right answer, the chain otherwise": 14
+      },
+      "marks": {
+       "a name written twice": 199,
+       "an empty step (==)": 10
+      },
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "3": 4,
+       "4": 186,
+       "5": 9
+      },
+      "the last byte": {
+       "4": 195,
+       "2": 4,
+       "8": 1
+      },
+      "examples": [
+       {
+        "right": "dj=bs=hp=ez=ou=op=iy=2",
+        "written": "dj=bs=hp=ez=tm=tt=tt=tt=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       },
+       {
+        "right": "qk=lt=ov=ka=qr=bi=kn=5",
+        "written": "qk=lt=ov=ka=tt=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       },
+       {
+        "right": "ry=of=pn=wf=so=do=ug=5",
+        "written": "ry=of=pn=wf=tt=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       },
+       {
+        "right": "qf=yx=kx=kp=tw=ku=lm=2",
+        "written": "qf=yx=kx=kp=tt=jr=tt=jr=tt=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       }
+      ]
+     },
+     "hops-stack-s2, hops, 12": {
+      "model": "hops-stack-s2",
+      "family": "hops",
+      "steps": 12,
+      "forms": {
+       "wrong answer": 182,
+       "right answer, the chain otherwise": 18
+      },
+      "marks": {
+       "a name written twice": 200,
+       "an empty step (==)": 8
+      },
+      "steps written right before the first wrong one": {
+       "3": 2,
+       "4": 187,
+       "5": 11
+      },
+      "the last byte": {
+       "4": 181,
+       "2": 19
+      },
+      "examples": [
+       {
+        "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+        "written": "ku=ta=ot=al=ta=tt=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       },
+       {
+        "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+        "written": "eb=xx=ib=ph=ct=it=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       },
+       {
+        "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+        "written": "ke=yp=wl=wb=tt=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       },
+       {
+        "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+        "written": "ui=ir=lr=ra=tt=tt=tt=ir=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=ii=4"
+       }
+      ]
+     },
+     "hops-stack-s2, offs, 5": {
+      "model": "hops-stack-s2",
+      "family": "offs",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 190,
+       "wrong answer": 9,
+       "right answer, the chain otherwise": 1
+      },
+      "marks": {
+       "a name written twice": 2
+      },
+      "steps written right before the first wrong one": {
+       "3": 4,
+       "4": 196
+      },
+      "the last byte": {
+       "2": 29,
+       "4": 24,
+       "7": 24,
+       "5": 23,
+       "8": 19,
+       "6": 17,
+       "1": 17,
+       "0": 17,
+       "3": 16,
+       "9": 14
+      },
+      "examples": [
+       {
+        "right": "vk3=oz8=js2=sm4=6",
+        "written": "vk3=oz8=js2=sm4=6"
+       },
+       {
+        "right": "nz4=ue6=no7=sf9=3",
+        "written": "nz4=ue6=no7=sf9=3"
+       },
+       {
+        "right": "tj5=dn9=hc7=ni4=4",
+        "written": "tj5=dn9=hc7=ni4=4"
+       },
+       {
+        "right": "qj9=bk4=vp2=hq0=4",
+        "written": "qj9=bk4=vp2=hq0=4"
+       }
+      ]
+     },
+     "hops-stack-s2, offs, 8": {
+      "model": "hops-stack-s2",
+      "family": "offs",
+      "steps": 8,
+      "forms": {
+       "wrong answer": 62,
+       "the chain as the corpus writes it": 125,
+       "right answer, the chain otherwise": 7,
+       "ran to the end of the room (64 bytes) without a newline": 6
+      },
+      "marks": {
+       "a name written twice": 24,
+       "an empty step (==)": 1
+      },
+      "steps written right before the first wrong one": {
+       "3": 9,
+       "4": 11,
+       "5": 20,
+       "6": 22,
+       "7": 138
+      },
+      "the last byte": {
+       "2": 30,
+       "5": 23,
+       "8": 22,
+       "0": 21,
+       "4": 19,
+       "3": 18,
+       "6": 17,
+       "9": 16,
+       "1": 14,
+       "7": 14,
+       "(no newline)": 6
+      },
+      "examples": [
+       {
+        "right": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5",
+        "written": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=ty9=jt6=ty5=jt2=1"
+       },
+       {
+        "right": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0",
+        "written": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0"
+       },
+       {
+        "right": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8",
+        "written": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8"
+       },
+       {
+        "right": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8",
+        "written": "hs3=qv0=og8=cs9=6"
+       }
+      ]
+     },
+     "hops-stack-s2, offs, 12": {
+      "model": "hops-stack-s2",
+      "family": "offs",
+      "steps": 12,
+      "forms": {
+       "right answer, the chain otherwise": 12,
+       "ran to the end of the room (64 bytes) without a newline": 22,
+       "wrong answer": 137,
+       "the chain as the corpus writes it": 29
+      },
+      "marks": {
+       "a name written twice": 90,
+       "an empty step (==)": 3
+      },
+      "steps written right before the first wrong one": {
+       "2": 2,
+       "3": 8,
+       "4": 15,
+       "5": 16,
+       "6": 25,
+       "7": 30,
+       "8": 30,
+       "9": 20,
+       "10": 16,
+       "11": 38
+      },
+      "the last byte": {
+       "4": 41,
+       "2": 36,
+       "6": 25,
+       "(no newline)": 22,
+       "7": 15,
+       "3": 14,
+       "0": 14,
+       "8": 13,
+       "9": 8,
+       "5": 6,
+       "1": 5,
+       "m": 1
+      },
+      "examples": [
+       {
+        "right": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3",
+        "written": "yp8=ab0=vz6=nh4=3"
+       },
+       {
+        "right": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3",
+        "written": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=ib9=it3=ib2=it5=ib2=ii4=ii8=ii2= ..."
+       },
+       {
+        "right": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0",
+        "written": "bd8=kb7=un0=lf6=uh2=mz2=ky6=bv5=mz7=ky3=bv8=tt=ii=ii=ii=ii=ii=ii ..."
+       },
+       {
+        "right": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0",
+        "written": "rm7=yn5=tf7=ig2=be0=tf2=cf4=ok2=re5=zc9=tf1=ig3=kt9=iig=ii=ii=ii ..."
+       }
+      ]
+     },
+     "offs-stack-s0, hops, 5": {
+      "model": "offs-stack-s0",
+      "family": "hops",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 199,
+       "wrong answer": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "4": 199
+      },
+      "the last byte": {
+       "3": 23,
+       "5": 22,
+       "1": 22,
+       "7": 22,
+       "0": 21,
+       "8": 21,
+       "6": 20,
+       "4": 19,
+       "9": 16,
+       "2": 14
+      },
+      "examples": [
+       {
+        "right": "zr=od=kb=yn=5",
+        "written": "zr=od=kb=yn=5"
+       },
+       {
+        "right": "jr=er=ht=yo=0",
+        "written": "jr=er=ht=yo=0"
+       },
+       {
+        "right": "tu=vp=uh=ks=1",
+        "written": "tu=vp=uh=ks=1"
+       },
+       {
+        "right": "en=qd=kz=pz=4",
+        "written": "en=qd=kz=pz=4"
+       }
+      ]
+     },
+     "offs-stack-s0, hops, 8": {
+      "model": "offs-stack-s0",
+      "family": "hops",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 197,
+       "wrong answer": 1,
+       "right answer, the chain otherwise": 2
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "2": 1,
+       "4": 1,
+       "7": 197
+      },
+      "the last byte": {
+       "5": 29,
+       "0": 25,
+       "9": 23,
+       "7": 22,
+       "2": 20,
+       "1": 19,
+       "3": 17,
+       "4": 16,
+       "6": 16,
+       "8": 13
+      },
+      "examples": [
+       {
+        "right": "dj=bs=hp=ez=ou=op=iy=2",
+        "written": "dj=bs=hp=ez=ou=op=iy=2"
+       },
+       {
+        "right": "qk=lt=ov=ka=qr=bi=kn=5",
+        "written": "qk=lt=ov=ka=qr=bi=kn=5"
+       },
+       {
+        "right": "ry=of=pn=wf=so=do=ug=5",
+        "written": "ry=of=pn=wf=so=do=ug=5"
+       },
+       {
+        "right": "qf=yx=kx=kp=tw=ku=lm=2",
+        "written": "qf=yx=kx=kp=tw=ku=lm=2"
+       }
+      ]
+     },
+     "offs-stack-s0, hops, 12": {
+      "model": "offs-stack-s0",
+      "family": "hops",
+      "steps": 12,
+      "forms": {
+       "the chain as the corpus writes it": 199,
+       "wrong answer": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "5": 1,
+       "11": 199
+      },
+      "the last byte": {
+       "5": 28,
+       "2": 27,
+       "3": 22,
+       "9": 20,
+       "8": 19,
+       "4": 19,
+       "1": 19,
+       "6": 18,
+       "0": 16,
+       "7": 12
+      },
+      "examples": [
+       {
+        "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+        "written": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8"
+       },
+       {
+        "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+        "written": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3"
+       },
+       {
+        "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+        "written": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9"
+       },
+       {
+        "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+        "written": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7"
+       }
+      ]
+     },
+     "offs-stack-s0, offs, 5": {
+      "model": "offs-stack-s0",
+      "family": "offs",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 199,
+       "wrong answer": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "3": 1,
+       "4": 199
+      },
+      "the last byte": {
+       "2": 29,
+       "7": 24,
+       "4": 23,
+       "5": 21,
+       "3": 18,
+       "0": 18,
+       "8": 18,
+       "1": 17,
+       "6": 16,
+       "9": 16
+      },
+      "examples": [
+       {
+        "right": "vk3=oz8=js2=sm4=6",
+        "written": "vk3=oz8=js2=sm4=6"
+       },
+       {
+        "right": "nz4=ue6=no7=sf9=3",
+        "written": "nz4=ue6=no7=sf9=3"
+       },
+       {
+        "right": "tj5=dn9=hc7=ni4=4",
+        "written": "tj5=dn9=hc7=ni4=4"
+       },
+       {
+        "right": "qj9=bk4=vp2=hq0=4",
+        "written": "qj9=bk4=vp2=hq0=4"
+       }
+      ]
+     },
+     "offs-stack-s0, offs, 8": {
+      "model": "offs-stack-s0",
+      "family": "offs",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 197,
+       "wrong answer": 2,
+       "right answer, the chain otherwise": 1
+      },
+      "marks": {
+       "a name written twice": 1
+      },
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "4": 1,
+       "5": 1,
+       "7": 197
+      },
+      "the last byte": {
+       "5": 27,
+       "0": 27,
+       "8": 23,
+       "2": 21,
+       "9": 19,
+       "6": 18,
+       "3": 18,
+       "4": 17,
+       "1": 16,
+       "7": 14
+      },
+      "examples": [
+       {
+        "right": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5",
+        "written": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5"
+       },
+       {
+        "right": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0",
+        "written": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0"
+       },
+       {
+        "right": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8",
+        "written": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8"
+       },
+       {
+        "right": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8",
+        "written": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8"
+       }
+      ]
+     },
+     "offs-stack-s0, offs, 12": {
+      "model": "offs-stack-s0",
+      "family": "offs",
+      "steps": 12,
+      "forms": {
+       "the chain as the corpus writes it": 197,
+       "wrong answer": 3
+      },
+      "marks": {
+       "a name written twice": 1
+      },
+      "steps written right before the first wrong one": {
+       "2": 1,
+       "3": 1,
+       "10": 1,
+       "11": 197
+      },
+      "the last byte": {
+       "2": 26,
+       "7": 26,
+       "6": 22,
+       "5": 21,
+       "3": 20,
+       "0": 18,
+       "4": 18,
+       "8": 18,
+       "9": 16,
+       "1": 15
+      },
+      "examples": [
+       {
+        "right": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3",
+        "written": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3"
+       },
+       {
+        "right": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3",
+        "written": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3"
+       },
+       {
+        "right": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0",
+        "written": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0"
+       },
+       {
+        "right": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0",
+        "written": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0"
+       }
+      ]
+     },
+     "offs-stack-s1, hops, 5": {
+      "model": "offs-stack-s1",
+      "family": "hops",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 171,
+       "wrong answer": 23,
+       "ran to the end of the room (64 bytes) without a newline": 2,
+       "right answer, the chain otherwise": 4
+      },
+      "marks": {
+       "an empty step (==)": 29
+      },
+      "steps written right before the first wrong one": {
+       "3": 2,
+       "4": 198
+      },
+      "the last byte": {
+       "5": 45,
+       "0": 19,
+       "8": 19,
+       "3": 19,
+       "7": 19,
+       "1": 17,
+       "6": 17,
+       "4": 16,
+       "9": 14,
+       "2": 13,
+       "(no newline)": 2
+      },
+      "examples": [
+       {
+        "right": "zr=od=kb=yn=5",
+        "written": "zr=od=kb=yn=5"
+       },
+       {
+        "right": "jr=er=ht=yo=0",
+        "written": "jr=er=ht=yo=0"
+       },
+       {
+        "right": "tu=vp=uh=ks=1",
+        "written": "tu=vp=uh=ks=1"
+       },
+       {
+        "right": "en=qd=kz=pz=4",
+        "written": "en=qd=kz=pz=4"
+       }
+      ]
+     },
+     "offs-stack-s1, hops, 8": {
+      "model": "offs-stack-s1",
+      "family": "hops",
+      "steps": 8,
+      "forms": {
+       "wrong answer": 99,
+       "right answer, the chain otherwise": 13,
+       "ran to the end of the room (64 bytes) without a newline": 62,
+       "the chain as the corpus writes it": 26
+      },
+      "marks": {
+       "an empty step (==)": 173,
+       "a name written twice": 4
+      },
+      "steps written right before the first wrong one": {
+       "1": 2,
+       "4": 39,
+       "5": 74,
+       "6": 29,
+       "7": 56
+      },
+      "the last byte": {
+       "5": 116,
+       "(no newline)": 62,
+       "1": 4,
+       "3": 3,
+       "0": 3,
+       "9": 3,
+       "2": 2,
+       "7": 2,
+       "6": 2,
+       "8": 2,
+       "=": 1
+      },
+      "examples": [
+       {
+        "right": "dj=bs=hp=ez=ou=op=iy=2",
+        "written": "dj=bs=hp=ez=ou===========================================5=5"
+       },
+       {
+        "right": "qk=lt=ov=ka=qr=bi=kn=5",
+        "written": "qk=lt=ov=ka=qr=============================================5=5"
+       },
+       {
+        "right": "ry=of=pn=wf=so=do=ug=5",
+        "written": "ry=of=pn=wf=so=do==d===========================================5 ..."
+       },
+       {
+        "right": "qf=yx=kx=kp=tw=ku=lm=2",
+        "written": "qf=yx=kx=kp=tw=ku=lm=2"
+       }
+      ]
+     },
+     "offs-stack-s1, hops, 12": {
+      "model": "offs-stack-s1",
+      "family": "hops",
+      "steps": 12,
+      "forms": {
+       "wrong answer": 124,
+       "ran to the end of the room (64 bytes) without a newline": 57,
+       "right answer, the chain otherwise": 19
+      },
+      "marks": {
+       "an empty step (==)": 199,
+       "a name written twice": 1
+      },
+      "steps written right before the first wrong one": {
+       "3": 1,
+       "4": 44,
+       "5": 73,
+       "6": 34,
+       "7": 40,
+       "8": 8
+      },
+      "the last byte": {
+       "5": 142,
+       "(no newline)": 57,
+       "7": 1
+      },
+      "examples": [
+       {
+        "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+        "written": "ku=ta=ot=al=pa=fq==========================================5=5"
+       },
+       {
+        "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+        "written": "eb=xx=ib=ph=bs=qv=it========================================5=5"
+       },
+       {
+        "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+        "written": "ke=yp=wl=wb==p============================================5=5"
+       },
+       {
+        "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+        "written": "ui=ir=lr=ra=hy=la=oe=ah==l====================================== ..."
+       }
+      ]
+     },
+     "offs-stack-s1, offs, 5": {
+      "model": "offs-stack-s1",
+      "family": "offs",
+      "steps": 5,
+      "forms": {
+       "ran to the end of the room (64 bytes) without a newline": 155,
+       "wrong answer": 16,
+       "the chain as the corpus writes it": 28,
+       "right answer, the chain otherwise": 1
+      },
+      "marks": {
+       "an empty step (==)": 169,
+       "a name written twice": 1
+      },
+      "steps written right before the first wrong one": {
+       "3": 166,
+       "4": 34
+      },
+      "the last byte": {
+       "(no newline)": 155,
+       "5": 15,
+       "4": 6,
+       "7": 6,
+       "6": 4,
+       "2": 4,
+       "1": 3,
+       "0": 3,
+       "8": 2,
+       "3": 2
+      },
+      "examples": [
+       {
+        "right": "vk3=oz8=js2=sm4=6",
+        "written": "vk3=oz8=js2=sm==l==============================================5 ..."
+       },
+       {
+        "right": "nz4=ue6=no7=sf9=3",
+        "written": "nz4=ue6=no7=sf=4"
+       },
+       {
+        "right": "tj5=dn9=hc7=ni4=4",
+        "written": "tj5=dn9=hc7=ni================================================== ..."
+       },
+       {
+        "right": "qj9=bk4=vp2=hq0=4",
+        "written": "qj9=bk4=vp2=hq================================================5= ..."
+       }
+      ]
+     },
+     "offs-stack-s1, offs, 8": {
+      "model": "offs-stack-s1",
+      "family": "offs",
+      "steps": 8,
+      "forms": {
+       "ran to the end of the room (64 bytes) without a newline": 180,
+       "wrong answer": 17,
+       "right answer, the chain otherwise": 3
+      },
+      "marks": {
+       "an empty step (==)": 196
+      },
+      "steps written right before the first wrong one": {
+       "2": 1,
+       "3": 174,
+       "4": 22,
+       "5": 2,
+       "6": 1
+      },
+      "the last byte": {
+       "(no newline)": 180,
+       "5": 17,
+       "2": 1,
+       "9": 1,
+       "4": 1
+      },
+      "examples": [
+       {
+        "right": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5",
+        "written": "pu9=ig5=ty6=jt7=fk============================================== ..."
+       },
+       {
+        "right": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0",
+        "written": "ov1=ka7=qr3=2"
+       },
+       {
+        "right": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8",
+        "written": "zn1=rv9=ww5=eh=================================================5 ..."
+       },
+       {
+        "right": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8",
+        "written": "hs3=qv0=og8=uu=============================================5=5"
+       }
+      ]
+     },
+     "offs-stack-s1, offs, 12": {
+      "model": "offs-stack-s1",
+      "family": "offs",
+      "steps": 12,
+      "forms": {
+       "wrong answer": 53,
+       "ran to the end of the room (64 bytes) without a newline": 141,
+       "right answer, the chain otherwise": 6
+      },
+      "marks": {
+       "an empty step (==)": 199
+      },
+      "steps written right before the first wrong one": {
+       "2": 3,
+       "3": 166,
+       "4": 30,
+       "5": 1
+      },
+      "the last byte": {
+       "(no newline)": 141,
+       "5": 59
+      },
+      "examples": [
+       {
+        "right": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3",
+        "written": "yp8=ab0=vz6==l=============================================5=5"
+       },
+       {
+        "right": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3",
+        "written": "ir5=vr3=eb0=xx===============================================5=5 ..."
+       },
+       {
+        "right": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0",
+        "written": "bd8=kb7=un0=lf=============================================5=5"
+       },
+       {
+        "right": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0",
+        "written": "rm7=yn5=tf7=ig2================================================= ..."
+       }
+      ]
+     },
+     "offs-stack-s2, hops, 5": {
+      "model": "offs-stack-s2",
+      "family": "hops",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 200
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "4": 200
+      },
+      "the last byte": {
+       "3": 23,
+       "5": 22,
+       "1": 22,
+       "7": 22,
+       "0": 21,
+       "6": 20,
+       "8": 20,
+       "4": 19,
+       "9": 17,
+       "2": 14
+      },
+      "examples": [
+       {
+        "right": "zr=od=kb=yn=5",
+        "written": "zr=od=kb=yn=5"
+       },
+       {
+        "right": "jr=er=ht=yo=0",
+        "written": "jr=er=ht=yo=0"
+       },
+       {
+        "right": "tu=vp=uh=ks=1",
+        "written": "tu=vp=uh=ks=1"
+       },
+       {
+        "right": "en=qd=kz=pz=4",
+        "written": "en=qd=kz=pz=4"
+       }
+      ]
+     },
+     "offs-stack-s2, hops, 8": {
+      "model": "offs-stack-s2",
+      "family": "hops",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 199,
+       "right answer, the chain otherwise": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "1": 1,
+       "7": 199
+      },
+      "the last byte": {
+       "5": 29,
+       "0": 25,
+       "9": 24,
+       "7": 22,
+       "2": 20,
+       "1": 19,
+       "3": 17,
+       "4": 16,
+       "6": 16,
+       "8": 12
+      },
+      "examples": [
+       {
+        "right": "dj=bs=hp=ez=ou=op=iy=2",
+        "written": "dj=bs=hp=ez=ou=op=iy=2"
+       },
+       {
+        "right": "qk=lt=ov=ka=qr=bi=kn=5",
+        "written": "qk=lt=ov=ka=qr=bi=kn=5"
+       },
+       {
+        "right": "ry=of=pn=wf=so=do=ug=5",
+        "written": "ry=of=pn=wf=so=do=ug=5"
+       },
+       {
+        "right": "qf=yx=kx=kp=tw=ku=lm=2",
+        "written": "qf=yx=kx=kp=tw=ku=lm=2"
+       }
+      ]
+     },
+     "offs-stack-s2, hops, 12": {
+      "model": "offs-stack-s2",
+      "family": "hops",
+      "steps": 12,
+      "forms": {
+       "the chain as the corpus writes it": 198,
+       "right answer, the chain otherwise": 1,
+       "wrong answer": 1
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "0": 1,
+       "5": 1,
+       "11": 198
+      },
+      "the last byte": {
+       "5": 28,
+       "2": 27,
+       "3": 22,
+       "9": 20,
+       "8": 19,
+       "4": 19,
+       "1": 19,
+       "6": 18,
+       "0": 16,
+       "7": 12
+      },
+      "examples": [
+       {
+        "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+        "written": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8"
+       },
+       {
+        "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+        "written": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3"
+       },
+       {
+        "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+        "written": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9"
+       },
+       {
+        "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+        "written": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7"
+       }
+      ]
+     },
+     "offs-stack-s2, offs, 5": {
+      "model": "offs-stack-s2",
+      "family": "offs",
+      "steps": 5,
+      "forms": {
+       "the chain as the corpus writes it": 200
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "4": 200
+      },
+      "the last byte": {
+       "2": 30,
+       "7": 24,
+       "4": 23,
+       "5": 21,
+       "0": 18,
+       "8": 18,
+       "3": 17,
+       "1": 17,
+       "6": 16,
+       "9": 16
+      },
+      "examples": [
+       {
+        "right": "vk3=oz8=js2=sm4=6",
+        "written": "vk3=oz8=js2=sm4=6"
+       },
+       {
+        "right": "nz4=ue6=no7=sf9=3",
+        "written": "nz4=ue6=no7=sf9=3"
+       },
+       {
+        "right": "tj5=dn9=hc7=ni4=4",
+        "written": "tj5=dn9=hc7=ni4=4"
+       },
+       {
+        "right": "qj9=bk4=vp2=hq0=4",
+        "written": "qj9=bk4=vp2=hq0=4"
+       }
+      ]
+     },
+     "offs-stack-s2, offs, 8": {
+      "model": "offs-stack-s2",
+      "family": "offs",
+      "steps": 8,
+      "forms": {
+       "the chain as the corpus writes it": 196,
+       "wrong answer": 4
+      },
+      "marks": {},
+      "steps written right before the first wrong one": {
+       "0": 1,
+       "4": 1,
+       "5": 1,
+       "6": 1,
+       "7": 196
+      },
+      "the last byte": {
+       "5": 28,
+       "0": 27,
+       "8": 22,
+       "2": 20,
+       "9": 19,
+       "1": 18,
+       "3": 18,
+       "6": 17,
+       "4": 16,
+       "7": 15
+      },
+      "examples": [
+       {
+        "right": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5",
+        "written": "pu9=ig5=ty6=jt7=fk1=dj2=bs8=5"
+       },
+       {
+        "right": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0",
+        "written": "ov1=ka7=qr3=bi0=kn9=ir5=nn7=0"
+       },
+       {
+        "right": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8",
+        "written": "zn1=rv9=ww5=eh0=eu0=pa9=gc8=8"
+       },
+       {
+        "right": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8",
+        "written": "hs3=qv0=og8=xb1=xv4=oa9=uq2=8"
+       }
+      ]
+     },
+     "offs-stack-s2, offs, 12": {
+      "model": "offs-stack-s2",
+      "family": "offs",
+      "steps": 12,
+      "forms": {
+       "the chain as the corpus writes it": 197,
+       "wrong answer": 3
+      },
+      "marks": {
+       "a name written twice": 1
+      },
+      "steps written right before the first wrong one": {
+       "3": 1,
+       "8": 1,
+       "10": 1,
+       "11": 197
+      },
+      "the last byte": {
+       "2": 27,
+       "7": 25,
+       "6": 22,
+       "3": 21,
+       "5": 21,
+       "0": 18,
+       "8": 18,
+       "4": 17,
+       "9": 16,
+       "1": 15
+      },
+      "examples": [
+       {
+        "right": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3",
+        "written": "yp8=ab0=vz6=iz7=xr4=sd0=zi1=ku4=ta2=ot2=al2=3"
+       },
+       {
+        "right": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3",
+        "written": "ir5=vr3=eb0=xx2=ib5=ph2=bs9=qv6=it0=ba5=ul8=3"
+       },
+       {
+        "right": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0",
+        "written": "bd8=kb7=un0=lf6=il7=rn6=zf2=uh8=mz8=ky2=bv1=0"
+       },
+       {
+        "right": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0",
+        "written": "rm7=yn5=tf7=ig2=be0=gy2=ok0=re3=zc7=zz3=hc6=0"
+       }
+      ]
+     }
+    }
+   },
+   "the runs that hold": "In the families they practise, the five runs that hold write 0.780 to 0.985 of their 12-step chains whole where they practised hops and 0.940 to 0.945 where they practised offs; all-stack-s0 writes 0.980 and 0.895 of its 16-step hop and offs chains whole, against the base's 0.040 and 0.010."
+  },
+  "what follows": "Neither consequence the registration names applies as written: practising the families together fails in two of three seeds, and each single arm fails in one seed as well, so the families' practice is not yet a choice between together and in turns. (4) finds carry-over in both directions, which the registration answers with a registration on how few families need practice of their own; that waits too. The loop with rehearsal held every run of practice_cap_raised.json (one family, from chain-stack) and lets four of nine fall here (two families, from four-stack). What the four share is a break just past the longest chain that the rehearsed corpus writes, and a loss that never lowers an attempt that fills the room. The next registration takes that on, with more seeds than three, before the families' order or number is asked again: first whether a weak dip (an attempt below its task's mean made less likely at a fraction of GRPO's weight) keeps every run standing."
+ },
+ "result_tf": {
+  "recorded_utc": "2026-11-27T20:48:47Z",
+  "runs": "The Transformer's arm of amendment_1: hops-tf-s0, -s1 and -s2 from four-tf-chain, practising hops with rehearsal of hops, 2,000 rounds each, three side by side under MPS on the server's GPU 1 with code copy v18q (d0f53e2) and no speed switch, from 20:16:49 UTC on 2026-11-27, after every stack run had ended, to their evaluations after practice at 20:35 (s0) and 20:42 UTC (s1, s2); none was stopped.",
+  "evaluator check": "four-tf-chain evaluated on the server's GPU before the runs (base-four-tf-chain) repeats the screen's evaluation of its hop family (four_families_transformer_again.json) in every cell.",
+  "marks (the record's own: kept, held, reach, reach kept)": {
+   "hops-tf-s0": {
+    "kept": true,
+    "mean accuracy over 1 to 4 steps": 1.0,
+    "held": true,
+    "reach": false,
+    "reach kept": false
+   },
+   "hops-tf-s1": {
+    "kept": true,
+    "mean accuracy over 1 to 4 steps": 1.0,
+    "held": true,
+    "reach": true,
+    "reach kept": true
+   },
+   "hops-tf-s2": {
+    "kept": true,
+    "mean accuracy over 1 to 4 steps": 1.0,
+    "held": true,
+    "reach": true,
+    "reach kept": true
+   }
+  },
+  "holds, by seed": [
+   false,
+   true,
+   true
+  ],
+  "after practice (steps: accuracy, whole chain, mean bytes; 200 tasks a cell)": {
+   "hops-tf-s0": {
+    "1": [
+     1.0,
+     1.0,
+     2.0
+    ],
+    "2": [
+     1.0,
+     1.0,
+     5.0
+    ],
+    "3": [
+     1.0,
+     1.0,
+     8.0
+    ],
+    "4": [
+     1.0,
+     1.0,
+     11.0
+    ],
+    "5": [
+     0.18,
+     0.0,
+     11.0
+    ],
+    "6": [
+     0.215,
+     0.0,
+     11.0
+    ],
+    "8": [
+     0.21,
+     0.0,
+     11.0
+    ],
+    "12": [
+     0.195,
+     0.0,
+     11.0
+    ],
+    "16": [
+     0.225,
+     0.0,
+     11.0
+    ]
+   },
+   "hops-tf-s1": {
+    "1": [
+     1.0,
+     1.0,
+     2.0
+    ],
+    "2": [
+     1.0,
+     1.0,
+     5.0
+    ],
+    "3": [
+     1.0,
+     1.0,
+     8.0
+    ],
+    "4": [
+     1.0,
+     1.0,
+     11.0
+    ],
+    "5": [
+     1.0,
+     1.0,
+     14.0
+    ],
+    "6": [
+     1.0,
+     1.0,
+     17.0
+    ],
+    "8": [
+     1.0,
+     1.0,
+     23.0
+    ],
+    "12": [
+     1.0,
+     1.0,
+     35.0
+    ],
+    "16": [
+     0.99,
+     0.99,
+     46.85
+    ]
+   },
+   "hops-tf-s2": {
+    "1": [
+     1.0,
+     1.0,
+     2.0
+    ],
+    "2": [
+     1.0,
+     1.0,
+     5.0
+    ],
+    "3": [
+     1.0,
+     1.0,
+     8.0
+    ],
+    "4": [
+     1.0,
+     1.0,
+     11.0
+    ],
+    "5": [
+     1.0,
+     1.0,
+     14.0
+    ],
+    "6": [
+     1.0,
+     1.0,
+     17.0
+    ],
+    "8": [
+     1.0,
+     1.0,
+     23.0
+    ],
+    "12": [
+     1.0,
+     1.0,
+     35.0
+    ],
+    "16": [
+     0.995,
+     0.995,
+     47.05
+    ]
+   }
+  },
+  "staircases": {
+   "hops-tf-s0": {
+    "longest": 8,
+    "first round at its longest": 380,
+    "share of rounds at its longest": 0.0005,
+    "rounds below its longest after reaching it": 1620
+   },
+   "hops-tf-s1": {
+    "longest": 12,
+    "first round at its longest": 471,
+    "share of rounds at its longest": 0.765,
+    "rounds below its longest after reaching it": 0
+   },
+   "hops-tf-s2": {
+    "longest": 12,
+    "first round at its longest": 766,
+    "share of rounds at its longest": 0.6175,
+    "rounds below its longest after reaching it": 0
+   }
+  },
+  "along the way (accuracy, whole chain)": {
+   "hops-tf-s0": {
+    "100": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.09,
+      0.0
+     ],
+     "12": [
+      0.115,
+      0.0
+     ]
+    },
+    "200": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.105,
+      0.0
+     ],
+     "12": [
+      0.15,
+      0.0
+     ]
+    },
+    "300": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.195,
+      0.0
+     ],
+     "12": [
+      0.165,
+      0.0
+     ]
+    },
+    "400": {
+     "2": [
+      0.995,
+      0.995
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.13,
+      0.0
+     ],
+     "12": [
+      0.16,
+      0.0
+     ]
+    },
+    "500": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.115,
+      0.0
+     ],
+     "12": [
+      0.13,
+      0.0
+     ]
+    },
+    "600": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.11,
+      0.0
+     ],
+     "12": [
+      0.13,
+      0.0
+     ]
+    },
+    "700": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.085,
+      0.0
+     ],
+     "12": [
+      0.125,
+      0.0
+     ]
+    },
+    "800": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.11,
+      0.0
+     ],
+     "12": [
+      0.09,
+      0.0
+     ]
+    },
+    "900": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.07,
+      0.0
+     ],
+     "12": [
+      0.105,
+      0.0
+     ]
+    },
+    "1000": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.135,
+      0.0
+     ],
+     "12": [
+      0.12,
+      0.0
+     ]
+    },
+    "1100": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.1,
+      0.0
+     ],
+     "12": [
+      0.08,
+      0.0
+     ]
+    },
+    "1200": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.145,
+      0.0
+     ],
+     "12": [
+      0.145,
+      0.0
+     ]
+    },
+    "1300": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.09,
+      0.0
+     ],
+     "12": [
+      0.105,
+      0.0
+     ]
+    },
+    "1400": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.12,
+      0.0
+     ],
+     "12": [
+      0.1,
+      0.0
+     ]
+    },
+    "1500": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.09,
+      0.0
+     ],
+     "12": [
+      0.15,
+      0.0
+     ]
+    },
+    "1600": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.15,
+      0.0
+     ],
+     "12": [
+      0.115,
+      0.0
+     ]
+    },
+    "1700": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.985,
+      0.985
+     ],
+     "8": [
+      0.23,
+      0.0
+     ],
+     "12": [
+      0.265,
+      0.0
+     ]
+    },
+    "1800": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.24,
+      0.0
+     ],
+     "12": [
+      0.235,
+      0.0
+     ]
+    },
+    "1900": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.205,
+      0.0
+     ],
+     "12": [
+      0.255,
+      0.0
+     ]
+    },
+    "2000": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.21,
+      0.0
+     ],
+     "12": [
+      0.195,
+      0.0
+     ]
+    }
+   },
+   "hops-tf-s1": {
+    "100": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.115,
+      0.0
+     ],
+     "12": [
+      0.085,
+      0.0
+     ]
+    },
+    "200": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.99,
+      0.99
+     ],
+     "8": [
+      0.11,
+      0.0
+     ],
+     "12": [
+      0.195,
+      0.0
+     ]
+    },
+    "300": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.135,
+      0.0
+     ],
+     "12": [
+      0.135,
+      0.0
+     ]
+    },
+    "400": {
+     "2": [
+      0.995,
+      0.995
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.81,
+      0.785
+     ],
+     "12": [
+      0.12,
+      0.05
+     ]
+    },
+    "500": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.995,
+      0.99
+     ],
+     "12": [
+      0.97,
+      0.965
+     ]
+    },
+    "600": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      0.995
+     ],
+     "12": [
+      0.995,
+      0.99
+     ]
+    },
+    "700": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      0.995
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "800": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      0.995
+     ],
+     "12": [
+      1.0,
+      0.99
+     ]
+    },
+    "900": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      0.995
+     ]
+    },
+    "1000": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1100": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      0.995,
+      0.995
+     ]
+    },
+    "1200": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1300": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1400": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1500": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1600": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1700": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1800": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1900": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "2000": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    }
+   },
+   "hops-tf-s2": {
+    "100": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.055,
+      0.0
+     ],
+     "12": [
+      0.025,
+      0.0
+     ]
+    },
+    "200": {
+     "2": [
+      0.995,
+      0.995
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.105,
+      0.0
+     ],
+     "12": [
+      0.155,
+      0.0
+     ]
+    },
+    "300": {
+     "2": [
+      0.99,
+      0.99
+     ],
+     "4": [
+      0.985,
+      0.98
+     ],
+     "8": [
+      0.115,
+      0.0
+     ],
+     "12": [
+      0.1,
+      0.0
+     ]
+    },
+    "400": {
+     "2": [
+      0.995,
+      0.995
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.105,
+      0.0
+     ],
+     "12": [
+      0.135,
+      0.0
+     ]
+    },
+    "500": {
+     "2": [
+      0.995,
+      0.995
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.08,
+      0.0
+     ],
+     "12": [
+      0.08,
+      0.0
+     ]
+    },
+    "600": {
+     "2": [
+      0.995,
+      0.995
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.065,
+      0.0
+     ],
+     "12": [
+      0.05,
+      0.0
+     ]
+    },
+    "700": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.085,
+      0.0
+     ],
+     "12": [
+      0.115,
+      0.0
+     ]
+    },
+    "800": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.995,
+      0.995
+     ],
+     "12": [
+      0.985,
+      0.975
+     ]
+    },
+    "900": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.995,
+      0.995
+     ],
+     "12": [
+      1.0,
+      0.995
+     ]
+    },
+    "1000": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      0.995,
+      0.995
+     ]
+    },
+    "1100": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1200": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1300": {
+     "2": [
+      0.995,
+      0.995
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1400": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1500": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1600": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      1.0
+     ]
+    },
+    "1700": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      0.995,
+      0.995
+     ],
+     "8": [
+      0.995,
+      0.995
+     ],
+     "12": [
+      0.995,
+      0.99
+     ]
+    },
+    "1800": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      0.995,
+      0.995
+     ],
+     "12": [
+      0.99,
+      0.985
+     ]
+    },
+    "1900": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      0.99,
+      0.99
+     ]
+    },
+    "2000": {
+     "2": [
+      1.0,
+      1.0
+     ],
+     "4": [
+      1.0,
+      1.0
+     ],
+     "8": [
+      1.0,
+      1.0
+     ],
+     "12": [
+      1.0,
+      0.995
+     ]
+    }
+   }
+  },
+  "how hops-tf-s0 writes (forms_families.py on the server's CPU, the evaluation's tasks)": {
+   "5 steps": {
+    "forms": {
+     "right answer, the chain otherwise": 36,
+     "wrong answer": 164
+    },
+    "steps written right before the first wrong one": {
+     "3": 200
+    },
+    "the last byte": {
+     "2": 70,
+     "5": 42,
+     "8": 25,
+     "3": 18,
+     "9": 14,
+     "4": 12,
+     "6": 7,
+     "1": 6,
+     "7": 6
+    },
+    "examples": [
+     {
+      "right": "zr=od=kb=yn=5",
+      "written": "zr=od=kb=5"
+     },
+     {
+      "right": "jr=er=ht=yo=0",
+      "written": "jr=er=ht=5"
+     },
+     {
+      "right": "tu=vp=uh=ks=1",
+      "written": "tu=vp=uh=2"
+     },
+     {
+      "right": "en=qd=kz=pz=4",
+      "written": "en=qd=kz=2"
+     }
+    ]
+   },
+   "8 steps": {
+    "forms": {
+     "right answer, the chain otherwise": 45,
+     "wrong answer": 155
+    },
+    "steps written right before the first wrong one": {
+     "3": 200
+    },
+    "the last byte": {
+     "2": 77,
+     "5": 37,
+     "8": 24,
+     "4": 18,
+     "6": 11,
+     "3": 8,
+     "0": 8,
+     "1": 7,
+     "7": 6,
+     "9": 4
+    },
+    "examples": [
+     {
+      "right": "dj=bs=hp=ez=ou=op=iy=2",
+      "written": "dj=bs=hp=2"
+     },
+     {
+      "right": "qk=lt=ov=ka=qr=bi=kn=5",
+      "written": "qk=lt=ov=5"
+     },
+     {
+      "right": "ry=of=pn=wf=so=do=ug=5",
+      "written": "ry=of=pn=8"
+     },
+     {
+      "right": "qf=yx=kx=kp=tw=ku=lm=2",
+      "written": "qf=yx=kx=5"
+     }
+    ]
+   },
+   "12 steps": {
+    "forms": {
+     "wrong answer": 159,
+     "right answer, the chain otherwise": 41
+    },
+    "steps written right before the first wrong one": {
+     "2": 1,
+     "3": 199
+    },
+    "the last byte": {
+     "2": 89,
+     "5": 37,
+     "4": 23,
+     "8": 21,
+     "3": 9,
+     "6": 6,
+     "1": 6,
+     "9": 5,
+     "0": 2,
+     "7": 2
+    },
+    "examples": [
+     {
+      "right": "ku=ta=ot=al=pa=fq=nu=uv=zx=kp=sr=8",
+      "written": "ku=ta=ot=2"
+     },
+     {
+      "right": "eb=xx=ib=ph=bs=qv=it=ba=ul=bh=qy=3",
+      "written": "eb=xx=ib=2"
+     },
+     {
+      "right": "ke=yp=wl=wb=ci=sp=rd=hx=jn=fl=qo=9",
+      "written": "ke=yp=wl=5"
+     },
+     {
+      "right": "ui=ir=lr=ra=hy=la=ol=oe=ah=iv=dv=7",
+      "written": "ui=ir=lr=6"
+     }
+    ]
+   }
+  },
+  "reading (5) by the registered rule": {
+   "hops: the Transformer's hops against the stack's hops": {
+    "whole chains at 12 steps, stack and Transformer by seed": [
+     [
+      0.935,
+      0.78,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      1.0
+     ]
+    ],
+    "seeds with the stack ahead": 1,
+    "seeds with the Transformer ahead": 2,
+    "stands": "neither"
+   },
+   "hops: the Transformer's hops against the stack's all": {
+    "whole chains at 12 steps, stack and Transformer by seed": [
+     [
+      0.985,
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      1.0,
+      1.0
+     ]
+    ],
+    "seeds with the stack ahead": 1,
+    "seeds with the Transformer ahead": 2,
+    "stands": "neither"
+   }
+  },
+  "reading": {
+   "the Transformer's runs": "Two of three hold. hops-tf-s1 and -s2 write every 5- to 12-step chain of the evaluation whole (1.000) and 0.990 and 0.995 at 16 steps, from a base that wrote no whole chain past 5 steps (0.395 at 5, 0.000 at 6 to 16); their staircases first reached 12 steps at rounds 471 and 766 and never left it. hops-tf-s0 keeps 1 to 4 steps and held them at every evaluation, but never reached: its staircase stood at 8 steps once (round 380), and after practice it writes 11 bytes at every length from 4 steps on. Counted on the server's CPU, 199 or 200 of its 200 answers at 5, 8 and 12 steps write the chain's first three names right and then a digit, the form of the longest chains the corpus and the rehearsal write; 36 to 45 of the 200 digits are right, about what a guess among the line's digits earns.",
+   "(5) the stack against the Transformer": "Neither stands for the hop family, against either of the stack's arms. Whole chains at 12 steps after practice, seeds 0, 1 and 2: the stack's hops arm 0.935, 0.780 and 0.000, its all arm 0.985, 0.000 and 0.000, the Transformer's 0.000, 1.000 and 1.000. The Transformer is ahead in two seeds and the stack in one, against both arms. The bases differ in more than the model: four-tf-chain began from chain-tf, which had 24,000 updates on the hop family alone, and then had 24,000 on the four families; four-stack had 24,000 on the four families only; and the Transformer's rounds rehearse one family where the stack's rehearse two.",
+   "both models fall at the same edge (reported)": "Every run that fell, of either model, broke just past the longest chain the rehearsed corpus writes. The stack's fallen runs write one name more and then fill the room; the Transformer's writes the corpus's longest form and guesses. Where they hold, the Transformer's runs climb slowly and then write perfectly (12 steps first at rounds 471 and 766, 1.000 whole), the stack's climb at once (12 steps at round 9 in every hop arm) and hold less (0.780 to 0.985 at 12 steps). Of the runs that practised hops, one in three fell for each model in its own arm (hops-stack-s2, hops-tf-s0); with both families in the loop the stack lost two of three."
+  },
+  "what follows": "Reading (5) is complete and stands for neither model. What result_stack says follows is unchanged and now holds for both models: before families are practised together or in turns, the loop must keep every run standing past the rehearsed lengths, and the next registration asks what does, with more seeds than three and both models."
+ }
+}

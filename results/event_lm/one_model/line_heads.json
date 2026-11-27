@@ -1,0 +1,659 @@
+{
+ "study": "Line heads",
+ "recorded_utc": "2026-11-27T17:18:12Z",
+ "kind": "pre-registration of a test-bed screen, two arms of one seed, on the server's GPU in the weekend's window",
+ "why": "The stack's state reads weigh every cell by its age in bytes beside what it holds, and they learned to turn against cells older than one line of the corpus: their offsets are below zero from 121 bytes and lowest at 140 to 150, where the line before ends (practice_cap_raised.json diagnostic_age_offsets). A read that counts bytes has no other way to tell the present line from the one before, whose names are bound to other values. The probe of recall_over_distance.json shows it on one binding at a time: in lines of 36 assignments chain-stack recalls the binding in 0.985 of the lines up to 100 bytes back, in 0.305 at 150 to 175 bytes and 0.190 at 175 to 200, four-stack in 1.000, 0.810 and 0.140, where chain-tf and four-tf-chain recall 0.970 to 1.000; the longer line costs nothing nearer, and recall starts to fall in the band after the age from which the offsets stay below zero. Practice with the cap at 8 or 12 taught the stack to reach that far (0.920 to 0.980) without moving its age offsets: the far cells can be found by what they hold, and the trained stack does not find them because its reads count bytes. The brain does not keep time in bytes: experience is cut into events at their boundaries, and what is recalled is recalled within its event (event segmentation; hippocampal time cells that start again at a boundary). A read can do the same with the word heads it already has, made to count lines.",
+ "change": "--read-word-unit line (commit 452f365, code copy v18r on the server). Word heads (snnformer/event_lm.py, _StateRead._word_offsets) reach only the cells of the present word and weigh each by its place in it. Counting lines, every byte but the newline is inside, so a line head reaches the present line alone, however many bytes it holds, up to --read-word-span places (256, the read's window), and weighs each cell by its place in the line with an offset of its own, learned from zero. Two of the four heads of every state read become line heads; the other two keep their offsets for the age in bytes. Word heads are wired to streams (the tape carries where the present line began), and a stream gives the same spikes however it is cut (tests/test_word_heads.py).",
+ "arms": {
+  "line-stack": "chain-stack's recipe (written_chains.json, checkpoints/laptop-loop/run-chains.sh) with --read-word-heads 2 --read-word-unit line --read-word-span 256: 5,252,132 parameters, 3,072 more than chain-stack (the line heads' place offsets).",
+  "cell-stack": "chain-stack's recipe unchanged: the control, trained beside it with the same code, read path and speed options.",
+  "both": "Corpus and training: --corpus data/onemodel/hops/hops-1-4-written.bin --ctx 256 --bs 16 --steps 24000 --warmup 300 --lr 1.2e-3 --wd 0.05 --seed 20001 --eval-every 750 --eval-bs 16 --eval-batches 16 --final-eval-batches 64 --validation-only --save-every 1500 --rotated-adam 50 --weight-average 0.999; the stack: --variant event_steered --no-carry --stack --dim 256 --hidden 4 --depth 6 --spike-resolution 16 --router-charge-bits 8 --pulse-budget 113000 --read-after 0,1,2,3,4,5 --read-width 256 --read-heads 4 --read-window 256 --read-mode race --read-budget 256 --read-resolution 4 --read-cap 128 --read-address-rate 64 --granule-after 0,1,2,3,4,5 --granule-clusters 1 --granule-fan 256 --granule-cells 1022 --granule-slope --granule-cap 128 --rotate-stacks --read-delays 4 --granule-delays 4 --stream 10 --stream-groups 3; and --read-by-cell --fused-optimizer --exact-products. Word heads have no read by age, so both arms take every read by cell (--read-by-cell, the same spikes as by age, tests/test_word_heads.py) and neither takes --fused-reads or --compile-cells; the fused optimizer and the exact products give the plain path's weights to the bit (journal 2026-11-27 03:30Z), so they are the fast path that both arms can share."
+ },
+ "where": "Two jobs on the server's GPU 1 in this weekend's window, side by side under MPS after the families practice (practice-families-b), each about an hour; evaluations on the same GPU after training.",
+ "measure": "(a) The probe of recall_over_distance.json on both arms' averaged weights, with its tasks (seed 0, 200 lines a band) and its script. (b) The written-chain evaluation of written_chains.json and the practice screens: experiments/practice_loop.py --evaluate 1 2 3 4 5 6 8 12 16 --evaluate-tasks 200 --max-bytes 64 --seed 0: accuracy with its 95% Wilson interval, whole chains, mean bytes. (c) Validation on streams, as the trainer reports it after 24,000 updates (64 batches). (d) The age offsets of the plain heads (experiments/read_age_offsets.py) and the line heads' offsets by place.",
+ "reading": {
+  "(1) line heads recall far": "In lines of 36 assignments line-stack's accuracy in the band 150-175 and in the band 175-200 is each at least 0.10 above cell-stack's with the two 95% intervals apart, and line-stack's recall does not fall with distance by reading (1) of recall_over_distance.json.",
+  "(2) nothing lost": "line-stack's mean accuracy over 1 to 4 hops is at least 0.95.",
+  "(3) reach without practice": "Whole chains at 8 and at 12 hops: line-stack reaches further if its share is at least 0.10 above cell-stack's at either with the intervals apart, and below it at neither.",
+  "reported and not read": "Every cell of (a) and (b); the validation on streams of both arms and their difference; the age offsets of both arms' plain heads and the line heads' offsets by place; the training curves.",
+  "scope": "One seed of the test bed on synthetic lookups: a screen of whether heads that count lines recall a binding at any distance within the line, not a claim about language."
+ },
+ "what follows": "If (1) and (2) pass, line-stack goes into the practice loop with rehearsal and the cap at 12 (practice_cap_raised.json's r12-stack, three seeds) and is read at 20 hops against r12-stack and r8-tf, and line heads go into the four-family corpus and the practice of several families; records of telemetry are lines, and line heads go into its corpus when there is one. If (1) fails, the line heads' offsets by place and line-stack's probe are read for why before anything else is tried. If (2) fails, line heads cost what the model was trained on, which is reported, and the next registration asks for fewer of them.",
+ "seen_before_recording": "recall_over_distance.json with its result (every cell of the probe for its 16 models); practice_cap_raised.json's two diagnostics; written_chains.json (chain-stack and chain-tf and their evaluations); the tests of commit 452f365; a smoke test of three updates of line-stack's recipe with batches of 2 on the laptop's CPU (it trains; its numbers say nothing); the corpus regenerated on the server with experiments/hop_tasks.py (its sha256 is the registered one, 6e095de1...). Neither arm has been trained.",
+ "result": {
+  "recorded_utc": "2026-11-27T21:15:09Z",
+  "runs": "lh-line-stack and lh-cell-stack on the server's GPU 1 under MPS in the weekend's window with code copy v18r (452f365), from 20:45:02 and 20:50:02 UTC on 2026-11-27, side by side, 24,000 updates each with --read-by-cell --fused-optimizer --exact-products; each then evaluated (the written-chain evaluation and the probe of recall_over_distance.json on its averaged weights) and done at 21:11:14 and 21:12:03 UTC. Neither was stopped. line-stack has 5,252,132 parameters, cell-stack 5,249,060.",
+  "after training: accuracy, whole chain, mean bytes (200 tasks a hop count)": {
+   "line-stack": {
+    "1": [
+     0.995,
+     0.995,
+     2.02
+    ],
+    "2": [
+     1.0,
+     1.0,
+     5.0
+    ],
+    "3": [
+     1.0,
+     1.0,
+     8.0
+    ],
+    "4": [
+     1.0,
+     0.995,
+     11.06
+    ],
+    "5": [
+     1.0,
+     1.0,
+     14.0
+    ],
+    "6": [
+     0.975,
+     0.975,
+     17.95
+    ],
+    "8": [
+     0.98,
+     0.975,
+     23.1
+    ],
+    "12": [
+     0.82,
+     0.785,
+     34.69
+    ],
+    "16": [
+     0.555,
+     0.455,
+     40.42
+    ]
+   },
+   "cell-stack": {
+    "1": [
+     1.0,
+     1.0,
+     2.0
+    ],
+    "2": [
+     1.0,
+     1.0,
+     5.0
+    ],
+    "3": [
+     0.995,
+     0.995,
+     8.0
+    ],
+    "4": [
+     0.98,
+     0.975,
+     10.94
+    ],
+    "5": [
+     0.965,
+     0.965,
+     13.94
+    ],
+    "6": [
+     0.91,
+     0.9,
+     16.73
+    ],
+    "8": [
+     0.69,
+     0.655,
+     21.48
+    ],
+    "12": [
+     0.295,
+     0.205,
+     26.39
+    ],
+    "16": [
+     0.12,
+     0.015,
+     26.64
+    ]
+   }
+  },
+  "the probe, accuracy by band (200 lines a band)": {
+   "line-stack": {
+    "24": {
+     "0-25": 1.0,
+     "25-50": 1.0,
+     "50-75": 1.0,
+     "75-100": 1.0,
+     "100-125": 1.0,
+     "125-150": 1.0
+    },
+    "36": {
+     "0-25": 1.0,
+     "25-50": 1.0,
+     "50-75": 0.5,
+     "75-100": 0.965,
+     "100-125": 0.97,
+     "125-150": 0.98,
+     "150-175": 0.965,
+     "175-200": 0.975,
+     "200-225": 0.75
+    }
+   },
+   "cell-stack": {
+    "24": {
+     "0-25": 1.0,
+     "25-50": 1.0,
+     "50-75": 1.0,
+     "75-100": 1.0,
+     "100-125": 1.0,
+     "125-150": 0.995
+    },
+    "36": {
+     "0-25": 1.0,
+     "25-50": 1.0,
+     "50-75": 1.0,
+     "75-100": 0.995,
+     "100-125": 1.0,
+     "125-150": 0.905,
+     "150-175": 0.195,
+     "175-200": 0.29,
+     "200-225": 0.13
+    }
+   }
+  },
+  "the probe's records": {
+   "line-stack": {
+    "tasks a band": 200,
+    "seed": 0,
+    "models": {
+     "lh-line-stack": {
+      "24": {
+       "0-25": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 14.8
+       },
+       "25-50": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 36.4
+       },
+       "50-75": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 61.5
+       },
+       "75-100": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 87.7
+       },
+       "100-125": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 111.8
+       },
+       "125-150": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 132.1
+       }
+      },
+      "36": {
+       "0-25": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 14.8
+       },
+       "25-50": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 36.1
+       },
+       "50-75": {
+        "right": 100,
+        "of": 200,
+        "accuracy": 0.5,
+        "interval_95": [
+         0.4314,
+         0.5686
+        ],
+        "one digit and a newline": 0.49,
+        "mean_bytes": 6.02,
+        "mean distance": 62.3
+       },
+       "75-100": {
+        "right": 193,
+        "of": 200,
+        "accuracy": 0.965,
+        "interval_95": [
+         0.9295,
+         0.9829
+        ],
+        "one digit and a newline": 0.965,
+        "mean_bytes": 2.33,
+        "mean distance": 85.8
+       },
+       "100-125": {
+        "right": 194,
+        "of": 200,
+        "accuracy": 0.97,
+        "interval_95": [
+         0.9361,
+         0.9862
+        ],
+        "one digit and a newline": 0.965,
+        "mean_bytes": 2.28,
+        "mean distance": 112.3
+       },
+       "125-150": {
+        "right": 196,
+        "of": 200,
+        "accuracy": 0.98,
+        "interval_95": [
+         0.9497,
+         0.9922
+        ],
+        "one digit and a newline": 0.98,
+        "mean_bytes": 2.18,
+        "mean distance": 137.4
+       },
+       "150-175": {
+        "right": 193,
+        "of": 200,
+        "accuracy": 0.965,
+        "interval_95": [
+         0.9295,
+         0.9829
+        ],
+        "one digit and a newline": 0.965,
+        "mean_bytes": 2.27,
+        "mean distance": 161.8
+       },
+       "175-200": {
+        "right": 195,
+        "of": 200,
+        "accuracy": 0.975,
+        "interval_95": [
+         0.9428,
+         0.9893
+        ],
+        "one digit and a newline": 0.975,
+        "mean_bytes": 2.18,
+        "mean distance": 186.9
+       },
+       "200-225": {
+        "right": 150,
+        "of": 200,
+        "accuracy": 0.75,
+        "interval_95": [
+         0.6857,
+         0.8049
+        ],
+        "one digit and a newline": 0.72,
+        "mean_bytes": 4.2,
+        "mean distance": 203.4
+       }
+      }
+     }
+    }
+   },
+   "cell-stack": {
+    "tasks a band": 200,
+    "seed": 0,
+    "models": {
+     "lh-cell-stack": {
+      "24": {
+       "0-25": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 14.8
+       },
+       "25-50": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 36.4
+       },
+       "50-75": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 61.5
+       },
+       "75-100": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 87.7
+       },
+       "100-125": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 111.8
+       },
+       "125-150": {
+        "right": 199,
+        "of": 200,
+        "accuracy": 0.995,
+        "interval_95": [
+         0.9722,
+         0.9991
+        ],
+        "one digit and a newline": 0.995,
+        "mean_bytes": 2.04,
+        "mean distance": 132.1
+       }
+      },
+      "36": {
+       "0-25": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 14.8
+       },
+       "25-50": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 36.1
+       },
+       "50-75": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 62.3
+       },
+       "75-100": {
+        "right": 199,
+        "of": 200,
+        "accuracy": 0.995,
+        "interval_95": [
+         0.9722,
+         0.9991
+        ],
+        "one digit and a newline": 0.995,
+        "mean_bytes": 2.02,
+        "mean distance": 85.8
+       },
+       "100-125": {
+        "right": 200,
+        "of": 200,
+        "accuracy": 1.0,
+        "interval_95": [
+         0.9812,
+         1.0
+        ],
+        "one digit and a newline": 1.0,
+        "mean_bytes": 2.0,
+        "mean distance": 112.3
+       },
+       "125-150": {
+        "right": 181,
+        "of": 200,
+        "accuracy": 0.905,
+        "interval_95": [
+         0.8564,
+         0.9383
+        ],
+        "one digit and a newline": 0.905,
+        "mean_bytes": 2.69,
+        "mean distance": 137.4
+       },
+       "150-175": {
+        "right": 39,
+        "of": 200,
+        "accuracy": 0.195,
+        "interval_95": [
+         0.1461,
+         0.2554
+        ],
+        "one digit and a newline": 0.12,
+        "mean_bytes": 7.82,
+        "mean distance": 161.8
+       },
+       "175-200": {
+        "right": 58,
+        "of": 200,
+        "accuracy": 0.29,
+        "interval_95": [
+         0.2315,
+         0.3564
+        ],
+        "one digit and a newline": 0.215,
+        "mean_bytes": 7.18,
+        "mean distance": 186.9
+       },
+       "200-225": {
+        "right": 26,
+        "of": 200,
+        "accuracy": 0.13,
+        "interval_95": [
+         0.0903,
+         0.1837
+        ],
+        "one digit and a newline": 0.04,
+        "mean_bytes": 8.16,
+        "mean distance": 203.4
+       }
+      }
+     }
+    }
+   }
+  },
+  "validation on streams (the trainer's, averaged weights)": {
+   "line-stack": 2.3675,
+   "cell-stack": 2.369
+  },
+  "age offsets of the plain heads and the line heads' offsets by place (experiments/read_age_offsets.py's measure, the six reads' mean, in units of the read's charge)": {
+   "line-stack": {
+    "plain heads a read": 2,
+    "reads": 6,
+    "plain heads' age offsets by age band (bytes)": {
+     "0-25": 1.99,
+     "25-50": 2.08,
+     "50-75": 1.87,
+     "75-100": 1.59,
+     "100-125": 0.81,
+     "125-140": -3.67,
+     "140-150": -3.78,
+     "150-175": -2.38,
+     "175-200": -1.28,
+     "200-256": -1.32
+    },
+    "first age of five in a row below zero (plain heads)": 125,
+    "line heads a read": 2,
+    "line heads' offsets by place in the line (bytes from the line's first)": {
+     "0-25": -0.35,
+     "25-50": -0.14,
+     "50-75": 0.14,
+     "75-100": 0.38,
+     "100-125": 0.5,
+     "125-140": -0.49,
+     "140-150": -1.25,
+     "150-175": -0.05,
+     "175-200": 0.0,
+     "200-256": 0.0
+    },
+    "line heads' offsets: lowest and highest place means": [
+     -3.23,
+     143,
+     0.85,
+     150
+    ]
+   },
+   "cell-stack": {
+    "plain heads a read": 4,
+    "reads": 6,
+    "plain heads' age offsets by age band (bytes)": {
+     "0-25": 3.3,
+     "25-50": 2.73,
+     "50-75": 2.13,
+     "75-100": 1.76,
+     "100-125": 0.66,
+     "125-140": -1.93,
+     "140-150": -4.14,
+     "150-175": -2.69,
+     "175-200": -1.67,
+     "200-256": -2.4
+    },
+    "first age of five in a row below zero (plain heads)": 120
+   }
+  },
+  "reading by the registered rules": {
+   "(1)": {
+    "bands": {
+     "150-175": {
+      "line-stack": 0.965,
+      "cell-stack": 0.195,
+      "line-stack ahead by the mark": true
+     },
+     "175-200": {
+      "line-stack": 0.975,
+      "cell-stack": 0.29,
+      "line-stack ahead by the mark": true
+     }
+    },
+    "line-stack's recall falls (recall_over_distance reading (1))": false,
+    "cell-stack's recall falls": true,
+    "passes": true
+   },
+   "(2)": {
+    "line-stack's mean accuracy over 1 to 4 hops": 0.9988,
+    "cell-stack's": 0.9938,
+    "passes": true
+   },
+   "(3)": {
+    "8": {
+     "line-stack": 0.975,
+     "cell-stack": 0.655,
+     "line-stack ahead": true,
+     "cell-stack ahead": false
+    },
+    "12": {
+     "line-stack": 0.785,
+     "cell-stack": 0.205,
+     "line-stack ahead": true,
+     "cell-stack ahead": false
+    },
+    "line-stack reaches further": true
+   }
+  },
+  "reading": {
+   "(1) line heads recall far": "Passes. In lines of 36 assignments line-stack answers 0.965 of the lookups whose binding stands 150 to 175 bytes back and 0.975 at 175 to 200, against cell-stack's 0.195 and 0.290, each at least 0.10 ahead with the intervals apart, and its recall does not fall with distance by recall_over_distance.json's reading (1), while cell-stack's does. In lines of 24 line-stack answers every lookup of every band (1.000).",
+   "(2) nothing lost": "Passes: line-stack answers 0.9988 of the tasks of 1 to 4 hops on the mean (cell-stack 0.9938).",
+   "(3) reach without practice": "Passes. Whole chains without any practice: at 8 hops line-stack writes 0.975 and cell-stack 0.655; at 12 hops 0.785 and 0.205; both well ahead with the intervals apart. At 16 hops line-stack writes 0.455 of the chains whole, cell-stack 0.015.",
+   "reported": "Validation on streams is level (2.3675 against 2.3690 bits a byte on the hop corpus): the line heads cost nothing on what the model was trained on. The line heads learned small offsets by place, below zero at a line's first bytes and above it from 50 to 125 bytes in, lowest at the place 143 (where the training lines end); places from 175 on, which no training line reaches, keep their offset of zero. The plain heads of line-stack learned the same age cliff as cell-stack's (below zero from 125 bytes, cell-stack from 120), so the far recall is the line heads'. Two bands of the probe in lines of 36 fall short in line-stack: 0.500 at 50 to 75 bytes and 0.750 at 200 to 225, which (1) does not read; why is not known. cell-stack, trained by chain-stack's recipe with the same seed on the server's code, reaches much further without practice than chain-stack did on the laptop (0.655 of 8-hop chains whole against 0.000 in practice_cap_raised.json's evaluation before practice): how far a model chains past its trained length varies widely between two trainings of one recipe, and the screen compares two arms trained side by side with one code.",
+   "scope": "One seed of the test bed on synthetic lookups."
+  },
+  "what follows": "(1) and (2) pass, so as registered: line-stack goes into the practice loop with rehearsal and the cap at 12 (three seeds) and is read at 20 hops against r12-stack and r8-tf, and line heads go into the four-family corpus and the practice of several families; records of telemetry are lines, and line heads go into its corpus when there is one. Each of these is registered on its own before it runs."
+ }
+}

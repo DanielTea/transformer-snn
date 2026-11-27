@@ -1,0 +1,618 @@
+{
+ "study": "Four families in one model: the Transformer again",
+ "recorded_utc": "2026-11-27T05:17:52Z",
+ "kind": "pre-registration of a screen on the laptop: two training runs of the test bed's Transformer and their evaluation",
+ "why": "four-tf of written_chains_four_families.json learned none of the four families in 24,000 updates, not even the lookups along names that chain-tf learns alone in under 4,000 (result_tf there). It writes every family's chain in its form, with names taken from the line, and follows no binding. The one-model plan compares each step with a Transformer of the same size on the same data, and a comparison of practice needs a Transformer that has learned the chains. So it gets two further chances at the same corpus, each a guess at what was missing. Updates: every family has a quarter of the lines, so four-tf saw the hop family about 0.3 times as often as chain-tf did; with four times the updates it sees every family about 1.2 times as often. A start: a model that already follows names may find the other families' steps from there, and chain-tf's averaged weights are that model.",
+ "arms": {
+  "four-tf-chain": "as four-tf, starting from chain-tf's averaged weights (--initialize-from): 24,000 updates on the corpus of four families, with the schedule a run from scratch has (300 updates of warm-up to 1.2e-3, then the same decay). chain-tf answers 0.9912 of the tasks of 1 to 4 hops.",
+  "four-tf-96k": "as four-tf with --steps 96000 and nothing else changed: the corpus is passed about six times where four-tf passed it one and a half times."
+ },
+ "training": "experiments/train_event_lm.py --variant transformer --dim 256 --depth 6 --heads 4 --mlp-ratio 4 (4,792,320 parameters) --corpus data/onemodel/chains/four-1-4-written.bin (sha256 6f2c48d8…d665, the corpus of written_chains_four_families.json) --ctx 256 --bs 16 --warmup 300 --lr 1.2e-3 --wd 0.05 --seed 20001 --rotated-adam 50 --weight-average 0.999, on the frozen code copy that trained four-tf and chain-tf (4d64208), on the laptop's GPU, one run at a time: four-tf-chain first (about 20 minutes), then four-tf-96k (about 80). They start when four-stack is evaluated; the laptop's practice runs of practice_within_reach.json that hold the GPU are paused meanwhile and go on afterwards as they were. The server's GPUs are closed until the evening and the laptop has no CUDA device, so the trainer's fast paths do not apply.",
+ "measure": "As written_chains_four_families.json, on the averaged weights, from the frozen copy of aedf5cc: experiments/practice_loop.py --families hops offs sums tots --evaluate 1 2 3 4 5 6 8 12 16 --evaluate-tasks 200 --max-bytes 64 --seed 0, the same 200 tasks a cell that four-tf and four-stack answer: the accuracy of the last byte with its 95% Wilson interval, the share of answers that write the whole chain right, the mean bytes.",
+ "reading": "(1) Learned, for each arm and family, by the screen's mark: a mean accuracy over 1 to 4 steps of at least 0.95 and a mean share of whole chains over 1 to 4 steps of at least 0.90. (2) Updates: more updates give the Transformer the lookup in the mixture if four-tf-96k learns the hop family, and they are enough for the corpus if it learns all four. (3) The start: four-tf-chain kept what it began with if it has the hop family after its 24,000 updates, and the start carried over if it learned at least one of the three new families. (4) Reach without practice, for every learned pair, as the screen reads it: at 8 steps an accuracy of at least 0.50 with at least half of the answers writing the whole chain right; reported at 5, 6, 12 and 16 steps. (5) Reported: each arm's validation curve beside four-tf's and chain-tf's, and for an arm that learns no family what it writes, as it was looked at for four-tf. One seed and synthetic tasks: a screen of what the Transformer needs to learn the mixture, not a claim about either model in language. What follows: the Transformer's base for the practice of several families (the next registration) is the arm of these two that learned more of the families the stack learned; if both learned the same number, four-tf-chain, which has half the updates. It practises the families it learned. That base has had more updates than four-stack, and the practice study says so. If neither arm learns a family, the Transformer practises none: at this size and with this corpus it does not learn a mixture of chains that the stack was given the same 24,000 updates for, and that is the finding recorded.",
+ "seen_before_recording": "four-tf's evaluation, training curve and what it writes (result_tf of written_chains_four_families.json); chain-tf's curve. Of four-stack only its training log up to 3,000 updates (validation on streams 2.726, 2.617, 2.590 and 2.567 bits a byte at 750, 1,500, 2,250 and 3,000 updates; four-tf ended at 2.736 in windows); it has not been evaluated. A check that --initialize-from loads chain-tf's weights into the Transformer: six updates on the CPU with a warm-up of two updates; the run's record names the checkpoint and its sha256, and its validation after three and six updates (6.24 and 4.91 bits a byte, a trained model thrown by the full rate at once) is not used for anything. The option first tried, --load-weights, takes spiking decoders only.",
+ "result": {
+  "recorded_utc": "2026-11-27T15:35:33Z",
+  "runs": "four-tf-chain: 24,000 updates from chain-tf's averaged weights (the run's record names the checkpoint and its sha256 32fc2e8a…f794), 06:50:39 to 07:09:25 UTC on 2026-11-27; four-tf-96k: 96,000 updates from scratch, 07:10:38 UTC to 15:32 UTC (evaluated 15:33:43), most of it waiting while the laptop slept with its lid closed (the run itself took about 75 minutes of the GPU). Both on the laptop's GPU with code-4d64208, evaluated by family with the frozen copy of aedf5cc as four-tf and four-stack were.",
+  "by arm, family and steps: accuracy, whole chain, mean bytes (200 tasks a cell)": {
+   "four-tf-chain": {
+    "hops": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      1.0,
+      1.0,
+      5.0
+     ],
+     "3": [
+      1.0,
+      1.0,
+      8.0
+     ],
+     "4": [
+      1.0,
+      1.0,
+      11.0
+     ],
+     "5": [
+      0.455,
+      0.395,
+      17.55
+     ],
+     "6": [
+      0.11,
+      0.0,
+      16.25
+     ],
+     "8": [
+      0.11,
+      0.0,
+      17.24
+     ],
+     "12": [
+      0.155,
+      0.0,
+      15.96
+     ],
+     "16": [
+      0.12,
+      0.0,
+      13.7
+     ]
+    },
+    "offs": {
+     "1": [
+      1.0,
+      1.0,
+      2.0
+     ],
+     "2": [
+      0.215,
+      0.215,
+      6.1
+     ],
+     "3": [
+      0.085,
+      0.01,
+      10.02
+     ],
+     "4": [
+      0.12,
+      0.01,
+      14.0
+     ],
+     "5": [
+      0.115,
+      0.0,
+      14.59
+     ],
+     "6": [
+      0.085,
+      0.0,
+      14.3
+     ],
+     "8": [
+      0.12,
+      0.0,
+      14.65
+     ],
+     "12": [
+      0.105,
+      0.0,
+      14.63
+     ],
+     "16": [
+      0.1,
+      0.0,
+      14.32
+     ]
+    },
+    "sums": {
+     "1": [
+      0.995,
+      0.995,
+      2.31
+     ],
+     "2": [
+      0.975,
+      0.975,
+      4.05
+     ],
+     "3": [
+      0.97,
+      0.97,
+      5.99
+     ],
+     "4": [
+      0.08,
+      0.075,
+      7.98
+     ],
+     "5": [
+      0.09,
+      0.0,
+      8.0
+     ],
+     "6": [
+      0.08,
+      0.0,
+      8.0
+     ],
+     "8": [
+      0.095,
+      0.0,
+      7.94
+     ],
+     "12": [
+      0.12,
+      0.0,
+      7.97
+     ],
+     "16": [
+      0.09,
+      0.0,
+      7.97
+     ]
+    },
+    "tots": {
+     "1": [
+      0.2,
+      0.2,
+      51.8
+     ],
+     "2": [
+      0.845,
+      0.845,
+      14.71
+     ],
+     "3": [
+      0.92,
+      0.92,
+      11.21
+     ],
+     "4": [
+      0.095,
+      0.085,
+      14.08
+     ],
+     "5": [
+      0.045,
+      0.0,
+      27.72
+     ],
+     "6": [
+      0.085,
+      0.0,
+      12.03
+     ],
+     "8": [
+      0.125,
+      0.0,
+      12.0
+     ],
+     "12": [
+      0.105,
+      0.0,
+      12.0
+     ],
+     "16": [
+      0.115,
+      0.0,
+      12.0
+     ]
+    }
+   },
+   "four-tf-96k": {
+    "hops": {
+     "1": [
+      0.985,
+      0.985,
+      2.04
+     ],
+     "2": [
+      0.99,
+      0.98,
+      5.08
+     ],
+     "3": [
+      0.99,
+      0.985,
+      8.06
+     ],
+     "4": [
+      0.99,
+      0.98,
+      10.96
+     ],
+     "5": [
+      0.28,
+      0.16,
+      11.48
+     ],
+     "6": [
+      0.135,
+      0.01,
+      11.55
+     ],
+     "8": [
+      0.14,
+      0.0,
+      11.49
+     ],
+     "12": [
+      0.13,
+      0.0,
+      11.45
+     ],
+     "16": [
+      0.12,
+      0.0,
+      11.4
+     ]
+    },
+    "offs": {
+     "1": [
+      0.955,
+      0.955,
+      2.3
+     ],
+     "2": [
+      0.935,
+      0.925,
+      6.36
+     ],
+     "3": [
+      0.885,
+      0.87,
+      10.16
+     ],
+     "4": [
+      0.855,
+      0.855,
+      13.68
+     ],
+     "5": [
+      0.14,
+      0.045,
+      13.8
+     ],
+     "6": [
+      0.14,
+      0.02,
+      14.22
+     ],
+     "8": [
+      0.12,
+      0.0,
+      14.64
+     ],
+     "12": [
+      0.115,
+      0.0,
+      14.55
+     ],
+     "16": [
+      0.125,
+      0.0,
+      14.72
+     ]
+    },
+    "sums": {
+     "1": [
+      0.18,
+      0.18,
+      44.7
+     ],
+     "2": [
+      0.365,
+      0.365,
+      37.15
+     ],
+     "3": [
+      0.265,
+      0.26,
+      36.38
+     ],
+     "4": [
+      0.035,
+      0.02,
+      36.12
+     ],
+     "5": [
+      0.01,
+      0.0,
+      54.15
+     ],
+     "6": [
+      0.055,
+      0.0,
+      38.81
+     ],
+     "8": [
+      0.06,
+      0.0,
+      29.09
+     ],
+     "12": [
+      0.02,
+      0.0,
+      57.12
+     ],
+     "16": [
+      0.045,
+      0.0,
+      40.35
+     ]
+    },
+    "tots": {
+     "1": [
+      0.18,
+      0.175,
+      47.31
+     ],
+     "2": [
+      0.365,
+      0.365,
+      38.42
+     ],
+     "3": [
+      0.28,
+      0.27,
+      37.64
+     ],
+     "4": [
+      0.225,
+      0.21,
+      38.22
+     ],
+     "5": [
+      0.015,
+      0.0,
+      54.71
+     ],
+     "6": [
+      0.03,
+      0.0,
+      41.76
+     ],
+     "8": [
+      0.085,
+      0.0,
+      31.2
+     ],
+     "12": [
+      0.025,
+      0.0,
+      57.73
+     ],
+     "16": [
+      0.035,
+      0.0,
+      46.41
+     ]
+    }
+   }
+  },
+  "mean accuracy and mean share of whole chains over 1 to 4 steps": {
+   "four-tf-chain": {
+    "hops": [
+     1.0,
+     1.0
+    ],
+    "offs": [
+     0.355,
+     0.3088
+    ],
+    "sums": [
+     0.755,
+     0.7538
+    ],
+    "tots": [
+     0.515,
+     0.5125
+    ]
+   },
+   "four-tf-96k": {
+    "hops": [
+     0.9888,
+     0.9825
+    ],
+    "offs": [
+     0.9075,
+     0.9012
+    ],
+    "sums": [
+     0.2112,
+     0.2062
+    ],
+    "tots": [
+     0.2625,
+     0.255
+    ]
+   }
+  },
+  "learned, by arm": {
+   "four-tf-chain": [
+    "hops"
+   ],
+   "four-tf-96k": [
+    "hops"
+   ]
+  },
+  "validation in windows (bits a byte) along the way": {
+   "four-tf-chain": {
+    "750": 2.7109,
+    "3000": 2.6851,
+    "6000": 2.6764,
+    "12000": 2.6604,
+    "24000": 2.6435
+   },
+   "four-tf-96k": {
+    "750": 3.0796,
+    "3000": 3.0577,
+    "6000": 2.7913,
+    "12000": 2.6792,
+    "24000": 2.6634,
+    "48000": 2.6547,
+    "72000": 2.6485,
+    "96000": 2.642
+   }
+  },
+  "validation of the averaged weights": {
+   "four-tf-chain": 2.6547,
+   "four-tf-96k": 2.6531
+  },
+  "reading by the registered rules": {
+   "(1) learned": {
+    "four-tf-chain": [
+     "hops"
+    ],
+    "four-tf-96k": [
+     "hops"
+    ]
+   },
+   "(2) updates": {
+    "four-tf-96k learned the hop family": true,
+    "four-tf-96k learned all four": false
+   },
+   "(3) the start": {
+    "four-tf-chain has the hop family": true,
+    "new families four-tf-chain learned": [],
+    "the start carried over": false
+   },
+   "(4) reach without practice": {
+    "four-tf-chain, hops": {
+     "reaches past the trained length (8 steps: accuracy 0.50 with half the chains whole)": false,
+     "5 steps": {
+      "accuracy": 0.455,
+      "interval": [
+       0.3875,
+       0.5242
+      ],
+      "whole chain": 0.395,
+      "mean bytes": 17.55
+     },
+     "6 steps": {
+      "accuracy": 0.11,
+      "interval": [
+       0.0738,
+       0.1609
+      ],
+      "whole chain": 0.0,
+      "mean bytes": 16.25
+     },
+     "8 steps": {
+      "accuracy": 0.11,
+      "interval": [
+       0.0738,
+       0.1609
+      ],
+      "whole chain": 0.0,
+      "mean bytes": 17.24
+     },
+     "12 steps": {
+      "accuracy": 0.155,
+      "interval": [
+       0.1114,
+       0.2116
+      ],
+      "whole chain": 0.0,
+      "mean bytes": 15.96
+     },
+     "16 steps": {
+      "accuracy": 0.12,
+      "interval": [
+       0.082,
+       0.1723
+      ],
+      "whole chain": 0.0,
+      "mean bytes": 13.7
+     }
+    },
+    "four-tf-chain, offs": "not learned: not read",
+    "four-tf-chain, sums": "not learned: not read",
+    "four-tf-chain, tots": "not learned: not read",
+    "four-tf-96k, hops": {
+     "reaches past the trained length (8 steps: accuracy 0.50 with half the chains whole)": false,
+     "5 steps": {
+      "accuracy": 0.28,
+      "interval": [
+       0.2224,
+       0.3459
+      ],
+      "whole chain": 0.16,
+      "mean bytes": 11.48
+     },
+     "6 steps": {
+      "accuracy": 0.135,
+      "interval": [
+       0.0945,
+       0.1893
+      ],
+      "whole chain": 0.01,
+      "mean bytes": 11.55
+     },
+     "8 steps": {
+      "accuracy": 0.14,
+      "interval": [
+       0.0987,
+       0.1949
+      ],
+      "whole chain": 0.0,
+      "mean bytes": 11.49
+     },
+     "12 steps": {
+      "accuracy": 0.13,
+      "interval": [
+       0.0903,
+       0.1837
+      ],
+      "whole chain": 0.0,
+      "mean bytes": 11.45
+     },
+     "16 steps": {
+      "accuracy": 0.12,
+      "interval": [
+       0.082,
+       0.1723
+      ],
+      "whole chain": 0.0,
+      "mean bytes": 11.4
+     }
+    },
+    "four-tf-96k, offs": "not learned: not read",
+    "four-tf-96k, sums": "not learned: not read",
+    "four-tf-96k, tots": "not learned: not read"
+   },
+   "the Transformer's base by the registered rule": {
+    "families the stack learned": [
+     "hops",
+     "offs"
+    ],
+    "of them, learned by arm": {
+     "four-tf-chain": [
+      "hops"
+     ],
+     "four-tf-96k": [
+      "hops"
+     ]
+    },
+    "base": "four-tf-chain"
+   }
+  },
+  "reading": {
+   "(1)": "four-tf-chain kept the lookups (1.000 over 1 to 4 hops, every chain whole) and learned no other family by the mark. It came close in one: the running sum is right in 0.995, 0.975 and 0.970 of the tasks of 1, 2 and 3 readings, every chain whole, and in 0.080 at 4 readings, a mean of 0.755. The log of the sum (tots) is right in 0.845 and 0.920 at 2 and 3 readings, 0.200 at one and 0.095 at four (mean 0.515). The lookups that add are right at one step (1.000) and not after (0.215 at two, 0.085 to 0.120 from three on; mean 0.355). four-tf-96k learned the lookups (0.9888 over 1 to 4 hops with 0.9825 of the chains whole) and no other family by the mark. It came close in the lookups that add: right in 0.955, 0.935, 0.885 and 0.855 of the tasks of 1 to 4 steps, a mean of 0.9075 with 0.9012 whole, where the mark asks 0.95. It learned neither running sum (sums 0.2112, tots 0.2625).",
+   "(2)": "Four times the updates gave the Transformer the lookups in the mixture, which four-tf, with a quarter of them, missed altogether (0.1075), and took it close to the lookups that add; they were not enough for the corpus: one family of four by the mark.",
+   "(3)": "The start kept the lookups (four-tf-chain: 1.000 over 1 to 4 hops) and did not carry over by the mark: it learned none of the three new families, though it came within reach of the running sum up to three readings.",
+   "(4)": "Reach without practice, for every learned pair: four-tf-chain, hops at 8 steps 0.110 right with 0.000 whole (does not reach; 5 steps 0.455/0.395, 12 steps 0.155/0.000); four-tf-96k, hops at 8 steps 0.140 right with 0.000 whole (does not reach; 5 steps 0.280/0.160, 12 steps 0.130/0.000). Neither arm reaches past the trained length: four-tf-96k writes four steps and stops whatever the query asks (11.4 to 11.6 bytes on average at 5 to 16 steps), four-tf-chain goes a step further at most (17.6 bytes at 5 steps, 0.455 right). four-stack, trained on the same corpus for 24,000 updates, answers 0.930 of the tasks of 8 steps with 0.910 of the chains whole (result_stack of written_chains_four_families.json).",
+   "(5)": "Validation in windows of 256 bytes, bits a byte: four-tf-chain 2.711 at 750 updates, 2.685 at 3,000, 2.676 at 6,000, 2.660 at 12,000, 2.644 at 24,000, the averaged weights 2.6547; four-tf-96k 3.080 at 750, 3.058 at 3,000, 2.791 at 6,000, 2.679 at 12,000, 2.663 at 24,000, 2.655 at 48,000, 2.649 at 72,000, 2.642 at 96,000, the averaged weights 2.6531. It took four-tf's step at 5,250 to 6,000 updates (3.05 to 2.79) and a second one at 9,750 to 10,500 (2.746 to 2.697) that four-tf, whose rate had decayed by then, never took. For comparison: four-tf 2.7362, four-stack 2.6540 in windows (2.4889 on streams), chain-tf 2.549 on the hop corpus. Both arms learned a family, so what an arm without one writes is not owed; it was looked at all the same."
+  },
+  "what four-tf-chain writes in the families it did not learn (looked at after the evaluation, not registered)": "Greedy answers on the CPU to one task of 1, 2 and 4 steps a family (diag.py) and the cost of the right chain (32 tasks a cell). sums: '1', '6=5' and '4=1=7=5' where the last is '9': the first three running totals right and the fourth wrong; the right chain costs it 0.003, 0.033 and 0.454 bits a byte. tots: '11', '66=95' and '44=71=67=52' where the last is '29': the fourth reading copied wrong. offs: '4' right; at two and four steps it writes the right names and the first step's sum, then wrong sums ('eg2=2' for 'eg2=9', 'vp4=uh5=ks8=1' for 'vp4=uh1=ks5=0'): it follows the names and does not carry the sum on.",
+  "what four-tf-96k writes (looked at after the evaluation, not registered)": "Greedy answers on the CPU to one task of 1, 2 and 4 steps a family (diag.py) and the cost of the right chain (32 tasks a cell). hops: all three right (the right chain costs 0.000 to 0.002 bits a byte). offs: all three right ('eg2=9', 'vp4=uh1=ks5=0'; 0.000 to 0.090 bits a byte). sums: '1' and '6=5' right, '4=5=7=7' for '4=1=7=9' (1.4 to 2.1 bits a byte). tots: '11' and '66=95' right; at four readings it writes assignments of the lookup families instead ('bj;bj=bb;bb=2;...').",
+  "the Transformer's base by the registered rule": "four-tf-chain: of the families the stack learned (hops, offs) four-tf-chain learned hops and four-tf-96k hops; a tie goes to four-tf-chain.",
+  "what follows": "By the registered rule the Transformer's base for the practice of several families is four-tf-chain: of the two families the stack learned, each arm learned one, the lookups, and a tie goes to four-tf-chain, which has half the other's updates (24,000 on the hop corpus as chain-tf and 24,000 on the four families). It practises the family it learned: practice_several_families.json names it, its one arm and its runs in amendment_1, recorded with this result and before any of its runs starts. Its base began from a model trained on the lookups alone, and that is said with every comparison. That four-tf-96k came within 0.04 of the mark in the lookups that add, and both arms near the running sums up to three readings, says the Transformer may learn more of the mixture with more updates; that is not tested here."
+ }
+}

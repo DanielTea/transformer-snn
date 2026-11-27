@@ -1,0 +1,2376 @@
+{
+ "study": "practice_within_reach",
+ "recorded_utc": "2026-11-27T00:25:14Z",
+ "kind": "A screen with one seed on the laptop's GPU: the practice of practice_written_chains.json again from its two models, with two properties of the loop changed, each alone and both together. The staircase stops at 8 hops, where a guess still pays less than the staircase's lower mark, and an attempt without reward teaches nothing.",
+ "why": "The stack arm of practice_written_chains.json lost what it had been trained on: after its 2,000 rounds it answers 0.108 of lines of 1 to 4 hops right (0.995 before), 0.045 at 6 hops and 0.060 at 8, and writes the whole chain right in none of its answers at 4 hops (0.995 before). Its rounds show two properties of the loop at work, and neither is what that screen asked about, which is whether reward on the answer alone lengthens a written chain. First, the staircase climbed to where a guess pays. A line holds 24 assignments whatever its hops and no chain beside the query's is longer than 4 hops, so the longer the query's chain, the fewer other digits its line holds: a digit drawn from those that a name points to, which is what a chain that goes wrong ends in, is right 0.20 of the time at 4 hops, 0.23 at 8, 0.25 at 10, 0.28 at 12, 0.37 at 16, 0.55 at 20 and 0.77 at 22 (experiments/hop_tasks.py floors --count 4000 --seed 3), and an attempt has room for 64 bytes where a chain of 22 hops takes 65. The staircase steps down under a solve rate of a quarter and up above a half: from 10 hops that guess is right more than a quarter of the time and holds its stair, from 20 hops more than half the time and climbs. The arm stood at 18 hops after 100 rounds and reached 22 after 150, at solve rates that a guess earns there (0.38 on average over rounds 101 to 200, at 19.5 hops on average, where that guess is right 0.44 of the time at 18 hops and 0.55 at 20): at such lengths the reward goes to attempts that hold no right chain. Second, the loss. GRPO lowers the likelihood of the bytes of every attempt that did worse than its task's mean. Those are bytes the model itself drew: lowering their likelihood has no floor, and it moves the likelihood to every other byte. The loss, which is the log likelihood a byte of the attempts below their task's mean minus that of those above it, each weighed by its distance from that mean, fell from -0.14 over the first 100 rounds to -1.32 over rounds 301 to 400 and -4.09 over rounds 1,101 to 1,200; the share of attempts that write a name fell from 1.00 to 0.20, and from round 1,300 on the arm answers one hop right in 0.13 of its attempts, where a digit drawn from the line's is right 0.15 of the time. This screen separates the two properties and asks the registered question again without them. The second change has a counterpart in the brain's reward signal, which is as lopsided: dopamine neurons answer a reward that was not expected with a burst several times their resting rate and a reward that was missed with a pause that cannot fall below silence, so that their rates tell how much better than expected an outcome was and barely how much worse (Bayer and Glimcher 2005). practice_written_chains.json names training on written chains of more lengths as its next registration if neither of its arms meets its mark (a); that registration follows when its Transformer arm is read. This screen stands beside it, not in its place.",
+ "loop": "experiments/practice_loop.py as registered in practice_written_chains.json: every round 16 tasks at the current number of hops, verified, 8 attempts each at temperature 1.0 with room for 64 bytes; reward 1 if the last byte before the newline is the answer, whatever is written before it; the staircase from 4 hops (a solve rate above a half +1, below a quarter -1); a step of Adam at 3e-5 with gradients clipped at 1 on the tasks whose attempts disagree; 2,000 rounds; seed 0, so every arm meets the registered run's first tasks. Two switches are new. --longest-hops 8: the staircase never asks for more than 8 hops, which is twice the trained length, the longest chain the registered marks read, and one hop short of the last length at which that guess pays less than a quarter (0.24 at 9 hops, 0.23 at 8). --dips 0: an attempt that did worse than its task's mean gets the weight 0, where GRPO gives it its negative advantage; an attempt that did better keeps its advantage, so a lone reward among 8 attempts teaches 2.6 times as much as a reward that 4 of the 8 earned and 7 times as much as one that 7 earned.",
+ "arms": {
+  "cap-stack, cap-tf": "--longest-hops 8, from chain-stack and from chain-tf (the averaged weights of written_chains.json)",
+  "bursts-stack, bursts-tf": "--dips 0",
+  "cap-bursts-stack, cap-bursts-tf": "--longest-hops 8 --dips 0",
+  "the fourth cell": "neither switch: practice_written_chains.json's own arm of each model, practice-chain-stack and practice-chain-tf, with the same seed",
+  "order": "cap-bursts-stack, cap-stack, cap-bursts-tf, cap-tf, bursts-stack, bursts-tf"
+ },
+ "code": "The frozen copy be42570, which evaluated written_chains.json and ran practice_written_chains.json, with the experiments/practice_loop.py and experiments/hop_tasks.py of commit 1a127c7. At its defaults the new loop repeats the frozen copy's rounds one for one, and its evaluations along the way leave the rounds as they are: both were checked on 6 rounds from chain-stack on the CPU with another seed (99) and small rounds (4 tasks, 4 attempts, 24 bytes, from 5 hops). On the laptop's GPU, one run at a time in the order above, after practice_written_chains.json's Transformer arm.",
+ "measure": "After the last round, practice_written_chains.json's evaluation: experiments/practice_loop.py --evaluate 1 2 3 4 5 6 7 8 10 12 16 --evaluate-tasks 200 --max-bytes 64 --seed 0, 200 tasks a hop count answered greedily up to a newline or 64 bytes; the accuracy of the last byte before the newline with its 95% Wilson interval, the share of answers that write a name, the share that write the query's whole chain right, the mean bytes. Before practice the models are that screen's, and its evaluations before practice stand for these arms. Along the way: before the first round and after every 100 rounds the same evaluation at 2, 4, 6, 8 and 12 hops (--evaluate-every 100 --evaluate-hops 2 4 6 8 12, on the tasks of the evaluation after practice), each scored model kept. The evaluation before the first round must repeat the registered evaluation before practice at these five hop counts for both models; if any number differs, the code copy is examined before anything is read. And the rounds' log, which now also gives the share of attempts that write the whole chain right.",
+ "reading": "Every arm is read by the marks of practice_written_chains.json on its evaluation after 2,000 rounds: (a) its accuracy at 6 hops is at least 0.50 and at least half of its answers at 6 hops write the whole chain right; (b) the same at 8 hops; (c) its mean accuracy over 1 to 4 hops is at least 0.95. An arm that meets (a) and (c) practises past what it read and keeps what it was trained on. (1) For each model whose arm of practice_written_chains.json did not meet (a) and (c): the staircase's reach was at fault if its cap arm meets them; the loss's dips were at fault if its bursts arm does; both had to change if only its cap-bursts arm does; and if none of the three does, neither change is what practice lacks, and this screen does not name what it lacks. If that model's arm of practice_written_chains.json met (a) and (c), nothing was at fault for it and its three arms here are reported as controls. (2) An arm that meets (a) and (c) reaches twice the trained length if it also meets (b). (3) The stack against the Transformer under the same loop, as (d) of practice_written_chains.json: one practises further than the other if at 6 hops and at 8 its accuracy is at least 0.10 above the other's with the two 95% intervals apart. Reported and not read: the evaluations along the way (the accuracy and the whole-chain share at 2, 4, 6, 8 and 12 hops every 100 rounds), the first of them at which an arm meets (a) and whether the arm still meets it after 2,000 rounds (a peak that the last round has lost is recorded as lost and is no pass); the accuracies at 5, 7, 10, 12 and 16 hops; the staircase and the rounds' whole-chain shares. One seed, synthetic: a screen of whether the practice loop is sound, not a claim about reasoning in language. What follows: an arm of the stack that meets (a) and (c) is run again with seed 1 from both models before anything is built on it, and its loop becomes the practice of the one-model plan. If no arm of the stack meets (a) and (c), the next registration adds rehearsal of the written corpus between the rounds of practice.",
+ "seen_before_recording": "practice_written_chains.json's stack arm in full: its 2,000 rounds and its evaluations before and after practice, with the numbers given under why. Of its Transformer arm, which was running when this was recorded, only that it had started; its result is recorded in practice_written_chains.json when it is done. written_chains.json and practice_hops.json with their results. The guess floors of the hop tasks. Of the new loop: the 6 rounds of the two checks named under code, in whose first three rounds the base model wrote the whole chain right in 0.31 to 0.44 of its 16 attempts at 5 hops, and 2 rounds of a smaller trial of the switches (2 tasks, 2 attempts, 16 bytes, seed 99, with evaluations of 4 tasks). No round of any arm.",
+ "result_stack": {
+  "recorded_utc": "2026-11-27T16:49:54Z",
+  "runs": "The stack's three arms, 2,000 rounds each on the laptop's GPU with the code copy code-be42570-reach (the registered copy be42570 with the loop of commit 1a127c7), seed 0, 2026-11-27: cap-bursts-stack 01:56 to 02:54 UTC; cap-stack 02:55 to 04:33 UTC, stopped at round 519 from 03:19:51 to 03:54:48 UTC while rehearse-bursts-stack of practice_with_rehearsal.json ran; bursts-stack 04:33 to 16:40 UTC, stopped at round 116 from 04:38 to 15:34 UTC while the arms of written_chains_four_families.json and four_families_transformer_again.json trained (the laptop slept for most of that time). A stopped run goes on from where it stood. The order differs from the registered one: the Transformer's first arm, cap-bursts-tf, started beside cap-stack at 02:55 UTC and was paused at round 267 from 03:07 UTC until the stack's arms were done (two runs side by side made no more rounds a minute than one); cap-tf and bursts-tf follow it. Each arm is its own process with its own seed, and nothing passes between runs side by side. The Transformer's three arms and reading (3) are appended to this file when they are done.",
+  "evaluator check": "In each of the three arms the evaluation before the first round repeats the registered evaluation before practice at 2, 4, 6, 8 and 12 hops in every number (accuracy, names written, whole chain, mean bytes).",
+  "after practice (200 tasks a hop count; right answers, accuracy with its 95% Wilson interval, names written, whole chain, mean bytes)": {
+   "cap-bursts-stack": {
+    "1": {
+     "right": 32,
+     "accuracy": 0.16,
+     "interval_95": [
+      0.1157,
+      0.2171
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 62.01
+    },
+    "2": {
+     "right": 23,
+     "accuracy": 0.115,
+     "interval_95": [
+      0.0779,
+      0.1666
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 62.0
+    },
+    "3": {
+     "right": 14,
+     "accuracy": 0.07,
+     "interval_95": [
+      0.0422,
+      0.1141
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 62.02
+    },
+    "4": {
+     "right": 17,
+     "accuracy": 0.085,
+     "interval_95": [
+      0.0537,
+      0.1319
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 62.0
+    },
+    "5": {
+     "right": 20,
+     "accuracy": 0.1,
+     "interval_95": [
+      0.0657,
+      0.1494
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 61.79
+    },
+    "6": {
+     "right": 20,
+     "accuracy": 0.1,
+     "interval_95": [
+      0.0657,
+      0.1494
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 61.91
+    },
+    "7": {
+     "right": 16,
+     "accuracy": 0.08,
+     "interval_95": [
+      0.0498,
+      0.126
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 61.65
+    },
+    "8": {
+     "right": 18,
+     "accuracy": 0.09,
+     "interval_95": [
+      0.0577,
+      0.1378
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 60.77
+    },
+    "10": {
+     "right": 19,
+     "accuracy": 0.095,
+     "interval_95": [
+      0.0617,
+      0.1436
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 60.8
+    },
+    "12": {
+     "right": 18,
+     "accuracy": 0.09,
+     "interval_95": [
+      0.0577,
+      0.1378
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 61.01
+    },
+    "16": {
+     "right": 19,
+     "accuracy": 0.095,
+     "interval_95": [
+      0.0617,
+      0.1436
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 61.92
+    }
+   },
+   "cap-stack": {
+    "1": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "2": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "3": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "4": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "5": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "6": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "7": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "8": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "10": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "12": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    },
+    "16": {
+     "right": 0,
+     "accuracy": 0.0,
+     "interval_95": [
+      0.0,
+      0.0188
+     ],
+     "wrote_names": 0.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 64.0
+    }
+   },
+   "bursts-stack": {
+    "1": {
+     "right": 23,
+     "accuracy": 0.115,
+     "interval_95": [
+      0.0779,
+      0.1666
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 63.3
+    },
+    "2": {
+     "right": 20,
+     "accuracy": 0.1,
+     "interval_95": [
+      0.0657,
+      0.1494
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 63.05
+    },
+    "3": {
+     "right": 21,
+     "accuracy": 0.105,
+     "interval_95": [
+      0.0697,
+      0.1552
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 63.05
+    },
+    "4": {
+     "right": 22,
+     "accuracy": 0.11,
+     "interval_95": [
+      0.0738,
+      0.1609
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 63.08
+    },
+    "5": {
+     "right": 21,
+     "accuracy": 0.105,
+     "interval_95": [
+      0.0697,
+      0.1552
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 62.95
+    },
+    "6": {
+     "right": 19,
+     "accuracy": 0.095,
+     "interval_95": [
+      0.0617,
+      0.1436
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 62.97
+    },
+    "7": {
+     "right": 34,
+     "accuracy": 0.17,
+     "interval_95": [
+      0.1243,
+      0.2282
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 62.97
+    },
+    "8": {
+     "right": 24,
+     "accuracy": 0.12,
+     "interval_95": [
+      0.082,
+      0.1723
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 62.46
+    },
+    "10": {
+     "right": 9,
+     "accuracy": 0.045,
+     "interval_95": [
+      0.0239,
+      0.0833
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 62.4
+    },
+    "12": {
+     "right": 23,
+     "accuracy": 0.115,
+     "interval_95": [
+      0.0779,
+      0.1666
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 61.3
+    },
+    "16": {
+     "right": 16,
+     "accuracy": 0.08,
+     "interval_95": [
+      0.0498,
+      0.126
+     ],
+     "wrote_names": 1.0,
+     "wrote_the_chain": 0.0,
+     "mean_bytes": 61.54
+    }
+   }
+  },
+  "marks": {
+   "cap-bursts-stack": {
+    "(a) 6 hops: accuracy and whole-chain share": [
+     0.1,
+     0.0,
+     false
+    ],
+    "(b) 8 hops: accuracy and whole-chain share": [
+     0.09,
+     0.0,
+     false
+    ],
+    "(c) mean accuracy over 1 to 4 hops": [
+     0.1075,
+     false
+    ],
+    "meets (a) and (c)": false,
+    "meets (a), (b) and (c)": false
+   },
+   "cap-stack": {
+    "(a) 6 hops: accuracy and whole-chain share": [
+     0.0,
+     0.0,
+     false
+    ],
+    "(b) 8 hops: accuracy and whole-chain share": [
+     0.0,
+     0.0,
+     false
+    ],
+    "(c) mean accuracy over 1 to 4 hops": [
+     0.0,
+     false
+    ],
+    "meets (a) and (c)": false,
+    "meets (a), (b) and (c)": false
+   },
+   "bursts-stack": {
+    "(a) 6 hops: accuracy and whole-chain share": [
+     0.095,
+     0.0,
+     false
+    ],
+    "(b) 8 hops: accuracy and whole-chain share": [
+     0.12,
+     0.0,
+     false
+    ],
+    "(c) mean accuracy over 1 to 4 hops": [
+     0.1075,
+     false
+    ],
+    "meets (a) and (c)": false,
+    "meets (a), (b) and (c)": false
+   }
+  },
+  "along the way (round: hops of the staircase; accuracy / whole-chain share at 2, 4, 6, 8, 12 hops)": {
+   "cap-bursts-stack": {
+    "0": [
+     4,
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.115,
+      0.02
+     ],
+     [
+      0.105,
+      0.0
+     ],
+     [
+      0.115,
+      0.0
+     ]
+    ],
+    "100": [
+     8,
+     [
+      0.99,
+      0.99
+     ],
+     [
+      0.99,
+      0.99
+     ],
+     [
+      0.925,
+      0.915
+     ],
+     [
+      0.96,
+      0.93
+     ],
+     [
+      0.855,
+      0.775
+     ]
+    ],
+    "200": [
+     8,
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.96,
+      0.96
+     ],
+     [
+      0.955,
+      0.94
+     ],
+     [
+      0.855,
+      0.795
+     ]
+    ],
+    "300": [
+     8,
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.98,
+      0.98
+     ],
+     [
+      0.95,
+      0.95
+     ],
+     [
+      0.955,
+      0.925
+     ],
+     [
+      0.88,
+      0.775
+     ]
+    ],
+    "400": [
+     8,
+     [
+      1.0,
+      1.0
+     ],
+     [
+      0.985,
+      0.985
+     ],
+     [
+      0.965,
+      0.96
+     ],
+     [
+      0.955,
+      0.925
+     ],
+     [
+      0.835,
+      0.765
+     ]
+    ],
+    "500": [
+     8,
+     [
+      0.995,
+      0.995
+     ],
+     [
+      1.0,
+      0.995
+     ],
+     [
+      0.985,
+      0.98
+     ],
+     [
+      0.96,
+      0.945
+     ],
+     [
+      0.9,
+      0.83
+     ]
+    ],
+    "600": [
+     8,
+     [
+      0.99,
+      0.99
+     ],
+     [
+      0.985,
+      0.98
+     ],
+     [
+      0.99,
+      0.985
+     ],
+     [
+      0.955,
+      0.94
+     ],
+     [
+      0.91,
+      0.845
+     ]
+    ],
+    "700": [
+     8,
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.985,
+      0.985
+     ],
+     [
+      0.99,
+      0.975
+     ],
+     [
+      0.96,
+      0.945
+     ],
+     [
+      0.895,
+      0.815
+     ]
+    ],
+    "800": [
+     1,
+     [
+      0.14,
+      0.08
+     ],
+     [
+      0.105,
+      0.01
+     ],
+     [
+      0.12,
+      0.025
+     ],
+     [
+      0.1,
+      0.005
+     ],
+     [
+      0.11,
+      0.0
+     ]
+    ],
+    "900": [
+     1,
+     [
+      0.005,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1000": [
+     1,
+     [
+      0.005,
+      0.0
+     ],
+     [
+      0.005,
+      0.0
+     ],
+     [
+      0.015,
+      0.0
+     ],
+     [
+      0.005,
+      0.0
+     ],
+     [
+      0.01,
+      0.0
+     ]
+    ],
+    "1100": [
+     1,
+     [
+      0.095,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.045,
+      0.0
+     ],
+     [
+      0.05,
+      0.0
+     ],
+     [
+      0.07,
+      0.0
+     ]
+    ],
+    "1200": [
+     1,
+     [
+      0.125,
+      0.0
+     ],
+     [
+      0.075,
+      0.0
+     ],
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.065,
+      0.0
+     ],
+     [
+      0.06,
+      0.0
+     ]
+    ],
+    "1300": [
+     1,
+     [
+      0.125,
+      0.0
+     ],
+     [
+      0.075,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.07,
+      0.0
+     ],
+     [
+      0.105,
+      0.0
+     ]
+    ],
+    "1400": [
+     1,
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.125,
+      0.0
+     ],
+     [
+      0.075,
+      0.0
+     ],
+     [
+      0.11,
+      0.0
+     ],
+     [
+      0.1,
+      0.0
+     ]
+    ],
+    "1500": [
+     1,
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.15,
+      0.0
+     ],
+     [
+      0.12,
+      0.0
+     ],
+     [
+      0.13,
+      0.0
+     ],
+     [
+      0.13,
+      0.0
+     ]
+    ],
+    "1600": [
+     1,
+     [
+      0.095,
+      0.0
+     ],
+     [
+      0.07,
+      0.0
+     ],
+     [
+      0.1,
+      0.0
+     ],
+     [
+      0.075,
+      0.0
+     ],
+     [
+      0.07,
+      0.0
+     ]
+    ],
+    "1700": [
+     1,
+     [
+      0.135,
+      0.0
+     ],
+     [
+      0.095,
+      0.0
+     ],
+     [
+      0.105,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.09,
+      0.0
+     ]
+    ],
+    "1800": [
+     1,
+     [
+      0.12,
+      0.0
+     ],
+     [
+      0.1,
+      0.0
+     ],
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.075,
+      0.0
+     ]
+    ],
+    "1900": [
+     1,
+     [
+      0.12,
+      0.0
+     ],
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.135,
+      0.0
+     ],
+     [
+      0.095,
+      0.0
+     ],
+     [
+      0.075,
+      0.0
+     ]
+    ],
+    "2000": [
+     1,
+     [
+      0.115,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.1,
+      0.0
+     ],
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.09,
+      0.0
+     ]
+    ]
+   },
+   "cap-stack": {
+    "0": [
+     4,
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.115,
+      0.02
+     ],
+     [
+      0.105,
+      0.0
+     ],
+     [
+      0.115,
+      0.0
+     ]
+    ],
+    "100": [
+     8,
+     [
+      0.995,
+      0.99
+     ],
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.91,
+      0.895
+     ],
+     [
+      0.925,
+      0.895
+     ],
+     [
+      0.81,
+      0.73
+     ]
+    ],
+    "200": [
+     8,
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.99,
+      0.99
+     ],
+     [
+      0.94,
+      0.935
+     ],
+     [
+      0.93,
+      0.91
+     ],
+     [
+      0.82,
+      0.755
+     ]
+    ],
+    "300": [
+     8,
+     [
+      0.615,
+      0.48
+     ],
+     [
+      0.715,
+      0.69
+     ],
+     [
+      0.71,
+      0.695
+     ],
+     [
+      0.705,
+      0.675
+     ],
+     [
+      0.675,
+      0.605
+     ]
+    ],
+    "400": [
+     3,
+     [
+      0.81,
+      0.115
+     ],
+     [
+      0.42,
+      0.08
+     ],
+     [
+      0.325,
+      0.07
+     ],
+     [
+      0.23,
+      0.055
+     ],
+     [
+      0.135,
+      0.0
+     ]
+    ],
+    "500": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "600": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "700": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "800": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "900": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1000": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1100": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1200": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1300": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1400": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1500": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1600": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1700": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1800": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "1900": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ],
+    "2000": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0
+     ]
+    ]
+   },
+   "bursts-stack": {
+    "0": [
+     4,
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.995,
+      0.995
+     ],
+     [
+      0.115,
+      0.02
+     ],
+     [
+      0.105,
+      0.0
+     ],
+     [
+      0.115,
+      0.0
+     ]
+    ],
+    "100": [
+     19,
+     [
+      0.985,
+      0.975
+     ],
+     [
+      0.965,
+      0.94
+     ],
+     [
+      0.905,
+      0.885
+     ],
+     [
+      0.91,
+      0.88
+     ],
+     [
+      0.92,
+      0.83
+     ]
+    ],
+    "200": [
+     1,
+     [
+      0.08,
+      0.025
+     ],
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.02,
+      0.0
+     ],
+     [
+      0.015,
+      0.0
+     ],
+     [
+      0.035,
+      0.0
+     ]
+    ],
+    "300": [
+     1,
+     [
+      0.02,
+      0.0
+     ],
+     [
+      0.01,
+      0.0
+     ],
+     [
+      0.015,
+      0.0
+     ],
+     [
+      0.04,
+      0.0
+     ],
+     [
+      0.035,
+      0.0
+     ]
+    ],
+    "400": [
+     1,
+     [
+      0.07,
+      0.0
+     ],
+     [
+      0.07,
+      0.0
+     ],
+     [
+      0.05,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.055,
+      0.0
+     ]
+    ],
+    "500": [
+     1,
+     [
+      0.0,
+      0.0
+     ],
+     [
+      0.025,
+      0.0
+     ],
+     [
+      0.005,
+      0.0
+     ],
+     [
+      0.015,
+      0.0
+     ],
+     [
+      0.015,
+      0.0
+     ]
+    ],
+    "600": [
+     1,
+     [
+      0.03,
+      0.0
+     ],
+     [
+      0.025,
+      0.0
+     ],
+     [
+      0.045,
+      0.0
+     ],
+     [
+      0.065,
+      0.0
+     ],
+     [
+      0.07,
+      0.0
+     ]
+    ],
+    "700": [
+     1,
+     [
+      0.055,
+      0.0
+     ],
+     [
+      0.045,
+      0.0
+     ],
+     [
+      0.045,
+      0.0
+     ],
+     [
+      0.045,
+      0.0
+     ],
+     [
+      0.07,
+      0.0
+     ]
+    ],
+    "800": [
+     1,
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.1,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.125,
+      0.0
+     ],
+     [
+      0.095,
+      0.0
+     ]
+    ],
+    "900": [
+     1,
+     [
+      0.065,
+      0.0
+     ],
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.07,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.075,
+      0.0
+     ]
+    ],
+    "1000": [
+     1,
+     [
+      0.05,
+      0.0
+     ],
+     [
+      0.11,
+      0.0
+     ],
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.135,
+      0.0
+     ]
+    ],
+    "1100": [
+     1,
+     [
+      0.065,
+      0.0
+     ],
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.075,
+      0.0
+     ],
+     [
+      0.075,
+      0.0
+     ]
+    ],
+    "1200": [
+     1,
+     [
+      0.07,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.065,
+      0.0
+     ],
+     [
+      0.095,
+      0.0
+     ],
+     [
+      0.11,
+      0.0
+     ]
+    ],
+    "1300": [
+     1,
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.095,
+      0.0
+     ],
+     [
+      0.05,
+      0.0
+     ],
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.09,
+      0.0
+     ]
+    ],
+    "1400": [
+     1,
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.105,
+      0.0
+     ],
+     [
+      0.065,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.11,
+      0.0
+     ]
+    ],
+    "1500": [
+     1,
+     [
+      0.065,
+      0.0
+     ],
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.095,
+      0.0
+     ]
+    ],
+    "1600": [
+     1,
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.095,
+      0.0
+     ]
+    ],
+    "1700": [
+     1,
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.06,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.105,
+      0.0
+     ],
+     [
+      0.1,
+      0.0
+     ]
+    ],
+    "1800": [
+     1,
+     [
+      0.07,
+      0.0
+     ],
+     [
+      0.08,
+      0.0
+     ],
+     [
+      0.07,
+      0.0
+     ],
+     [
+      0.105,
+      0.0
+     ],
+     [
+      0.125,
+      0.0
+     ]
+    ],
+    "1900": [
+     1,
+     [
+      0.075,
+      0.0
+     ],
+     [
+      0.09,
+      0.0
+     ],
+     [
+      0.085,
+      0.0
+     ],
+     [
+      0.115,
+      0.0
+     ],
+     [
+      0.125,
+      0.0
+     ]
+    ],
+    "2000": [
+     1,
+     [
+      0.1,
+      0.0
+     ],
+     [
+      0.11,
+      0.0
+     ],
+     [
+      0.095,
+      0.0
+     ],
+     [
+      0.12,
+      0.0
+     ],
+     [
+      0.115,
+      0.0
+     ]
+    ]
+   }
+  },
+  "evaluations along the way that meet (a)": {
+   "cap-bursts-stack": {
+    "first": 100,
+    "count": 7,
+    "of": 21,
+    "last": 700
+   },
+   "cap-stack": {
+    "first": 100,
+    "count": 3,
+    "of": 21,
+    "last": 300
+   },
+   "bursts-stack": {
+    "first": 100,
+    "count": 1,
+    "of": 21,
+    "last": 100
+   }
+  },
+  "reading": {
+   "(1) the stack": "practice_written_chains.json's stack arm met neither (a) nor (c) (0.045 at 6 hops, 0.1075 over 1 to 4 hops), so (1) is read for the stack. None of its three arms meets (a) and (c) after 2,000 rounds: at 6 hops cap-bursts-stack answers 0.100, cap-stack 0.000 and bursts-stack 0.095, with no whole chain at any hop count; over 1 to 4 hops 0.1075, 0.000 and 0.1075. Neither change is what practice lacks, and this screen does not name what it lacks. Every arm met (a) along the way and lost it, which the reading records as lost and no pass: cap-bursts-stack at the seven evaluations from round 100 to round 700, cap-stack from round 100 to round 300, bursts-stack at round 100 alone.",
+   "(2) the stack": "Read only for an arm that meets (a) and (c): no arm of the stack.",
+   "(3)": "Waits for the Transformer's arms."
+  },
+  "reported and not read": {
+   "staircases": {
+    "cap-bursts-stack": {
+     "highest": 8,
+     "first round at its highest": 21,
+     "last round at its highest": 757,
+     "first round at 1 hop": 773,
+     "rounds above 1 hop after that": 19,
+     "first round at 8 hops or more": 21,
+     "rounds at each hop count": {
+      "1": 1209,
+      "2": 21,
+      "3": 1,
+      "4": 3,
+      "5": 10,
+      "6": 10,
+      "7": 9,
+      "8": 737
+     }
+    },
+    "cap-stack": {
+     "highest": 8,
+     "first round at its highest": 29,
+     "last round at its highest": 360,
+     "first round at 1 hop": 422,
+     "rounds above 1 hop after that": 34,
+     "first round at 8 hops or more": 29,
+     "rounds at each hop count": {
+      "1": 1545,
+      "2": 62,
+      "3": 29,
+      "4": 2,
+      "5": 8,
+      "6": 15,
+      "7": 7,
+      "8": 332
+     }
+    },
+    "bursts-stack": {
+     "highest": 24,
+     "first round at its highest": 143,
+     "last round at its highest": 159,
+     "first round at 1 hop": 190,
+     "rounds above 1 hop after that": 30,
+     "first round at 8 hops or more": 21,
+     "rounds at each hop count": {
+      "1": 1781,
+      "2": 31,
+      "3": 1,
+      "4": 2,
+      "5": 9,
+      "6": 9,
+      "7": 4,
+      "8": 4,
+      "9": 11,
+      "10": 2,
+      "11": 6,
+      "12": 4,
+      "13": 5,
+      "14": 5,
+      "15": 5,
+      "16": 11,
+      "17": 25,
+      "18": 7,
+      "19": 9,
+      "20": 5,
+      "21": 19,
+      "22": 23,
+      "23": 5,
+      "24": 17
+     }
+    }
+   },
+   "how the arms lost their chains": "Each staircase stood at its top and fell to 1 hop within about 60 rounds, and none climbed back. cap-bursts-stack stood at 8 hops from round 21 to round 757 (solve rate 0.958 over rounds 698 to 717, 0.595 over rounds 738 to 757) and first at 1 hop at round 773; cap-stack at 8 hops from round 29 to round 360 (0.666 over rounds 281 to 300, 0.323 over 341 to 360) and at 1 hop from round 422; bursts-stack, uncapped, climbed to 20 hops by round 102 and to 24 by round 143, lengths at which a guess pays (practice_written_chains.json), wrote no whole chain over rounds 140 to 159 at 23.75 hops on average, and stood at 1 hop from round 190. After the fall the two arms in which only rewarded attempts teach went on teaching in 198 to 200 of every 200 rounds: 0.057 to 0.126 of their attempts end on the answer's digit, and the share that writes the whole chain right fell to 0.005 or less from round 1,201 in cap-bursts-stack and from round 401 in bursts-stack, so what they learned from were digits after a wrong chain. The arm that keeps GRPO's dips taught in 4 of the 1,400 rounds after round 600: its solve rate is 0.000 in every block of 200 rounds from round 601, and a round in which no attempt is rewarded has no task whose attempts disagree, so it teaches nothing. After practice every arm writes 61 to 64 bytes on average at every hop count; the example attempts of the last round are a line of names (cap-bursts-stack), one sign repeated until the room ends (cap-stack: `?zn=====`), and letters and digits without the form of an assignment (bursts-stack).",
+   "rounds by 200": {
+    "cap-bursts-stack": [
+     {
+      "rounds": "1-200",
+      "mean_hops": 7.765,
+      "longest": 8,
+      "shortest": 4,
+      "solve_rate": 0.84,
+      "wrote_the_chain": 0.776,
+      "wrote_names": 1.0,
+      "mean_bytes": 22.185,
+      "loss": 0.099,
+      "rounds_that_taught": 197
+     },
+     {
+      "rounds": "201-400",
+      "mean_hops": 8.0,
+      "longest": 8,
+      "shortest": 8,
+      "solve_rate": 0.925,
+      "wrote_the_chain": 0.877,
+      "wrote_names": 0.999,
+      "mean_bytes": 22.732,
+      "loss": 0.035,
+      "rounds_that_taught": 196
+     },
+     {
+      "rounds": "401-600",
+      "mean_hops": 8.0,
+      "longest": 8,
+      "shortest": 8,
+      "solve_rate": 0.95,
+      "wrote_the_chain": 0.912,
+      "wrote_names": 1.0,
+      "mean_bytes": 23.069,
+      "loss": 0.022,
+      "rounds_that_taught": 183
+     },
+     {
+      "rounds": "601-800",
+      "mean_hops": 6.91,
+      "longest": 8,
+      "shortest": 1,
+      "solve_rate": 0.777,
+      "wrote_the_chain": 0.702,
+      "wrote_names": 0.978,
+      "mean_bytes": 25.15,
+      "loss": 0.071,
+      "rounds_that_taught": 190
+     },
+     {
+      "rounds": "801-1000",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.126,
+      "wrote_the_chain": 0.064,
+      "wrote_names": 0.925,
+      "mean_bytes": 48.541,
+      "loss": 0.18,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "1001-1200",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.096,
+      "wrote_the_chain": 0.024,
+      "wrote_names": 0.975,
+      "mean_bytes": 60.273,
+      "loss": 0.08,
+      "rounds_that_taught": 199
+     },
+     {
+      "rounds": "1201-1400",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.082,
+      "wrote_the_chain": 0.004,
+      "wrote_names": 0.988,
+      "mean_bytes": 60.936,
+      "loss": 0.363,
+      "rounds_that_taught": 199
+     },
+     {
+      "rounds": "1401-1600",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.083,
+      "wrote_the_chain": 0.005,
+      "wrote_names": 0.989,
+      "mean_bytes": 60.793,
+      "loss": 0.741,
+      "rounds_that_taught": 199
+     },
+     {
+      "rounds": "1601-1800",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.089,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 1.0,
+      "mean_bytes": 61.91,
+      "loss": 0.793,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "1801-2000",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.095,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 1.0,
+      "mean_bytes": 61.395,
+      "loss": 0.789,
+      "rounds_that_taught": 200
+     }
+    ],
+    "cap-stack": [
+     {
+      "rounds": "1-200",
+      "mean_hops": 7.705,
+      "longest": 8,
+      "shortest": 4,
+      "solve_rate": 0.787,
+      "wrote_the_chain": 0.727,
+      "wrote_names": 1.0,
+      "mean_bytes": 22.405,
+      "loss": -0.464,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "201-400",
+      "mean_hops": 6.96,
+      "longest": 8,
+      "shortest": 2,
+      "solve_rate": 0.602,
+      "wrote_the_chain": 0.49,
+      "wrote_names": 0.982,
+      "mean_bytes": 24.802,
+      "loss": -1.325,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "401-600",
+      "mean_hops": 1.33,
+      "longest": 3,
+      "shortest": 1,
+      "solve_rate": 0.163,
+      "wrote_the_chain": 0.139,
+      "wrote_names": 0.19,
+      "mean_bytes": 49.951,
+      "loss": -1.082,
+      "rounds_that_taught": 97
+     },
+     {
+      "rounds": "601-800",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.0,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 0.017,
+      "mean_bytes": 62.422,
+      "loss": -0.012,
+      "rounds_that_taught": 2
+     },
+     {
+      "rounds": "801-1000",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.0,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 0.019,
+      "mean_bytes": 61.815,
+      "loss": -0.088,
+      "rounds_that_taught": 1
+     },
+     {
+      "rounds": "1001-1200",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.0,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 0.02,
+      "mean_bytes": 61.256,
+      "loss": null,
+      "rounds_that_taught": 0
+     },
+     {
+      "rounds": "1201-1400",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.0,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 0.02,
+      "mean_bytes": 60.486,
+      "loss": -0.001,
+      "rounds_that_taught": 1
+     },
+     {
+      "rounds": "1401-1600",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.0,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 0.021,
+      "mean_bytes": 60.408,
+      "loss": null,
+      "rounds_that_taught": 0
+     },
+     {
+      "rounds": "1601-1800",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.0,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 0.022,
+      "mean_bytes": 60.564,
+      "loss": null,
+      "rounds_that_taught": 0
+     },
+     {
+      "rounds": "1801-2000",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.0,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 0.022,
+      "mean_bytes": 60.571,
+      "loss": null,
+      "rounds_that_taught": 0
+     }
+    ],
+    "bursts-stack": [
+     {
+      "rounds": "1-200",
+      "mean_hops": 15.26,
+      "longest": 24,
+      "shortest": 1,
+      "solve_rate": 0.354,
+      "wrote_the_chain": 0.155,
+      "wrote_names": 0.997,
+      "mean_bytes": 41.124,
+      "loss": 0.205,
+      "rounds_that_taught": 198
+     },
+     {
+      "rounds": "201-400",
+      "mean_hops": 1.15,
+      "longest": 2,
+      "shortest": 1,
+      "solve_rate": 0.249,
+      "wrote_the_chain": 0.197,
+      "wrote_names": 0.791,
+      "mean_bytes": 37.832,
+      "loss": 0.502,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "401-600",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.057,
+      "wrote_the_chain": 0.001,
+      "wrote_names": 0.989,
+      "mean_bytes": 54.698,
+      "loss": 1.113,
+      "rounds_that_taught": 198
+     },
+     {
+      "rounds": "601-800",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.062,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 0.999,
+      "mean_bytes": 60.634,
+      "loss": 1.033,
+      "rounds_that_taught": 199
+     },
+     {
+      "rounds": "801-1000",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.083,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 1.0,
+      "mean_bytes": 62.107,
+      "loss": 1.158,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "1001-1200",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.087,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 1.0,
+      "mean_bytes": 63.165,
+      "loss": 1.191,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "1201-1400",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.091,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 1.0,
+      "mean_bytes": 63.171,
+      "loss": 1.159,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "1401-1600",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.09,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 1.0,
+      "mean_bytes": 63.312,
+      "loss": 1.153,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "1601-1800",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.093,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 1.0,
+      "mean_bytes": 63.462,
+      "loss": 1.143,
+      "rounds_that_taught": 200
+     },
+     {
+      "rounds": "1801-2000",
+      "mean_hops": 1.0,
+      "longest": 1,
+      "shortest": 1,
+      "solve_rate": 0.094,
+      "wrote_the_chain": 0.0,
+      "wrote_names": 1.0,
+      "mean_bytes": 63.612,
+      "loss": 1.176,
+      "rounds_that_taught": 200
+     }
+    ]
+   }
+  },
+  "what follows": "As registered: no arm of the stack meets (a) and (c), so the next registration adds rehearsal of the written corpus between the rounds of practice. That registration came before this result: practice_with_rehearsal.json (recorded 2026-11-27T03:18:54Z) was registered after cap-bursts-stack had lost its chains and while cap-stack was losing them (its seen_before_recording says how far each run had come), and its stack arm met all its marks (commit 28d0d4d); practice_cap_raised.json repeated it with three seeds and caps of 8, 12 and 16 hops, and all nine runs held (commit bc06226). The two arms that finished since, cap-stack and bursts-stack, bear out what it acted on: without rehearsal the stack's practice does not keep its chains, with either change or both."
+ }
+}

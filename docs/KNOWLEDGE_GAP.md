@@ -178,8 +178,15 @@ on new contexts falls from 0.078 to 0.044 on test and from 0.090 to 0.052 on val
 to 0.003 and from 0.034 to 0.009. The stack is still behind on both splits. What is left of the gap is knowledge: the
 stack is ahead wherever a context offers a copy (0.087 near, 0.44 far on test) and 0.044 behind where it offers none.
 
+v22 trained the lifted loop with power-law cells (`full_size_lifted_loop_second.json`). Read with fast output
+synapses, as registered, it is 0.003 behind v21's stack. The synapses cost it 0.026 to 0.028 on new contexts. Read
+without them, the cells gain knowledge: 0.0097 on new contexts on test and 0.0140 on validation over v21's stack read
+the same way. The distance to the Transformer on new contexts falls to 0.026 on test and 0.029 on validation, and the
+whole gap to 0.0038 ahead on test and 0.0006 behind on validation. That reading was chosen after the scores were
+seen; a second seed with it fixed in advance decides (`full_size_power_cells_second_seed.json`).
+
 Records: `full_size.json`, `full_size_word_heads.json`, `full_size_best_rate_pair.json`, `full_size_loop_run.json`,
-`full_size_lifted_loop_run.json`, `results/event_lm/trained_plasticity/arms.json`.
+`full_size_lifted_loop_run.json`, `full_size_lifted_loop_second.json`, `results/event_lm/trained_plasticity/arms.json`.
 
 ## What this means
 

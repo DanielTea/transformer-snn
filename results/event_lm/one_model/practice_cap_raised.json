@@ -1,0 +1,5947 @@
+{
+ "study": "practice_cap_raised",
+ "recorded_utc": "2026-11-27T03:55:40Z",
+ "kind": "Eighteen runs on the server's GPU: the loop of practice_with_rehearsal.json (capped practice from rewarded attempts, with the written chains of 1 to 4 hops rehearsed in every round) with its cap at 8, at 12 and at 16 hops, from the stack and from the Transformer, with seeds 0, 1 and 2 each. The runs with the cap at 8 are the seeds that practice_with_rehearsal.json registered as what follows a pass; the runs with the cap at 12 and 16 are the next step it names, registered here before they start.",
+ "why": "Two questions. First, whether rehearsal holds the chains that practice wins with other seeds than the one that showed it. Second, what the cap is still needed for. The cap stood at 8 hops because a guess pays more the longer the chain: a line holds 24 assignments whatever its hops, so a long chain leaves few other digits, and a guess among the digits that a name points to is right 0.23 of the time at 8 hops, 0.24 at 9, 0.28 at 12, 0.37 at 16 and 0.55 at 20 (experiments/hop_tasks.py floors, 4,000 lines a length). The staircase steps down when fewer than a quarter of a round's attempts are rewarded: up to 9 hops a model that had lost its chains and guessed would be sent back to shorter tasks; from 10 hops on a guess pays a quarter or more. With the cap at 12 or 16 that brake is gone, and what holds the chains is the rehearsal and the chains' own higher pay. The uncapped loop without rehearsal lost them (practice_written_chains.json: the staircase climbed to 23 hops, where the guess pays). Under the cap at 8 the stack already writes chains it never practised: its model kept at round 700 of practice_within_reach.json's cap-bursts-stack wrote the whole chain right in 0.815 of the answers at 12 hops, 0.720 at 16 and 0.335 at 20. Whether practising those lengths takes the chains further, and whether the loop still holds, is not known.",
+ "loop": "experiments/practice_loop.py as practice_with_rehearsal.json ran it: every round 16 tasks at the current number of hops, verified, 8 attempts each at temperature 1.0 with room for 64 bytes (a written chain of 8 hops takes 23 bytes, of 12 hops 35, of 16 hops 47, of 20 hops 59); reward 1 if the last byte before the newline is the answer; the staircase from 4 hops, capped (--longest-hops); only attempts above their task's mean teach (--dips 0); every round rehearses the written chains of 16 fresh tasks of 1, 2, 3 or 4 hops with weight 1 (--rehearse 16); Adam at 3e-5, gradients clipped at 1; 2,000 rounds.",
+ "arms": {
+  "r8-stack-s0, r8-stack-s1, r8-stack-s2": "--longest-hops 8 --dips 0 --rehearse 16 --evaluate-hops 2 4 6 8 12 16 --seed 0, 1, 2, from chain-stack (the averaged weights of written_chains.json)",
+  "r12-stack-s0, -s1, -s2 and r16-stack-s0, -s1, -s2": "the same with --longest-hops 12 and --longest-hops 16",
+  "r8-tf-s0 ... r16-tf-s2": "the same nine runs from chain-tf",
+  "beside them": "rehearse-bursts-stack and rehearse-bursts-tf of practice_with_rehearsal.json: the cap at 8 with seed 0 on the laptop's GPU, read in their own record"
+ },
+ "code": "Commit ef30a84 (the server's copy v18p): the practice loop of 38c215f with two of the trainer's speed switches. The stack's runs take --exact-products --fused-reads; the Transformer has neither whole-number products nor reads, and its runs take no switch. All 18 runs side by side on one GPU of the server (CUDA, through MPS) in the night window of 2026-11-27, which closes at 06:15 UTC; a run that the window's end cuts short starts afresh in the next window with the same seed (a run does not go on from its middle) and is the registered run. Checked before recording: on a CPU this copy repeats the frozen copy that runs practice_with_rehearsal.json round for round (5 rounds with rehearsal from chain-stack, seed 99: the two logs equal byte for byte). On the server's GPU its evaluation of both models before practice repeats the laptop's at 2, 4, 6, 8 and 12 hops in every number (accuracy, whole chain, mean bytes), for the stack by each way (as it is, with exact products, with fused reads beside them); on the server's CPU the stack's answers at 6 hops take 19.21 bytes in the mean for 18.96 and every other number is the same. On the GPU 60 rounds with seed 99 gave the same log byte for byte by each of the three ways. A run on this GPU does not repeat itself to the bit: two runs of 30 rounds from chain-stack as they are gave the same log and weights that differ in the input synapses alone (by up to 3e-8, in 0.04% of the entries), the run with both switches differs from them by no more than that, and two runs from chain-tf gave the same log and differ in every tensor by up to 6e-8. A run on another device, or with fused reads, is another run as another seed is: seed 0 here is not the laptop's arm again. Speed, 60 rounds from chain-stack beside one other job on the GPU: 0.72 s a round as it is, 0.68 with exact products, 0.65 with fused reads beside them; the Transformer 0.16 s; the laptop's GPU takes about 1.1 s a round for the stack.",
+ "measure": "As practice_with_rehearsal.json. Along the way: before the first round and after every 100 rounds, 200 tasks each of 2, 4, 6, 8, 12 and 16 hops answered greedily (--evaluate-every 100 --evaluate-hops 2 4 6 8 12 16 --evaluate-tasks 200), each scored model kept; these tasks are drawn from the run's seed, so every seed is scored on its own tasks along the way. After the last round, the same for every run: --evaluate 1 2 3 4 5 6 7 8 10 12 16 20 --evaluate-tasks 200 --max-bytes 64 --seed 0 (the tasks of the earlier screens): the accuracy of the last byte with its 95% Wilson interval, the share of answers that write the whole chain right with its interval, the mean bytes. The rounds' log with the staircase and the rehearsal's loss.",
+ "reading": "Every run is read by the marks of practice_with_rehearsal.json: on its evaluation after 2,000 rounds (a) at 6 hops an accuracy of at least 0.50 with at least half of the answers writing the whole chain right, (b) the same at 8 hops, (c) a mean accuracy over 1 to 4 hops of at least 0.95; and (h) at every one of its 20 evaluations from round 100 to round 2,000 it meets (b) and answers at least 0.95 of the tasks of 2 hops and of 4 hops. A run holds if it meets all four. (1) Seeds: rehearsal keeps what practice wins if the stack's three runs with the cap at 8 all hold. If one does not, it holds with some seeds and not with others: no pass, and the lost run's rounds are read before anything is built on the loop. (2) The cap raised, for the stack. (2a) The loop still holds without the staircase's brake if the three runs with the cap at 16 all hold; the same is read for the cap at 12. (2b) A raised cap takes the chains further if, in at least two of the three seeds, the share of answers that write the whole chain right at 16 hops, or that share at 20 hops, is at least 0.10 higher in the run with the cap at 16 than in the run with the cap at 8 and the same seed, with the two 95% intervals apart, and in no seed the run with the cap at 8 is ahead by that margin at either length. The whole chain is read and not the accuracy, because at these lengths a guess is right in 0.37 and 0.55 of the tasks. A seed whose run with the cap at 8 writes 0.90 or more of the 16-hop chains has no room at 16 hops and is read at 20 alone. The runs with the cap at 12 are reported by the same shares as the step between. (3) The stack against the Transformer under each cap, as before: one practises further if at 6 hops and at 8 its accuracy after 2,000 rounds is at least 0.10 above the other's with the two 95% intervals apart, read for each seed; it stands for a cap if it holds in at least two of the three seeds and the other model is ahead in none. Reported and not read: the accuracies and whole-chain shares at 10, 12, 16 and 20 hops of every run, the evaluations along the way at 12 and 16 hops, the share of rounds the staircase spent at its cap and the rounds at which it left it, the rounds' solve rates and whole-chain shares, the rehearsal's loss, the mean bytes. Synthetic tasks of one family: whether the practice loop holds and how far it reaches, not a claim about reasoning in language. What follows: if (1) passes, this loop is the practice of the one-model plan, as registered. If (2a) and (2b) pass with the cap at 16, the cap is no part of the loop's safety for this family, and the next registration puts a second family of tasks into the same loop. If a run with a raised cap loses its chains, the cap stays at 8, where a model that guesses is sent back to shorter tasks, and the next registration tries a reward that asks for more than the answer before longer chains are practised.",
+ "seen_before_recording": "The laptop's arm (rehearse-bursts-stack, seed 0) had finished when this was recorded and meets (a), (b), (c) and (h), so the follow-up that practice_with_rehearsal.json registered is due; its result is appended to that file after this record. It met (h) at every one of its 20 evaluations: at 8 hops an accuracy of 0.955 to 1.000 with the whole chain right in 0.935 to 0.990 of the answers, at 12 hops 0.745 to 0.980 (0.660 to 0.975). After 2,000 rounds, accuracy (whole chain): 6 hops 0.995 (0.995), 8 hops 0.990 (0.985), 10 hops 0.995 (0.980), 12 hops 0.980 (0.975), 16 hops 0.905 (0.875), 20 hops 0.430 (0.345); mean accuracy over 1 to 4 hops 0.9988. The uncapped and capped runs without rehearsal are recorded in practice_written_chains.json and practice_within_reach.json (five of the latter's six arms were not finished at this time). No run of this record had started.",
+ "amendment_1": {
+  "recorded_utc": "2026-11-27T04:05:48Z",
+  "what changed": "The order of the runs on the GPU, not the runs or their reading. Eighteen runs side by side did not work.",
+  "what happened": "The eighteen runs started together at 03:56:02 UTC. After 98 seconds the six runs with the cap at 12 were stopped (the Transformer's after 24 to 33 rounds, the stack's before their first round): together the runs held 94 of the GPU's 98 GB. At 04:02:57 the Transformer's six runs with the cap at 8 and 16 were stopped after 196 to 414 rounds: beside them the stack's runs took 8 to 40 seconds a round, where one alone takes 0.65 and six side by side took 0.8 to 1.8 once the Transformer's runs were gone. A full-size pilot of another study that shared the GPU (fs-loop6-lift-pc3 of cubic_cells_with_data.json) was paused at 04:00:31 after 1,957 of its 24,000 updates and goes on from there when these runs are done.",
+  "the order now": "The stack's six runs with the cap at 8 and 16 were never stopped: they are the runs that started at 03:56:02. The stack's three runs with the cap at 12 started afresh at 04:05:02 beside them. The Transformer's nine runs start afresh when every stack run has ended, the six with the cap at 8 and 16 first. A stopped run starts from its first round again with the same seed and switches; of the stopped attempts nothing was read but their round counts and their pace."
+ },
+ "result_stack": {
+  "recorded_utc": "2026-11-27T05:14:48Z",
+  "runs": "The stack's nine runs, r8-, r12- and r16-stack-s0 to -s2, 2,000 rounds each on the server's GPU with code copy ef30a84 (--exact-products --fused-reads), side by side as amendment_1 says: the six with the cap at 8 and 16 from 03:56:02 UTC on 2026-11-27 without a stop, the three with the cap at 12 from 04:05:02. They ended between 04:29 and 05:11 UTC, each with its evaluation after practice. The Transformer's nine runs started at 05:11:09 when the last stack run had ended; reading (3) is appended with them.",
+  "evaluator check": "The evaluation before the first round of every seed-0 run repeats the registered evaluation of chain-stack before practice at 2, 4, 6, 8 and 12 hops (accuracy, whole chain, mean bytes): 0.995/0.995/5.01, 0.995/0.995/11.0, 0.115/0.020/18.96, 0.105/0.000/17.51, 0.115/0.000/14.76; at 16 hops it gives 0.115/0.000/14.93.",
+  "runs read": [
+   "r12-stack-s0",
+   "r12-stack-s1",
+   "r12-stack-s2",
+   "r16-stack-s0",
+   "r16-stack-s1",
+   "r16-stack-s2",
+   "r8-stack-s0",
+   "r8-stack-s1",
+   "r8-stack-s2"
+  ],
+  "after 2,000 rounds: accuracy, whole chain (200 tasks a hop count, the tasks of the earlier screens)": {
+   "r8-stack-s0": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     0.995,
+     0.995
+    ],
+    "5": [
+     0.995,
+     0.99
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     1.0,
+     1.0
+    ],
+    "8": [
+     0.995,
+     0.99
+    ],
+    "10": [
+     0.99,
+     0.985
+    ],
+    "12": [
+     0.99,
+     0.99
+    ],
+    "16": [
+     0.93,
+     0.905
+    ],
+    "20": [
+     0.705,
+     0.645
+    ]
+   },
+   "r8-stack-s1": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     1.0,
+     1.0
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     1.0,
+     0.995
+    ],
+    "8": [
+     0.99,
+     0.99
+    ],
+    "10": [
+     0.985,
+     0.98
+    ],
+    "12": [
+     0.955,
+     0.95
+    ],
+    "16": [
+     0.86,
+     0.845
+    ],
+    "20": [
+     0.44,
+     0.35
+    ]
+   },
+   "r8-stack-s2": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     1.0,
+     1.0
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     0.995,
+     0.995
+    ],
+    "8": [
+     0.985,
+     0.975
+    ],
+    "10": [
+     0.98,
+     0.965
+    ],
+    "12": [
+     0.96,
+     0.935
+    ],
+    "16": [
+     0.775,
+     0.725
+    ],
+    "20": [
+     0.38,
+     0.22
+    ]
+   },
+   "r12-stack-s0": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     1.0,
+     1.0
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     0.995,
+     0.99
+    ],
+    "8": [
+     1.0,
+     0.995
+    ],
+    "10": [
+     0.995,
+     0.985
+    ],
+    "12": [
+     0.995,
+     0.995
+    ],
+    "16": [
+     0.99,
+     0.975
+    ],
+    "20": [
+     0.945,
+     0.92
+    ]
+   },
+   "r12-stack-s1": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     1.0,
+     1.0
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     1.0,
+     0.995
+    ],
+    "8": [
+     1.0,
+     1.0
+    ],
+    "10": [
+     0.995,
+     0.985
+    ],
+    "12": [
+     0.99,
+     0.98
+    ],
+    "16": [
+     0.985,
+     0.98
+    ],
+    "20": [
+     0.935,
+     0.905
+    ]
+   },
+   "r12-stack-s2": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     0.99,
+     0.985
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     0.995,
+     0.98
+    ],
+    "8": [
+     0.99,
+     0.925
+    ],
+    "10": [
+     0.965,
+     0.885
+    ],
+    "12": [
+     0.94,
+     0.825
+    ],
+    "16": [
+     0.905,
+     0.75
+    ],
+    "20": [
+     0.805,
+     0.605
+    ]
+   },
+   "r16-stack-s0": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     0.995,
+     0.995
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     1.0,
+     0.995
+    ],
+    "6": [
+     0.995,
+     0.995
+    ],
+    "7": [
+     0.98,
+     0.965
+    ],
+    "8": [
+     0.94,
+     0.93
+    ],
+    "10": [
+     0.96,
+     0.88
+    ],
+    "12": [
+     0.92,
+     0.845
+    ],
+    "16": [
+     0.805,
+     0.695
+    ],
+    "20": [
+     0.695,
+     0.52
+    ]
+   },
+   "r16-stack-s1": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     0.99,
+     0.99
+    ],
+    "5": [
+     1.0,
+     1.0
+    ],
+    "6": [
+     0.995,
+     0.99
+    ],
+    "7": [
+     0.985,
+     0.96
+    ],
+    "8": [
+     0.95,
+     0.93
+    ],
+    "10": [
+     0.95,
+     0.885
+    ],
+    "12": [
+     0.87,
+     0.8
+    ],
+    "16": [
+     0.795,
+     0.695
+    ],
+    "20": [
+     0.675,
+     0.465
+    ]
+   },
+   "r16-stack-s2": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     0.995,
+     0.995
+    ],
+    "5": [
+     1.0,
+     1.0
+    ],
+    "6": [
+     0.995,
+     0.99
+    ],
+    "7": [
+     0.985,
+     0.98
+    ],
+    "8": [
+     0.975,
+     0.955
+    ],
+    "10": [
+     0.965,
+     0.905
+    ],
+    "12": [
+     0.915,
+     0.85
+    ],
+    "16": [
+     0.82,
+     0.71
+    ],
+    "20": [
+     0.74,
+     0.595
+    ]
+   }
+  },
+  "whole chains at 16 and 20 hops with their 95% intervals": {
+   "r8-stack-s0": {
+    "16": [
+     0.905,
+     [
+      0.8564,
+      0.9383
+     ]
+    ],
+    "20": [
+     0.645,
+     [
+      0.5765,
+      0.708
+     ]
+    ]
+   },
+   "r8-stack-s1": {
+    "16": [
+     0.845,
+     [
+      0.7884,
+      0.8886
+     ]
+    ],
+    "20": [
+     0.35,
+     [
+      0.2873,
+      0.4184
+     ]
+    ]
+   },
+   "r8-stack-s2": {
+    "16": [
+     0.725,
+     [
+      0.6593,
+      0.7822
+     ]
+    ],
+    "20": [
+     0.22,
+     [
+      0.1682,
+      0.2824
+     ]
+    ]
+   },
+   "r12-stack-s0": {
+    "16": [
+     0.975,
+     [
+      0.9428,
+      0.9893
+     ]
+    ],
+    "20": [
+     0.92,
+     [
+      0.874,
+      0.9502
+     ]
+    ]
+   },
+   "r12-stack-s1": {
+    "16": [
+     0.98,
+     [
+      0.9497,
+      0.9922
+     ]
+    ],
+    "20": [
+     0.905,
+     [
+      0.8564,
+      0.9383
+     ]
+    ]
+   },
+   "r12-stack-s2": {
+    "16": [
+     0.75,
+     [
+      0.6857,
+      0.8049
+     ]
+    ],
+    "20": [
+     0.605,
+     [
+      0.5359,
+      0.6702
+     ]
+    ]
+   },
+   "r16-stack-s0": {
+    "16": [
+     0.695,
+     [
+      0.628,
+      0.7546
+     ]
+    ],
+    "20": [
+     0.52,
+     [
+      0.451,
+      0.5882
+     ]
+    ]
+   },
+   "r16-stack-s1": {
+    "16": [
+     0.695,
+     [
+      0.628,
+      0.7546
+     ]
+    ],
+    "20": [
+     0.465,
+     [
+      0.3972,
+      0.5341
+     ]
+    ]
+   },
+   "r16-stack-s2": {
+    "16": [
+     0.71,
+     [
+      0.6436,
+      0.7685
+     ]
+    ],
+    "20": [
+     0.595,
+     [
+      0.5258,
+      0.6606
+     ]
+    ]
+   }
+  },
+  "mean accuracy over 1 to 4 hops": {
+   "r8-stack-s0": 0.9988,
+   "r8-stack-s1": 1.0,
+   "r8-stack-s2": 1.0,
+   "r12-stack-s0": 1.0,
+   "r12-stack-s1": 1.0,
+   "r12-stack-s2": 1.0,
+   "r16-stack-s0": 0.9988,
+   "r16-stack-s1": 0.9975,
+   "r16-stack-s2": 0.9988
+  },
+  "marks": {
+   "r8-stack-s0": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": true,
+    "holds": true,
+    "evaluations of 20 that meet (h)": 20
+   },
+   "r8-stack-s1": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": true,
+    "holds": true,
+    "evaluations of 20 that meet (h)": 20
+   },
+   "r8-stack-s2": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": true,
+    "holds": true,
+    "evaluations of 20 that meet (h)": 20
+   },
+   "r12-stack-s0": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": true,
+    "holds": true,
+    "evaluations of 20 that meet (h)": 20
+   },
+   "r12-stack-s1": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": true,
+    "holds": true,
+    "evaluations of 20 that meet (h)": 20
+   },
+   "r12-stack-s2": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": true,
+    "holds": true,
+    "evaluations of 20 that meet (h)": 20
+   },
+   "r16-stack-s0": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": true,
+    "holds": true,
+    "evaluations of 20 that meet (h)": 20
+   },
+   "r16-stack-s1": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": true,
+    "holds": true,
+    "evaluations of 20 that meet (h)": 20
+   },
+   "r16-stack-s2": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": true,
+    "holds": true,
+    "evaluations of 20 that meet (h)": 20
+   }
+  },
+  "along the way, 20 evaluations (lowest, highest)": {
+   "r8-stack-s0": {
+    "8 hops": {
+     "accuracy": [
+      0.965,
+      1.0
+     ],
+     "whole chain": [
+      0.94,
+      0.995
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.76,
+      0.99
+     ],
+     "whole chain": [
+      0.69,
+      0.99
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.465,
+      0.93
+     ],
+     "whole chain": [
+      0.36,
+      0.905
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.995,
+    "rounds whose evaluation misses (h)": []
+   },
+   "r8-stack-s1": {
+    "8 hops": {
+     "accuracy": [
+      0.915,
+      0.995
+     ],
+     "whole chain": [
+      0.905,
+      0.995
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.73,
+      0.96
+     ],
+     "whole chain": [
+      0.665,
+      0.935
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.48,
+      0.87
+     ],
+     "whole chain": [
+      0.375,
+      0.84
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.975,
+    "rounds whose evaluation misses (h)": []
+   },
+   "r8-stack-s2": {
+    "8 hops": {
+     "accuracy": [
+      0.94,
+      0.995
+     ],
+     "whole chain": [
+      0.925,
+      0.985
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.725,
+      0.955
+     ],
+     "whole chain": [
+      0.705,
+      0.95
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.405,
+      0.86
+     ],
+     "whole chain": [
+      0.305,
+      0.815
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 1.0,
+    "rounds whose evaluation misses (h)": []
+   },
+   "r12-stack-s0": {
+    "8 hops": {
+     "accuracy": [
+      0.955,
+      1.0
+     ],
+     "whole chain": [
+      0.94,
+      0.995
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.855,
+      1.0
+     ],
+     "whole chain": [
+      0.795,
+      1.0
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.62,
+      0.995
+     ],
+     "whole chain": [
+      0.535,
+      0.985
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.995,
+    "rounds whose evaluation misses (h)": []
+   },
+   "r12-stack-s1": {
+    "8 hops": {
+     "accuracy": [
+      0.855,
+      1.0
+     ],
+     "whole chain": [
+      0.785,
+      0.995
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.65,
+      0.985
+     ],
+     "whole chain": [
+      0.525,
+      0.98
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.47,
+      0.975
+     ],
+     "whole chain": [
+      0.24,
+      0.965
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.965,
+    "rounds whose evaluation misses (h)": []
+   },
+   "r12-stack-s2": {
+    "8 hops": {
+     "accuracy": [
+      0.925,
+      0.995
+     ],
+     "whole chain": [
+      0.905,
+      0.995
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.87,
+      0.99
+     ],
+     "whole chain": [
+      0.79,
+      0.98
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.68,
+      0.97
+     ],
+     "whole chain": [
+      0.58,
+      0.935
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.995,
+    "rounds whose evaluation misses (h)": []
+   },
+   "r16-stack-s0": {
+    "8 hops": {
+     "accuracy": [
+      0.93,
+      0.985
+     ],
+     "whole chain": [
+      0.9,
+      0.965
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.855,
+      0.95
+     ],
+     "whole chain": [
+      0.8,
+      0.915
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.73,
+      0.895
+     ],
+     "whole chain": [
+      0.625,
+      0.86
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.99,
+    "rounds whose evaluation misses (h)": []
+   },
+   "r16-stack-s1": {
+    "8 hops": {
+     "accuracy": [
+      0.86,
+      0.99
+     ],
+     "whole chain": [
+      0.62,
+      0.975
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.49,
+      0.95
+     ],
+     "whole chain": [
+      0.235,
+      0.89
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.325,
+      0.875
+     ],
+     "whole chain": [
+      0.06,
+      0.79
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.98,
+    "rounds whose evaluation misses (h)": []
+   },
+   "r16-stack-s2": {
+    "8 hops": {
+     "accuracy": [
+      0.925,
+      0.99
+     ],
+     "whole chain": [
+      0.905,
+      0.97
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.855,
+      0.945
+     ],
+     "whole chain": [
+      0.755,
+      0.93
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.7,
+      0.905
+     ],
+     "whole chain": [
+      0.565,
+      0.815
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.985,
+    "rounds whose evaluation misses (h)": []
+   }
+  },
+  "staircase": {
+   "r8-stack-s0": {
+    "longest": 8,
+    "share of rounds at its longest": 0.99,
+    "first round at its longest": 21,
+    "rounds below its longest after reaching it": 0,
+    "rounds below its longest": []
+   },
+   "r8-stack-s1": {
+    "longest": 8,
+    "share of rounds at its longest": 0.9885,
+    "first round at its longest": 24,
+    "rounds below its longest after reaching it": 0,
+    "rounds below its longest": []
+   },
+   "r8-stack-s2": {
+    "longest": 8,
+    "share of rounds at its longest": 0.9865,
+    "first round at its longest": 28,
+    "rounds below its longest after reaching it": 0,
+    "rounds below its longest": []
+   },
+   "r12-stack-s0": {
+    "longest": 12,
+    "share of rounds at its longest": 0.9835,
+    "first round at its longest": 33,
+    "rounds below its longest after reaching it": 1,
+    "rounds below its longest": [
+     35
+    ]
+   },
+   "r12-stack-s1": {
+    "longest": 12,
+    "share of rounds at its longest": 0.9705,
+    "first round at its longest": 40,
+    "rounds below its longest after reaching it": 20,
+    "rounds below its longest": [
+     41,
+     1508,
+     1509,
+     1510,
+     1511,
+     1512,
+     1513,
+     1514,
+     1515,
+     1516,
+     1517,
+     1518,
+     1519,
+     1520,
+     1521,
+     1522,
+     1523,
+     1524,
+     1525,
+     1526
+    ]
+   },
+   "r12-stack-s2": {
+    "longest": 12,
+    "share of rounds at its longest": 0.979,
+    "first round at its longest": 43,
+    "rounds below its longest after reaching it": 0,
+    "rounds below its longest": []
+   },
+   "r16-stack-s0": {
+    "longest": 16,
+    "share of rounds at its longest": 0.9555,
+    "first round at its longest": 53,
+    "rounds below its longest after reaching it": 37,
+    "rounds below its longest": [
+     55,
+     56,
+     57,
+     58,
+     59,
+     74,
+     650,
+     651,
+     652,
+     653,
+     654,
+     655,
+     656,
+     657,
+     658,
+     659,
+     660,
+     661,
+     662,
+     663,
+     664,
+     665,
+     666,
+     667,
+     668,
+     669,
+     670,
+     671,
+     672,
+     673,
+     674,
+     675,
+     676,
+     677,
+     678,
+     679,
+     680
+    ]
+   },
+   "r16-stack-s1": {
+    "longest": 16,
+    "share of rounds at its longest": 0.962,
+    "first round at its longest": 77,
+    "rounds below its longest after reaching it": 0,
+    "rounds below its longest": []
+   },
+   "r16-stack-s2": {
+    "longest": 16,
+    "share of rounds at its longest": 0.964,
+    "first round at its longest": 69,
+    "rounds below its longest after reaching it": 4,
+    "rounds below its longest": [
+     78,
+     79,
+     80,
+     81
+    ]
+   }
+  },
+  "rounds by 500 (solve rate, whole chain, rounds that taught, rehearsal's loss)": {
+   "r8-stack-s0": {
+    "1-500": [
+     0.9291,
+     0.904,
+     349,
+     0.0025
+    ],
+    "501-1000": [
+     0.982,
+     0.9707,
+     186,
+     0.0012
+    ],
+    "1001-1500": [
+     0.9876,
+     0.9813,
+     106,
+     0.0007
+    ],
+    "1501-2000": [
+     0.9924,
+     0.9887,
+     65,
+     0.0003
+    ]
+   },
+   "r8-stack-s1": {
+    "1-500": [
+     0.9182,
+     0.8942,
+     365,
+     0.0021
+    ],
+    "501-1000": [
+     0.9847,
+     0.9768,
+     158,
+     0.0006
+    ],
+    "1001-1500": [
+     0.9854,
+     0.9781,
+     128,
+     0.0007
+    ],
+    "1501-2000": [
+     0.9913,
+     0.9871,
+     100,
+     0.0008
+    ]
+   },
+   "r8-stack-s2": {
+    "1-500": [
+     0.9225,
+     0.8996,
+     348,
+     0.0017
+    ],
+    "501-1000": [
+     0.9795,
+     0.9686,
+     194,
+     0.0005
+    ],
+    "1001-1500": [
+     0.9823,
+     0.9731,
+     148,
+     0.0004
+    ],
+    "1501-2000": [
+     0.9911,
+     0.9842,
+     84,
+     0.0003
+    ]
+   },
+   "r12-stack-s0": {
+    "1-500": [
+     0.8427,
+     0.7675,
+     448,
+     0.002
+    ],
+    "501-1000": [
+     0.9673,
+     0.9339,
+     314,
+     0.0012
+    ],
+    "1001-1500": [
+     0.9841,
+     0.968,
+     176,
+     0.0003
+    ],
+    "1501-2000": [
+     0.9882,
+     0.9724,
+     182,
+     0.0002
+    ]
+   },
+   "r12-stack-s1": {
+    "1-500": [
+     0.8458,
+     0.7765,
+     465,
+     0.0022
+    ],
+    "501-1000": [
+     0.9627,
+     0.9223,
+     360,
+     0.0007
+    ],
+    "1001-1500": [
+     0.9664,
+     0.928,
+     377,
+     0.0009
+    ],
+    "1501-2000": [
+     0.9429,
+     0.904,
+     280,
+     0.0032
+    ]
+   },
+   "r12-stack-s2": {
+    "1-500": [
+     0.8488,
+     0.782,
+     455,
+     0.002
+    ],
+    "501-1000": [
+     0.9713,
+     0.9398,
+     288,
+     0.0012
+    ],
+    "1001-1500": [
+     0.974,
+     0.9451,
+     236,
+     0.0011
+    ],
+    "1501-2000": [
+     0.9826,
+     0.9563,
+     199,
+     0.0009
+    ]
+   },
+   "r16-stack-s0": {
+    "1-500": [
+     0.7416,
+     0.613,
+     498,
+     0.0021
+    ],
+    "501-1000": [
+     0.746,
+     0.5964,
+     497,
+     0.003
+    ],
+    "1001-1500": [
+     0.8017,
+     0.6709,
+     500,
+     0.0012
+    ],
+    "1501-2000": [
+     0.8127,
+     0.6865,
+     498,
+     0.0007
+    ]
+   },
+   "r16-stack-s1": {
+    "1-500": [
+     0.605,
+     0.3964,
+     499,
+     0.0031
+    ],
+    "501-1000": [
+     0.7311,
+     0.5487,
+     500,
+     0.0021
+    ],
+    "1001-1500": [
+     0.78,
+     0.6216,
+     499,
+     0.0015
+    ],
+    "1501-2000": [
+     0.7513,
+     0.5793,
+     500,
+     0.0015
+    ]
+   },
+   "r16-stack-s2": {
+    "1-500": [
+     0.6514,
+     0.4749,
+     500,
+     0.0025
+    ],
+    "501-1000": [
+     0.8223,
+     0.7038,
+     494,
+     0.0015
+    ],
+    "1001-1500": [
+     0.8044,
+     0.6832,
+     500,
+     0.0011
+    ],
+    "1501-2000": [
+     0.7574,
+     0.6067,
+     499,
+     0.0012
+    ]
+   }
+  },
+  "reading by the registered rules": {
+   "(1) seeds, the stack with the cap at 8": {
+    "holds, by seed": [
+     true,
+     true,
+     true
+    ],
+    "marks, by seed": [
+     {
+      "(a)": true,
+      "(b)": true,
+      "(c)": true,
+      "(h)": true
+     },
+     {
+      "(a)": true,
+      "(b)": true,
+      "(c)": true,
+      "(h)": true
+     },
+     {
+      "(a)": true,
+      "(b)": true,
+      "(c)": true,
+      "(h)": true
+     }
+    ],
+    "evaluations of 20 that meet (h), by seed": [
+     20,
+     20,
+     20
+    ],
+    "all hold": true
+   },
+   "(2a) the stack with the cap at 16": {
+    "holds, by seed": [
+     true,
+     true,
+     true
+    ],
+    "marks, by seed": [
+     {
+      "(a)": true,
+      "(b)": true,
+      "(c)": true,
+      "(h)": true
+     },
+     {
+      "(a)": true,
+      "(b)": true,
+      "(c)": true,
+      "(h)": true
+     },
+     {
+      "(a)": true,
+      "(b)": true,
+      "(c)": true,
+      "(h)": true
+     }
+    ],
+    "evaluations of 20 that meet (h), by seed": [
+     20,
+     20,
+     20
+    ],
+    "all hold": true
+   },
+   "(2a) the stack with the cap at 12": {
+    "holds, by seed": [
+     true,
+     true,
+     true
+    ],
+    "marks, by seed": [
+     {
+      "(a)": true,
+      "(b)": true,
+      "(c)": true,
+      "(h)": true
+     },
+     {
+      "(a)": true,
+      "(b)": true,
+      "(c)": true,
+      "(h)": true
+     },
+     {
+      "(a)": true,
+      "(b)": true,
+      "(c)": true,
+      "(h)": true
+     }
+    ],
+    "evaluations of 20 that meet (h), by seed": [
+     20,
+     20,
+     20
+    ],
+    "all hold": true
+   },
+   "(2b) whole chains, the stack's cap at 16 against the cap at 8": {
+    "by seed": {
+     "0": {
+      "16 hops": {
+       "cap 16": [
+        0.695,
+        [
+         0.628,
+         0.7546
+        ]
+       ],
+       "cap 8": [
+        0.905,
+        [
+         0.8564,
+         0.9383
+        ]
+       ],
+       "difference": -0.21,
+       "raised cap ahead": false,
+       "cap 8 ahead": true
+      },
+      "20 hops": {
+       "cap 16": [
+        0.52,
+        [
+         0.451,
+         0.5882
+        ]
+       ],
+       "cap 8": [
+        0.645,
+        [
+         0.5765,
+         0.708
+        ]
+       ],
+       "difference": -0.125,
+       "raised cap ahead": false,
+       "cap 8 ahead": false
+      },
+      "read at 20 alone (the cap at 8 writes 0.90 or more of the 16-hop chains)": true,
+      "raised cap ahead": false,
+      "cap 8 ahead at either length": true
+     },
+     "1": {
+      "16 hops": {
+       "cap 16": [
+        0.695,
+        [
+         0.628,
+         0.7546
+        ]
+       ],
+       "cap 8": [
+        0.845,
+        [
+         0.7884,
+         0.8886
+        ]
+       ],
+       "difference": -0.15,
+       "raised cap ahead": false,
+       "cap 8 ahead": true
+      },
+      "20 hops": {
+       "cap 16": [
+        0.465,
+        [
+         0.3972,
+         0.5341
+        ]
+       ],
+       "cap 8": [
+        0.35,
+        [
+         0.2873,
+         0.4184
+        ]
+       ],
+       "difference": 0.115,
+       "raised cap ahead": false,
+       "cap 8 ahead": false
+      },
+      "read at 20 alone (the cap at 8 writes 0.90 or more of the 16-hop chains)": false,
+      "raised cap ahead": false,
+      "cap 8 ahead at either length": true
+     },
+     "2": {
+      "16 hops": {
+       "cap 16": [
+        0.71,
+        [
+         0.6436,
+         0.7685
+        ]
+       ],
+       "cap 8": [
+        0.725,
+        [
+         0.6593,
+         0.7822
+        ]
+       ],
+       "difference": -0.015,
+       "raised cap ahead": false,
+       "cap 8 ahead": false
+      },
+      "20 hops": {
+       "cap 16": [
+        0.595,
+        [
+         0.5258,
+         0.6606
+        ]
+       ],
+       "cap 8": [
+        0.22,
+        [
+         0.1682,
+         0.2824
+        ]
+       ],
+       "difference": 0.375,
+       "raised cap ahead": true,
+       "cap 8 ahead": false
+      },
+      "read at 20 alone (the cap at 8 writes 0.90 or more of the 16-hop chains)": false,
+      "raised cap ahead": true,
+      "cap 8 ahead at either length": false
+     }
+    },
+    "seeds with the raised cap ahead": 1,
+    "seeds with the cap at 8 ahead": 2,
+    "passes": false
+   },
+   "(2b) whole chains, the stack's cap at 12 against the cap at 8 (reported)": {
+    "by seed": {
+     "0": {
+      "16 hops": {
+       "cap 12": [
+        0.975,
+        [
+         0.9428,
+         0.9893
+        ]
+       ],
+       "cap 8": [
+        0.905,
+        [
+         0.8564,
+         0.9383
+        ]
+       ],
+       "difference": 0.07,
+       "raised cap ahead": false,
+       "cap 8 ahead": false
+      },
+      "20 hops": {
+       "cap 12": [
+        0.92,
+        [
+         0.874,
+         0.9502
+        ]
+       ],
+       "cap 8": [
+        0.645,
+        [
+         0.5765,
+         0.708
+        ]
+       ],
+       "difference": 0.275,
+       "raised cap ahead": true,
+       "cap 8 ahead": false
+      },
+      "read at 20 alone (the cap at 8 writes 0.90 or more of the 16-hop chains)": true,
+      "raised cap ahead": true,
+      "cap 8 ahead at either length": false
+     },
+     "1": {
+      "16 hops": {
+       "cap 12": [
+        0.98,
+        [
+         0.9497,
+         0.9922
+        ]
+       ],
+       "cap 8": [
+        0.845,
+        [
+         0.7884,
+         0.8886
+        ]
+       ],
+       "difference": 0.135,
+       "raised cap ahead": true,
+       "cap 8 ahead": false
+      },
+      "20 hops": {
+       "cap 12": [
+        0.905,
+        [
+         0.8564,
+         0.9383
+        ]
+       ],
+       "cap 8": [
+        0.35,
+        [
+         0.2873,
+         0.4184
+        ]
+       ],
+       "difference": 0.555,
+       "raised cap ahead": true,
+       "cap 8 ahead": false
+      },
+      "read at 20 alone (the cap at 8 writes 0.90 or more of the 16-hop chains)": false,
+      "raised cap ahead": true,
+      "cap 8 ahead at either length": false
+     },
+     "2": {
+      "16 hops": {
+       "cap 12": [
+        0.75,
+        [
+         0.6857,
+         0.8049
+        ]
+       ],
+       "cap 8": [
+        0.725,
+        [
+         0.6593,
+         0.7822
+        ]
+       ],
+       "difference": 0.025,
+       "raised cap ahead": false,
+       "cap 8 ahead": false
+      },
+      "20 hops": {
+       "cap 12": [
+        0.605,
+        [
+         0.5359,
+         0.6702
+        ]
+       ],
+       "cap 8": [
+        0.22,
+        [
+         0.1682,
+         0.2824
+        ]
+       ],
+       "difference": 0.385,
+       "raised cap ahead": true,
+       "cap 8 ahead": false
+      },
+      "read at 20 alone (the cap at 8 writes 0.90 or more of the 16-hop chains)": false,
+      "raised cap ahead": true,
+      "cap 8 ahead at either length": false
+     }
+    },
+    "seeds with the raised cap ahead": 3,
+    "seeds with the cap at 8 ahead": 0,
+    "passes": true
+   }
+  },
+  "reading": {
+   "(1)": "Passes. The stack's three runs with the cap at 8 hold (a), (b), (c) and (h), each at 20 of its 20 evaluations. After 2,000 rounds they answer 0.995, 0.990 and 0.985 of the tasks of 8 hops with the whole chain written right in 0.990, 0.990 and 0.975, and 0.9988, 1.000 and 1.000 over 1 to 4 hops. With the laptop's run of practice_with_rehearsal.json that is four runs of four in which rehearsal keeps what practice wins. Past the practised length the seeds differ: whole chains at 16 hops in 0.905, 0.845 and 0.725 of the answers, at 20 hops in 0.645, 0.350 and 0.220.",
+   "(2a)": "Passes at 16 and at 12: each of the six runs with a raised cap holds the four marks at 20 of its 20 evaluations. No run lost its chains. The lowest evaluation along the way at 8 hops is 0.855 right (r12-stack-s1) and 0.620 whole chains (r16-stack-s1), and no run answers under 0.965 of the tasks of 2 or 4 hops at any evaluation.",
+   "(2b)": "Fails at 16. Whole chains with the cap at 16 against the cap at 8, seeds 0, 1, 2: at 16 hops 0.695 against 0.905, 0.695 against 0.845, 0.710 against 0.725; at 20 hops 0.520 against 0.645, 0.465 against 0.350, 0.595 against 0.220. The raised cap is ahead by the margin in one seed (seed 2 at 20 hops) where two were asked, and the cap at 8 is ahead in two (seeds 0 and 1 at 16 hops, intervals apart). Seed 0 is read at 20 hops alone for the raised cap, because its run with the cap at 8 writes 0.905 of the 16-hop chains; if its 16 hops are left out of the other direction as well, the cap at 8 is still ahead in seed 1, so the reading fails either way. A stack that practised at 16 hops writes chains of 16 hops no better than one that never practised past 8.",
+   "(2b) the cap at 12, reported by the same shares": "Ahead of the cap at 8 in all three seeds and behind in none. Whole chains at 16 hops 0.975, 0.980 and 0.750 against 0.905, 0.845 and 0.725; at 20 hops 0.920, 0.905 and 0.605 against 0.645, 0.350 and 0.220, each of the three 20-hop differences with the intervals apart. From a corpus of 1 to 4 hops and practice up to 12, two seeds of three write chains of 20 hops whole in nine answers of ten, five times the length they read. The cap at 12 is above the cap at 16 at both lengths in every seed: clearly in seeds 0 and 1 (0.975 and 0.980 against 0.695 at 16 hops, 0.920 and 0.905 against 0.520 and 0.465 at 20), by 0.04 and 0.01 in seed 2.",
+   "why 16 does worse than 12 (from the rounds, reported)": "With the cap at 8 the runs solve 0.99 of their tasks in the last 500 rounds and 0.004 to 0.007 of the attempts are rewarded without the whole chain written right. At 12 they solve 0.94 to 0.99 and that share is 0.016 to 0.039. At 16 they solve 0.75 to 0.81 and it is 0.126 to 0.172: a guess pays 0.37 at 16 hops (hop_tasks.py floors, 0.28 at 12, 0.23 at 8), so about one attempt in seven earns its reward without the chain, and the reward teaches that too. The staircase does not answer that, since such a run's solve rate stays far above 0.25, which is what the registration expected of a cap past 9 hops. Every round with the cap at 16 teaches (498 to 500 of the last 500), against 65 to 100 with the cap at 8, where most rounds have nothing left to correct.",
+   "two slumps, both recovered (from the rounds, reported)": "Two of the six runs with a raised cap began to lose their chains as cap-bursts-stack of practice_within_reach.json lost them for good after round 700, and came back. r16-stack-s0 solved 0.73 of its tasks in round 641 and 0.19 in round 649, with no whole chain in rounds 647 to 649; r12-stack-s1 solved 0.72 in round 1,500 and 0.16 in round 1,508. The staircase took them down, to 7 and to 6 hops, where they solved their tasks again, and both stood at their cap again 39 and 26 rounds after the slump began. Both runs meet (h) at every evaluation; the one at round 1,500 of r12-stack-s1 fell into the slump's first rounds (8 hops 0.855 with 0.785 whole chains, 16 hops 0.470 with 0.240) and the next, at round 1,600, reads 1.000 and 0.955 again. What holds the loop is then not the cap but the staircase's way down together with rehearsal: the run without rehearsal had the same staircase and did not return.",
+   "(3)": "Waits for the Transformer's nine runs."
+  },
+  "what follows": "(1) passes: reward on the answer alone, with rehearsal and without dips, is the practice loop of the one-model plan, as registered. For the cap neither registered consequence applies as written: (2b) fails at 16, so the cap is not shown to be no part of the loop, and no run with a raised cap lost its chains, so the cap need not stay at 8. What the runs show instead is a best cap between the two: at 12 hops the tasks are still solved nearly always and the reward still means the chain. The next registration, practice of several families of tasks in one loop, sets its caps at 12 steps and names this result as the reason; that is a choice made after seeing these runs, not a registered consequence. Whether practice at 16 hops pays once the reward asks for more than a digit a guess can hit is open: the new families of task_families.py come at it from the other side, since a guess pays 0.10 in three of them at every length."
+ },
+ "amendment_2": {
+  "recorded_utc": "2026-11-27T05:53:37Z",
+  "what changed": "When the Transformer's runs with the cap at 12 and 16 are run, not the runs or their reading. Three of them were stopped by hand, twice.",
+  "what happened": "The Transformer's six runs with the cap at 8 and 16 started together at 05:11:09 UTC on 2026-11-27, when the last stack run had ended. Side by side they were too slow to end before 06:05, when the runner stops its runs because the window closes at 06:45: at 05:30 the three with the cap at 8 stood at 642, 683 and 955 rounds and made 29 to 39 rounds a minute, the three with the cap at 16 at 450, 490 and 909 with 18 to 22. At 05:31:29 the three runs with the cap at 16 were stopped by hand after 474, 511 and 933 rounds: they could not end in time whatever was done, and without them the three with the cap at 8 could. Those then made 90 to 100 rounds a minute each and ended at 05:42:58, 05:44:12 and 05:44:29 with their evaluations after practice. With three arms missing the runner ended with an error, and the scheduler starts a job that ends so once more: at 05:45:32 the three runs with the cap at 16 started from their first round again, now beside the full-size pilot that had waited for the GPU. They were stopped by hand at 05:47:29 after 100, 100 and 184 rounds, with 18 minutes of the runner's time left for runs that need more than twice that.",
+  "the order now": "The three runs with the cap at 16 and the three with the cap at 12 start from their first round, with the same seeds and switches, when the weekend's window opens at 16:45 UTC on 2026-11-27: three side by side, the cap at 16 first, before the other practice runs and with no full-size job on the same GPU.",
+  "what was seen of the stopped runs": "Their rounds and their evaluations along the way up to the stops; result_tf_cap_8 reports them. They are not read: a run is read when it has its 2,000 rounds and its evaluation after practice. The second start repeated the first one's rounds as far as it went (every logged number of all 100 rounds for seed 1; for seeds 0 and 2 all but the fifth decimal of a loss in 5 of 100 and in 2 of 184 rounds) and its evaluations, so the weekend's runs are expected to begin as the stopped ones did. Where they part from them later, both are reported."
+ },
+ "result_tf_cap_8": {
+  "recorded_utc": "2026-11-27T05:53:37Z",
+  "runs": "The Transformer's three runs with the cap at 8, r8-tf-s0 to -s2, 2,000 rounds each on the server's GPU with code copy ef30a84, from 05:11:09 UTC on 2026-11-27, at first beside its three runs with the cap at 16 (amendment_2). They ended at 05:44:29, 05:44:12 and 05:42:58, each with its evaluation after practice. The six runs with the cap at 12 and 16 are run in the weekend's window, and reading (3) for those caps is appended with them.",
+  "evaluator check": "The evaluation before the first round of r8-tf-s0 repeats the registered evaluation of chain-tf (written_chains.json, on the laptop) at 2, 4, 6, 8, 12 and 16 hops to the last digit (accuracy, whole chain, mean bytes): 0.990/0.985/5.01, 0.990/0.985/10.97, 0.070/0.000/36.52, 0.090/0.000/35.92, 0.115/0.000/32.30, 0.105/0.000/23.64.",
+  "runs read": [
+   "r8-tf-s0",
+   "r8-tf-s1",
+   "r8-tf-s2"
+  ],
+  "after 2,000 rounds: accuracy, whole chain (200 tasks a hop count, the tasks of the earlier screens)": {
+   "r8-tf-s0": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     1.0,
+     1.0
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     1.0,
+     0.995
+    ],
+    "8": [
+     1.0,
+     1.0
+    ],
+    "10": [
+     0.995,
+     0.995
+    ],
+    "12": [
+     1.0,
+     1.0
+    ],
+    "16": [
+     0.985,
+     0.965
+    ],
+    "20": [
+     0.975,
+     0.97
+    ]
+   },
+   "r8-tf-s1": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     1.0,
+     0.0
+    ],
+    "6": [
+     0.995,
+     0.0
+    ],
+    "7": [
+     1.0,
+     0.0
+    ],
+    "8": [
+     1.0,
+     0.0
+    ],
+    "10": [
+     1.0,
+     0.0
+    ],
+    "12": [
+     1.0,
+     0.0
+    ],
+    "16": [
+     1.0,
+     0.0
+    ],
+    "20": [
+     0.995,
+     0.0
+    ]
+   },
+   "r8-tf-s2": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     1.0,
+     1.0
+    ],
+    "6": [
+     0.995,
+     0.995
+    ],
+    "7": [
+     1.0,
+     1.0
+    ],
+    "8": [
+     0.995,
+     0.995
+    ],
+    "10": [
+     0.99,
+     0.99
+    ],
+    "12": [
+     1.0,
+     1.0
+    ],
+    "16": [
+     0.975,
+     0.965
+    ],
+    "20": [
+     0.92,
+     0.91
+    ]
+   }
+  },
+  "whole chains at 16 and 20 hops with their 95% intervals": {
+   "r8-tf-s0": {
+    "16": [
+     0.965,
+     [
+      0.9295,
+      0.9829
+     ]
+    ],
+    "20": [
+     0.97,
+     [
+      0.9361,
+      0.9862
+     ]
+    ]
+   },
+   "r8-tf-s1": {
+    "16": [
+     0.0,
+     [
+      0.0,
+      0.0188
+     ]
+    ],
+    "20": [
+     0.0,
+     [
+      0.0,
+      0.0188
+     ]
+    ]
+   },
+   "r8-tf-s2": {
+    "16": [
+     0.965,
+     [
+      0.9295,
+      0.9829
+     ]
+    ],
+    "20": [
+     0.91,
+     [
+      0.8622,
+      0.9423
+     ]
+    ]
+   }
+  },
+  "mean accuracy over 1 to 4 hops": {
+   "r8-tf-s0": 1.0,
+   "r8-tf-s1": 1.0,
+   "r8-tf-s2": 1.0
+  },
+  "marks": {
+   "r8-tf-s0": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": false,
+    "holds": false,
+    "evaluations of 20 that meet (h)": 18
+   },
+   "r8-tf-s1": {
+    "(a)": false,
+    "(b)": false,
+    "(c)": true,
+    "(h)": false,
+    "holds": false,
+    "evaluations of 20 that meet (h)": 0
+   },
+   "r8-tf-s2": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": false,
+    "holds": false,
+    "evaluations of 20 that meet (h)": 13
+   }
+  },
+  "along the way, 20 evaluations (lowest, highest)": {
+   "r8-tf-s0": {
+    "8 hops": {
+     "accuracy": [
+      0.13,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      1.0
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.145,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      1.0
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.13,
+      0.99
+     ],
+     "whole chain": [
+      0.0,
+      0.99
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.98,
+    "rounds whose evaluation misses (h)": [
+     100,
+     200
+    ]
+   },
+   "r8-tf-s1": {
+    "8 hops": {
+     "accuracy": [
+      0.28,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      0.045
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.27,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      0.0
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.295,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      0.005
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.99,
+    "rounds whose evaluation misses (h)": [
+     100,
+     200,
+     300,
+     400,
+     500,
+     600,
+     700,
+     800,
+     900,
+     1000,
+     1100,
+     1200,
+     1300,
+     1400,
+     1500,
+     1600,
+     1700,
+     1800,
+     1900,
+     2000
+    ]
+   },
+   "r8-tf-s2": {
+    "8 hops": {
+     "accuracy": [
+      0.09,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      1.0
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.1,
+      0.99
+     ],
+     "whole chain": [
+      0.0,
+      0.99
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.095,
+      0.99
+     ],
+     "whole chain": [
+      0.0,
+      0.99
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.99,
+    "rounds whose evaluation misses (h)": [
+     100,
+     200,
+     300,
+     400,
+     500,
+     600,
+     700
+    ]
+   }
+  },
+  "staircase": {
+   "r8-tf-s0": {
+    "longest": 8,
+    "share of rounds at its longest": 0.943,
+    "first round at its longest": 71,
+    "rounds below its longest after reaching it": 44,
+    "rounds below its longest": {
+     "count": 44,
+     "first": 72,
+     "last": 211
+    }
+   },
+   "r8-tf-s1": {
+    "longest": 8,
+    "share of rounds at its longest": 0.903,
+    "first round at its longest": 171,
+    "rounds below its longest after reaching it": 24,
+    "rounds below its longest": [
+     194,
+     195,
+     196,
+     197,
+     198,
+     199,
+     200,
+     201,
+     202,
+     203,
+     204,
+     205,
+     206,
+     207,
+     208,
+     209,
+     210,
+     211,
+     212,
+     213,
+     214,
+     215,
+     216,
+     217
+    ]
+   },
+   "r8-tf-s2": {
+    "longest": 8,
+    "share of rounds at its longest": 0.6285,
+    "first round at its longest": 712,
+    "rounds below its longest after reaching it": 32,
+    "rounds below its longest": [
+     742,
+     743,
+     744,
+     745,
+     746,
+     747,
+     748,
+     749,
+     750,
+     751,
+     752,
+     753,
+     754,
+     755,
+     756,
+     757,
+     758,
+     759,
+     760,
+     761,
+     762,
+     763,
+     764,
+     775,
+     776,
+     777,
+     778,
+     779,
+     780,
+     781,
+     782,
+     783
+    ]
+   }
+  },
+  "rounds by 500 (solve rate, whole chain, rounds that taught, rehearsal's loss)": {
+   "r8-tf-s0": {
+    "1-500": [
+     0.7797,
+     0.7184,
+     473,
+     0.0062
+    ],
+    "501-1000": [
+     0.984,
+     0.9761,
+     392,
+     0.0008
+    ],
+    "1001-1500": [
+     0.9901,
+     0.9844,
+     323,
+     0.0007
+    ],
+    "1501-2000": [
+     0.9912,
+     0.9862,
+     272,
+     0.0006
+    ]
+   },
+   "r8-tf-s1": {
+    "1-500": [
+     0.6763,
+     0.1169,
+     477,
+     0.0036
+    ],
+    "501-1000": [
+     0.9856,
+     0.0,
+     366,
+     0.0007
+    ],
+    "1001-1500": [
+     0.9888,
+     0.0,
+     301,
+     0.0009
+    ],
+    "1501-2000": [
+     0.9899,
+     0.0,
+     312,
+     0.0008
+    ]
+   },
+   "r8-tf-s2": {
+    "1-500": [
+     0.5464,
+     0.4927,
+     422,
+     0.0028
+    ],
+    "501-1000": [
+     0.7157,
+     0.6514,
+     451,
+     0.0055
+    ],
+    "1001-1500": [
+     0.9873,
+     0.9789,
+     354,
+     0.0008
+    ],
+    "1501-2000": [
+     0.9892,
+     0.9821,
+     294,
+     0.0007
+    ]
+   }
+  },
+  "how the practised models write, counted on the laptop's CPU (the evaluation's 200 tasks a hop count, greedy)": {
+   "r8-tf-s0": {
+    "6": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      1.0,
+      1.0
+     ],
+     "the evaluation, on the server's GPU": [
+      1.0,
+      1.0
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 200
+     }
+    },
+    "8": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      0.99,
+      0.99
+     ],
+     "the evaluation, on the server's GPU": [
+      1.0,
+      1.0
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 198,
+      "something else, the last byte wrong": 2
+     }
+    },
+    "12": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      1.0,
+      1.0
+     ],
+     "the evaluation, on the server's GPU": [
+      1.0,
+      1.0
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 200
+     }
+    },
+    "16": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      1.0,
+      0.995
+     ],
+     "the evaluation, on the server's GPU": [
+      0.985,
+      0.965
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 199,
+      "something else, the last byte right": 1
+     }
+    },
+    "20": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      0.92,
+      0.91
+     ],
+     "the evaluation, on the server's GPU": [
+      0.975,
+      0.97
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 182,
+      "something else, the last byte right": 2,
+      "something else, the last byte wrong": 16
+     }
+    }
+   },
+   "r8-tf-s1": {
+    "6": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      1.0,
+      0.0
+     ],
+     "the evaluation, on the server's GPU": [
+      0.995,
+      0.0
+     ],
+     "answers of 200": {
+      "the right chain with question marks added": 200
+     },
+     "names written before each added question mark (answers)": {
+      "3": 200
+     }
+    },
+    "8": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      0.995,
+      0.0
+     ],
+     "the evaluation, on the server's GPU": [
+      1.0,
+      0.0
+     ],
+     "answers of 200": {
+      "the right chain with question marks added": 199,
+      "something else, the last byte wrong": 1
+     },
+     "names written before each added question mark (answers)": {
+      "3": 199
+     }
+    },
+    "12": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      1.0,
+      0.0
+     ],
+     "the evaluation, on the server's GPU": [
+      1.0,
+      0.0
+     ],
+     "answers of 200": {
+      "the right chain with question marks added": 200
+     },
+     "names written before each added question mark (answers)": {
+      "3 7": 200
+     }
+    },
+    "16": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      0.99,
+      0.0
+     ],
+     "the evaluation, on the server's GPU": [
+      1.0,
+      0.0
+     ],
+     "answers of 200": {
+      "the right chain with question marks added": 198,
+      "something else, the last byte wrong": 2
+     },
+     "names written before each added question mark (answers)": {
+      "3 7 11": 198
+     }
+    },
+    "20": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      0.98,
+      0.0
+     ],
+     "the evaluation, on the server's GPU": [
+      0.995,
+      0.0
+     ],
+     "answers of 200": {
+      "the right chain with question marks added": 193,
+      "something else, the last byte right": 3,
+      "something else, the last byte wrong": 4
+     },
+     "names written before each added question mark (answers)": {
+      "3 7 11 15": 193
+     }
+    }
+   },
+   "r8-tf-s2": {
+    "6": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      0.995,
+      0.995
+     ],
+     "the evaluation, on the server's GPU": [
+      0.995,
+      0.995
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 199,
+      "something else, the last byte wrong": 1
+     }
+    },
+    "8": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      1.0,
+      1.0
+     ],
+     "the evaluation, on the server's GPU": [
+      0.995,
+      0.995
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 200
+     }
+    },
+    "12": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      1.0,
+      0.995
+     ],
+     "the evaluation, on the server's GPU": [
+      1.0,
+      1.0
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 199,
+      "something else, the last byte right": 1
+     }
+    },
+    "16": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      0.995,
+      0.995
+     ],
+     "the evaluation, on the server's GPU": [
+      0.975,
+      0.965
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 199,
+      "something else, the last byte wrong": 1
+     }
+    },
+    "20": {
+     "this count, on the laptop's CPU (accuracy, whole chain)": [
+      0.88,
+      0.875
+     ],
+     "the evaluation, on the server's GPU": [
+      0.92,
+      0.91
+     ],
+     "answers of 200": {
+      "the chain as the corpus writes it": 175,
+      "something else, the last byte wrong": 24,
+      "something else, the last byte right": 1
+     }
+    }
+   }
+  },
+  "the stopped runs with the cap at 16 (seen, not read)": {
+   "r16-tf-s0": {
+    "rounds before the first stop": 474,
+    "rounds before the second stop": 100,
+    "rounds of the second start equal to the first start's in every logged number": "95 of 100",
+    "longest steps its staircase reached": 16,
+    "evaluations of the first start (accuracy, whole chain)": {
+     "0": {
+      "2": [
+       0.99,
+       0.985
+      ],
+      "4": [
+       0.99,
+       0.985
+      ],
+      "6": [
+       0.07,
+       0.0
+      ],
+      "8": [
+       0.09,
+       0.0
+      ],
+      "12": [
+       0.115,
+       0.0
+      ],
+      "16": [
+       0.105,
+       0.0
+      ]
+     },
+     "100": {
+      "2": [
+       0.895,
+       0.89
+      ],
+      "4": [
+       0.725,
+       0.66
+      ],
+      "6": [
+       0.37,
+       0.2
+      ],
+      "8": [
+       0.275,
+       0.05
+      ],
+      "12": [
+       0.235,
+       0.0
+      ],
+      "16": [
+       0.27,
+       0.0
+      ]
+     },
+     "200": {
+      "2": [
+       0.99,
+       0.985
+      ],
+      "4": [
+       0.98,
+       0.98
+      ],
+      "6": [
+       0.86,
+       0.82
+      ],
+      "8": [
+       0.645,
+       0.575
+      ],
+      "12": [
+       0.57,
+       0.37
+      ],
+      "16": [
+       0.47,
+       0.175
+      ]
+     },
+     "300": {
+      "2": [
+       0.995,
+       0.99
+      ],
+      "4": [
+       0.985,
+       0.985
+      ],
+      "6": [
+       0.97,
+       0.955
+      ],
+      "8": [
+       0.955,
+       0.935
+      ],
+      "12": [
+       0.83,
+       0.755
+      ],
+      "16": [
+       0.775,
+       0.645
+      ]
+     },
+     "400": {
+      "2": [
+       1.0,
+       0.995
+      ],
+      "4": [
+       0.995,
+       0.99
+      ],
+      "6": [
+       0.975,
+       0.97
+      ],
+      "8": [
+       0.92,
+       0.9
+      ],
+      "12": [
+       0.865,
+       0.82
+      ],
+      "16": [
+       0.795,
+       0.67
+      ]
+     }
+    }
+   },
+   "r16-tf-s1": {
+    "rounds before the first stop": 511,
+    "rounds before the second stop": 100,
+    "rounds of the second start equal to the first start's in every logged number": "100 of 100",
+    "longest steps its staircase reached": 16,
+    "evaluations of the first start (accuracy, whole chain)": {
+     "0": {
+      "2": [
+       0.99,
+       0.99
+      ],
+      "4": [
+       0.995,
+       0.995
+      ],
+      "6": [
+       0.09,
+       0.0
+      ],
+      "8": [
+       0.14,
+       0.0
+      ],
+      "12": [
+       0.09,
+       0.0
+      ],
+      "16": [
+       0.11,
+       0.0
+      ]
+     },
+     "100": {
+      "2": [
+       0.99,
+       0.99
+      ],
+      "4": [
+       0.99,
+       0.985
+      ],
+      "6": [
+       0.435,
+       0.31
+      ],
+      "8": [
+       0.28,
+       0.025
+      ],
+      "12": [
+       0.275,
+       0.0
+      ],
+      "16": [
+       0.295,
+       0.0
+      ]
+     },
+     "200": {
+      "2": [
+       0.99,
+       0.99
+      ],
+      "4": [
+       0.995,
+       0.995
+      ],
+      "6": [
+       0.54,
+       0.395
+      ],
+      "8": [
+       0.405,
+       0.045
+      ],
+      "12": [
+       0.27,
+       0.0
+      ],
+      "16": [
+       0.32,
+       0.005
+      ]
+     },
+     "300": {
+      "2": [
+       0.99,
+       0.99
+      ],
+      "4": [
+       0.995,
+       0.995
+      ],
+      "6": [
+       0.58,
+       0.0
+      ],
+      "8": [
+       0.61,
+       0.0
+      ],
+      "12": [
+       0.455,
+       0.0
+      ],
+      "16": [
+       0.405,
+       0.0
+      ]
+     },
+     "400": {
+      "2": [
+       1.0,
+       1.0
+      ],
+      "4": [
+       1.0,
+       1.0
+      ],
+      "6": [
+       0.265,
+       0.04
+      ],
+      "8": [
+       0.205,
+       0.0
+      ],
+      "12": [
+       0.23,
+       0.0
+      ],
+      "16": [
+       0.275,
+       0.0
+      ]
+     },
+     "500": {
+      "2": [
+       1.0,
+       1.0
+      ],
+      "4": [
+       0.98,
+       0.975
+      ],
+      "6": [
+       0.87,
+       0.8
+      ],
+      "8": [
+       0.665,
+       0.49
+      ],
+      "12": [
+       0.445,
+       0.21
+      ],
+      "16": [
+       0.47,
+       0.15
+      ]
+     }
+    }
+   },
+   "r16-tf-s2": {
+    "rounds before the first stop": 933,
+    "rounds before the second stop": 184,
+    "rounds of the second start equal to the first start's in every logged number": "182 of 184",
+    "longest steps its staircase reached": 16,
+    "evaluations of the first start (accuracy, whole chain)": {
+     "0": {
+      "2": [
+       0.985,
+       0.985
+      ],
+      "4": [
+       0.985,
+       0.985
+      ],
+      "6": [
+       0.06,
+       0.0
+      ],
+      "8": [
+       0.11,
+       0.0
+      ],
+      "12": [
+       0.135,
+       0.0
+      ],
+      "16": [
+       0.155,
+       0.0
+      ]
+     },
+     "100": {
+      "2": [
+       0.995,
+       0.995
+      ],
+      "4": [
+       0.99,
+       0.99
+      ],
+      "6": [
+       0.095,
+       0.0
+      ],
+      "8": [
+       0.115,
+       0.0
+      ],
+      "12": [
+       0.135,
+       0.0
+      ],
+      "16": [
+       0.12,
+       0.0
+      ]
+     },
+     "200": {
+      "2": [
+       0.995,
+       0.995
+      ],
+      "4": [
+       0.99,
+       0.985
+      ],
+      "6": [
+       0.14,
+       0.0
+      ],
+      "8": [
+       0.09,
+       0.0
+      ],
+      "12": [
+       0.14,
+       0.0
+      ],
+      "16": [
+       0.095,
+       0.0
+      ]
+     },
+     "300": {
+      "2": [
+       1.0,
+       1.0
+      ],
+      "4": [
+       1.0,
+       1.0
+      ],
+      "6": [
+       0.12,
+       0.0
+      ],
+      "8": [
+       0.115,
+       0.0
+      ],
+      "12": [
+       0.135,
+       0.0
+      ],
+      "16": [
+       0.1,
+       0.0
+      ]
+     },
+     "400": {
+      "2": [
+       1.0,
+       1.0
+      ],
+      "4": [
+       0.99,
+       0.99
+      ],
+      "6": [
+       0.09,
+       0.0
+      ],
+      "8": [
+       0.125,
+       0.0
+      ],
+      "12": [
+       0.1,
+       0.0
+      ],
+      "16": [
+       0.1,
+       0.0
+      ]
+     },
+     "500": {
+      "2": [
+       0.995,
+       0.995
+      ],
+      "4": [
+       1.0,
+       1.0
+      ],
+      "6": [
+       0.095,
+       0.0
+      ],
+      "8": [
+       0.105,
+       0.0
+      ],
+      "12": [
+       0.145,
+       0.0
+      ],
+      "16": [
+       0.115,
+       0.0
+      ]
+     },
+     "600": {
+      "2": [
+       0.995,
+       0.995
+      ],
+      "4": [
+       0.99,
+       0.99
+      ],
+      "6": [
+       0.095,
+       0.0
+      ],
+      "8": [
+       0.12,
+       0.0
+      ],
+      "12": [
+       0.11,
+       0.0
+      ],
+      "16": [
+       0.105,
+       0.0
+      ]
+     },
+     "700": {
+      "2": [
+       1.0,
+       1.0
+      ],
+      "4": [
+       0.995,
+       0.995
+      ],
+      "6": [
+       0.16,
+       0.005
+      ],
+      "8": [
+       0.15,
+       0.0
+      ],
+      "12": [
+       0.14,
+       0.0
+      ],
+      "16": [
+       0.21,
+       0.0
+      ]
+     },
+     "800": {
+      "2": [
+       0.995,
+       0.985
+      ],
+      "4": [
+       0.98,
+       0.96
+      ],
+      "6": [
+       0.715,
+       0.61
+      ],
+      "8": [
+       0.425,
+       0.265
+      ],
+      "12": [
+       0.355,
+       0.12
+      ],
+      "16": [
+       0.38,
+       0.065
+      ]
+     },
+     "900": {
+      "2": [
+       1.0,
+       1.0
+      ],
+      "4": [
+       0.985,
+       0.98
+      ],
+      "6": [
+       0.955,
+       0.925
+      ],
+      "8": [
+       0.88,
+       0.805
+      ],
+      "12": [
+       0.795,
+       0.645
+      ],
+      "16": [
+       0.815,
+       0.6
+      ]
+     }
+    }
+   }
+  },
+  "reading by the registered rules": {
+   "(3) the stack against the Transformer, cap 8": {
+    "by seed": {
+     "0": {
+      "6 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     },
+     "1": {
+      "6 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.99,
+        [
+         0.9643,
+         0.9973
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     },
+     "2": {
+      "6 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.985,
+        [
+         0.9568,
+         0.9949
+        ]
+       ],
+       "Transformer": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     }
+    },
+    "stands": "neither"
+   },
+   "(3) the stack against the Transformer, cap 12": {
+    "by seed": {
+     "0": "waits",
+     "1": "waits",
+     "2": "waits"
+    }
+   },
+   "(3) the stack against the Transformer, cap 16": {
+    "by seed": {
+     "0": "waits",
+     "1": "waits",
+     "2": "waits"
+    }
+   }
+  },
+  "reading": {
+   "marks": "By the registered marks none of the three runs holds, for two different reasons. r8-tf-s0 and r8-tf-s2 meet (a), (b) and (c) after practice and miss (h): they reached 8 hops late, so the evaluations at rounds 100 and 200 (seed 0) and at rounds 100 to 700 (seed 2) do not meet (b). From the first that meets it, at round 300 and at round 800, every later one does, and no evaluation of any of the three runs answers under 0.98 of the tasks of 2 or of 4 hops. r8-tf-s1 answers 1.000 of the tasks of 8 hops and writes no chain in the corpus's form at 5 hops or more, so it misses (a) and (b), and (h) at every evaluation; what it writes is described below. The stack's three runs with the cap at 8 hold all four marks at 20 of 20 evaluations (result_stack).",
+   "(3), the cap at 8": "Neither stands. At 6 hops the stack answers 1.000, 1.000 and 1.000 of the tasks and the Transformer 1.000, 0.995 and 0.995 (seeds 0, 1, 2); at 8 hops 0.995, 0.990 and 0.985 against 1.000, 1.000 and 0.995. No difference comes near 0.10. The caps at 12 and 16 wait for the weekend's six runs.",
+   "past the practised length (reported)": "Here the two differ. After practice with the cap at 8 the Transformer answers 0.985, 1.000 and 0.975 of the tasks of 16 hops and 0.975, 0.995 and 0.920 of the tasks of 20; the stack 0.930, 0.860 and 0.775, and 0.705, 0.440 and 0.380. At 20 hops the Transformer is above the stack by 0.27, 0.555 and 0.54 with the two intervals apart in every seed; at 16 hops by 0.055, 0.14 and 0.20, the last two with the intervals apart. Whole chains at 20 hops: 0.970, none in the corpus's form, and 0.910, against 0.645, 0.350 and 0.220. A guess is right in 0.37 of the tasks at 16 hops and in 0.55 at 20, so these accuracies are set beside the whole chains, and r8-tf-s1's answers are checked name by name below. The stack's best cap, 12, takes it to 0.945, 0.935 and 0.805 right at 20 hops with 0.920, 0.905 and 0.605 whole chains: about where the Transformer stands with the cap at 8, having practised four hops less far. What practice up to 8 hops teaches the Transformer, it carries to chains two and a half times as long almost without loss; the stack's chains thin out past the length it practised.",
+   "how the Transformer got there (from the rounds and the evaluations along the way, reported)": "Later and less evenly than the stack. The stack's staircase first stood at 8 hops in rounds 21, 24 and 28, and every evaluation from round 100 on meets (b). The Transformer's first stood there in rounds 71, 171 and 712. Seed 0 answered 0.430 of the 8-hop tasks at round 100 and 0.130 at round 200, its staircase having gone down again between rounds 72 and 211, and 0.985 at round 300. Seed 2 wrote four steps and stopped, whatever the query asked, for 700 rounds: 11.0 bytes at every length at each evaluation from round 100 to round 600, and 0.09 to 0.15 right at 8 hops up to round 700, its staircase moving between 4 and 5 hops with 79 to 87 rounds in a hundred teaching. Then it wrote a fifth step, stood at 8 hops in round 712, and answered 0.935 at round 800. Once there the runs stayed: from its first evaluation that meets (b), seed 0 never answers under 0.985 of the 8-hop tasks, and neither does seed 2 from round 900. Rehearsal held the trained lengths all the way, as it does for the stack. The Transformer's rounds go on teaching: 272, 312 and 294 of the last 500, against 65, 100 and 84 for the stack.",
+   "another form (r8-tf-s1, reported)": "From round 300 r8-tf-s1 answers at least 0.92 of the tasks at every length it is asked along the way and writes none of their chains as the corpus writes it; after practice it writes no such chain at 5 hops or more. Its answers after practice were written out on the laptop's CPU for the evaluation's own 200 tasks at 6, 8, 12, 16 and 20 hops: 200, 199, 200, 198 and 193 of them are the right chain, name for name, with a question mark added before every fourth name (after 3, 7, 11 and 15 names, the same places in every one of these answers). Asked '?on=', it writes 'pd=hp=tq=?kk=qm=iq=eh=9'. A model that was taught chains of up to four hops begins a new query, with the corpus's own mark, at the name it has reached, and so turns a long chain into chains of the length it knows. The reward asks for the last byte and takes this; marks (a) and (b) ask for the chain as the corpus writes it and do not. The form is in the logged attempt of 1,793 of the run's 2,000 rounds, from round 44 on; seed 0 wrote it in five logged attempts between rounds 66 and 77 and left it. The count runs on another device than the evaluation, which rounds differently, and at lengths no run practised some answers differ: at 20 hops it finds 0.920 and 0.880 right for seeds 0 and 2 where the evaluation on the GPU has 0.975 and 0.920; up to 16 hops the two accuracies are within 0.02 of each other in every cell and the shares of whole chains within 0.03.",
+   "the stopped runs with the cap at 16 (reported, not read)": "What they showed before the stops is in the table. r16-tf-s0 answered only 0.895 and 0.725 of the tasks of 2 and 4 hops at round 100: of the fifteen runs here (the stack's nine, the Transformer's three with the cap at 8 and these three) it is the one evaluation at which rehearsal did not hold the trained lengths, the lowest of all the others being 0.965. At round 200 it had them again (0.990 and 0.980), and at round 400 it answered 0.795 of the 16-hop tasks with 0.670 whole chains. r16-tf-s1 took the same path as r8-tf-s1 to round 200 and wrote question marks as that run does in 66 of the logged attempts of rounds 201 to 300 and 60 of rounds 301 to 400 (0.610 right at 8 hops at round 300 with no whole chain, 0.265 at 6 hops at round 400), then in 3 of the 111 rounds after, and at round 500 it wrote the corpus's chains (0.665 right at 8 hops, 0.490 whole). r16-tf-s2 is r8-tf-s2 to round 700, evaluation for evaluation, and reached 16 hops by round 900 (0.815 right, 0.600 whole). The weekend's runs say where each of these ends."
+  },
+  "what follows": "Reading (3) stays open for the caps at 12 and 16 until the weekend's six runs are in, and nothing changes in what result_stack says follows. The stack is not ahead of the Transformer in this practice. It takes to the loop at once and evenly, with every seed; the Transformer takes 300 to 800 rounds and in one seed of three leaves the chain's form, and once it is there it carries the chains further past the practised length than the stack does. Two things go into the next registration, the practice of several families: its marks ask for reach after practice and, once an evaluation shows it, at every later one, since a model that reaches late has lost nothing; and whole chains stay its measure, with a run that answers in another form reported as such and its answers looked at. Why the stack's chains thin out with their length where the Transformer's do not is the question this leaves for the stack."
+ },
+ "diagnostic_where_chains_break": {
+  "recorded_utc": "2026-11-27T15:23:18Z",
+  "kind": "a diagnostic looked at after result_stack and result_tf_cap_8, not registered; reported, not read",
+  "why": "result_tf_cap_8 left open why the stack's chains thin out past the practised length where the Transformer's do not.",
+  "method": "checkpoints/scheduler/tools/practice/where-chains-break.py on the server's CPU (no GPU), with code copy v18q, for the twelve practised models of the stack's caps 8, 12, 16 and the Transformer's cap 8 (model.pt after 2,000 rounds), and for four-stack, chain-stack and chain-tf before practice: the tasks of the evaluation after practice (seed 0, 200 a hop count), greedy, room for 64 bytes. Each answer is compared with the right chain step by step (question marks dropped, so r8-tf-s1 is compared by its names). For the first error, its kind. For every step written up to and with the first error, how far back in the stream the assignment it needs stands (bytes from the place the step is written to the start of that assignment in the line), and whether the step is right. The CPU rounds differently from the GPU, so the counts are close to the evaluation's but not equal to it (20 hops, right answers: r8-stack 0.700/0.450/0.355 here against 0.705/0.440/0.380 on the GPU).",
+  "first errors at 20 hops, by kind (answers of 200)": {
+   "r8-stack-s0": {
+    "the whole chain right": 121,
+    "another name of the line": 55,
+    "a name not in the line": 14,
+    "a digit too early (stopped short)": 4,
+    "a name where the digit belongs (went on)": 3,
+    "a skipped step": 2,
+    "the previous name repeated": 1
+   },
+   "r8-stack-s1": {
+    "another name of the line": 106,
+    "the whole chain right": 71,
+    "a name not in the line": 12,
+    "a skipped step": 4,
+    "a digit too early (stopped short)": 2,
+    "the previous name repeated": 2,
+    "a step backwards": 2,
+    "a name where the digit belongs (went on)": 1
+   },
+   "r8-stack-s2": {
+    "another name of the line": 102,
+    "a name not in the line": 49,
+    "the whole chain right": 41,
+    "a skipped step": 4,
+    "a step backwards": 3,
+    "a digit too early (stopped short)": 1
+   },
+   "r12-stack-s0": {
+    "the whole chain right": 185,
+    "another name of the line": 9,
+    "a name where the digit belongs (went on)": 2,
+    "a name not in the line": 2,
+    "a wrong digit at the end": 1,
+    "a step backwards": 1
+   },
+   "r12-stack-s1": {
+    "the whole chain right": 180,
+    "another name of the line": 14,
+    "a skipped step": 2,
+    "a name where the digit belongs (went on)": 2,
+    "a name not in the line": 2
+   },
+   "r12-stack-s2": {
+    "the whole chain right": 127,
+    "a name not in the line": 59,
+    "another name of the line": 11,
+    "a wrong digit at the end": 1,
+    "a name where the digit belongs (went on)": 1,
+    "a skipped step": 1
+   },
+   "r16-stack-s0": {
+    "the whole chain right": 111,
+    "another name of the line": 57,
+    "a name not in the line": 18,
+    "a name where the digit belongs (went on)": 8,
+    "a step backwards": 2,
+    "a skipped step": 2,
+    "a digit too early (stopped short)": 1,
+    "the previous name repeated": 1
+   },
+   "r16-stack-s1": {
+    "the whole chain right": 92,
+    "another name of the line": 72,
+    "a name not in the line": 15,
+    "a name where the digit belongs (went on)": 10,
+    "a digit too early (stopped short)": 4,
+    "a step backwards": 4,
+    "the previous name repeated": 2,
+    "a skipped step": 1
+   },
+   "r16-stack-s2": {
+    "the whole chain right": 111,
+    "another name of the line": 55,
+    "a name not in the line": 16,
+    "a name where the digit belongs (went on)": 13,
+    "the previous name repeated": 2,
+    "a step backwards": 1,
+    "a skipped step": 1,
+    "a digit too early (stopped short)": 1
+   },
+   "r8-tf-s0": {
+    "the whole chain right": 182,
+    "a name where the digit belongs (went on)": 6,
+    "a name not in the line": 5,
+    "another name of the line": 4,
+    "a wrong digit at the end": 2,
+    "a step backwards": 1
+   },
+   "r8-tf-s1": {
+    "the whole chain right": 193,
+    "another name of the line": 6,
+    "a name not in the line": 1
+   },
+   "r8-tf-s2": {
+    "the whole chain right": 175,
+    "a name where the digit belongs (went on)": 12,
+    "another name of the line": 7,
+    "a name not in the line": 4,
+    "a wrong digit at the end": 2
+   }
+  },
+  "error rate of a step by the distance back to the assignment it needs (three seeds pooled: wrong, written, rate)": {
+   "16 hops": {
+    "the stack, cap 8": {
+     "0-50": [
+      3,
+      1449,
+      0.002
+     ],
+     "50-100": [
+      3,
+      3243,
+      0.001
+     ],
+     "100-150": [
+      6,
+      3263,
+      0.002
+     ],
+     "150-200": [
+      100,
+      1249,
+      0.08
+     ]
+    },
+    "the stack, cap 12": {
+     "0-50": [
+      6,
+      1445,
+      0.004
+     ],
+     "50-100": [
+      10,
+      3290,
+      0.003
+     ],
+     "100-150": [
+      11,
+      3297,
+      0.003
+     ],
+     "150-200": [
+      36,
+      1270,
+      0.028
+     ]
+    },
+    "the stack, cap 16": {
+     "0-50": [
+      2,
+      1420,
+      0.001
+     ],
+     "50-100": [
+      3,
+      3131,
+      0.001
+     ],
+     "100-150": [
+      11,
+      3135,
+      0.004
+     ],
+     "150-200": [
+      139,
+      1200,
+      0.116
+     ]
+    },
+    "the Transformer, cap 8": {
+     "0-50": [
+      1,
+      1464,
+      0.001
+     ],
+     "50-100": [
+      0,
+      3389,
+      0.0
+     ],
+     "100-150": [
+      3,
+      3383,
+      0.001
+     ],
+     "150-200": [
+      0,
+      1334,
+      0.0
+     ]
+    }
+   },
+   "20 hops": {
+    "the stack, cap 8": {
+     "0-50": [
+      0,
+      1324,
+      0.0
+     ],
+     "50-100": [
+      20,
+      3576,
+      0.006
+     ],
+     "100-150": [
+      60,
+      3629,
+      0.017
+     ],
+     "150-200": [
+      286,
+      1778,
+      0.161
+     ],
+     "200-250": [
+      1,
+      10,
+      0.1
+     ]
+    },
+    "the stack, cap 12": {
+     "0-50": [
+      3,
+      1329,
+      0.002
+     ],
+     "50-100": [
+      14,
+      3858,
+      0.004
+     ],
+     "100-150": [
+      19,
+      3963,
+      0.005
+     ],
+     "150-200": [
+      72,
+      2094,
+      0.034
+     ],
+     "200-250": [
+      0,
+      32,
+      0.0
+     ]
+    },
+    "the stack, cap 16": {
+     "0-50": [
+      1,
+      1286,
+      0.001
+     ],
+     "50-100": [
+      4,
+      3373,
+      0.001
+     ],
+     "100-150": [
+      12,
+      3542,
+      0.003
+     ],
+     "150-200": [
+      269,
+      1759,
+      0.153
+     ],
+     "200-250": [
+      0,
+      15,
+      0.0
+     ]
+    },
+    "the Transformer, cap 8": {
+     "0-50": [
+      2,
+      1347,
+      0.001
+     ],
+     "50-100": [
+      7,
+      4027,
+      0.002
+     ],
+     "100-150": [
+      8,
+      4142,
+      0.002
+     ],
+     "150-200": [
+      27,
+      2250,
+      0.012
+     ],
+     "200-250": [
+      6,
+      41,
+      0.146
+     ]
+    }
+   }
+  },
+  "the same by the step's place in the chain (groups of five steps) and the distance": {
+   "16 hops": {
+    "the stack, cap 8": {
+     "steps 0-4, 0-50": [
+      2,
+      841,
+      0.002
+     ],
+     "steps 0-4, 50-100": [
+      1,
+      1003,
+      0.001
+     ],
+     "steps 0-4, 100-150": [
+      1,
+      1070,
+      0.001
+     ],
+     "steps 0-4, 150-200": [
+      1,
+      76,
+      0.013
+     ],
+     "steps 5-9, 0-50": [
+      1,
+      451,
+      0.002
+     ],
+     "steps 5-9, 50-100": [
+      0,
+      1085,
+      0.0
+     ],
+     "steps 5-9, 100-150": [
+      0,
+      1053,
+      0.0
+     ],
+     "steps 5-9, 150-200": [
+      15,
+      358,
+      0.042
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      157,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      2,
+      1011,
+      0.002
+     ],
+     "steps 10-14, 100-150": [
+      5,
+      931,
+      0.005
+     ],
+     "steps 10-14, 150-200": [
+      82,
+      678,
+      0.121
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      144,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      0,
+      209,
+      0.0
+     ],
+     "steps 15-19, 150-200": [
+      2,
+      137,
+      0.015
+     ]
+    },
+    "the stack, cap 12": {
+     "steps 0-4, 0-50": [
+      3,
+      840,
+      0.004
+     ],
+     "steps 0-4, 50-100": [
+      0,
+      1006,
+      0.0
+     ],
+     "steps 0-4, 100-150": [
+      0,
+      1071,
+      0.0
+     ],
+     "steps 0-4, 150-200": [
+      2,
+      75,
+      0.027
+     ],
+     "steps 5-9, 0-50": [
+      3,
+      447,
+      0.007
+     ],
+     "steps 5-9, 50-100": [
+      3,
+      1091,
+      0.003
+     ],
+     "steps 5-9, 100-150": [
+      4,
+      1051,
+      0.004
+     ],
+     "steps 5-9, 150-200": [
+      8,
+      356,
+      0.022
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      158,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      7,
+      1034,
+      0.007
+     ],
+     "steps 10-14, 100-150": [
+      7,
+      951,
+      0.007
+     ],
+     "steps 10-14, 150-200": [
+      26,
+      685,
+      0.038
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      159,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      0,
+      224,
+      0.0
+     ],
+     "steps 15-19, 150-200": [
+      0,
+      154,
+      0.0
+     ]
+    },
+    "the stack, cap 16": {
+     "steps 0-4, 0-50": [
+      2,
+      840,
+      0.002
+     ],
+     "steps 0-4, 50-100": [
+      0,
+      1003,
+      0.0
+     ],
+     "steps 0-4, 100-150": [
+      4,
+      1071,
+      0.004
+     ],
+     "steps 0-4, 150-200": [
+      4,
+      76,
+      0.053
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      436,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      3,
+      1063,
+      0.003
+     ],
+     "steps 5-9, 100-150": [
+      4,
+      1016,
+      0.004
+     ],
+     "steps 5-9, 150-200": [
+      44,
+      352,
+      0.125
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      144,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      0,
+      932,
+      0.0
+     ],
+     "steps 10-14, 100-150": [
+      2,
+      855,
+      0.002
+     ],
+     "steps 10-14, 150-200": [
+      69,
+      630,
+      0.11
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      133,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      1,
+      193,
+      0.005
+     ],
+     "steps 15-19, 150-200": [
+      22,
+      142,
+      0.155
+     ]
+    },
+    "the Transformer, cap 8": {
+     "steps 0-4, 0-50": [
+      1,
+      843,
+      0.001
+     ],
+     "steps 0-4, 50-100": [
+      0,
+      1008,
+      0.0
+     ],
+     "steps 0-4, 100-150": [
+      0,
+      1070,
+      0.0
+     ],
+     "steps 0-4, 150-200": [
+      0,
+      78,
+      0.0
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      457,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      0,
+      1110,
+      0.0
+     ],
+     "steps 5-9, 100-150": [
+      2,
+      1060,
+      0.002
+     ],
+     "steps 5-9, 150-200": [
+      0,
+      362,
+      0.0
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      164,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      0,
+      1096,
+      0.0
+     ],
+     "steps 10-14, 100-150": [
+      0,
+      1002,
+      0.0
+     ],
+     "steps 10-14, 150-200": [
+      0,
+      723,
+      0.0
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      175,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      1,
+      251,
+      0.004
+     ],
+     "steps 15-19, 150-200": [
+      0,
+      171,
+      0.0
+     ]
+    }
+   },
+   "20 hops": {
+    "the stack, cap 8": {
+     "steps 0-4, 0-50": [
+      0,
+      744,
+      0.0
+     ],
+     "steps 0-4, 50-100": [
+      4,
+      1062,
+      0.004
+     ],
+     "steps 0-4, 100-150": [
+      3,
+      1079,
+      0.003
+     ],
+     "steps 0-4, 150-200": [
+      5,
+      96,
+      0.052
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      460,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      1,
+      1040,
+      0.001
+     ],
+     "steps 5-9, 100-150": [
+      0,
+      1059,
+      0.0
+     ],
+     "steps 5-9, 150-200": [
+      14,
+      359,
+      0.039
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      120,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      4,
+      961,
+      0.004
+     ],
+     "steps 10-14, 100-150": [
+      10,
+      887,
+      0.011
+     ],
+     "steps 10-14, 150-200": [
+      113,
+      747,
+      0.151
+     ],
+     "steps 15-19, 50-100": [
+      11,
+      513,
+      0.021
+     ],
+     "steps 15-19, 100-150": [
+      47,
+      604,
+      0.078
+     ],
+     "steps 15-19, 150-200": [
+      154,
+      576,
+      0.267
+     ],
+     "steps 15-19, 200-250": [
+      1,
+      10,
+      0.1
+     ]
+    },
+    "the stack, cap 12": {
+     "steps 0-4, 0-50": [
+      0,
+      744,
+      0.0
+     ],
+     "steps 0-4, 50-100": [
+      4,
+      1068,
+      0.004
+     ],
+     "steps 0-4, 100-150": [
+      4,
+      1080,
+      0.004
+     ],
+     "steps 0-4, 150-200": [
+      0,
+      96,
+      0.0
+     ],
+     "steps 5-9, 0-50": [
+      3,
+      459,
+      0.007
+     ],
+     "steps 5-9, 50-100": [
+      5,
+      1048,
+      0.005
+     ],
+     "steps 5-9, 100-150": [
+      6,
+      1064,
+      0.006
+     ],
+     "steps 5-9, 150-200": [
+      9,
+      356,
+      0.025
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      126,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      2,
+      984,
+      0.002
+     ],
+     "steps 10-14, 100-150": [
+      4,
+      897,
+      0.004
+     ],
+     "steps 10-14, 150-200": [
+      34,
+      769,
+      0.044
+     ],
+     "steps 15-19, 50-100": [
+      3,
+      758,
+      0.004
+     ],
+     "steps 15-19, 100-150": [
+      5,
+      922,
+      0.005
+     ],
+     "steps 15-19, 150-200": [
+      29,
+      873,
+      0.033
+     ],
+     "steps 15-19, 200-250": [
+      0,
+      32,
+      0.0
+     ]
+    },
+    "the stack, cap 16": {
+     "steps 0-4, 0-50": [
+      1,
+      742,
+      0.001
+     ],
+     "steps 0-4, 50-100": [
+      4,
+      1057,
+      0.004
+     ],
+     "steps 0-4, 100-150": [
+      5,
+      1074,
+      0.005
+     ],
+     "steps 0-4, 150-200": [
+      13,
+      96,
+      0.135
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      440,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      0,
+      983,
+      0.0
+     ],
+     "steps 5-9, 100-150": [
+      3,
+      998,
+      0.003
+     ],
+     "steps 5-9, 150-200": [
+      64,
+      347,
+      0.184
+     ],
+     "steps 10-14, 0-50": [
+      0,
+      104,
+      0.0
+     ],
+     "steps 10-14, 50-100": [
+      0,
+      804,
+      0.0
+     ],
+     "steps 10-14, 100-150": [
+      1,
+      792,
+      0.001
+     ],
+     "steps 10-14, 150-200": [
+      97,
+      665,
+      0.146
+     ],
+     "steps 15-19, 50-100": [
+      0,
+      529,
+      0.0
+     ],
+     "steps 15-19, 100-150": [
+      3,
+      678,
+      0.004
+     ],
+     "steps 15-19, 150-200": [
+      95,
+      651,
+      0.146
+     ],
+     "steps 15-19, 200-250": [
+      0,
+      15,
+      0.0
+     ]
+    },
+    "the Transformer, cap 8": {
+     "steps 0-4, 0-50": [
+      1,
+      746,
+      0.001
+     ],
+     "steps 0-4, 50-100": [
+      1,
+      1066,
+      0.001
+     ],
+     "steps 0-4, 100-150": [
+      1,
+      1087,
+      0.001
+     ],
+     "steps 0-4, 150-200": [
+      0,
+      95,
+      0.0
+     ],
+     "steps 5-9, 0-50": [
+      0,
+      470,
+      0.0
+     ],
+     "steps 5-9, 50-100": [
+      2,
+      1070,
+      0.002
+     ],
+     "steps 5-9, 100-150": [
+      1,
+      1080,
+      0.001
+     ],
+     "steps 5-9, 150-200": [
+      0,
+      363,
+      0.0
+     ],
+     "steps 10-14, 0-50": [
+      1,
+      131,
+      0.008
+     ],
+     "steps 10-14, 50-100": [
+      2,
+      1044,
+      0.002
+     ],
+     "steps 10-14, 100-150": [
+      0,
+      953,
+      0.0
+     ],
+     "steps 10-14, 150-200": [
+      9,
+      820,
+      0.011
+     ],
+     "steps 15-19, 50-100": [
+      2,
+      847,
+      0.002
+     ],
+     "steps 15-19, 100-150": [
+      6,
+      1022,
+      0.006
+     ],
+     "steps 15-19, 150-200": [
+      18,
+      972,
+      0.019
+     ],
+     "steps 15-19, 200-250": [
+      6,
+      41,
+      0.146
+     ]
+    }
+   }
+  },
+  "before practice (four-stack, chain-stack, chain-tf at 4 to 16 steps)": {
+   "four-stack": {
+    "4": {
+     "right answers": 0.99,
+     "answers by the first error's kind": {
+      "the whole chain right": 198,
+      "a digit too early (stopped short)": 1,
+      "another name of the line": 1
+     }
+    },
+    "6": {
+     "right answers": 0.945,
+     "answers by the first error's kind": {
+      "the whole chain right": 188,
+      "a digit too early (stopped short)": 7,
+      "another name of the line": 4,
+      "a name not in the line": 1
+     }
+    },
+    "8": {
+     "right answers": 0.935,
+     "answers by the first error's kind": {
+      "the whole chain right": 183,
+      "a digit too early (stopped short)": 12,
+      "another name of the line": 5
+     }
+    },
+    "12": {
+     "right answers": 0.76,
+     "answers by the first error's kind": {
+      "the whole chain right": 147,
+      "a digit too early (stopped short)": 29,
+      "another name of the line": 9,
+      "a wrong digit at the end": 8,
+      "a name not in the line": 6,
+      "a name where the digit belongs (went on)": 1
+     }
+    },
+    "16": {
+     "right answers": 0.155,
+     "answers by the first error's kind": {
+      "a digit too early (stopped short)": 149,
+      "a name not in the line": 19,
+      "another name of the line": 18,
+      "the whole chain right": 10,
+      "a step backwards": 2,
+      "a skipped step": 1,
+      "a wrong digit at the end": 1
+     }
+    }
+   },
+   "chain-stack": {
+    "4": {
+     "right answers": 0.99,
+     "answers by the first error's kind": {
+      "the whole chain right": 196,
+      "another name of the line": 3,
+      "a skipped step": 1
+     }
+    },
+    "6": {
+     "right answers": 0.12,
+     "answers by the first error's kind": {
+      "a name not in the line": 87,
+      "another name of the line": 56,
+      "a digit too early (stopped short)": 47,
+      "the whole chain right": 10
+     }
+    },
+    "8": {
+     "right answers": 0.08,
+     "answers by the first error's kind": {
+      "a name not in the line": 104,
+      "a digit too early (stopped short)": 63,
+      "another name of the line": 28,
+      "a skipped step": 4,
+      "a step backwards": 1
+     }
+    },
+    "12": {
+     "right answers": 0.095,
+     "answers by the first error's kind": {
+      "a name not in the line": 89,
+      "a digit too early (stopped short)": 77,
+      "another name of the line": 33,
+      "a skipped step": 1
+     }
+    },
+    "16": {
+     "right answers": 0.135,
+     "answers by the first error's kind": {
+      "a name not in the line": 91,
+      "a digit too early (stopped short)": 82,
+      "another name of the line": 25,
+      "a step backwards": 1,
+      "a skipped step": 1
+     }
+    }
+   },
+   "chain-tf": {
+    "4": {
+     "right answers": 0.99,
+     "answers by the first error's kind": {
+      "the whole chain right": 198,
+      "another name of the line": 2
+     }
+    },
+    "6": {
+     "right answers": 0.07,
+     "answers by the first error's kind": {
+      "a name not in the line": 167,
+      "another name of the line": 21,
+      "a digit too early (stopped short)": 11,
+      "a skipped step": 1
+     }
+    },
+    "8": {
+     "right answers": 0.105,
+     "answers by the first error's kind": {
+      "a name not in the line": 165,
+      "another name of the line": 23,
+      "a digit too early (stopped short)": 12
+     }
+    },
+    "12": {
+     "right answers": 0.07,
+     "answers by the first error's kind": {
+      "a name not in the line": 159,
+      "a digit too early (stopped short)": 23,
+      "another name of the line": 18
+     }
+    },
+    "16": {
+     "right answers": 0.12,
+     "answers by the first error's kind": {
+      "a name not in the line": 136,
+      "a digit too early (stopped short)": 38,
+      "another name of the line": 26
+     }
+    }
+   }
+  },
+  "what it shows": "The stack's long chains break where the assignment a step needs stands far back in the stream. At 20 hops, in the stack's runs with the cap at 8, a step whose assignment stands under 50 bytes back is never wrong, 50 to 100 bytes back it is wrong in 0.6% of the cases, 100 to 150 in 1.7%, 150 to 200 in 16.1%. The Transformer, from the same practice, is wrong in 0.1%, 0.2%, 0.2% and 1.2% at those distances. Under 50 bytes no run of the stack is wrong in more than 0.2%. The runs with the cap at 16 show the distance alone: under 150 bytes back their steps are wrong in at most 0.5% in every group of five steps from the first to the twentieth, and at 150 to 200 bytes in 13.5%, 18.4%, 14.6% and 14.6%, whatever the step's place. With the cap at 8 the place adds to the distance: steps 15 to 19, past anything practised, are wrong in 2.1% and 7.8% at 50 to 150 bytes and in 26.7% at 150 to 200. The cap at 12 holds far assignments best of the three (3.4% at 150 to 200 bytes), which is why it reached furthest. Of the 761 answers of the stack's nine runs at 20 hops that go wrong, 481 begin with another name of the line and 187 with a name that is not in the line; r12-stack-s2 writes names that are not in the line (59 of its errors, against 11 wrong names of the line), its own way of failing. So it is recall that fails, not the chain's step: the stack finds the right assignment while it stands within about 150 bytes, and beyond that it often takes a neighbour. A chain of 20 hops puts its later assignments that far back, since the line takes about 140 bytes and the chain written so far up to 59 more. Before practice the limits are others: four-stack stops early (149 of 200 answers at 16 steps write the digit too soon, after about twelve steps), and chain-stack and chain-tf go wrong from the fifth step on with names not in the line.",
+  "what follows": "A candidate cause, not yet tested: the test bed's state read addresses what it reads by age (race reads with stored age offsets, a window of 256 cells), and an address by age may lose its precision with the distance, which would hit a neighbouring assignment. A screen of its own, registered before it runs, varies the read (its addressing by age, its reach) and measures this distance curve on the same tasks, against the Transformer's. Until then the practice studies keep the line and the chains within about 150 bytes where they mean to read the step and not the recall."
+ },
+ "diagnostic_where_chains_break_tool": {
+  "recorded_utc": "2026-11-27T15:26:42Z",
+  "note": "The tool that diagnostic_where_chains_break names by its working path is published as experiments/where_chains_break.py: the same code, with only its usage lines changed (it is run from the repository's root). The working path is outside the repository."
+ },
+ "diagnostic_age_offsets": {
+  "recorded_utc": "2026-11-27T16:56:08Z",
+  "kind": "diagnostic, not registered, reported: what the state reads of the stack's models learned about age",
+  "method": "experiments/read_age_offsets.py. A state read adds to every cell's charge in its race a learned offset for the cell's age in bytes, one for every head and age within its window of 256 bytes (snnformer/event_lm.py, _StateRead.aged). The offsets times the read address rate (64) are read from the checkpoints; no stream is run. Reported: their mean over the six reads and four heads in bands of age, and the first age from which that mean stays below zero for five ages in a row.",
+  "models": "chain-stack and four-stack (the laptop's), the nine practised runs of this record's stack arms (the server's), cap-bursts-stack of practice_within_reach.json and rehearse-bursts-stack of practice_with_rehearsal.json.",
+  "mean offset by age band in bytes": {
+   "chain-stack": {
+    "0-25": 3.61,
+    "25-50": 3.14,
+    "50-75": 2.29,
+    "75-100": 1.68,
+    "100-125": 0.41,
+    "125-140": -2.55,
+    "140-150": -4.59,
+    "150-175": -2.66,
+    "175-200": -1.49,
+    "200-256": -1.76
+   },
+   "four-stack": {
+    "0-25": 4.01,
+    "25-50": 3.36,
+    "50-75": 2.76,
+    "75-100": 1.96,
+    "100-125": 1.58,
+    "125-140": -0.71,
+    "140-150": -2.71,
+    "150-175": -2.82,
+    "175-200": -2.04,
+    "200-256": -2.89
+   }
+  },
+  "first age of five in a row below zero": {
+   "chain-stack": 121,
+   "four-stack": 129,
+   "every practised run, cap-bursts-stack, rehearse-bursts-stack": 121
+  },
+  "heads": "In chain-stack every one of the 24 heads has a negative mean offset at 140 to 150 bytes, and 21 have a positive one at 0 to 100 bytes; in four-stack 22 and 23 of the 24 are negative at 140 to 150 and at 150 to 175 bytes.",
+  "practice": "The practised runs' offsets differ from chain-stack's by at most 0.05 in any band: 2,000 rounds of practice at a rate of 3e-5 left them where training put them.",
+  "where the lines stand": "Up to its query's '=' a line of the corpus is 131 to 141 bytes long (24 assignments; 2,000 lines of 1 hop drawn with experiments/hop_tasks.py), so from a query the line's first byte stands 131 to 141 bytes back, and the query and written chain of the line before stand about 132 to 156 bytes back. The offsets turn negative at 121 bytes and are lowest at 140 to 150 bytes, where the line before ends.",
+  "what it suggests": "The reads learned to tell the present line from the one before by age alone: in the corpus every line is about as long as every other, and cells older than the line hold the bindings of another line. A chain written after the line pushes the line's first assignments past that age, and there the diagnostic above finds the errors: 16.1% of the steps whose assignment stands 150 to 200 bytes back (cap 8) against at most 1.7% nearer. Practice did not move the offsets, so what lets the cap of 12 hold far assignments better (3.4%) lies elsewhere in the weights. The Transformer hears the newline and the place of every byte and can find the line's start by content.",
+  "what follows": "Two steps, each registered before it runs. First a probe of recall by distance: one-hop lookups whose assignment stands at a set distance in lines of 24 and of 36 assignments, for the stack's and the Transformer's models. Then, if the stack's recall falls past the age at which its offsets turn negative where the Transformer's does not, a read that counts age in lines (a clock that beats at the start of every line, as the read's beats can count words), so that the present line has one age however long it is."
+ },
+ "result_tf_caps_12_16": {
+  "recorded_utc": "2026-11-27T18:25:12Z",
+  "runs": "The Transformer's runs with the cap at 16 (r16-tf-s0 to -s2) and at 12 (r12-tf-s0 to -s2), 2,000 rounds each on the server's GPU 1 in the weekend's window with code copy ef30a84, as amendment_2 set out: the three with the cap at 16 side by side from 16:45:10 UTC on 2026-11-27, then the three with the cap at 12; all six with their evaluation after practice by 18:13:45 UTC. No run was stopped.",
+  "evaluator check": "The evaluation before the first round of every run equals that of the run with the cap at 8 and the same seed in every number, and seed 0's repeats chain-tf's registered evaluation (result_tf_cap_8).",
+  "runs read": [
+   "r12-tf-s0",
+   "r12-tf-s1",
+   "r12-tf-s2",
+   "r16-tf-s0",
+   "r16-tf-s1",
+   "r16-tf-s2"
+  ],
+  "after 2,000 rounds: accuracy, whole chain (200 tasks a hop count, the tasks of the earlier screens)": {
+   "r12-tf-s0": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     0.995,
+     0.995
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     0.995,
+     0.995
+    ],
+    "5": [
+     0.995,
+     0.995
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     1.0,
+     1.0
+    ],
+    "8": [
+     0.99,
+     0.99
+    ],
+    "10": [
+     1.0,
+     1.0
+    ],
+    "12": [
+     1.0,
+     0.99
+    ],
+    "16": [
+     0.99,
+     0.99
+    ],
+    "20": [
+     0.985,
+     0.975
+    ]
+   },
+   "r12-tf-s1": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     0.975,
+     0.975
+    ],
+    "5": [
+     0.76,
+     0.52
+    ],
+    "6": [
+     0.485,
+     0.155
+    ],
+    "7": [
+     0.35,
+     0.055
+    ],
+    "8": [
+     0.375,
+     0.045
+    ],
+    "10": [
+     0.37,
+     0.01
+    ],
+    "12": [
+     0.39,
+     0.0
+    ],
+    "16": [
+     0.405,
+     0.0
+    ],
+    "20": [
+     0.44,
+     0.0
+    ]
+   },
+   "r12-tf-s2": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     1.0
+    ],
+    "5": [
+     0.995,
+     0.0
+    ],
+    "6": [
+     1.0,
+     0.0
+    ],
+    "7": [
+     1.0,
+     0.0
+    ],
+    "8": [
+     1.0,
+     0.0
+    ],
+    "10": [
+     1.0,
+     0.0
+    ],
+    "12": [
+     1.0,
+     0.0
+    ],
+    "16": [
+     1.0,
+     0.0
+    ],
+    "20": [
+     0.97,
+     0.0
+    ]
+   },
+   "r16-tf-s0": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     1.0,
+     1.0
+    ],
+    "4": [
+     1.0,
+     0.995
+    ],
+    "5": [
+     0.995,
+     0.995
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     0.99,
+     0.985
+    ],
+    "8": [
+     1.0,
+     1.0
+    ],
+    "10": [
+     1.0,
+     0.985
+    ],
+    "12": [
+     0.99,
+     0.985
+    ],
+    "16": [
+     0.985,
+     0.98
+    ],
+    "20": [
+     0.97,
+     0.945
+    ]
+   },
+   "r16-tf-s1": {
+    "1": [
+     1.0,
+     1.0
+    ],
+    "2": [
+     1.0,
+     1.0
+    ],
+    "3": [
+     0.995,
+     0.995
+    ],
+    "4": [
+     1.0,
+     0.995
+    ],
+    "5": [
+     0.99,
+     0.99
+    ],
+    "6": [
+     1.0,
+     1.0
+    ],
+    "7": [
+     0.98,
+     0.955
+    ],
+    "8": [
+     0.97,
+     0.96
+    ],
+    "10": [
+     1.0,
+     0.97
+    ],
+    "12": [
+     0.985,
+     0.96
+    ],
+    "16": [
+     0.975,
+     0.95
+    ],
+    "20": [
+     0.97,
+     0.945
+    ]
+   },
+   "r16-tf-s2": {
+    "1": [
+     0.995,
+     0.995
+    ],
+    "2": [
+     0.995,
+     0.995
+    ],
+    "3": [
+     0.985,
+     0.985
+    ],
+    "4": [
+     0.97,
+     0.97
+    ],
+    "5": [
+     0.965,
+     0.95
+    ],
+    "6": [
+     0.91,
+     0.865
+    ],
+    "7": [
+     0.855,
+     0.785
+    ],
+    "8": [
+     0.78,
+     0.72
+    ],
+    "10": [
+     0.82,
+     0.675
+    ],
+    "12": [
+     0.84,
+     0.675
+    ],
+    "16": [
+     0.725,
+     0.49
+    ],
+    "20": [
+     0.64,
+     0.23
+    ]
+   }
+  },
+  "whole chains at 16 and 20 hops with their 95% intervals": {
+   "r12-tf-s0": {
+    "16": [
+     0.99,
+     [
+      0.9643,
+      0.9973
+     ]
+    ],
+    "20": [
+     0.975,
+     [
+      0.9428,
+      0.9893
+     ]
+    ]
+   },
+   "r12-tf-s1": {
+    "16": [
+     0.0,
+     [
+      0.0,
+      0.0188
+     ]
+    ],
+    "20": [
+     0.0,
+     [
+      0.0,
+      0.0188
+     ]
+    ]
+   },
+   "r12-tf-s2": {
+    "16": [
+     0.0,
+     [
+      0.0,
+      0.0188
+     ]
+    ],
+    "20": [
+     0.0,
+     [
+      0.0,
+      0.0188
+     ]
+    ]
+   },
+   "r16-tf-s0": {
+    "16": [
+     0.98,
+     [
+      0.9497,
+      0.9922
+     ]
+    ],
+    "20": [
+     0.945,
+     [
+      0.9042,
+      0.969
+     ]
+    ]
+   },
+   "r16-tf-s1": {
+    "16": [
+     0.95,
+     [
+      0.9104,
+      0.9726
+     ]
+    ],
+    "20": [
+     0.945,
+     [
+      0.9042,
+      0.969
+     ]
+    ]
+   },
+   "r16-tf-s2": {
+    "16": [
+     0.49,
+     [
+      0.4216,
+      0.5588
+     ]
+    ],
+    "20": [
+     0.23,
+     [
+      0.1771,
+      0.2931
+     ]
+    ]
+   }
+  },
+  "mean accuracy over 1 to 4 hops": {
+   "r12-tf-s0": 0.9975,
+   "r12-tf-s1": 0.9938,
+   "r12-tf-s2": 1.0,
+   "r16-tf-s0": 1.0,
+   "r16-tf-s1": 0.9988,
+   "r16-tf-s2": 0.9863
+  },
+  "marks": {
+   "r12-tf-s0": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": false,
+    "holds": false,
+    "evaluations of 20 that meet (h)": 19
+   },
+   "r12-tf-s1": {
+    "(a)": false,
+    "(b)": false,
+    "(c)": true,
+    "(h)": false,
+    "holds": false,
+    "evaluations of 20 that meet (h)": 5
+   },
+   "r12-tf-s2": {
+    "(a)": false,
+    "(b)": false,
+    "(c)": true,
+    "(h)": false,
+    "holds": false,
+    "evaluations of 20 that meet (h)": 1
+   },
+   "r16-tf-s0": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": false,
+    "holds": false,
+    "evaluations of 20 that meet (h)": 18
+   },
+   "r16-tf-s1": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": false,
+    "holds": false,
+    "evaluations of 20 that meet (h)": 10
+   },
+   "r16-tf-s2": {
+    "(a)": true,
+    "(b)": true,
+    "(c)": true,
+    "(h)": false,
+    "holds": false,
+    "evaluations of 20 that meet (h)": 2
+   }
+  },
+  "along the way, 20 evaluations (lowest, highest)": {
+   "r12-tf-s0": {
+    "8 hops": {
+     "accuracy": [
+      0.275,
+      1.0
+     ],
+     "whole chain": [
+      0.05,
+      1.0
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.235,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      1.0
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.27,
+      0.995
+     ],
+     "whole chain": [
+      0.0,
+      0.99
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.725,
+    "rounds whose evaluation misses (h)": [
+     100
+    ]
+   },
+   "r12-tf-s1": {
+    "8 hops": {
+     "accuracy": [
+      0.21,
+      0.995
+     ],
+     "whole chain": [
+      0.0,
+      0.985
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.265,
+      0.985
+     ],
+     "whole chain": [
+      0.0,
+      0.95
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.29,
+      0.935
+     ],
+     "whole chain": [
+      0.0,
+      0.89
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.975,
+    "rounds whose evaluation misses (h)": [
+     100,
+     200,
+     300,
+     400,
+     900,
+     1000,
+     1100,
+     1200,
+     1300,
+     1400,
+     1500,
+     1600,
+     1800,
+     1900,
+     2000
+    ]
+   },
+   "r12-tf-s2": {
+    "8 hops": {
+     "accuracy": [
+      0.09,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      0.735
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.1,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      0.495
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.095,
+      0.99
+     ],
+     "whole chain": [
+      0.0,
+      0.465
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.92,
+    "rounds whose evaluation misses (h)": [
+     100,
+     200,
+     300,
+     400,
+     500,
+     600,
+     700,
+     900,
+     1000,
+     1100,
+     1200,
+     1300,
+     1400,
+     1500,
+     1600,
+     1700,
+     1800,
+     1900,
+     2000
+    ]
+   },
+   "r16-tf-s0": {
+    "8 hops": {
+     "accuracy": [
+      0.275,
+      1.0
+     ],
+     "whole chain": [
+      0.05,
+      1.0
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.235,
+      1.0
+     ],
+     "whole chain": [
+      0.0,
+      0.995
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.27,
+      0.995
+     ],
+     "whole chain": [
+      0.0,
+      0.98
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.725,
+    "rounds whose evaluation misses (h)": [
+     100,
+     600
+    ]
+   },
+   "r16-tf-s1": {
+    "8 hops": {
+     "accuracy": [
+      0.205,
+      0.99
+     ],
+     "whole chain": [
+      0.0,
+      0.965
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.23,
+      0.985
+     ],
+     "whole chain": [
+      0.0,
+      0.955
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.275,
+      0.99
+     ],
+     "whole chain": [
+      0.0,
+      0.965
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.97,
+    "rounds whose evaluation misses (h)": [
+     100,
+     200,
+     300,
+     400,
+     500,
+     600,
+     700,
+     900,
+     1000,
+     1100
+    ]
+   },
+   "r16-tf-s2": {
+    "8 hops": {
+     "accuracy": [
+      0.09,
+      0.85
+     ],
+     "whole chain": [
+      0.0,
+      0.725
+     ]
+    },
+    "12 hops": {
+     "accuracy": [
+      0.1,
+      0.75
+     ],
+     "whole chain": [
+      0.0,
+      0.59
+     ]
+    },
+    "16 hops": {
+     "accuracy": [
+      0.095,
+      0.72
+     ],
+     "whole chain": [
+      0.0,
+      0.46
+     ]
+    },
+    "lowest accuracy at 2 and 4 hops": 0.935,
+    "rounds whose evaluation misses (h)": [
+     100,
+     200,
+     300,
+     400,
+     500,
+     600,
+     700,
+     800,
+     900,
+     1000,
+     1100,
+     1200,
+     1300,
+     1400,
+     1500,
+     1600,
+     1700,
+     1900
+    ]
+   }
+  },
+  "staircase": {
+   "r12-tf-s0": {
+    "longest": 12,
+    "share of rounds at its longest": 0.8875,
+    "first round at its longest": 208,
+    "rounds below its longest after reaching it": 18,
+    "rounds below its longest": [
+     962,
+     963,
+     964,
+     965,
+     966,
+     967,
+     968,
+     969,
+     970,
+     971,
+     972,
+     973,
+     974,
+     975,
+     976,
+     977,
+     978,
+     979
+    ]
+   },
+   "r12-tf-s1": {
+    "longest": 12,
+    "share of rounds at its longest": 0.636,
+    "first round at its longest": 457,
+    "rounds below its longest after reaching it": 272,
+    "rounds below its longest": {
+     "count": 272,
+     "first": 903,
+     "last": 2000
+    }
+   },
+   "r12-tf-s2": {
+    "longest": 12,
+    "share of rounds at its longest": 0.486,
+    "first round at its longest": 726,
+    "rounds below its longest after reaching it": 303,
+    "rounds below its longest": {
+     "count": 303,
+     "first": 732,
+     "last": 1303
+    }
+   },
+   "r16-tf-s0": {
+    "longest": 16,
+    "share of rounds at its longest": 0.829,
+    "first round at its longest": 216,
+    "rounds below its longest after reaching it": 127,
+    "rounds below its longest": {
+     "count": 127,
+     "first": 236,
+     "last": 691
+    }
+   },
+   "r16-tf-s1": {
+    "longest": 16,
+    "share of rounds at its longest": 0.563,
+    "first round at its longest": 471,
+    "rounds below its longest after reaching it": 404,
+    "rounds below its longest": {
+     "count": 404,
+     "first": 500,
+     "last": 1304
+    }
+   },
+   "r16-tf-s2": {
+    "longest": 16,
+    "share of rounds at its longest": 0.14,
+    "first round at its longest": 996,
+    "rounds below its longest after reaching it": 725,
+    "rounds below its longest": {
+     "count": 725,
+     "first": 1018,
+     "last": 1973
+    }
+   }
+  },
+  "rounds by 500 (solve rate, whole chain, rounds that taught, rehearsal's loss)": {
+   "r12-tf-s0": {
+    "1-500": [
+     0.6542,
+     0.5512,
+     495,
+     0.0071
+    ],
+    "501-1000": [
+     0.8823,
+     0.6971,
+     492,
+     0.004
+    ],
+    "1001-1500": [
+     0.95,
+     0.639,
+     464,
+     0.0013
+    ],
+    "1501-2000": [
+     0.9859,
+     0.963,
+     345,
+     0.0006
+    ]
+   },
+   "r12-tf-s1": {
+    "1-500": [
+     0.4335,
+     0.2338,
+     497,
+     0.0069
+    ],
+    "501-1000": [
+     0.8736,
+     0.62,
+     500,
+     0.0077
+    ],
+    "1001-1500": [
+     0.6797,
+     0.0244,
+     499,
+     0.0049
+    ],
+    "1501-2000": [
+     0.5367,
+     0.184,
+     498,
+     0.0062
+    ]
+   },
+   "r12-tf-s2": {
+    "1-500": [
+     0.5464,
+     0.4927,
+     422,
+     0.0028
+    ],
+    "501-1000": [
+     0.4845,
+     0.2632,
+     460,
+     0.0073
+    ],
+    "1001-1500": [
+     0.6993,
+     0.0758,
+     499,
+     0.0048
+    ],
+    "1501-2000": [
+     0.962,
+     0.0,
+     442,
+     0.0012
+    ]
+   },
+   "r16-tf-s0": {
+    "1-500": [
+     0.5173,
+     0.3448,
+     495,
+     0.0078
+    ],
+    "501-1000": [
+     0.6791,
+     0.4689,
+     499,
+     0.0048
+    ],
+    "1001-1500": [
+     0.9305,
+     0.8406,
+     493,
+     0.0014
+    ],
+    "1501-2000": [
+     0.963,
+     0.9057,
+     467,
+     0.0009
+    ]
+   },
+   "r16-tf-s1": {
+    "1-500": [
+     0.4007,
+     0.1902,
+     496,
+     0.0101
+    ],
+    "501-1000": [
+     0.4194,
+     0.1379,
+     500,
+     0.0067
+    ],
+    "1001-1500": [
+     0.4704,
+     0.1398,
+     500,
+     0.0071
+    ],
+    "1501-2000": [
+     0.8726,
+     0.7186,
+     499,
+     0.0016
+    ]
+   },
+   "r16-tf-s2": {
+    "1-500": [
+     0.5464,
+     0.4927,
+     422,
+     0.0028
+    ],
+    "501-1000": [
+     0.4529,
+     0.2915,
+     462,
+     0.006
+    ],
+    "1001-1500": [
+     0.3733,
+     0.0999,
+     500,
+     0.0074
+    ],
+    "1501-2000": [
+     0.4361,
+     0.0836,
+     500,
+     0.0075
+    ]
+   }
+  },
+  "before practice, seed 0 (accuracy, whole chain, mean bytes)": {
+   "r12-tf-s0": {
+    "2": [
+     0.99,
+     0.985,
+     5.01
+    ],
+    "4": [
+     0.99,
+     0.985,
+     10.97
+    ],
+    "6": [
+     0.07,
+     0.0,
+     36.52
+    ],
+    "8": [
+     0.09,
+     0.0,
+     35.92
+    ],
+    "12": [
+     0.115,
+     0.0,
+     32.3
+    ],
+    "16": [
+     0.105,
+     0.0,
+     23.64
+    ]
+   },
+   "r16-tf-s0": {
+    "2": [
+     0.99,
+     0.985,
+     5.01
+    ],
+    "4": [
+     0.99,
+     0.985,
+     10.97
+    ],
+    "6": [
+     0.07,
+     0.0,
+     36.52
+    ],
+    "8": [
+     0.09,
+     0.0,
+     35.92
+    ],
+    "12": [
+     0.115,
+     0.0,
+     32.3
+    ],
+    "16": [
+     0.105,
+     0.0,
+     23.64
+    ]
+   }
+  },
+  "how three of the runs write, counted on the server's CPU (the evaluation's 200 tasks a hop count, greedy)": {
+   "r12-tf-s1 at 8 hops": {
+    "forms": {
+     "wrong answer": 130,
+     "the chain as the corpus writes it": 4,
+     "right answer, the chain otherwise": 66
+    },
+    "examples": [
+     {
+      "right": "dj=bs=hp=ez=ou=op=iy=2",
+      "written": "dj=bs=hp=ez=o=tm=pj=rw=4"
+     },
+     {
+      "right": "qk=lt=ov=ka=qr=bi=kn=5",
+      "written": "qk=lt=ov=k=n=0"
+     },
+     {
+      "right": "ry=of=pn=wf=so=do=ug=5",
+      "written": "ry=of=pn=wf=so=do=ug=5"
+     }
+    ]
+   },
+   "r12-tf-s1 at 20 hops": {
+    "forms": {
+     "wrong answer": 118,
+     "right answer, the chain otherwise": 82
+    },
+    "examples": [
+     {
+      "right": "hw=if=rs=ww=sr=mo=ey=eb=cy=qa=qf=bb=gr=wo=mx=dz=za=kg=fy=9",
+      "written": "hw=if=rs=w=n?=ey=eb=cy=qa=qf=bb=gr=wo=mx=dz=z=n?=ey=eb=cy=qa=qf="
+     },
+     {
+      "right": "cw=am=nd=vy=ry=eq=gm=cd=ux=sa=pv=mk=zr=ac=lo=en=de=gu=re=4",
+      "written": "cw=am=nd=vy=r=4"
+     },
+     {
+      "right": "ky=hb=ap=nk=yn=vo=ct=uv=ak=ii=sm=wt=cq=dx=sf=pp=ld=os=pg=4",
+      "written": "ky=hb=ap=nk=y?=n?=ld=os=pg=4"
+     }
+    ]
+   },
+   "r12-tf-s2 at 8 hops": {
+    "forms": {
+     "the right chain with question marks in it": 200
+    },
+    "examples": [
+     {
+      "right": "dj=bs=hp=ez=ou=op=iy=2",
+      "written": "dj=bs=hp=?ez=ou=op=iy=2"
+     },
+     {
+      "right": "qk=lt=ov=ka=qr=bi=kn=5",
+      "written": "qk=lt=ov=?ka=qr=bi=kn=5"
+     },
+     {
+      "right": "ry=of=pn=wf=so=do=ug=5",
+      "written": "ry=of=pn=?wf=so=do=ug=5"
+     }
+    ]
+   },
+   "r12-tf-s2 at 20 hops": {
+    "forms": {
+     "the right chain with question marks in it": 190,
+     "right answer, the chain otherwise": 5,
+     "wrong answer": 5
+    },
+    "examples": [
+     {
+      "right": "hw=if=rs=ww=sr=mo=ey=eb=cy=qa=qf=bb=gr=wo=mx=dz=za=kg=fy=9",
+      "written": "hw=if=rs=?ww=sr=mo=ey=?eb=cy=qa=qf=?bb=gr=wo=mx=?dz=za=kg=fy=9"
+     },
+     {
+      "right": "cw=am=nd=vy=ry=eq=gm=cd=ux=sa=pv=mk=zr=ac=lo=en=de=gu=re=4",
+      "written": "cw=am=nd=?vy=ry=eq=gm=?cd=ux=sa=pv=?mk=zr=ac=lo=?en=de=gu=re=4"
+     },
+     {
+      "right": "ky=hb=ap=nk=yn=vo=ct=uv=ak=ii=sm=wt=cq=dx=sf=pp=ld=os=pg=4",
+      "written": "ky=hb=ap=?nk=yn=vo=ct=?uv=ak=ii=sm=?wt=cq=dx=sf=?pp=ld=os=pg=4"
+     }
+    ]
+   },
+   "r16-tf-s2 at 8 hops": {
+    "forms": {
+     "right answer, the chain otherwise": 22,
+     "the chain as the corpus writes it": 142,
+     "wrong answer": 36
+    },
+    "examples": [
+     {
+      "right": "dj=bs=hp=ez=ou=op=iy=2",
+      "written": "dj=bs=hp=ez=ou=ig=2"
+     },
+     {
+      "right": "qk=lt=ov=ka=qr=bi=kn=5",
+      "written": "qk=lt=ov=kn=5"
+     },
+     {
+      "right": "ry=of=pn=wf=so=do=ug=5",
+      "written": "ry=of=pn=wf=so=do=ug=5"
+     }
+    ]
+   },
+   "r16-tf-s2 at 20 hops": {
+    "forms": {
+     "right answer, the chain otherwise": 71,
+     "wrong answer": 73,
+     "the chain as the corpus writes it": 56
+    },
+    "examples": [
+     {
+      "right": "hw=if=rs=ww=sr=mo=ey=eb=cy=qa=qf=bb=gr=wo=mx=dz=za=kg=fy=9",
+      "written": "hw=if=bb=gr=wo=mx=dz=za=kg=fy=9"
+     },
+     {
+      "right": "cw=am=nd=vy=ry=eq=gm=cd=ux=sa=pv=mk=zr=ac=lo=en=de=gu=re=4",
+      "written": "cw=am=nd=vy=ry=eq=gm=re=4"
+     },
+     {
+      "right": "ky=hb=ap=nk=yn=vo=ct=uv=ak=ii=sm=wt=cq=dx=sf=pp=ld=os=pg=4",
+      "written": "ky=hb=ap=nk=yn=vo=ct=uv=ak=ii=sm=wt=bq=dc=dy=xz=5"
+     }
+    ]
+   }
+  },
+  "the restarted runs with the cap at 16 against the stopped ones (reported)": {
+   "r16-tf-s0": "The first start's 474 rounds and the second start's 100 are repeated by the run: the same staircase, solve rates, whole-chain shares, mean bytes and example attempts in every round, and the losses within 0.00001; its evaluations along the way at rounds 0 to 400 are the same in every number.",
+   "r16-tf-s1": "The first start's 511 rounds are repeated but for the mean bytes of round 370 (22.16 against 21.79): one attempt that earned no reward came out at another length, and since only rewarded attempts teach (--dips 0), every later round is the same again; the second start's 100 rounds are the same.",
+   "r16-tf-s2": "The second start's 184 rounds are repeated to the last digit of every loss. The first start's 933 rounds are repeated through round 701; from round 702 (mean bytes 12.02 against 11.99) the two part and 229 of the remaining 232 rows differ; its evaluations along the way agree through round 700.",
+   "what it says": "A practice run of the Transformer on the GPU repeats itself up to the rounding of floating-point sums, which leaves the logged losses a hundred-thousandth apart from the first rounds on and, after hundreds of rounds, can tip one byte drawn in a rewarded attempt and part a run from an earlier start of its seed (seed 2, after 701 rounds). Nothing of the stopped starts is read."
+  },
+  "reading by the registered rules": {
+   "(3) the stack against the Transformer, cap 8": {
+    "by seed": {
+     "0": {
+      "6 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     },
+     "1": {
+      "6 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.99,
+        [
+         0.9643,
+         0.9973
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     },
+     "2": {
+      "6 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.985,
+        [
+         0.9568,
+         0.9949
+        ]
+       ],
+       "Transformer": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     }
+    },
+    "stands": "neither"
+   },
+   "(3) the stack against the Transformer, cap 12": {
+    "by seed": {
+     "0": {
+      "6 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        0.99,
+        [
+         0.9643,
+         0.9973
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     },
+     "1": {
+      "6 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        0.485,
+        [
+         0.4167,
+         0.5539
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        0.375,
+        [
+         0.3109,
+         0.4439
+        ]
+       ]
+      },
+      "stack further": true,
+      "Transformer further": false
+     },
+     "2": {
+      "6 hops": {
+       "stack": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.99,
+        [
+         0.9643,
+         0.9973
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     }
+    },
+    "stands": "neither"
+   },
+   "(3) the stack against the Transformer, cap 16": {
+    "by seed": {
+     "0": {
+      "6 hops": {
+       "stack": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.94,
+        [
+         0.8981,
+         0.9653
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     },
+     "1": {
+      "6 hops": {
+       "stack": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ],
+       "Transformer": [
+        1.0,
+        [
+         0.9812,
+         1.0
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.95,
+        [
+         0.9104,
+         0.9726
+        ]
+       ],
+       "Transformer": [
+        0.97,
+        [
+         0.9361,
+         0.9862
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     },
+     "2": {
+      "6 hops": {
+       "stack": [
+        0.995,
+        [
+         0.9722,
+         0.9991
+        ]
+       ],
+       "Transformer": [
+        0.91,
+        [
+         0.8622,
+         0.9423
+        ]
+       ]
+      },
+      "8 hops": {
+       "stack": [
+        0.975,
+        [
+         0.9428,
+         0.9893
+        ]
+       ],
+       "Transformer": [
+        0.78,
+        [
+         0.7176,
+         0.8318
+        ]
+       ]
+      },
+      "stack further": false,
+      "Transformer further": false
+     }
+    },
+    "stands": "neither"
+   }
+  },
+  "reading": {
+   "marks": "By the registered marks none of the six runs holds. r12-tf-s0, r16-tf-s0, r16-tf-s1 and r16-tf-s2 meet (a), (b) and (c) after practice and miss (h): they first stood at their cap in rounds 208, 216, 471 and 996 (the stack's runs in rounds 33 to 43 with the cap at 12 and 53 to 77 with the cap at 16), and the evaluations before they could write chains of 8 hops miss (b): 19, 18, 10 and 2 of 20 meet (h), the last first meeting (b) at round 1,800. r12-tf-s1 lost its chains: its evaluations met (b) at rounds 500 to 800 (0.955 to 0.995 right at 8 hops with 0.935 to 0.985 whole chains); from round 900 its whole chains fell while it still answered 0.855 to 0.980 of those tasks, and from round 1,600 the accuracy fell as well, to 0.390 at round 2,000. After practice it answers 0.485 of the tasks of 6 hops and 0.375 of 8, with 0.155 and 0.045 whole chains, and keeps 1 to 4 hops (0.9938). r12-tf-s2 answers 1.000 of the tasks of 6 to 16 hops and 0.970 of 20 and writes no chain in the corpus's form from 5 hops on. Counted on the server's CPU, every one of its 200 answers at 8 hops is the right chain with a question mark before a later name (dj=bs=hp=?ez=ou=op=iy=2), and 190 of 200 at 20 hops, where it puts one before every fourth name: the form r8-tf-s1 found, a long chain written as chains of the length the corpus taught. r12-tf-s1's answers at 8 hops are wrong in 130 of 200 and right with the chain otherwise in 66; among its answers are broken names and single letters (qk=lt=ov=k=n=0). r16-tf-s2 writes 142 whole chains of 200 at 8 hops; among its wrong ones are skipped steps (qk=lt=ov=kn=5). No evaluation of r12-tf-s1, r12-tf-s2, r16-tf-s1 or r16-tf-s2 answers under 0.92 of the tasks of 2 or 4 hops; seed 0's first evaluation, at round 100, answers 0.725 (the same rounds in both caps).",
+   "(3), the caps at 12 and 16": "Neither stands for either cap, so under none of the three caps does either model practise further at 6 and 8 hops. With the cap at 12 the stack is further in seed 1 alone, where r12-tf-s1 had lost its chains (1.000 against 0.485 at 6 hops, 1.000 against 0.375 at 8); in seeds 0 and 2 no difference reaches 0.10. With the cap at 16 no seed shows it at both lengths: in seed 2 the stack answers 0.995 and 0.975 against 0.910 and 0.780, 0.085 short of the mark at 6 hops.",
+   "past the practised length (reported)": "Where the Transformer's runs keep the chain's form they carry further than the stack's. Whole chains at 20 hops with the cap at 16: Transformer 0.945, 0.945 and 0.230 (seeds 0, 1, 2), stack 0.520, 0.465 and 0.595; with the cap at 12: Transformer 0.975, none (lost) and none (another form, 0.970 right), stack 0.920, 0.905 and 0.605. Over the three caps five of the Transformer's nine runs write 0.910 to 0.975 of the 20-hop chains whole (r8-tf-s0, r8-tf-s2, r12-tf-s0, r16-tf-s0, r16-tf-s1), against the stack's best 0.920 (r12-stack-s0); two leave the corpus's form (r8-tf-s1, r12-tf-s2), one loses its chains (r12-tf-s1) and one reaches 8 hops only at the end (r16-tf-s2). Every one of the stack's nine runs holds."
+  },
+  "what follows": "Reading (3) is complete, and nothing changes in what result_stack says follows. The two models practise alike up to 8 hops under every cap. Past it the Transformer's runs that keep the chain's form carry further, while the stack keeps its chains and their form with every seed and cap where four of the Transformer's nine runs do not. Why the stack's chains thin out past the practised length has been traced since: its reads count bytes and turn against cells older than a line (diagnostic_where_chains_break, diagnostic_age_offsets, recall_over_distance.json), and line_heads.json tests reads that count lines."
+ }
+}

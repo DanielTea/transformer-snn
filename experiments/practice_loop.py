@@ -18,8 +18,34 @@ The model may write anything before its answer. Between the query's '=' and the 
 the chain (?zt=mx=qa=7), each one lookup that a shallow model can make: a chain of thought in the task's own syntax,
 which no program writes for it. The share of attempts that write at least one name is reported every round.
 
+A guess pays more the longer the chain: a line holds 24 assignments whatever its hops, so a long chain leaves few
+other digits, and a guess among the digits that a name points to is right 0.20 of the time at 4 hops, 0.24 at 8, 0.37
+at 16 and more than half the time from 20 hops. A staircase that climbs there rewards the guess as it rewards the
+chain. --longest-hops caps it where a guess stays under the staircase's lower mark (8 hops). --evaluate-every scores
+greedy answers along the way, so that what practice does to the written chains is seen before the last round.
+--dips weighs what an attempt without reward teaches (policy_loss): at 0 the model learns only from the attempts
+that were rewarded, as a synapse that is strengthened by a burst of dopamine and barely weakened by its pause.
+
+Practice alone holds nothing in place. Once a length is solved its rounds teach almost nothing, the optimizer's steps
+stay as large as they were, and after some hundred rounds a model can lose what it had, the stop of a chain first
+(practice_within_reach.json). --rehearse adds to every round what the written corpus taught: fresh tasks of the
+corpus's lengths with their chains written as the corpus writes them, learned as the corpus was (rehearsal_loss).
+
+A model that was trained on several families of tasks (task_families.py) practises them in one loop. --families
+names the families it knows: each is evaluated, and with --rehearse each is rehearsed. --practise names those that
+are practised for reward (all of them unless given), each with its own staircase and its own --tasks tasks a round;
+the round's step adds the families' losses. --longest gives a family its own cap on the staircase. A family that is rehearsed and not practised shows what practice in
+another family does to it.
+
+On a CUDA device two of the trainer's speed options apply (experiments/speed_options.py). --exact-products takes a
+stack's products of whole numbers on the tensor cores: the same attempts, losses and weights to the bit, checked
+against single precision in the first round and in the round after every evaluation along the way. --fused-reads
+takes a stack's race reads in the fused kernels: the same spikes at the same weights and a gradient that rounds
+differently, so a run with it is another run, as another seed is.
+
 usage: python experiments/practice_loop.py --checkpoint run/model.pt.averaged --out practice/ --rounds 200 \\
-    [--device mps]
+    [--device mps] [--longest-hops 8] [--evaluate-every 50 --evaluate-hops 4 6 8] [--dips 0] [--rehearse 16] \\
+    [--families hops offs sums tots] [--practise hops] [--exact-products] [--fused-reads]
 """
 from __future__ import annotations
 
@@ -36,7 +62,9 @@ from torch.nn import functional as F
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import resolve_device  # noqa: E402
-from hop_tasks import chain_of, example, resolve  # noqa: E402
+from task_families import FAMILIES  # noqa: E402
+import snnformer.event_lm as event_lm_module  # noqa: E402
+from snnformer import whole_products  # noqa: E402
 from snnformer.event_lm import EventLM  # noqa: E402
 from train_event_lm import load_checkpoint, scoring_logits  # noqa: E402
 
@@ -54,21 +82,23 @@ def scores(model, output):
 class Task:
     prompt: bytes      # the line up to and with the query's '='
     answer: int        # the answer digit's byte
-    hops: int
+    hops: int          # the steps of its chain
+    family: str = "hops"
 
 
-def generate(rng: random.Random, hops: int) -> Task:
-    line = example(rng, hops)
+def generate(rng: random.Random, hops: int, family: str = "hops") -> Task:
+    line = FAMILIES[family].example(rng, hops)
     cut = line.rindex("=") + 1
-    return Task(line[:cut].encode(), ord(line[cut]), hops)
+    return Task(line[:cut].encode(), ord(line[cut]), hops, family)
 
 
 def verify(task: Task) -> bool:
-    """The reference answer follows from the task's own assignments, and the query is not a digit itself."""
+    """The reference answer follows from the task's own items in as many steps as were asked, and the query is not
+    a digit itself."""
     text = task.prompt.decode() + chr(task.answer) + "\n"
-    answer, hops = resolve(text)
-    query = task.prompt.decode().rsplit(";?", 1)[1][:-1]
-    return answer == chr(task.answer) and hops == task.hops and not query.isdigit()
+    family = FAMILIES[task.family]
+    query = text[text.rindex(";") + 2:].split("=", 1)[0]
+    return family.chain(text)[-1][-1] == chr(task.answer) and family.steps(text) == task.hops and not query.isdigit()
 
 
 def grade(task: Task, written: bytes) -> float:
@@ -117,43 +147,70 @@ def attempts(model, tasks: list[Task], count: int, max_bytes: int, temperature: 
     return [bytes(w) for w in written]
 
 
-def policy_loss(model, tasks: list[Task], written: list[bytes], rewards: torch.Tensor, count: int, device):
-    """The GRPO loss on the bytes written for the tasks whose attempts disagree, or None if none do."""
+def policy_loss(model, tasks: list[Task], written: list[bytes], rewards: torch.Tensor, count: int, device,
+                dips: float = 1.0):
+    """The GRPO loss on the bytes written for the tasks whose attempts disagree, or None if none do. An attempt
+    teaches by how far its reward came out above or below the mean of its task's attempts, in their standard
+    deviations: above it, its bytes become likelier (a burst); below it, less likely (a dip). ``dips`` weighs the
+    dips: 1 is GRPO, and at 0 only the attempts that were rewarded teach, an unexpected reward the most. A dip
+    lowers the likelihood of bytes the model itself drew, which has no floor; a burst raises one that ends at 1."""
     groups = rewards.view(len(tasks), count)
     spread = groups.std(1, unbiased=False)
     useful = spread > 0
     if not useful.any():
         return None
     advantages = ((groups - groups.mean(1, keepdim=True)) / (spread[:, None] + 1e-6))[useful].flatten()
+    if dips != 1.0:
+        advantages = torch.where(advantages < 0, advantages * dips, advantages)
     rows = [index for index, keep in enumerate(useful.repeat_interleave(count).tolist()) if keep]
-    texts = [tasks[i // count].prompt + written[i] for i in rows]
+    per_attempt = written_likelihood(model, [tasks[i // count].prompt for i in rows], [written[i] for i in rows],
+                                     device)
+    return -(advantages.to(device) * per_attempt).mean()
+
+
+def written_likelihood(model, prompts: list[bytes], written: list[bytes], device):
+    """For every row, the mean log-likelihood a byte of what was written after its prompt, the row read as one
+    window (shorter rows are led by newlines, as the attempts were)."""
+    texts = [prompt + wrote for prompt, wrote in zip(prompts, written)]
     width = max(len(t) for t in texts)
     tokens = torch.tensor([[NEWLINE] * (width - len(t)) + list(t) for t in texts], dtype=torch.long, device=device)
-    mask = torch.zeros(len(rows), width - 1, device=device)
-    for row, index in enumerate(rows):
-        length = len(written[index])
-        mask[row, width - 1 - length:] = 1.0
+    mask = torch.zeros(len(texts), width - 1, device=device)
+    for row, wrote in enumerate(written):
+        mask[row, width - 1 - len(wrote):] = 1.0
     logits = scores(model, model(tokens[:, :-1])).float()
-    logp = -F.cross_entropy(logits.flatten(0, 1), tokens[:, 1:].flatten(), reduction="none").view(len(rows), -1)
-    per_attempt = (logp * mask).sum(1) / mask.sum(1).clamp_min(1)
-    return -(advantages.to(device) * per_attempt).mean()
+    logp = -F.cross_entropy(logits.flatten(0, 1), tokens[:, 1:].flatten(), reduction="none").view(len(texts), -1)
+    return (logp * mask).sum(1) / mask.sum(1).clamp_min(1)
+
+
+def chain_written(task: Task) -> bytes:
+    """What the written corpus writes after a task's prompt: the steps of its family's chain, the answer and a
+    newline (hops: ?zt= then mx=qa=7; one hop: 7)."""
+    steps = FAMILIES[task.family].chain(task.prompt.decode() + chr(task.answer) + "\n")
+    return "=".join(steps).encode() + b"\n"
+
+
+def rehearsal_loss(model, tasks: list[Task], device):
+    """What the written corpus taught, asked again: the mean cost a byte of writing every task's chain as the corpus
+    writes it. No attempt and no reward: the lesson is the one the model was trained on before it practised."""
+    return -written_likelihood(model, [task.prompt for task in tasks], [chain_written(task) for task in tasks],
+                               device).mean()
 
 
 def wrote_the_chain(task: Task, written: bytes) -> bool:
     """The answer writes the query's whole chain and nothing else: ?zt= then mx=qa=7 and a newline (one hop: 7)."""
-    steps = chain_of(task.prompt.decode() + chr(task.answer) + "\n")
-    return written == "=".join(steps[1:]).encode() + b"\n"
+    return written == chain_written(task)
 
 
 @torch.no_grad()
-def evaluate(model, hops_list, count: int, max_bytes: int, seed: int, device) -> dict:
-    """Greedy answers with room to think: for every hop count, ``count`` tasks (drawn from ``seed``), the model
-    writes its most likely bytes up to a newline; the accuracy of the last byte, the share of answers that write at
-    least one name, the share that write the query's whole chain right (wrote_the_chain), and the mean bytes."""
+def evaluate(model, hops_list, count: int, max_bytes: int, seed: int, device, family: str = "hops") -> dict:
+    """Greedy answers with room to think: for every hop count, ``count`` tasks of the family (drawn from ``seed``),
+    the model writes its most likely bytes up to a newline; the accuracy of the last byte, the share of answers that
+    write at least one name, the share that write the query's whole chain right (wrote_the_chain), and the mean
+    bytes."""
     found = {}
     for hops in hops_list:
         rng = random.Random(seed * 1000 + hops)
-        tasks = [generate(rng, hops) for _ in range(count)]
+        tasks = [generate(rng, hops, family) for _ in range(count)]
         written = attempts(model, tasks, 1, max_bytes, 1e-6, torch.Generator().manual_seed(seed), device)
         chains = sum(wrote_the_chain(t, w) for t, w in zip(tasks, written))
         found[str(hops)] = {"accuracy": round(sum(grade(t, w) for t, w in zip(tasks, written)) / count, 4),
@@ -166,6 +223,30 @@ def evaluate(model, hops_list, count: int, max_bytes: int, seed: int, device) ->
 def wrote_a_name(written: bytes) -> bool:
     body = written.split(b"\n", 1)[0]
     return any(chr(b).isalpha() for b in body)
+
+
+def keep_evaluation(model, checkpoint, out: Path, round_: int, hops, hops_list, count: int, max_bytes: int,
+                    seed: int, device, families=("hops",)) -> dict:
+    """Score the model's greedy answers after ``round_`` rounds of practice (evaluate, on the tasks that the
+    evaluation of a finished run draws from the same seed), append the row to OUT/evaluations.jsonl and keep the
+    scored model as OUT/model-rROUND.pt. The evaluation draws from generators of its own, so the practice that
+    follows is the practice without it. With several families the row holds every family's evaluation (by_family)
+    and ``hops`` is every practised family's place on its staircase."""
+    was_training = model.training
+    model.eval()
+    if len(families) == 1:
+        row = {"round": round_, "hops": hops,
+               "by_hops": evaluate(model, hops_list, count, max_bytes, seed, device, families[0])}
+    else:
+        row = {"round": round_, "hops": hops,
+               "by_family": {family: evaluate(model, hops_list, count, max_bytes, seed, device, family)
+                             for family in families}}
+    model.train(was_training)
+    with (out / "evaluations.jsonl").open("a") as log:
+        log.write(json.dumps(row) + "\n")
+    torch.save({**checkpoint, "state_dict": model.state_dict(), "practice_rounds": round_, "practice_hops": hops},
+               out / f"model-r{round_:05d}.pt")
+    return row
 
 
 def main():
@@ -184,48 +265,149 @@ def main():
     parser.add_argument("--evaluate", type=int, nargs="*",
                         help="only score greedy answers with room to think at these hop counts, into OUT/evaluate.json")
     parser.add_argument("--evaluate-tasks", type=int, default=200)
+    parser.add_argument("--longest-hops", type=int, default=24,
+                        help="the staircase never asks for more hops than this (24 assignments a line; from 9 hops a "
+                             "guess among the line's digits is right more than a quarter of the time)")
+    parser.add_argument("--evaluate-every", type=int, default=0, metavar="ROUNDS",
+                        help="while practising, score greedy answers before the first round and after every ROUNDS "
+                             "rounds at --evaluate-hops (OUT/evaluations.jsonl) and keep each scored model")
+    parser.add_argument("--evaluate-hops", type=int, nargs="+", default=[4, 6, 8])
+    parser.add_argument("--dips", type=float, default=1.0,
+                        help="weight of the attempts that did worse than their task's mean (1: GRPO; 0: only "
+                             "rewarded attempts teach)")
+    parser.add_argument("--rehearse", type=int, default=0, metavar="TASKS",
+                        help="add to every round's step the written chains of TASKS fresh tasks of --rehearse-hops "
+                             "(0: practice alone)")
+    parser.add_argument("--rehearse-hops", type=int, nargs="+", default=[1, 2, 3, 4],
+                        help="the lengths rehearsed, drawn evenly: those of the written corpus")
+    parser.add_argument("--rehearse-weight", type=float, default=1.0,
+                        help="weight of the rehearsal's loss beside the practice's")
+    parser.add_argument("--families", nargs="+", choices=sorted(FAMILIES), default=["hops"],
+                        help="the task families the model was trained on (task_families.py): each is evaluated, and "
+                             "with --rehearse each is rehearsed")
+    parser.add_argument("--practise", nargs="+", choices=sorted(FAMILIES), default=None,
+                        help="the families practised for reward, each with its own staircase and --tasks tasks a "
+                             "round (default: every family of --families)")
+    parser.add_argument("--longest", nargs="+", default=[], metavar="FAMILY=STEPS",
+                        help="a family's own longest chain on its staircase, in place of --longest-hops (a family "
+                             "whose answer cannot be guessed needs no cap below its line's 24 items)")
+    parser.add_argument("--exact-products", action="store_true",
+                        help="a stack's products of whole numbers on a CUDA device's tensor cores, to the bit "
+                             "(snnformer/whole_products.py)")
+    parser.add_argument("--fused-reads", action="store_true",
+                        help="a stack's race reads in the fused kernels (snnformer/race_kernel.py): the same spikes, "
+                             "a gradient that rounds differently, so another run")
     args = parser.parse_args()
     device = resolve_device(args.device)
+    if (args.exact_products or args.fused_reads) and device.type != "cuda":
+        parser.error("--exact-products and --fused-reads take a CUDA device")
+    families = list(dict.fromkeys(args.families))
+    practised = list(dict.fromkeys(args.practise or families))
+    if not set(practised) <= set(families):
+        parser.error("--practise names families of --families")
+    single = len(families) == 1
+    longest = dict.fromkeys(practised, args.longest_hops)
+    for pair in args.longest:
+        family, _, steps = pair.partition("=")
+        if family not in practised or not steps.isdigit() or not 1 <= int(steps) <= 24:
+            parser.error(f"--longest {pair}: a practised family and 1 to 24 steps, as FAMILY=STEPS")
+        longest[family] = int(steps)
+    whole_products.ON = args.exact_products
+    event_lm_module._READ_FUSED = args.fused_reads
     model, checkpoint = load_checkpoint(args.checkpoint, device)
     if args.evaluate:
         args.out.mkdir(parents=True, exist_ok=True)
-        found = evaluate(model, args.evaluate, args.evaluate_tasks, args.max_bytes, args.seed + 7, device)
-        (args.out / "evaluate.json").write_text(json.dumps({"checkpoint": str(args.checkpoint), "by_hops": found},
-                                                           indent=1) + "\n")
+        found = {family: evaluate(model, args.evaluate, args.evaluate_tasks, args.max_bytes, args.seed + 7, device,
+                                  family) for family in families}
+        found = found[families[0]] if single else found
+        (args.out / "evaluate.json").write_text(json.dumps(
+            {"checkpoint": str(args.checkpoint), "by_hops" if single else "by_family": found}, indent=1) + "\n")
         print(json.dumps(found), flush=True)
         return
     optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=args.lr)
     rng, generator = random.Random(args.seed), torch.Generator().manual_seed(args.seed)
+    rehearsing = random.Random(args.seed + 13)  # rehearsal draws its own tasks: the practice's stay as they were
     args.out.mkdir(parents=True, exist_ok=True)
     log = (args.out / "rounds.jsonl").open("a")
-    hops = args.start_hops
+    hops = {family: args.start_hops for family in practised}  # every practised family's place on its staircase
+
+    def places():
+        return hops[practised[0]] if single else dict(hops)
+
+    def scored(round_):
+        if args.evaluate_every and round_ % args.evaluate_every == 0:
+            row = keep_evaluation(model, checkpoint, args.out, round_, places(), args.evaluate_hops,
+                                  args.evaluate_tasks, args.max_bytes, args.seed + 7, device, families)
+            print(json.dumps(row), flush=True)
+
+    scored(0)
     for round_ in range(1, args.rounds + 1):
-        tasks = [task for task in (generate(rng, hops) for _ in range(args.tasks)) if verify(task)]
-        model.eval()
-        written = attempts(model, tasks, args.attempts, args.max_bytes, args.temperature, generator, device)
-        rewards = torch.tensor([grade(tasks[i // args.attempts], w) for i, w in enumerate(written)])
-        solve_rate = float(rewards.mean())
-        model.train()
-        loss = policy_loss(model, tasks, written, rewards, args.attempts, device)
-        if loss is not None:
+        # Every product on the tensor cores is checked against single precision in the first round and in the round
+        # after each evaluation along the way, so that a factor too large for them does not go unseen.
+        whole_products.AUDIT = args.exact_products and (
+            round_ == 1 or bool(args.evaluate_every) and round_ % args.evaluate_every == 1)
+        # One family: the step is taken on the sum of its losses, as the loop always took it. Several: every loss
+        # sends its gradient back as soon as it is known and the gradients add up, so that one family's graph is
+        # held at a time and a round needs no more memory than a round of one family.
+        losses, rows, solved, sent = [], {}, {}, False
+        if not single:
             optimizer.zero_grad(set_to_none=True)
-            loss.backward()
+        for family in practised:
+            tasks = [task for task in (generate(rng, hops[family], family) for _ in range(args.tasks)) if verify(task)]
+            model.eval()
+            written = attempts(model, tasks, args.attempts, args.max_bytes, args.temperature, generator, device)
+            rewards = torch.tensor([grade(tasks[i // args.attempts], w) for i, w in enumerate(written)])
+            solved[family] = float(rewards.mean())
+            model.train()
+            loss = policy_loss(model, tasks, written, rewards, args.attempts, device, args.dips)
+            if loss is not None and single:
+                losses.append(loss)
+            elif loss is not None:
+                loss.backward()
+                sent = True
+            rows[family] = {"hops": hops[family], "tasks": len(tasks), "solve_rate": round(solved[family], 4),
+                            "wrote_names": round(sum(map(wrote_a_name, written)) / len(written), 4),
+                            "wrote_the_chain": round(sum(wrote_the_chain(tasks[i // args.attempts], w)
+                                                         for i, w in enumerate(written)) / len(written), 4),
+                            "mean_bytes": round(sum(len(w) for w in written) / len(written), 2),
+                            "loss": None if loss is None else round(float(loss.detach()), 5),
+                            "example": (tasks[0].prompt[-12:] + written[0]).decode("latin-1")}
+        rehearsals = []
+        if args.rehearse:
+            for family in families:
+                again = [generate(rehearsing, rehearsing.choice(args.rehearse_hops), family)
+                         for _ in range(args.rehearse)]
+                rehearsal = rehearsal_loss(model, again, device)
+                if single:
+                    rehearsals.append(rehearsal)
+                else:
+                    (args.rehearse_weight * rehearsal).backward()
+                    sent = True
+                row = rows.setdefault(family, {})
+                example_ = row.pop("example", None)  # the rehearsal's loss is logged before the example, as it was
+                row["rehearsal"] = round(float(rehearsal.detach()), 5)
+                if example_ is not None:
+                    row["example"] = example_
+        step = losses + [args.rehearse_weight * rehearsal for rehearsal in rehearsals]
+        if step:
+            optimizer.zero_grad(set_to_none=True)
+            (step[0] if len(step) == 1 else step[0] + step[1]).backward()
+        if step or sent:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             if hasattr(model, "synaptic_scaling"):
                 model.synaptic_scaling()
-        row = {"round": round_, "hops": hops, "tasks": len(tasks), "solve_rate": round(solve_rate, 4),
-               "wrote_names": round(sum(map(wrote_a_name, written)) / len(written), 4),
-               "mean_bytes": round(sum(len(w) for w in written) / len(written), 2),
-               "loss": None if loss is None else round(float(loss), 5),
-               "example": (tasks[0].prompt[-12:] + written[0]).decode("latin-1")}
-        log.write(json.dumps(row) + "\n")
+        for family in families:  # one row a round; with several families one row a round and family
+            row = {"round": round_, **({} if single else {"family": family}), **rows.get(family, {})}
+            log.write(json.dumps(row) + "\n")
+            print(json.dumps(row), flush=True)
         log.flush()
-        print(json.dumps(row), flush=True)
-        hops = staircase(hops, solve_rate)
+        for family in practised:
+            hops[family] = staircase(hops[family], solved[family], longest=longest[family])
+        scored(round_)
         if round_ % 50 == 0 or round_ == args.rounds:
             torch.save({**checkpoint, "state_dict": model.state_dict(), "practice_rounds": round_,
-                        "practice_hops": hops}, args.out / "model.pt")
+                        "practice_hops": places()}, args.out / "model.pt")
     log.close()
 
 

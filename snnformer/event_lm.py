@@ -392,6 +392,10 @@ class EventLMConfig:
     # fixed synapses mark where a word begins, as a rhythm that every word resets.
     read_word_heads: int = 0
     read_word_span: int = 32
+    # With read_word_unit "line" the word heads count lines instead of words: the letter neuron hears every byte but
+    # the newline, so the onset neuron fires at the first byte of a line, and a head reaches the present line alone,
+    # however many bytes it holds, and weighs its cells by their place in the line.
+    read_word_unit: str = "word"
     read_cap: int | None = None
     read_phases: int = 0
     read_turn: bool = False
@@ -2969,10 +2973,15 @@ class _StateRead(nn.Module):
             self.kept_offset = nn.Parameter(torch.zeros(self.heads))
         self.word_heads, self.word_span = cfg.read_word_heads, cfg.read_word_span
         if self.word_heads:
-            # The letter neuron's synapses from the 256 byte lines: one from every letter, and from every byte of a
-            # character of more than one byte, so that a word of any script is one word.
-            letters = torch.zeros(256, dtype=torch.bool)
-            letters[ord("A"):ord("Z") + 1] = letters[ord("a"):ord("z") + 1] = letters[128:] = True
+            if cfg.read_word_unit == "line":
+                # Counting lines, the letter neuron has a synapse from every byte line but the newline's.
+                letters = torch.ones(256, dtype=torch.bool)
+                letters[ord("\n")] = False
+            else:
+                # The letter neuron's synapses from the 256 byte lines: one from every letter, and from every byte of
+                # a character of more than one byte, so that a word of any script is one word.
+                letters = torch.zeros(256, dtype=torch.bool)
+                letters[ord("A"):ord("Z") + 1] = letters[ord("a"):ord("z") + 1] = letters[128:] = True
             self.register_buffer("letters", letters, persistent=False)
             # A word head's offset for every place in a word, stored at the address rate as the ages are.
             self.word_age = nn.Parameter(torch.zeros(self.word_heads, self.word_span))
@@ -3329,7 +3338,8 @@ class _StateRead(nn.Module):
         cells]. The letter neuron fires at every letter, and the onset neuron at a letter after a byte that is none:
         a word begins there, and a stream's first byte counts as a beginning. A word head at a byte reaches the cells
         from the last beginning on, the byte's own always among them, and weighs each by its place in that word. In a
-        stream ``tape`` brings where the last word began and whether the last byte was a letter, and takes them up."""
+        stream ``tape`` brings where the last word began and whether the last byte was a letter, and takes them up.
+        Counting lines, every byte but the newline is a letter, so a line begins at the byte after a newline."""
         if tokens is None:
             raise ValueError("word heads hear the bytes, to know where a word begins")
         letter = self.letters[tokens]
@@ -5329,6 +5339,9 @@ class EventLM(nn.Module):
                                              or cfg.read_beats or cfg.read_phases or cfg.read_turn))):
             raise ValueError("word heads are some of the heads of a race read with a budget, without kept cells, clocks "
                              "or pacemakers, and weigh 2 to 256 places of a word")
+        if cfg.read_word_unit not in ("word", "line") or (cfg.read_word_unit != "word" and not cfg.read_word_heads):
+            raise ValueError("word heads count words or lines (read_word_unit), and a unit other than words needs "
+                             "word heads")
         if cfg.read_after is not None:
             below = cfg.depth if cfg.clock_start is None else cfg.clock_start
             if (cfg.carry or cfg.continuous or cfg.read_mode not in _READ_MODES

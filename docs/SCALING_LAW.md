@@ -508,8 +508,32 @@ charge, up to its cap: a plain cell's synapses, no gate and no new parameters.
 On the bed the lead shrinks by about 0.005 from 6,000 to 24,000 updates and holds at 0.010 or more on every seed, at
 the bed's parameters and pulses: a constant gain by the shared reading. At full size it is on new contexts (0.018)
 and far copies (0.019), for 0.4% more pulses, and the code is sparser: about half as many cells fire at a byte, and
-those that fire have a longer tail. The lifted loop with power-law cells trains for 90,000 updates as this is written
-(`full_size_lifted_loop_second.json`).
+those that fire have a longer tail.
+
+## Power-law cells at full length: behind as registered, ahead of the Transformer on test without fast synapses
+
+The lifted loop with power-law cells trained for the full 90,000 updates (fsp-lift2,
+`full_size_lifted_loop_second.json`) and was scored as v21's stack. Its record registered the reading with fast
+output synapses at 2^24 on all 18 passes.
+
+| Reading (enwik8, 16 streams, reach 8,192) | fsp-lift2 | Against v21's stack (fsp-lift) | Against the Transformer, frozen |
+|---|---:|---:|---:|
+| With fast output synapses, test (registered) | 1.08448 | +0.0027 (0.0022 to 0.0033) | +0.0055 (0.0044 to 0.0066) |
+| With fast output synapses, validation (registered) | 1.11694 | +0.0034 (0.0028 to 0.0040) | +0.0121 (0.0110 to 0.0133) |
+| Without them, test | 1.07524 | −0.0074 (−0.0080 to −0.0069) | −0.0038 (−0.0047 to −0.0027) |
+| Without them, validation | 1.10540 | −0.0074 (−0.0080 to −0.0069) | +0.0006 (−0.0004 to +0.0016) |
+
+By its registered reading power-law cells fail at full length: 0.003 worse than plain cells, and the Transformer
+stays ahead. The loss is the fast output synapses': they cost this stack 0.0092 on test and 0.0115 on validation,
+where on v21's stack they added 0.0009 and cost 0.0007. They still help copies (0.045 near, 0.023 far on test) and
+cost new contexts 0.026 to 0.028. Without them the cells' gain on the bed carries to full length, 0.0074 on both
+splits and mostly on new contexts (0.0097 on test, 0.0140 on validation), and the stack is ahead of the Transformer
+on test and level with it on validation, with neither model using fast synapses. That reading was chosen after the
+scores were seen, so it decides nothing. A second seed is registered with it as the measure, fixed in advance
+(`full_size_power_cells_second_seed.json`): it beats the Transformer only if it is ahead on both splits with each
+interval clear of zero, and the mean of the two seeds must agree. With power-law cells 0.50 to 0.72 times as many
+cells fire at a byte, with a longer tail; saturation stays negligible; the pulses (506,607 a byte) and the training
+time (0.7% more) are v21's.
 
 ## What the pool costs is its division, and how it trains
 
@@ -523,6 +547,7 @@ updates, each change made to the Transformer:
 | The stack's pool in place of every LayerNorm | 0.0691 (0.0682 to 0.0701) |
 | A centred pool (`full_size_centring_in_floats.json`) | 0.0636 (0.0627 to 0.0646) |
 | A pool that divides by the root mean square (`energy_pool.json`) | 0.0020 |
+| The stack's pool trained with the energy's gradient (`pool_gradient.json`) | 0.0084 better (0.0075 to 0.0092) |
 
 So the pool's price is its division by the mean absolute activity: 97% of it goes with a division by the root mean
 square. In spikes the same change does not pay: pools that hear the stream's energy (`--pool-energy`) trail the bed
@@ -530,8 +555,12 @@ by 0.0030 on the mean of two seeds, and the lifted loop with them is 0.0040 behi
 say why the division itself cannot be the price. In both trained models the stream is dense and close to Gaussian,
 its root mean square 1.25 times its mean absolute activity at every token within a few percent, so the two
 divisions differ by a constant that the gains absorb (`stream_loudness.json`). What costs is how the division
-trains. Pools that fire as before and train with the energy's gradient (`--pool-energy-gradient`) are on test in
-floats, on the bed and at full size (`pool_gradient.json`).
+trains, and the last row of the table measures it: the same pool, dividing as before and passing the gradient of a
+division by the root mean square through its divisor, is better than LayerNorm, so the gradient is the pool's whole
+price in a Transformer (`pool_gradient.json`). The stack does not pay that price. Pools that fire as before and
+train with the energy's gradient (`--pool-energy-gradient`) leave the lifted loop 0.0011 behind the same loop at
+full size (0.0003 to 0.0019) and fail on the bed, where after 24,000 updates one seed is 0.0027 behind and one
+0.0018 ahead. Twice, then, what the pool costs a Transformer has not been what it costs the stack.
 
 ## Tried since v20, each by its mark
 
@@ -545,6 +574,15 @@ floats, on the bed and at full size (`pool_gradient.json`).
 | A racing loop, the output summing every pass | `racing_loop_screen.json` | Fails: summing costs 0.031; a third of the bytes settle before the last pass, and the best pass for each byte would gain 0.013 |
 | Sleep alone | `sleep_with_data.json` | Fails: 0.0034 ahead on the mean of two seeds, one behind |
 | Sleep with gates that start closed | `sleep_closed_gates_screen.json` | Passes its screen: 0.0061 ahead (0.0052 to 0.0070) on the laptop's seed, for twice the pulses; its server seeds wait |
+
+## Tried since v21, each by its mark
+
+| Idea | Record | Result |
+|---|---|---|
+| Pools that fire as before and train with the energy's gradient | `pool_gradient.json` | Fails in the stack (0.0011 worse at full size); in floats such a pool is 0.0084 better than the Transformer's LayerNorm |
+| Power-law cells at twice the rate | `full_size_power_loop_variants.json` | Fails: 0.0128 worse at full size |
+| Skip fibres on the lifted loop with power-law cells | `full_size_power_loop_variants.json` | 0.0011 better, under the mark of 0.005 |
+| Cubic cells | `cubic_cells_with_data.json` | Fails on the bed: 0.027 to 0.031 behind square cells on three seeds; its full-size pilot waits |
 
 ## The same spikes in less time
 
@@ -562,10 +600,8 @@ The data-slope test's new stack runs train with fused reads after a registered c
 
 | Record | Question |
 |---|---|
-| `full_size_lifted_loop_second.json` | The lifted loop with power-law cells for 90,000 updates (fsp-lift2), read against the lifted loop (pre-registered) |
+| `full_size_power_cells_second_seed.json` | A second seed of the lifted loop with power-law cells, read without fast output synapses against the Transformer (pre-registered) |
 | `full_size_data_slope.json` | The gap's slope with data at full size: that stack and the Transformer at 45,000, 90,000 and 180,000 updates (pre-registered) |
-| `pool_gradient.json` | Pools that fire as before and train with the energy's gradient: in floats, on the bed's two seeds and in a full-size pilot (pre-registered) |
-| `full_size_power_loop_variants.json` | Skip fibres and the Transformer's rate on the lifted loop with power-law cells, full-size pilots (pre-registered) |
 | `cubic_cells_with_data.json` | Power-law cells whose count grows with the cube of their charge: the bed's two seeds and a full-size pilot (pre-registered) |
 | `sleep_closed_gates_with_data.json` | Sleep with gates that start closed, alone and on the loop, two server seeds at 6,000 and 24,000 updates (pre-registered) |
 | `data_scaling_long.json` | The curves: the Transformer, the delayed stack and the plain stack at 6,000 to 96,000 updates, at each model's best rate |

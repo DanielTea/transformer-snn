@@ -16,8 +16,8 @@ claims are made, and what to try next. Every number links to a record in
 
 | Scale | Stack | Transformer | Gap (bits per byte) |
 |---|---|---|---|
-| Full size, the looped stack under the pool that lifts the ceiling (fsp-lift: levels 2 to 8 run twice, 36.3M parameters, 1.63 times the pulses), enwik8 test | 1.0817 | 1.0790 (34.75M, at 1.2e-3) | **0.003 behind** (0.009 on validation) |
-| Full size, the looped stack (fsp-loop: the same without the lifting pool), enwik8 test | 1.1039 | 1.0790 (34.75M, at 1.2e-3) | 0.025 behind |
+| Full size, the looped stack under the pool that lifts the ceiling (v21, fsp-lift: levels 2 to 8 run twice, 36.3M parameters, 1.63 times the pulses), enwik8 test | 1.0817 | 1.0790 (34.75M, at 1.2e-3) | **0.003 behind** (0.009 on validation) |
+| Full size, the looped stack (v20, fsp-loop: the same without the lifting pool), enwik8 test | 1.1039 | 1.0790 (34.75M, at 1.2e-3) | 0.025 behind |
 | Full size, each model at its best rate (v19: fsp-st at 6e-4, 36.3M parameters), enwik8 test | 1.1129 | 1.0790 (34.75M, at 1.2e-3) | 0.034 behind |
 | The same pair against the Transformer with output synapses that learn while it reads | 1.1129 | 1.0771 | 0.036 behind |
 | Full size, both at 3e-4 (v18: l2048-word-st, 36.3M), enwik8 test | 1.1162 | 1.1067 (34.75M) | 0.0095 behind |
@@ -153,6 +153,17 @@ trained with them is therefore another run of the same recipe, as another seed i
 the same bits by either read. The scaling test's two new stack runs train with fused reads: a check on the deployed
 code met the six conditions registered before it ran (`full_size_data_slope.json`, its third amendment and second
 code check).
+
+On the test bed the same options give less, because a small model's update is spent launching kernels more than in
+them (2026-11-27, 600 updates on streams, each way twice): 0.056 s an update with reads by age, 0.053 with exact
+products (the weights the same to the bit), 0.050 with fused reads beside them, and 0.036 with fused reads and
+compiled cells; the looped, lifted bed takes 0.106, 0.095 and 0.084. From that day every newly registered run trains
+on the fast path of its size, the base of its comparison included, since a run with fused reads or compiled cells is
+another run; runs registered earlier keep the path they were registered on. The practice loop of the one-model plan
+takes exact products and fused reads as well and has moved to the server's GPU, where a round of the bed's stack
+takes 0.65 s against 1.1 s on the laptop and several of the stack's runs share the GPU (six side by side took 0.8
+to 1.8 s a round each, nine 1.4 to 3.1 s). The two models take turns there: with the Transformer's runs beside
+them the stack's runs took 8 to 40 s a round.
 
 ## Rules for claims
 
@@ -358,7 +369,16 @@ code check).
    **Pools that train with the energy's gradient** (`--pool-energy-gradient`, `pool_gradient.json`) hear the summed
    counts as before, so the stack fires the same spikes, and pass the energy's gradient: a float control with the
    pool's forward and the root mean square's gradient (`gpool`), a full-size pilot and two bed seeds run on GPU 1
-   once fsp-lift is scored.
+   once fsp-lift is scored. **The float control is read: the gradient is the pool's whole price.** The Transformer
+   whose every norm is the stack's pool, trained with the energy's gradient, scores 1.2973: 0.0084 better than with
+   its LayerNorms (0.0075 to 0.0092), where the same pool trained through its own divisor is 0.0691 worse. Both
+   pools compute the same division, so the 0.078 between them is the gradient that the divisor passes and nothing
+   else. That was the reason to expect a gain in the stack, and **the stack gains nothing**: at full size the lifted
+   loop whose pools train with the energy's gradient is 0.0011 behind the same loop (0.0003 to 0.0019), and on the
+   bed after 24,000 updates one seed is 0.0027 behind and one 0.0018 ahead, a fail by the shared reading, so these
+   pools stay off. Twice now, with energy pools and with their gradient, what the stack's pool costs a Transformer
+   has not been what it costs the stack: the walk of the layout in floats explains the pool's price in a
+   Transformer in full, and it is no recipe for the stack.
    **Power-law cells** (`--granule-power P`, `power_cells_screen.json`, on the laptop tonight): a cortical neuron's
    rate grows with a power of about two of how far its membrane stands past the threshold. A power-law cell fires
    round(k * k / P) spikes for k thresholds of charge, up to its cap, as a plain cell does at P thresholds: the
@@ -384,18 +404,34 @@ code check).
    every seed (0.0100, 0.0156, 0.0100, 0.0143; 0.0125 on the mean) at equal pulses, a constant gain. After 6,000
    updates they led by 0.0176, so the plain cells catch up part of the way with data. Power-law cells therefore join
    the next full-length run, **fsp-lift2** (`full_size_lifted_loop_second.json`): the lifted loop with power-law
-   cells, on GPU 0 alone from the evening of 2026-11-26, read against fsp-lift, fsp-loop and the Transformer. Its
-   90,000 updates show how much of the gain survives at full length. **In the loop the gain is larger**: on the
+   cells, on GPU 0 alone from the evening of 2026-11-26, read against fsp-lift, fsp-loop and the Transformer.
+   **By its registered measure it fails; without the fast output synapses it is the best stack yet.** Read with
+   fast output synapses at 2^24, as every full-size stack since v19, fsp-lift2 is 0.0027 worse than fsp-lift on
+   test and 0.0034 on validation, and 0.0055 and 0.0121 behind the Transformer. The synapses cost this run 0.0092
+   and 0.0115: they still help copies, and they cost new contexts 0.026 to 0.028. Read without them, at the reach
+   of 8,192, fsp-lift2 scores 1.0752 on test and 1.1054 on validation. Power-law cells are then 0.0074 better than
+   plain cells on both splits, mostly on new contexts, so the bed's gain did carry to full length. Against the
+   Transformer, neither model using fast synapses, the stack is 0.0038 ahead on test (interval 0.0027 to 0.0047)
+   and 0.0006 behind on validation (0.0004 ahead to 0.0016 behind). That is not the measure the record named, so
+   it decides nothing. A second seed is registered with this measure fixed in advance
+   (`full_size_power_cells_second_seed.json`), trained on the fast path. **In the loop the gain is larger**: on the
    laptop's seed, after 24,000 updates, the looped bed with power-law cells leads the looped bed with plain cells
    by 0.0095 (interval 0.0086 to 0.0105) at equal pulses (`power_cells_in_loop_screen.json`), twice the same seed's
    lead on the plain bed, again on new contexts (0.015 better on 76% of bytes) with near copies 0.029 worse.
    **Next on this line.** Cortical rates grow with powers of about 2 to 4, so the square is one point of a family:
    cubic cells (`--granule-power-exponent 3`, round(k^3 / 64) spikes for k thresholds, the same as a square cell at 8
    thresholds; `cubic_cells_with_data.json`) keep every cell under 4 thresholds silent. They run on two bed seeds, a
-   full-size pilot against the lifted loop with square cells (1.2870), and the laptop's seed. Two cheap full-size
-   pilots on the same loop need no new code (`full_size_power_loop_variants.json`): skip fibres, which gave the looped
-   bed a steady 0.006 under their own mark, and twice the rate, which gave the lifted loop 0.003. Whatever passes
-   joins the weekend's next full-length run.
+   full-size pilot against the lifted loop with square cells (1.2870), and the laptop's seed. **On the bed the cube
+   is worse**: after 24,000 updates it trails the square by 0.0308 and 0.0272 on the server's two seeds (intervals
+   0.0297 to 0.0320 and 0.0262 to 0.0283) and by 0.0278 on the laptop's, at equal pulses, mostly on new contexts
+   (0.035 a byte on three quarters of the bytes) and on far copies. The steeper power silences too much. Its
+   full-size pilot is still to be scored. Two cheap full-size
+   pilots on the same loop needed no new code (`full_size_power_loop_variants.json`): skip fibres, which gave the
+   looped bed a steady 0.006 under their own mark, and twice the rate, which gave the lifted loop 0.003. **Neither
+   passes.** Skip fibres are 0.0011 better (interval 0.0003 to 0.0019), under the mark of 0.005, so they stay out.
+   Twice the rate is 0.0128 worse (0.0119 to 0.0136): plain cells gained 0.003 from it, and power-law cells, which
+   gain 0.0137 at 6e-4, cost 0.0022 at 1.2e-3. The cells' gain is tied to the rate, and the next full-length run
+   keeps fsp-lift2's recipe as it is.
 3. **What holds late learning back: the charge grid and weight decay.** Does the charge grid limit late learning
    (`weight_precision_with_data.json`; at the best rate `randomness_at_best_rate.json`)? A typical full-size synapse
    is about 8 ticks from zero, so a tick is an eighth of it, and on the test bed a float stand-in that was level
@@ -485,8 +521,9 @@ code check).
    membrane is held at a bound any more (0.04% of the top cells' entries reach their cap, where 27% of fsp-loop's sat
    at the bound). The fast output synapses now add little: 0.0009 on test, and on validation they cost 0.0007 (a
    scan on fsp-loop kept their threshold at 2^24, `fast_synapse_threshold_loop.json`). The lifted loop is the
-   stack's recipe from here on; fsp-lift2, the same loop with power-law cells, trains on GPU 0 and is read against
-   it.
+   stack's recipe from here on. fsp-lift2, the same loop with power-law cells, is worse than it by the registered
+   measure. Without fast output synapses it is ahead of it and of the Transformer on test (see power-law cells
+   above); a second seed tests that with the measure fixed in advance.
 
    Built and pre-registered next: **a racing loop** (`--stack-loop-exits`, d837b6c, `racing_loop_screen.json`).
    A uniform third pass helps hard bytes and hurts copies, so it nets nothing. In cortex a decision is a race:
@@ -601,16 +638,122 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   writes 2% of the chains right and the Transformer none, and from 8 to 16 hops both answer as often as a guess
   among ten digits (0.09 to 0.12). The step is the same lookup at every length, but both learned it together with
   the lengths they saw.
-- **Practice from written chains** (`practice_written_chains.json`, running on the laptop): the two models practise
-  2,000 rounds from 4 hops, with only the answer checked, as in the practice screen. Now every attempt writes a chain
-  for the reward to grade, so the question is whether reward at the edge of what a model solves makes its chains
-  longer than any it has read: an accuracy of at least 0.50 at 6 hops with the whole chain written in half of the
-  answers, the same at 8 hops for twice the trained length, and the trained lengths kept. If neither model meets
-  the first mark, the next screen trains on written chains of more lengths (1 to 8 hops).
+- **Practice from written chains** (`practice_written_chains.json`): the two models practise 2,000 rounds from 4
+  hops, with only the answer checked, as in the practice screen. Now every attempt writes a chain for the reward to
+  grade, so the question is whether reward at the edge of what a model solves makes its chains longer than any it
+  has read: an accuracy of at least 0.50 at 6 hops with the whole chain written in half of the answers, the same at
+  8 hops for twice the trained length, and the trained lengths kept. The Transformer's chains grew: 0.71 right at 6
+  hops with 0.63 whole chains, 0.61 at 8 hops with 0.47 whole chains, just under the second mark. But it lost the
+  short ones (0.51 over 1 to 4 hops, from 0.99). The stack lost everything (0.05 at 6 hops, 0.11 over 1 to 4). The
+  rounds show two faults of the loop itself. The staircase climbed past 20 hops within 150 rounds, where a guess
+  pays: a line holds 24 assignments whatever its hops, so a long chain leaves few other digits (`hop_tasks.py
+  floors`). And GRPO's attempts below the mean push the likelihood of the model's own bytes down without a floor.
+- **Practice within reach** (`practice_within_reach.json`, on the laptop): the same practice with the staircase
+  capped at 8 hops, with only rewarded attempts teaching, and with both, from both models. Its reading is taken
+  after 2,000 rounds. The stack's three arms are done and none passes. The arm with both changes failed in a way
+  worth more than a pass would have told: within 100 rounds it answered 0.96 of the tasks of 8 hops right with the
+  whole chain in 0.93, and it held that for 700 rounds. The model kept at round 700 writes whole chains of 16 hops
+  right in 0.72 of its answers, four times the length it read and twice the length it practised. Then, within
+  about 50 rounds, it lost the stop of a chain (it writes names until the room ends) and never returned. The
+  capped arm that keeps GRPO's dips lost its chains between rounds 300 and 400. The uncapped arm in which only
+  rewarded attempts teach lost them between rounds 100 and 200, after its staircase had climbed to 24 hops, where
+  a guess pays. Reward on the answer alone does lengthen a spiking model's written chains; without rehearsal the
+  loop does not hold what it wins. The Transformer's three arms run on the laptop now.
+- **Practice with rehearsal** (`practice_with_rehearsal.json`, `practice_loop.py --rehearse`): the capped,
+  reward-only practice with the written chains of 16 fresh tasks of 1 to 4 hops rehearsed in every round, as the
+  brain replays old memories among new ones. The stack's arm passes: it meets the three marks after 2,000 rounds
+  and held them at every one of the 20 evaluations on the way. After practice it answers 0.99 of the tasks of 8
+  hops right with the whole chain written right in 0.985, and it writes chains it never practised: whole chains
+  in 0.975 of its answers at 12 hops, 0.875 at 16 and 0.345 at 20, from a corpus that showed it 1 to 4. Rehearsal
+  costs nothing on the way up (0.955 at 8 hops by round 100). One seed; the Transformer's arm follows on the
+  laptop.
+- **The cap raised** (`practice_cap_raised.json`, on the server's GPU): the same loop with its cap at 8, 12 and
+  16 hops, from both models, with three seeds each. The stack's nine runs are in. Every one holds its chains at
+  every evaluation, so rehearsal keeps what practice wins with each seed and each cap. The cap at 12 reaches
+  furthest: from a corpus of 1 to 4 hops, two seeds of three write chains of 20 hops whole in 0.92 and 0.905 of
+  their answers (0.605 in the third), against 0.645, 0.35 and 0.22 with the cap at 8. The cap at 16 does not beat
+  the cap at 8: at 16 hops a guess is right in 0.37 of the tasks, one attempt in seven is rewarded without its
+  chain, and the reward teaches that too. Two runs began to lose their chains as the run without rehearsal had
+  lost them for good; the staircase took them down to 6 and 7 hops and both stood at their cap again within 40
+  rounds. The Transformer's three runs with the cap at 8 are in as well. At 6 and 8 hops neither model is ahead.
+  Past the practised length the Transformer carries further: after practice up to 8 hops it answers 0.975, 0.995
+  and 0.92 of the 20-hop tasks, the stack 0.705, 0.44 and 0.38 (the stack's best cap, 12, takes it to 0.945,
+  0.935 and 0.805). It got there later and less evenly. The stack stands at 8 hops within 28 rounds with every
+  seed and holds at every evaluation; the Transformer needed 71, 171 and 712 rounds, one seed writing four steps
+  and stopping for 700 of them. One of its three seeds left the corpus's form: it writes the right chain with a
+  fresh question mark before every fourth name, turning a long chain into chains of the length it was taught, so
+  its answers are right and none of its chains counts as whole. With the cap at 12 and 16 it is the same picture.
+  Neither model practises further at 6 and 8 hops under any cap. Past it, five of the Transformer's nine runs
+  write 0.91 to 0.975 of the 20-hop chains whole, against the stack's best 0.92 (cap 12), but four of its nine
+  runs fall short: two write the chain with question marks in it, one loses its chains, and one reaches 8 hops
+  only at the end.
+  Every one of the stack's nine runs holds. Why the stack's chains thin out with length where the Transformer's do not: a
+  diagnostic of the practised models says it is recall over distance, not the chain's step. At 20 hops the stack
+  writes a step right almost always while the assignment it needs stands within about 150 bytes back, and takes a
+  neighbouring name in 16% of the steps (cap 8) when it stands 150 to 200 bytes back. The Transformer misses 1.2%
+  there. With the cap at 16 this holds at every place in the chain alike; the cap at 12 holds far assignments best
+  (3.4%). The stack's own weights say why. Its memory reads weigh every earlier byte by its age as well as by
+  what it holds, and every head learned to turn against bytes older than about 120, most of all at 140 to 150
+  bytes back: in the corpus that is where the line before ends (a line is 131 to 141 bytes up to its question).
+  The reads tell the present line from the one before by age alone, and a long chain written after the line
+  pushes the line's first assignments past that age. Practice did not move these weights. A probe of recall by
+  distance bears it out (`recall_over_distance.json`, `experiments/recall_over_distance.py`): asked for one
+  binding in lines longer than any it read, the stack recalls it almost always up to 150 bytes back, but in only
+  0.31 and 0.19 of the lines at 150 to 175 and 175 to 200 bytes, where the Transformer recalls 1.00 and 0.97.
+  Practice with the cap at 8 or 12 had taught the stack to reach that far (0.92 to 0.98) without moving its age
+  offsets, so the practised runs' long chains break partly over the chain they write themselves.
+- **Line heads** (`line_heads.json`, `--read-word-unit line`): two of every read's four heads count lines instead
+  of bytes. They are the read's word heads, which reach only the present word, made to reach only the present
+  line, as the brain cuts experience into events and recalls within them. **All three readings pass.** Asked for
+  one binding 150 to 200 bytes back, the stack with line heads answers 0.965 and 0.975, where the same recipe
+  without them answers 0.195 and 0.29. It keeps 1 to 4 hops (0.999), and without any practice it writes 0.975 of
+  8-hop chains whole (without line heads 0.655), 0.785 of 12-hop chains (0.205) and 0.455 of 16-hop chains
+  (0.015). Validation on the hop corpus is level, so the line heads cost nothing. Its plain heads still learned
+  the cliff at about 120 bytes; the far recall is the line heads'. As registered, line-stack goes into the
+  practice loop with rehearsal next, and line heads go into the four-family corpus. Records of telemetry are lines
+  too.
+- **Four families in one model** (`written_chains_four_families.json`, `experiments/task_families.py`, training on
+  the laptop): before the loop can practise more than one kind of reasoning, a model must have learned to write
+  each kind's chain. One corpus, four families, 1 to 4 steps each: the lookups along names; lookups that add as
+  they go (`?zt=mx2=qa5=2`), whose answer cannot be guessed from the line; the running sum of a channel's readings
+  (`+mx=7=4=8`), found by its place in a row as telemetry is; and the same sum written as a log that copies each
+  reading (`#mx=77=74=48`). It asks which families the stack and the Transformer learn, what sharing a model costs
+  the lookups, and whether a chain that keeps its place silently is learned as well as one that writes down what
+  it reads. Every learned family goes into the practice loop next (`practice_loop.py --families`). The
+  Transformer's arm is in: with the 24,000 updates that teach it the lookups alone, it learned none of the four
+  families, the lookups included. It writes each family's chain in its form, with names taken from the line, and
+  follows no binding. The stack learned two of the four: the lookups (0.9925 over 1 to 4 steps, no worse than the
+  stack trained on them alone) and the lookups that add (0.979). It learned neither running sum; there it writes a
+  digit or two and runs on into assignments instead of ending the line. And without any practice its lookups now
+  run past the trained length: 0.93 right at 8 steps and 0.775 at 12, where the stack trained on lookups alone
+  managed 0.105 at 8 and needed practice to get further. The two learned families go into the practice loop
+  together this weekend; the running sums need another way of writing their chains first.
+- **Practice of several families** (`practice_several_families.json`, on the server's GPU on 2026-11-27): the
+  stack's two learned families in one practice loop with rehearsal, capped at 12 steps: both practised in the
+  same rounds, and each practised alone while the other is only rehearsed, three seeds each. **Four of the nine
+  stack runs fall.** The five that hold write 0.78 to 0.985 of their practised 12-step chains whole (the base
+  wrote 0.715 for the lookups and 0.105 for the lookups that add), the run that practised both in seed 0 writes
+  0.98 and 0.895 of its 16-step chains, and practice in one family lengthened the other's chains too. But two of
+  the three runs that practised both families, and one run of each single arm, lost everything past the
+  rehearsed lengths. They write the first steps right, then fill the room with one name repeated or with equals
+  signs, and end on one digit whatever the task. Once a run has fallen, its staircase goes between 4 and 5 steps,
+  and nothing in the loss makes the filler less likely, because only paid attempts teach. The Transformer
+  practised its one learned family, the lookups, with three seeds. Two runs write every chain of 5 to 12 steps
+  whole and 0.99 of those of 16 steps. The third never got past the corpus's longest form: it writes three names
+  and a guessed digit at every length. Neither model practises further by the reading. Every run that fell, of
+  either model, broke just past the longest chain the rehearsed corpus writes. So the choice between practising
+  families together and in turns must wait: first the loop has to keep every run standing.
+- **The Transformer again** (`four_families_transformer_again.json`, on the laptop): a comparison of practice
+  needs a Transformer that has learned the chains, so it gets two further chances at the same corpus: four times
+  the updates, and a start from the model that already follows names. Each learned the lookups and nothing else
+  by the mark. The one with four times the updates came close on the lookups that add (0.91 over 1 to 4 steps);
+  the one started from the lookup model managed the running sum up to three readings. Neither reaches past the
+  trained length without practice, where the stack's lookups reach 8 steps. By the registered tie rule the
+  Transformer practises the lookups this weekend from the arm that started from the lookup model.
 
 ## How to continue
 
-- The newest handoff (`docs/V19_HANDOFF.md`) says how to restore checkpoints,
+- The newest handoff (`docs/V21_HANDOFF.md`) says how to restore checkpoints,
   rescore and retrain.
 - `experiments/train_event_lm.py` trains every arm; `experiments/eval_stream.py`
   scores streams, and `experiments/gap_by_piece.py` splits two scorings.
