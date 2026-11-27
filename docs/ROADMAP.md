@@ -660,6 +660,14 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   model that guesses is no longer sent back to shorter tasks, so only rehearsal and the chains' own higher pay
   hold them. It passes if every run holds its chains and the share of whole chains at 16 or 20 hops rises by 0.10
   over the cap at 8.
+- **Four families in one model** (`written_chains_four_families.json`, `experiments/task_families.py`, training on
+  the laptop): before the loop can practise more than one kind of reasoning, a model must have learned to write
+  each kind's chain. One corpus, four families, 1 to 4 steps each: the lookups along names; lookups that add as
+  they go (`?zt=mx2=qa5=2`), whose answer cannot be guessed from the line; the running sum of a channel's readings
+  (`+mx=7=4=8`), found by its place in a row as telemetry is; and the same sum written as a log that copies each
+  reading (`#mx=77=74=48`). It asks which families the stack and the Transformer learn, what sharing a model costs
+  the lookups, and whether a chain that keeps its place silently is learned as well as one that writes down what
+  it reads. Every learned family goes into the practice loop next (`practice_loop.py --families`).
 
 ## How to continue
 
