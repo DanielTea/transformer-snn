@@ -184,14 +184,14 @@ def test_the_speed_options_are_refused_without_a_cuda_device(tmp_path, monkeypat
         assert "take a CUDA device" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("family", ["hops", "offs", "sums", "tots"])
+@pytest.mark.parametrize("family", ["hops", "offs", "sums", "tots", "ticks"])
 def test_every_family_gives_tasks_the_loop_can_verify_grade_and_rehearse(family):
     task = practice.generate(random.Random(3), 3, family)
     assert task.family == family and task.hops == 3 and task.prompt.endswith(b"=") and practice.verify(task)
     right = practice.chain_written(task)
     line = task.prompt.decode() + chr(task.answer) + "\n"
     assert right == "=".join(task_families.FAMILIES[family].chain(line)).encode() + b"\n"
-    assert right[-2] == task.answer and right.count(b"=") == 2
+    assert right[-2] == task.answer and right.count(b"=") == 2 + (family == "ticks")  # ticks end with a step more
     assert practice.wrote_the_chain(task, right) and practice.grade(task, right) == 1.0
     assert not practice.wrote_the_chain(task, bytes([task.answer]) + b"\n")
     wrong = practice.Task(task.prompt, ord("0") + (task.answer - ord("0") + 1) % 10, task.hops, family)

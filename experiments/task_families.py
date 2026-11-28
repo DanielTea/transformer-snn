@@ -22,6 +22,15 @@ whatever the steps, so that a line's length does not tell them.
   tots   the same rows and the same question, with the chain written as a log: every step copies the next reading
          and writes the total beside it, so that the place in the row stands in the chain itself.
              qa:3152;mx:774;...;#mx=8                written: #mx=77=74=48
+  ticks  the same question over readings that carry their time, as a telemetry log does. A reading's name is its
+         channel's letter and its tick's letter, the ticks of a channel run on through the alphabet (after z comes
+         a) from a start drawn evenly, and the item at the tick after a channel's last reading says that the
+         channel ends there: channel m read 7 at tick k, 7 at l and 4 at m, and at n it ends.
+             mk=7;ml=7;mm=4;mn=.;...;@mk=8           written: @mk=7ml=4mm=8mn=8
+         Each written step is the last digit of the sum so far and the name of the next tick; the step after it
+         looks that name up as hops and offs look up theirs, and at the item that ends the channel the sum is
+         written once more as the answer. A line's steps are the readings of its channel. Every step is one lookup
+         by a name and one addition of two digits, as in offs, and the next name is worked out, not looked up.
 
 In the other families as in hops, the items beside the query's are chains or rows of one to four steps, so the
 corpus of one to four steps shows nothing longer.
@@ -41,6 +50,7 @@ import argparse
 import hashlib
 import json
 import random
+import string
 from pathlib import Path
 
 import hop_tasks
@@ -187,7 +197,74 @@ class Tots:
         return len(Tots.chain(line))
 
 
-FAMILIES = {family.name: family for family in (Hops, Offs, Sums, Tots)}
+TICKS = string.ascii_lowercase
+ENDS = "."  # the value of the item at the tick after a channel's last reading
+
+
+def _channels(rng: random.Random, steps: int, items: int) -> list[int]:
+    """The readings of the query's channel and, beside it, channels of one to LONGEST_OTHER readings until the line
+    holds its items. A channel takes one item more than its readings, the item that ends it; where a single item
+    is left, a channel without readings takes it."""
+    if not 1 <= steps < items:
+        raise ValueError(f"a channel of {steps} readings and its end do not fit in a line of {items} items")
+    lengths, left = [steps], items - steps - 1
+    while left:
+        length = rng.randint(1, min(LONGEST_OTHER, left - 1)) if left > 1 else 0
+        lengths.append(length)
+        left -= length + 1
+    return lengths
+
+
+def _next_tick(name: str) -> str:
+    """The name of the same channel's reading one tick later."""
+    return name[0] + TICKS[(TICKS.index(name[1]) + 1) % len(TICKS)]
+
+
+class Ticks:
+    """The running sum of a channel's readings, each named by its channel and its tick."""
+    name = "ticks"
+    query = "@"
+
+    @staticmethod
+    def example(rng: random.Random, steps: int, items: int = ITEMS) -> str:
+        """One line: ``items`` readings and channel ends in random order, the query of a channel of ``steps``
+        readings (its first reading's name), the last digit of their sum."""
+        lengths = _channels(rng, steps, items)
+        pairs, query, answer = [], None, None
+        for channel, length in zip(rng.sample(TICKS, len(lengths)), lengths):
+            name = channel + rng.choice(TICKS)
+            if query is None:
+                query = name
+            total = 0
+            for _ in range(length):
+                reading = rng.randrange(10)
+                pairs.append((name, str(reading)))
+                total, name = (total + reading) % 10, _next_tick(name)
+            pairs.append((name, ENDS))
+            if answer is None:
+                answer = total
+        rng.shuffle(pairs)
+        return ";".join(f"{name}={value}" for name, value in pairs) + f";@{query}={answer}\n"
+
+    @staticmethod
+    def chain(line: str) -> list[str]:
+        """What is written after the query's '=': after every reading the last digit of the sum so far and the name
+        of the next tick, and at the channel's end the sum once more (@mk= then 7ml, 4mm, 8mn, 8)."""
+        body, query = line.rstrip("\n").rsplit(";@", 1)
+        bound = dict(pair.split("=", 1) for pair in body.split(";"))
+        name, total, written = query.split("=", 1)[0], 0, []
+        while bound[name] != ENDS:
+            total, name = (total + int(bound[name])) % 10, _next_tick(name)
+            written.append(f"{total}{name}")
+        return written + [str(total)]
+
+    @staticmethod
+    def steps(line: str) -> int:
+        """The readings of the query's channel: one written step each, before the answer."""
+        return len(Ticks.chain(line)) - 1
+
+
+FAMILIES = {family.name: family for family in (Hops, Offs, Sums, Tots, Ticks)}
 
 
 def _query_at(line: str) -> int:
