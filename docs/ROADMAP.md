@@ -73,6 +73,9 @@ Daniel opened the server's two GPUs around the clock from Saturday 28 November u
   cube in the next full-length run if its pilot passes, the replay study of the one-model track, and two seeds
   of the full-size candidate the verdicts name. If the stack beats the Transformer at 180,000 updates, the next
   step is more data for both models. Nothing is downloaded for that without Daniel's consent.
+- **Whenever nothing else waits:** both models train at 360,000 updates (`full_size_data_slope_360k.json`), a
+  fourth length for the data slope. They have the lowest priority in the queue. At that length the mixture's
+  enwik8 bytes repeat about 8.2 times, so the record reads it as longer training on repeated data.
 
 ## The diagnosis: memory is solved, knowledge is not
 
