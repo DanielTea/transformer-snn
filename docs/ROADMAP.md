@@ -72,7 +72,8 @@ Daniel opened the server's two GPUs around the clock from Saturday 28 November u
   win rule at 180,000 updates before any Transformer run at that length has trained.
 - **Saturday on the laptop, Sunday morning on the server:** the four-family model trains again with line heads
   and beside a control trained the same way, and both learned families are practised together from each, six
-  seeds an arm (`line_heads_four_families.json`).
+  seeds an arm (`line_heads_four_families.json`). After them the laptop trains the stack and the Transformer on a
+  running sum written with its times (`ticks_family.json`).
 - **Sunday and Monday:** the test-bed studies that have waited since 22 to 26 November, about 130 runs. They
   cover sleep with closed gates, subthreshold slopes, weight precision, cell dither, randomness at the best rate
   and the data-scaling curves of `data_scaling_long.json`.
@@ -831,6 +832,18 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   fell. So line heads become the read of the one-model stack: the four-family corpus trains again with them on
   the laptop (`line_heads_four_families.json`), and the two learned families are practised together from it,
   six seeds against a control trained the same way.
+
+- **Readings named by their time** (`ticks_family.json`, the family `ticks` of `experiments/task_families.py`, on the
+  laptop on 2026-11-28): neither model learned the running sum of a row of readings, written as sums or as tots.
+  The four-family stack did not find the row even for one reading: the query shares no run of bytes with its row,
+  and a step is found by its place in it. That record's rule for a family nobody learns is to write its chain
+  another way first. Telemetry names a reading by its channel and its time, so in `ticks` every reading is an item
+  of its own, named by its channel's letter and its tick's letter, and the item after a channel's last reading
+  ends it: `mk=7;ml=7;mm=4;mn=.;...;@mk=8`, written `@mk=7ml=4mm=8mn=8`. Each written step is the sum so far and
+  the next tick's name, which the step after it looks up: one lookup by a name and one addition of two digits, as
+  in offs. The stack with line heads trains on hops, offs and ticks from scratch, beside the same-size Transformer
+  from scratch and from weights that follow names. A family counts as learned at 0.95 over 1 to 4 steps with 0.90
+  of the chains whole.
 
 ## How to continue
 
