@@ -806,7 +806,19 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   not hold keep 1 to 4 steps and lose reach slowly: one does not keep it in the offset family at every late
   evaluation, the other drops to 0.19 whole chains at 8 steps there. The runs that hold reach less far than the
   one run without dips that held (lookups at 16 steps 0.43 on the mean against 0.98). So dips end the filler
-  falls and cost reach. The Transformer's runs finish today.
+  falls and cost reach. **The Transformer does not stand either: five of its six runs with dips hold.** The
+  sixth reached the cap of 12 steps at round 44 and then filled the room at every length past 4. Dips lift the
+  Transformer's staircase to the cap by round 39 to 52, against 452 to 766 without them, and three of its six
+  runs without dips fell, stopping at the corpus's lengths. Neither model practises further by the reading:
+  the stack is ahead in one seed, the Transformer in three. In both models the dip ends one way of falling and
+  leaves another, so the loop needs something more than the dip.
+- **Line heads in practice** (`line_heads_in_practice.json`, on the server's GPU on 2026-11-28): the stack with
+  line heads and its control, each practised with rehearsal at a cap of 12 steps, three seeds each. **Both
+  readings pass.** After practice the stack with line heads writes 0.88, 0.77 and 0.815 of 20-step chains whole,
+  its control 0.08, 0.00 and 0.07; at 16 steps 0.955 to 0.98 against 0.015 to 0.26. All six runs hold, and none
+  fell. So line heads become the read of the one-model stack: the four-family corpus trains again with them on
+  the laptop (`line_heads_four_families.json`), and the two learned families are practised together from it,
+  six seeds against a control trained the same way.
 
 ## How to continue
 
