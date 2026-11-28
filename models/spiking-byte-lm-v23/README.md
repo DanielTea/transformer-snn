@@ -118,8 +118,10 @@ contexts.
 - The trainer counts 507,237 pulses per byte at the last update
   against a budget of 507,000, 1.63 times the plain stack's. That
   count is the trainer's own, and no native decoder has audited it.
-- Saturation and the cells' firing of this seed are measured after
-  the release, on the server's CPU, and added to the record.
+- Saturation is negligible (7e-8 of the cells' entries reach their
+  cap, 8e-5 of the reads'), and the cells fire as the first seed's
+  (20,650 cell spikes a byte against 20,675; the record's
+  `result_measurements`).
 - Not measured for this checkpoint: whole PG-19 books as single
   streams, a native integer run and a pulse audit.
 

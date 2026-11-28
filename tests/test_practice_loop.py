@@ -225,3 +225,54 @@ def test_a_family_s_own_cap_must_name_a_practised_family(tmp_path, monkeypatch, 
         with pytest.raises(SystemExit):
             practice.main()
         assert "--longest" in capsys.readouterr().err
+
+
+def test_replay_keeps_only_paid_whole_chains_past_the_rehearsed_lengths():
+    rng = random.Random(5)
+    short, long_ = practice.generate(rng, 3), practice.generate(rng, 6)
+    replay = practice.Replay(keep=3, rehearsed=[1, 2, 3, 4], seed=1)
+    right, wrong = practice.chain_written(long_), b"zz=1\n"
+    # two attempts a task: the short task's whole chain is within the rehearsed lengths, so it is not kept
+    assert replay.add([short, long_], [practice.chain_written(short), wrong, right, right], 2) == 2
+    assert replay.kept == [long_, long_]
+    for _ in range(3):
+        replay.add([long_], [right, wrong], 2)
+    assert len(replay.kept) == 3  # the newest three
+    drawn = replay.draw(2)
+    assert len(drawn) == 2 and all(task is long_ for task in drawn)
+    assert practice.Replay(keep=3, rehearsed=[1, 2], seed=1).draw(4) == []
+    again = practice.Replay(keep=3, rehearsed=[1, 2, 3, 4], seed=1)
+    again.kept = list(replay.kept)
+    assert [id(t) for t in again.draw(2)] == [id(t) for t in practice.Replay(3, [4], 1).rng.sample(replay.kept, 2)]
+
+
+def _tiny_checkpoint(tmp_path):
+    torch.manual_seed(0)
+    stack = EventLM(EventLMConfig(**_STACK))
+    path = tmp_path / "base.pt"
+    torch.save({"task": "event_lm", "model_type": "EventLM", "cfg": dict(_STACK), "state_dict": stack.state_dict()},
+               path)
+    return path
+
+
+def _run_loop(tmp_path, monkeypatch, out, *flags):
+    monkeypatch.setattr(sys, "argv", ["practice_loop.py", "--checkpoint", str(_tiny_checkpoint(tmp_path)),
+                                      "--out", str(tmp_path / out), "--rounds", "2", "--tasks", "2",
+                                      "--attempts", "2", "--max-bytes", "6", "--start-hops", "6",
+                                      "--rehearse", "2", *flags])
+    practice.main()
+    return [json.loads(line) for line in (tmp_path / out / "rounds.jsonl").read_text().splitlines()]
+
+
+def test_replay_in_the_loop_rehearses_kept_chains_and_changes_nothing_when_off(tmp_path, monkeypatch):
+    plain = _run_loop(tmp_path, monkeypatch, "plain")
+    assert not any(key.startswith("replay") for row in plain for key in row)
+    # a model this small never writes a whole chain, so the test pays every attempt that reaches the buffer
+    monkeypatch.setattr(practice.Replay, "add", lambda self, tasks, written, count: (
+        self.kept.extend(tasks), len(tasks))[1])
+    rows = _run_loop(tmp_path, monkeypatch, "replay", "--replay", "2")
+    assert rows[0]["replay_added"] == rows[0]["tasks"] and rows[0]["replay_kept"] == rows[0]["tasks"]
+    assert rows[0]["replayed"] == 2 and rows[0]["replay_loss"] > 0
+    assert rows[1]["replay_kept"] == rows[0]["tasks"] + rows[1]["tasks"]
+    # the practice's own tasks are drawn as without replay: the first round's example is the same
+    assert rows[0]["example"][:12] == plain[0]["example"][:12]

@@ -196,6 +196,32 @@ def rehearsal_loss(model, tasks: list[Task], device):
                                device).mean()
 
 
+class Replay:
+    """The model's own paid chains past the rehearsed lengths, kept to be rehearsed again (--replay). The hippocampus
+    replays the paths that led to reward, in the pauses between trials and in sleep (Foster and Wilson 2006; Ambrose,
+    Pfeiffer and Foster 2016), and so keeps what was won by trying. An attempt is kept if it wrote its task's whole
+    chain as the corpus writes it and the task is longer than every rehearsed length; the newest ``keep`` are held,
+    and a round replays ``count`` of them drawn by its own generator, so the practice's tasks stay as they were."""
+
+    def __init__(self, keep: int, rehearsed: list[int], seed: int):
+        self.keep, self.longest_rehearsed, self.kept = keep, max(rehearsed), []
+        self.rng = random.Random(seed)
+
+    def add(self, tasks: list[Task], written: list[bytes], count: int) -> int:
+        """Keep the attempts (``count`` a task, in order) that earned their place; returns how many were added."""
+        added = 0
+        for i, wrote in enumerate(written):
+            task = tasks[i // count]
+            if task.hops > self.longest_rehearsed and wrote_the_chain(task, wrote):
+                self.kept.append(task)
+                added += 1
+        del self.kept[:max(0, len(self.kept) - self.keep)]
+        return added
+
+    def draw(self, count: int) -> list[Task]:
+        return self.rng.sample(self.kept, min(count, len(self.kept)))
+
+
 def wrote_the_chain(task: Task, written: bytes) -> bool:
     """The answer writes the query's whole chain and nothing else: ?zt= then mx=qa=7 and a newline (one hop: 7)."""
     return written == chain_written(task)
@@ -282,6 +308,10 @@ def main():
                         help="the lengths rehearsed, drawn evenly: those of the written corpus")
     parser.add_argument("--rehearse-weight", type=float, default=1.0,
                         help="weight of the rehearsal's loss beside the practice's")
+    parser.add_argument("--replay", type=int, default=0, metavar="TASKS",
+                        help="add to every round's step TASKS of the model's own paid whole chains longer than every "
+                             "--rehearse-hops length, kept from earlier rounds (Replay), as rehearsal weighs them")
+    parser.add_argument("--replay-keep", type=int, default=256, help="the newest paid chains a family keeps")
     parser.add_argument("--families", nargs="+", choices=sorted(FAMILIES), default=["hops"],
                         help="the task families the model was trained on (task_families.py): each is evaluated, and "
                              "with --rehearse each is rehearsed")
@@ -327,6 +357,8 @@ def main():
     optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=args.lr)
     rng, generator = random.Random(args.seed), torch.Generator().manual_seed(args.seed)
     rehearsing = random.Random(args.seed + 13)  # rehearsal draws its own tasks: the practice's stay as they were
+    replays = {family: Replay(args.replay_keep, args.rehearse_hops, args.seed + 29 + index)
+               for index, family in enumerate(practised)} if args.replay else {}
     args.out.mkdir(parents=True, exist_ok=True)
     log = (args.out / "rounds.jsonl").open("a")
     hops = {family: args.start_hops for family in practised}  # every practised family's place on its staircase
@@ -360,6 +392,7 @@ def main():
             solved[family] = float(rewards.mean())
             model.train()
             loss = policy_loss(model, tasks, written, rewards, args.attempts, device, args.dips)
+            kept_now = replays[family].add(tasks, written, args.attempts) if replays else 0
             if loss is not None and single:
                 losses.append(loss)
             elif loss is not None:
@@ -372,6 +405,8 @@ def main():
                             "mean_bytes": round(sum(len(w) for w in written) / len(written), 2),
                             "loss": None if loss is None else round(float(loss.detach()), 5),
                             "example": (tasks[0].prompt[-12:] + written[0]).decode("latin-1")}
+            if replays:
+                rows[family]["replay_added"] = kept_now
         rehearsals = []
         if args.rehearse:
             for family in families:
@@ -388,10 +423,26 @@ def main():
                 row["rehearsal"] = round(float(rehearsal.detach()), 5)
                 if example_ is not None:
                     row["example"] = example_
+        for family, replay in replays.items():
+            again = replay.draw(args.replay)
+            rows[family]["replay_kept"] = len(replay.kept)
+            if not again:
+                continue
+            replayed = rehearsal_loss(model, again, device)
+            rows[family]["replayed"] = len(again)
+            rows[family]["replay_loss"] = round(float(replayed.detach()), 5)
+            if single:
+                rehearsals.append(replayed)
+            else:
+                (args.rehearse_weight * replayed).backward()
+                sent = True
         step = losses + [args.rehearse_weight * rehearsal for rehearsal in rehearsals]
         if step:
             optimizer.zero_grad(set_to_none=True)
-            (step[0] if len(step) == 1 else step[0] + step[1]).backward()
+            total = step[0]
+            for more in step[1:]:  # one or two terms add as they always did: step[0] + step[1]
+                total = total + more
+            total.backward()
         if step or sent:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
