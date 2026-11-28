@@ -66,6 +66,9 @@ Daniel opened the server's two GPUs around the clock from Saturday 28 November u
 - **Saturday night to Sunday morning:** second seeds (`full_size_second_seeds.json`). The Transformer trains
   again at 90,000 updates, as every full-size claim needs, and both models at 180,000. That record fixes the
   win rule at 180,000 updates before any Transformer run at that length has trained.
+- **Saturday on the laptop, Sunday morning on the server:** the four-family model trains again with line heads
+  and beside a control trained the same way, and both learned families are practised together from each, six
+  seeds an arm (`line_heads_four_families.json`).
 - **Sunday and Monday:** the test-bed studies that have waited since 22 to 26 November, about 130 runs. They
   cover sleep with closed gates, subthreshold slopes, weight precision, cell dither, randomness at the best rate
   and the data-scaling curves of `data_scaling_long.json`.
