@@ -174,5 +174,122 @@
       "full size": "waits for fs-loop6-lift-pc3"
     },
     "what follows": "The pilot fs-loop6-lift-pc3 started at 03:50 UTC and was paused by hand at 04:00 UTC after 1,957 of its 24,000 updates, to free GPU 1 for the practice runs of practice_cap_raised.json; it goes on from its saved state when those runs end and is read as registered. With the bed reading worse, a pilot that passes sends two more server seeds before any full-length run carries the cube; a pilot that does not pass closes the steeper side of the power-law line."
+  },
+  "result_full_size": {
+    "recorded_utc": "2026-11-28T10:05:13Z",
+    "runs": "fs-loop6-lift-pc3 on the server's GPU 1 (code v18i): paused by hand at 1,957 updates on 2026-11-27, resumed from its saved state on 2026-11-28 and trained to 24,000 updates, then scored by full.sh on the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes (its trained reach of 512). Paired with fs-loop6-lift-pw8 by experiments/compare_stream_scores.py, split by context with experiments/gap_by_piece.py (near 240, far 8,192); the cells' firing by experiments/cell_activity.py on the first 8,192 validation bytes as 16 streams after 256 lead bytes (code v18s, CPU), both pilots side by side.",
+    "scores": {
+      "fs-loop6-lift-pc3 (cube)": 1.309285,
+      "fs-loop6-lift-pw8 (square)": 1.287005
+    },
+    "cube over square (paired; above zero the cube is worse)": {
+      "bits a byte": 0.02228,
+      "95% interval": [
+        0.02142,
+        0.02317
+      ],
+      "pieces": 4160,
+      "piece bytes": 512
+    },
+    "by what the context offers (cube over square, bits a byte of that kind)": {
+      "copyable near": {
+        "share of bytes": 0.0747,
+        "gap": -0.0001,
+        "95% interval": [
+          -0.0071,
+          0.0069
+        ]
+      },
+      "copyable far only": {
+        "share of bytes": 0.1102,
+        "gap": 0.0413,
+        "95% interval": [
+          0.0285,
+          0.0525
+        ]
+      },
+      "seen, other follower": {
+        "share of bytes": 0.0546,
+        "gap": -0.1174,
+        "95% interval": [
+          -0.1707,
+          -0.0617
+        ]
+      },
+      "new": {
+        "share of bytes": 0.7605,
+        "gap": 0.0318,
+        "95% interval": [
+          0.0288,
+          0.0345
+        ]
+      }
+    },
+    "pulses a byte at the last update": {
+      "fs-loop6-lift-pc3": 516468,
+      "fs-loop6-lift-pw8": 515340
+    },
+    "the cells' firing (share of cells firing at a byte, the eleven firing levels from the bottom up)": {
+      "fs-loop6-lift-pc3": [
+        0.024,
+        0.025,
+        0.029,
+        0.029,
+        0.032,
+        0.035,
+        0.039,
+        0.045,
+        0.048,
+        0.123,
+        0.171
+      ],
+      "fs-loop6-lift-pw8": [
+        0.056,
+        0.05,
+        0.053,
+        0.05,
+        0.055,
+        0.063,
+        0.074,
+        0.086,
+        0.095,
+        0.195,
+        0.253
+      ]
+    },
+    "the cells' spikes a byte by level": {
+      "fs-loop6-lift-pc3": [
+        624,
+        720,
+        661,
+        704,
+        729,
+        778,
+        869,
+        1156,
+        1255,
+        5504,
+        10238
+      ],
+      "fs-loop6-lift-pw8": [
+        789,
+        795,
+        781,
+        720,
+        810,
+        945,
+        1117,
+        1347,
+        1728,
+        5587,
+        9907
+      ]
+    },
+    "reading": {
+      "full size": "Worse, so the square stays and the steeper side of the power-law line is closed. The pilot scores 1.3093 against the square's 1.2870: the cube is 0.0223 worse (interval 0.0214 to 0.0232), at 0.2% more pulses a byte (516,468 against 515,340).",
+      "where": "As on the bed: on new contexts, three quarters of the bytes, the cube is 0.032 a byte worse, and on copies that only a far reach finds 0.041; where a context was seen with another follower it is 0.117 better, and near copies are level.",
+      "firing": "The cube keeps 43% to 68% as many cells firing at a byte as the square, level by level (0.024 to 0.171 against 0.056 to 0.253), so its cells are silenced, as the bed's reading said."
+    },
+    "what follows": "Power-law cells stay square in the next full-length runs. The cube is not tried again at full size."
   }
 }
