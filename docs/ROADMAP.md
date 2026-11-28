@@ -54,6 +54,26 @@ Sources: `results/event_lm/knowledge_gap/full_size_lifted_loop_run.json`,
 `results/event_lm/knowledge_gap/learning_rate_with_data.json`; figure
 `results/figures/event_lm_best_model.png`.
 
+### Running now: the server around the clock until Thursday 3 December
+
+Daniel opened the server's two GPUs around the clock from Saturday 28 November until Thursday 3 December,
+07:45 Berlin. Until then DeepSeek does not run on the server. The order of the work:
+
+- **Saturday:** the data slope (`full_size_data_slope.json`). The Transformer trains at 45,000 and 180,000
+  updates and the stack at 45,000; the stack at 180,000 has trained. The verdict comes on Saturday evening.
+  Beside it run the threshold scan of the fast output synapses for power-law cells
+  (`fast_synapse_threshold_power.json`) and the cubic-cells pilot at full size (`cubic_cells_with_data.json`).
+- **Saturday night to Sunday morning:** second seeds (`full_size_second_seeds.json`). The Transformer trains
+  again at 90,000 updates, as every full-size claim needs, and both models at 180,000. That record fixes the
+  win rule at 180,000 updates before any Transformer run at that length has trained.
+- **Sunday and Monday:** the test-bed studies that have waited since 22 to 26 November, about 130 runs. They
+  cover sleep with closed gates, subthreshold slopes, weight precision, cell dither, randomness at the best rate
+  and the data-scaling curves of `data_scaling_long.json`.
+- **Monday to Thursday:** what the weekend's verdicts call for, each registered before it runs. That means the
+  cube in the next full-length run if its pilot passes, the replay study of the one-model track, and two seeds
+  of the full-size candidate the verdicts name. If the stack beats the Transformer at 180,000 updates, the next
+  step is more data for both models. Nothing is downloaded for that without Daniel's consent.
+
 ## The diagnosis: memory is solved, knowledge is not
 
 `experiments/gap_by_piece.py` splits the paired bits of two scorings by what
