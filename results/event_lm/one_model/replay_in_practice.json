@@ -1,0 +1,23 @@
+{
+ "study": "Replay in practice: the model's own paid chains rehearsed again",
+ "recorded_utc": "2026-11-28T10:12:34Z",
+ "kind": "pre-registration of six practice runs on the server's GPU 1 in the window Daniel opened until Thursday 2026-12-03 07:45 Berlin",
+ "why": "practice_that_stands.json did not pass for either model: learning from attempts below their task's mean ended one way of falling and left another. Its record names the next candidate: replay of the model's own paid chains past the rehearsed lengths, as the hippocampus replays rewarded paths during rest. Every run that fell so far broke just past the longest chain the rehearsed corpus writes, so rehearsal holds what the corpus shows and nothing holds what practice has added. experiments/practice_loop.py --replay (833ff4d) keeps the newest paid whole chains past the rehearsed lengths, per family, and rehearses a number of them every round beside the corpus's chains; it was smoke-tested on the laptop on 2026-11-28 (40 rounds from four-stack).",
+ "arms": {
+  "replay-all-s0 ... -s5": "from four-line-stack (line_heads_four_families.json), that record's arm 'all' with replay: --families hops offs --longest-hops 12 --dips 0 --rehearse 16 --replay 16 --evaluate-hops 2 4 8 12 --exact-products --seed N for seeds 0 to 5; the families are the ones that record practises.",
+  "the control": "line-all-s0 to -s5 of line_heads_four_families.json: the same base, flags, seeds and code without --replay. A seed draws the same first tasks and attempts in both arms.",
+  "replay": "16 paid whole chains a round, drawn from the newest 256 that a family has kept (--replay-keep's default), rehearsed with the same weight as the corpus's chains.",
+  "code": "Code copy v18s (833ff4d), practice-study.sh, as line_heads_four_families.json's runs."
+ },
+ "measure": "line_heads_four_families.json's: practice_several_families.json's marks (kept, held, reach, reach kept) for every practised family, the evaluation after practice at 1 to 16 steps (200 tasks a cell, room for 64 bytes, seed 0), and the forms of every run that does not hold.",
+ "reading": {
+  "(1) replay keeps the loop standing": "If all six replay-all runs hold. If any falls, its rounds are read first.",
+  "(2) replay practises further": "For each practised family, the share of whole chains at 12 and at 16 steps after practice, replay-all against line-all seed by seed: replay practises further in a family if it is ahead (at least 0.10 higher with the two 95% intervals apart) at either length in at least four of the six seeds and behind at neither length in any seed; the control practises further by the same rule the other way; otherwise neither.",
+  "(3) what replay costs": "The mean accuracy over 1 to 4 steps after practice, replay-all against line-all: reported.",
+  "reported and not read": "Every cell, the evaluations along the way, the staircases, how many chains each family kept for replay, and the replay loss.",
+  "scope": "Two families of synthetic chains, one base, six seeds."
+ },
+ "what follows": "If (1) holds and (2) finds replay ahead in both families, the practice loop takes replay from here on. If (1) holds and (2) does not, replay costs nothing and is kept only if the control falls where replay holds. If (1) fails, the fallen runs are read before the next candidate (a cap whose guess pays under the staircase's lower mark).",
+ "where": "The server's GPU 1 after line_heads_four_families.json's two practice jobs (AFTER), one job of six runs; the jobs that waited for them start after it.",
+ "seen_before_recording": "practice_that_stands.json's results (both halves and the forms), line_heads_in_practice.json's result, the registration of line_heads_four_families.json, and the 40-round laptop smoke run of --replay from four-stack. No run of either arm exists."
+}
