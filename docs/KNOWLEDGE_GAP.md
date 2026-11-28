@@ -185,8 +185,18 @@ the same way. The distance to the Transformer on new contexts falls to 0.026 on 
 whole gap to 0.0038 ahead on test and 0.0006 behind on validation. That reading was chosen after the scores were
 seen; a second seed with it fixed in advance decides (`full_size_power_cells_second_seed.json`).
 
+v23 is that second seed (`full_size_power_cells_second_seed.json`, seed 20002, trained on the fast path). Without
+fast output synapses it scores 1.0751 on test and 1.1051 on validation: 0.0039 ahead of the Transformer on test
+(interval 0.0029 to 0.0048) and 0.0003 behind on validation (0.0007 ahead to 0.0013 behind). By the rule fixed before
+the run, ahead on one split and level on the other is not beating, so the claim is not made. The two seeds lie 0.0001
+and 0.0003 apart: the recipe is reproducibly ahead on test and level on validation. On new contexts it is 0.025 behind
+on test and 0.030 on validation; on copies it is 0.054 and 0.070 ahead (near) and 0.40 and 0.38 (far). Validation
+holds fewer copyable bytes than test, which is why the splits differ. The fast output synapses cost it 0.0097 and
+0.0119, so power-law stacks are read without them from here on.
+
 Records: `full_size.json`, `full_size_word_heads.json`, `full_size_best_rate_pair.json`, `full_size_loop_run.json`,
-`full_size_lifted_loop_run.json`, `full_size_lifted_loop_second.json`, `results/event_lm/trained_plasticity/arms.json`.
+`full_size_lifted_loop_run.json`, `full_size_lifted_loop_second.json`, `full_size_power_cells_second_seed.json`,
+`results/event_lm/trained_plasticity/arms.json`.
 
 ## What this means
 
@@ -197,7 +207,7 @@ there: how synapses learn through spikes late in training. See `docs/ROADMAP.md`
 
 ## Limits
 
-- One seed at full size; four seeds on the test bed only for knowledge cells, keyed synapses and the attention sink.
+- One seed at full size, except power-law cells (two seeds, 0.0003 apart); four seeds on the test bed only for knowledge cells, keyed synapses and the attention sink.
 - The test bed reaches 256 cells back where the full size reaches 2,048 to 8,192: knowledge cells helped the test bed
   and did nothing at full size.
 - The per-piece fit cannot separate kinds of byte whose shares move together, as the first letters of words do; only

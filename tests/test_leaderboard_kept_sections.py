@@ -22,7 +22,8 @@ def test_hand_written_sections_are_kept_in_order(tmp_path):
 def test_the_repository_leaderboard_keeps_its_release_sections():
     board = Path(__file__).resolve().parents[1] / "docs" / "LEADERBOARD.md"
     titles = [section.split("\n")[1] for section in kept_sections(board)]
-    assert titles[:5] == ["## Power-law cells at full length · 368,640,000 training targets · seed 20001",
+    assert titles[:6] == ["## Power-law cells, a second seed · 368,640,000 training targets · seed 20002",
+                          "## Power-law cells at full length · 368,640,000 training targets · seed 20001",
                           "## The lifted loop at full length · 368,640,000 training targets · seed 20001",
                           "## The looped stack at full length · 368,640,000 training targets · seed 20001",
                           "## Each model at its best rate · 368,640,000 training targets · seed 20001",

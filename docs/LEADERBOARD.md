@@ -5,6 +5,29 @@ Lower bits per byte rank higher. Every row in a comparison has the same number o
 State is persistent tensor storage for one stream. Full attention reports FP32 key and value storage at the context length in each comparison. Pulse counts use a native 4,096-byte enwik8 test sample. Each PG-19 temperature is fitted on eight separate validation books. The teacher-guided SNN uses additional training compute from a frozen Transformer.
 
 <!-- hand-written:start -->
+## Power-law cells, a second seed · 368,640,000 training targets · seed 20002
+
+| Model | Parameters | Reads the test as | enwik8 test | Rank | enwik8 validation | Rank |
+|---|---:|---|---:|---:|---:|---:|
+| 36.26M SNN stack, levels 2 to 8 run twice under the lifting pool, power-law cells, trained on streams at 6e-4, seed 20002 | 36,263,956 | Stream, reach 8,192 (the registered reading) | **1.07513** | 1 | 1.10509 | 3 |
+| The same recipe, seed 20001 (v22) | 36,263,956 | Stream, reach 8,192 | 1.07524 | 2 | 1.10540 | 4 |
+| 34.75M full attention, windows of 2,048 bytes, at 1.2e-3 | 34,752,000 | Windows with 2,032 bytes of history, taught output synapses | 1.07714 | 3 | **1.10442** | 1 |
+| 34.75M full attention, windows of 2,048 bytes, at 1.2e-3 | 34,752,000 | Windows with 2,032 bytes of history (the registered comparison) | 1.07899 | 4 | 1.10480 | 2 |
+| 36.26M SNN stack, power-law cells, seed 20002 | 36,263,956 | Stream, reach 8,192, taught output synapses | 1.08486 | 5 | 1.11702 | 5 |
+| 36.26M SNN stack, power-law cells, seed 20002 | 36,263,956 | Stream, as trained | 1.08884 | 6 | 1.11773 | 6 |
+
+The second seed of v22's recipe, read by the measure its record fixed before the run: without fast output synapses,
+against the Transformer's frozen score (`results/event_lm/knowledge_gap/full_size_power_cells_second_seed.json`). It
+is 0.0039 ahead on test (paired 95% interval 0.0029 to 0.0048) and 0.0003 behind on validation (0.0007 ahead to
+0.0013 behind). The record asked for both intervals below zero, so it does not beat the Transformer by it. The two
+seeds lie 0.0001 and 0.0003 apart. 507,237 pulses a byte, 1.63 times v19's stack. Two seeds of the stack, one of the
+Transformer.
+[Model card](../models/spiking-byte-lm-v23/README.md) · [Knowledge-gap study](KNOWLEDGE_GAP.md)
+
+![Release by release, the spiking stack against the Transformer](../results/figures/event_lm_full_size_line.png)
+<!-- hand-written:end -->
+
+<!-- hand-written:start -->
 ## Power-law cells at full length · 368,640,000 training targets · seed 20001
 
 | Model | Parameters | Reads the test as | enwik8 | Rank | PG-19 | Rank |
@@ -27,7 +50,6 @@ ahead of the Transformer with them. On validation it is level, 1.10540 against 1
 seed is registered with it (`full_size_power_cells_second_seed.json`). One seed of each model.
 [Model card](../models/spiking-byte-lm-v22/README.md) · [Scaling-law study](SCALING_LAW.md)
 
-![Release by release, the spiking stack against the Transformer](../results/figures/event_lm_full_size_line.png)
 <!-- hand-written:end -->
 
 <!-- hand-written:start -->

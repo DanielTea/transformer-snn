@@ -19,5 +19,309 @@
   "(4) the fast output synapses": "fsp-lift2-s2 taught at 2^24 against its primary score. If they cost it at least 0.005 on both splits again, full-size stacks with power-law cells are read without them from here on, beside the taught score, and a scan of their threshold for power-law cells is registered; if they help by at least 0.005 on both, the taught score is reported as the stack's best beside the primary one."
  },
  "what follows": "If (1) and (2) hold, Volley beats a Transformer of its size trained on the same data, at full size, by this measure: the claim is made with its limits (one Transformer seed, the pulses, the stack without fast synapses), a second seed of the Transformer is registered next, and the work turns to scaling, starting from the data slope (full_size_data_slope.json). If (1) holds and (2) does not, or the reverse, the result is reported as it is and a third seed is registered. If neither holds, fsp-lift2's scores without fast synapses were one seed's luck within the spread that (3) measures, and the next full-size candidate is chosen from the bed as before.",
- "seen_before_recording": "full_size_lifted_loop_second.json's result (every score of fsp-lift2, with and without fast output synapses, and their pairings with fsp-lift, fsp-loop and fsp-tf); every earlier full-size record. fast-lift2-check.sh was queued, not yet run; no run of seed 20002 has been made."
+ "seen_before_recording": "full_size_lifted_loop_second.json's result (every score of fsp-lift2, with and without fast output synapses, and their pairings with fsp-lift, fsp-loop and fsp-tf); every earlier full-size record. fast-lift2-check.sh was queued, not yet run; no run of seed 20002 has been made.",
+ "result": {
+  "recorded_utc": "2026-11-28T07:26:00Z",
+  "run": "fsp-lift2-s2 as the record named it: CODE=v18r (452f365) sched/bin/full-pair5.sh stack fsp-lift2-s2 6e-4 --stack-loop 2,8,2 --pulse-budget 507000 --pool-lifts-ceiling --granule-power 8, SEED=20002, windows with --fused-optimizer --exact-products, streams with --fused-reads --fused-optimizer --exact-products, on the server's GPU 1 alone (MPS=0). The check fast-lift2-check5 passed first (v18r scores fsp-lift2 on the first million validation bytes at reach 8,192 to 1.1327126674205783, the same bits as v18c; both stages train with the switches), so the run used the fast path. Started 2026-11-27 21:45:02 UTC, forked to streams at update 24,000 at 22:55:38 UTC, training ended about 02:44 UTC, scoring ended 03:59:26 UTC. 36,263,956 parameters, as fsp-lift2.",
+  "scores": {
+   "fsp-lift2-s2": {
+    "reach 8,192 test (primary)": 1.07513,
+    "reach 8,192 validation (primary)": 1.10509,
+    "taught test (reach 8,192, fast output synapses at 2^24 on all 18 passes)": 1.08486,
+    "taught validation": 1.11702,
+    "as trained test (reach 2,048)": 1.08884,
+    "as trained validation": 1.11773
+   },
+   "fsp-lift2 (seed 20001, full_size_lifted_loop_second.json)": {
+    "reach 8,192 test": 1.07524,
+    "reach 8,192 validation": 1.1054,
+    "taught test": 1.08448,
+    "taught validation": 1.11694
+   },
+   "mean of the two seeds, piece by piece": {
+    "reach 8,192 test": 1.07518,
+    "reach 8,192 validation": 1.10525
+   },
+   "fsp-tf": {
+    "frozen test (windows of 2,048)": 1.07899,
+    "frozen validation": 1.1048,
+    "taught at 0.07 test": 1.07714,
+    "taught at 0.07 validation": 1.10442
+   }
+  },
+  "reach": "chosen on the first 1,000,000 validation bytes: 1.13086 at 8,192 against 1.14473 at the trained 2,048 (fsp-lift2: 1.13271 and 1.14825), so 8,192; the primary scores are full-pair5.sh's reach-test and reach-validation.",
+  "pairing": "experiments/compare_stream_scores.py (95% interval from 3,000 resamples of 20,016 pieces of 256 bytes) and experiments/gap_by_piece.py, run on the laptop on the bits of every piece copied from the server's scores. The two seeds' mean is the mean of their bits piece by piece (same streams, lead and pieces).",
+  "(1) the second seed against the Transformer (primary; above zero fsp-lift2-s2 is behind)": {
+   "test over frozen fsp-tf": {
+    "gap": -0.0039,
+    "interval_95": [
+     -0.0048,
+     -0.0029
+    ]
+   },
+   "validation over frozen fsp-tf": {
+    "gap": 0.0003,
+    "interval_95": [
+     -0.0007,
+     0.0013
+    ]
+   }
+  },
+  "(2) the recipe over two seeds (mean of fsp-lift2 and fsp-lift2-s2 over frozen fsp-tf)": {
+   "test": {
+    "gap": -0.0038,
+    "interval_95": [
+     -0.0047,
+     -0.0029
+    ]
+   },
+   "validation": {
+    "gap": 0.0004,
+    "interval_95": [
+     -0.0005,
+     0.0014
+    ]
+   }
+  },
+  "(3) the spread of two seeds (fsp-lift2-s2 over fsp-lift2; below zero the second seed is better)": {
+   "primary test": {
+    "gap": -0.0001,
+    "interval_95": [
+     -0.0008,
+     0.0005
+    ]
+   },
+   "primary validation": {
+    "gap": -0.0003,
+    "interval_95": [
+     -0.0009,
+     0.0004
+    ]
+   },
+   "taught test": {
+    "gap": 0.0004,
+    "interval_95": [
+     -0.0003,
+     0.001
+    ]
+   },
+   "taught validation": {
+    "gap": 0.0001,
+    "interval_95": [
+     -0.0006,
+     0.0008
+    ]
+   }
+  },
+  "(4) the fast output synapses (taught at 2^24 over primary; above zero they cost)": {
+   "test": {
+    "gap": 0.0097,
+    "interval_95": [
+     0.0093,
+     0.0101
+    ]
+   },
+   "validation": {
+    "gap": 0.0119,
+    "interval_95": [
+     0.0116,
+     0.0123
+    ]
+   }
+  },
+  "beside": {
+   "taught test over frozen fsp-tf": {
+    "gap": 0.0059,
+    "interval_95": [
+     0.0047,
+     0.007
+    ]
+   },
+   "taught validation over frozen fsp-tf": {
+    "gap": 0.0122,
+    "interval_95": [
+     0.0111,
+     0.0134
+    ]
+   },
+   "taught test over taught fsp-tf": {
+    "gap": 0.0077,
+    "interval_95": [
+     0.0067,
+     0.0087
+    ]
+   },
+   "taught validation over taught fsp-tf": {
+    "gap": 0.0126,
+    "interval_95": [
+     0.0116,
+     0.0136
+    ]
+   },
+   "primary test over fsp-lift (v21, reach 8,192)": {
+    "gap": -0.0075,
+    "interval_95": [
+     -0.0082,
+     -0.0069
+    ]
+   },
+   "primary validation over fsp-lift (v21, reach 8,192)": {
+    "gap": -0.0077,
+    "interval_95": [
+     -0.0084,
+     -0.0071
+    ]
+   }
+  },
+  "by what the context offers (gap_by_piece, primary over frozen fsp-tf; near 2,032, far 8,192; gap in bits a byte of that kind, below zero the stack is better)": {
+   "test": {
+    "copyable near": {
+     "share_of_bytes": 0.1659,
+     "gap_bits_per_byte": -0.0543,
+     "gap_95": [
+      -0.0596,
+      -0.0489
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0424,
+     "gap_bits_per_byte": -0.4006,
+     "gap_95": [
+      -0.4371,
+      -0.3686
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0547,
+     "gap_bits_per_byte": 0.0621,
+     "gap_95": [
+      0.0122,
+      0.1109
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.737,
+     "gap_bits_per_byte": 0.0254,
+     "gap_95": [
+      0.0226,
+      0.028
+     ]
+    }
+   },
+   "validation": {
+    "copyable near": {
+     "share_of_bytes": 0.1346,
+     "gap_bits_per_byte": -0.0699,
+     "gap_95": [
+      -0.0789,
+      -0.0611
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0427,
+     "gap_bits_per_byte": -0.38,
+     "gap_95": [
+      -0.4242,
+      -0.3389
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0542,
+     "gap_bits_per_byte": 0.0595,
+     "gap_95": [
+      -0.0055,
+      0.1278
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7684,
+     "gap_bits_per_byte": 0.0295,
+     "gap_95": [
+      0.0269,
+      0.0321
+     ]
+    }
+   }
+  },
+  "fast output synapses by context (taught over primary)": {
+   "test": {
+    "copyable near": {
+     "share_of_bytes": 0.1659,
+     "gap_bits_per_byte": -0.0398,
+     "gap_95": [
+      -0.0417,
+      -0.0378
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0424,
+     "gap_bits_per_byte": -0.0222,
+     "gap_95": [
+      -0.0278,
+      -0.0175
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0547,
+     "gap_bits_per_byte": -0.0546,
+     "gap_95": [
+      -0.0751,
+      -0.0383
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.737,
+     "gap_bits_per_byte": 0.0275,
+     "gap_95": [
+      0.0265,
+      0.0288
+     ]
+    }
+   },
+   "validation": {
+    "copyable near": {
+     "share_of_bytes": 0.1346,
+     "gap_bits_per_byte": -0.0338,
+     "gap_95": [
+      -0.0372,
+      -0.03
+     ]
+    },
+    "copyable far only": {
+     "share_of_bytes": 0.0427,
+     "gap_bits_per_byte": -0.0182,
+     "gap_95": [
+      -0.025,
+      -0.0107
+     ]
+    },
+    "seen, other follower": {
+     "share_of_bytes": 0.0542,
+     "gap_bits_per_byte": -0.0754,
+     "gap_95": [
+      -0.1,
+      -0.0528
+     ]
+    },
+    "new": {
+     "share_of_bytes": 0.7684,
+     "gap_bits_per_byte": 0.0278,
+     "gap_95": [
+      0.0267,
+      0.0288
+     ]
+    }
+   }
+  },
+  "pulses a byte": "507,237 at update 90,000 in training (budget 507,000); fsp-lift2 506,607.",
+  "training time": "17,949 s of training on the fast path (stage 1, 24,000 updates of 512-byte windows: 4,228 s; stage 2, 66,000 updates of streams: about 13,720 s), then about 1.25 h of scoring. fsp-lift2 took 59,238 s on v18c without speed switches.",
+  "membrane saturation and the cells' firing": "owed: queued as the server CPU job sat-fsp-lift2-s2 (tmp/sat/run-fsp-lift2-s2.sh, v18r, as for fsp-lift2, firing beside fsp-lift2); added by amendment when it ends.",
+  "reading": {
+   "(1)": "Does not hold. On test fsp-lift2-s2 is below fsp-tf's frozen score with the interval below zero (-0.0039 [-0.0048, -0.0029]); on validation the interval includes zero (+0.0003 [-0.0007, +0.0013]). By the record this is ahead on test and level on validation, which is not beating.",
+   "(2)": "Does not hold, by the same rule: the two seeds' mean is ahead on test (-0.0038 [-0.0047, -0.0029]) and level on validation (+0.0004 [-0.0005, +0.0014]).",
+   "(3)": "The two seeds lie 0.0001 apart on test and 0.0003 on validation (primary), both intervals including zero; taught, 0.0004 and 0.0001. The first measure of the spread of one recipe at full size: far smaller than any gap read so far.",
+   "(4)": "The fast output synapses cost fsp-lift2-s2 0.0097 on test and 0.0119 on validation, at least 0.005 on both splits again. By the record, full-size stacks with power-law cells are read without them from here on, beside the taught score, and a scan of their threshold for power-law cells is registered."
+  },
+  "what follows": "Neither (1) nor (2) holds. The record says that in this case fsp-lift2's scores without fast synapses were one seed's luck within the spread that (3) measures, and the next full-size candidate is chosen from the bed as before. The second half is what follows. The first half is contradicted by (3): the second seed repeats the first to within 0.0003, so the result is not luck. The recipe is, reproducibly, 0.0038 ahead of fsp-tf on test and level with it on validation. Split by context, the stack is better on bytes the context offers (copyable near -0.054/-0.070, far only -0.40/-0.38 bits a byte) and worse on new contexts (+0.025/+0.030 on 74 to 77% of bytes). Validation holds fewer copyable bytes than test (13.5% near against 16.6%), which is why the same model is ahead on one split and level on the other. The deficit that stands between the stack and a win on both splits is knowledge on new contexts. Also owed by (4): the registration of a scan of the fast synapses' threshold for power-law cells."
+ }
 }

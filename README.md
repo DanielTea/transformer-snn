@@ -13,30 +13,29 @@ can. In the game, a volley answers the ball before it bounces, as
 the model answers each byte when it comes. Releases up to v17 were
 published as ShuntFormer; their tags and files keep that name.
 
-The newest release, **v22**, trains v21's lifted loop with
-power-law cells, which fire about the square of how far their
-membrane stands past threshold, for the full 90,000 updates.
-Read as its record registered, with fast output synapses, it is
-0.003 worse than v21's stack and the Transformer stays ahead. But
-those synapses cost this stack 0.009 to 0.012. Read without them,
-the stack scores **1.0752 bits per byte** on the enwik8 test and
-1.1054 on validation with the same 36.26M parameters: 0.0074
-better than v21's read the same way, **0.0038 ahead of the
-Transformer on test** (1.0790; paired interval 0.0027 to 0.0047)
-and level with it on validation (1.1048; 0.0006 behind, within the
-interval). That measure was chosen after the scores were seen, so
-nothing is claimed: a second seed, read without fast synapses as
-fixed in advance, is training. v22 also gives the stack heads that
-count lines instead of bytes, so that it recalls a binding as far
-back as the Transformer and writes chains of 12 steps unpractised.
-It finds where its practice of written chains breaks: just past
-the lengths it rehearses. The v22 weights are release assets,
-and the model that runs from a clone is v11.
+The newest release, **v23**, trains a second seed of v22's
+recipe, v21's lifted loop with power-law cells, and reads it by the
+measure fixed before it ran: without fast output synapses, against
+the Transformer's frozen score. It scores **1.0751 bits per byte**
+on the enwik8 test and 1.1051 on validation with 36.26M parameters:
+**0.0039 ahead of the Transformer on test** (1.0790; paired interval
+0.0029 to 0.0048) and level with it on validation (1.1048; 0.0003
+behind, interval 0.0007 ahead to 0.0013 behind). The record asked
+for both splits ahead, so the stack does not beat the Transformer
+by it. The two seeds lie 0.0001 and 0.0003 apart, so the lead on
+test is the recipe's and not one seed's luck. What separates the
+stack from a win on both splits is knowledge on new contexts:
+0.025 to 0.030 bits a byte behind on three quarters of the bytes,
+against 0.05 to 0.40 ahead wherever a copy is on offer. v23 also
+reads the Transformer's practice runs and the first half of
+practice that stands. The v23 weights are release assets, and the
+model that runs from a clone is v11.
 
 ![Release by release, the spiking stack against the Transformer](results/figures/event_lm_full_size_line.png)
 
 | Release | Adds | enwik8 test | Transformer | Scored in |
 |---|---|---:|---:|---|
+| [v23](#v23-a-second-seed-and-a-measure-fixed-in-advance) | A second seed of power-law cells read by a measure fixed in advance (ahead on test, level on validation), the spread of two seeds, practice that stands | **1.075** | 1.079 | Unbroken streams; windows of 2,048 bytes |
 | [v22](#v22-power-law-cells-at-full-length-and-practice-that-has-to-stand) | Power-law cells at full length (1.075 on test without fast output synapses, not the registered reading), heads that count lines, where practice of written chains breaks | 1.084 | **1.079** | Unbroken streams; windows of 2,048 bytes |
 | [v21](#v21-the-ceiling-lifted-at-full-length) | The ceiling lifted at full length, power-law cells, what the pool costs, fused reads, first screens of one model that reasons in writing | 1.082 | **1.079** | Unbroken streams; windows of 2,048 bytes |
 | [v20](#v20-depth-by-recurrence-at-full-length) | Depth by recurrence at full length, the loop's form, gated cells that catch up, sleep | 1.104 | **1.079** | Unbroken streams; windows of 2,048 bytes |
@@ -51,15 +50,15 @@ and the model that runs from a clone is v11.
 | [v11](#v11-surprise-clock-and-fast-synapses) | Fast synapses written by error spikes | 1.645 | 1.704 | One continuous stream |
 
 Each Transformer has the size and the training of its row. The
-Transformers of v22, v21, v20, v19, v18, v17 and v16 trained on windows
+Transformers of v23, v22, v21, v20, v19, v18, v17 and v16 trained on windows
 of 2,048 bytes from 24,000 updates, as their stacks did, and read
-2,048; every other one reads 512 bytes. v22, v21, v20 and v19 share
+2,048; every other one reads 512 bytes. v23, v22, v21, v20 and v19 share
 their Transformer, and their stacks and it trained at each model's
 best peak rate, the stacks at 6e-4 and the Transformer at 1.2e-3;
-the earlier ones at 3e-4. The stacks of v22, v21, v20, v19, v18 and v17
+the earlier ones at 3e-4. The stacks of v23, v22, v21, v20, v19, v18 and v17
 have 36.26M parameters, 4.2% more than their Transformer, for
 their knowledge cells; v18's word heads add 352 more. The stacks
-of v22, v21 and v20 run their levels 2 to 8 twice and fire 1.63 times
+of v23, v22, v21 and v20 run their levels 2 to 8 twice and fire 1.63 times
 v19's pulses. v16 to v12 have about 34.8M parameters and
 368.64M training targets from random weights. The Transformer of
 v15 has the standard shape and trained under the rotated
@@ -72,15 +71,16 @@ published scores 1.207. In the windows of v13 and v14 the v12
 decoder scores 1.467, because it gives up the stream it carries.
 v11 has 25.79M parameters and 140.90M targets. Its fast synapses
 carry the whole stream, and with the same synapses on its output
-the v11 Transformer scores 1.578. Every arm is one seed.
+the v11 Transformer scores 1.578. Every arm is one seed, except v23's
+stack, the second of its recipe.
 
 [Knowledge-gap study](docs/KNOWLEDGE_GAP.md) ·
 [Roadmap](docs/ROADMAP.md) ·
 [Scaling-law study](docs/SCALING_LAW.md) ·
-[Model card](models/spiking-byte-lm-v22/README.md) ·
+[Model card](models/spiking-byte-lm-v23/README.md) ·
 [Leaderboard](docs/LEADERBOARD.md) ·
-[Research handoff](docs/V22_HANDOFF.md) ·
-[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v22)
+[Research handoff](docs/V23_HANDOFF.md) ·
+[Latest release](https://github.com/DanielTea/transformer-snn/releases/tag/spiking-byte-lm-v23)
 
 ## How Volley works
 
@@ -117,6 +117,72 @@ from every byte after it was predicted, so the model adapts while
 it reads. Training uses gradients through surrogate slopes; the
 trained network fires whole counts, and its pulses are counted
 against a budget.
+
+## v23: a second seed and a measure fixed in advance
+
+v22's power-law stack lost by its registered reading, with fast
+output synapses, and was ahead of the Transformer on test without
+them, on a measure chosen after the scores were seen. v23 trains a
+second seed of the same recipe and reads it by that measure, fixed
+before the run (`full_size_power_cells_second_seed.json`): the stack
+without fast output synapses at the reach chosen on validation,
+against the Transformer's frozen score, paired piece by piece. It
+beats the Transformer only if it is ahead on test and on validation
+with both intervals below zero, and the two seeds' mean must agree.
+The seed trained on the fused race kernels, in 5.0 hours against
+the first seed's 16.5, after a check that the fast code scores the
+first seed to the same bits.
+
+**Ahead on test, level on validation: not a win by the rule.** The
+second seed scores 1.0751 bits per byte on the enwik8 test and
+1.1051 on validation. Against the Transformer (1.0790 and 1.1048)
+it is 0.0039 ahead on test (paired 95% interval 0.0029 to 0.0048)
+and 0.0003 behind on validation (0.0007 ahead to 0.0013 behind).
+The two seeds' mean is 0.0038 ahead and 0.0004 behind. By the
+record, ahead on one split and level on the other is not beating.
+
+**Two seeds of one recipe lie 0.0003 apart.** This is the first
+measure of the spread at full size: 0.0001 on test and 0.0003 on
+validation between seeds 20001 and 20002, both intervals across
+zero. Every gap read at full size so far is larger. The stack's lead
+on test is the recipe's.
+
+**Why one split and not the other.** Split by what each byte's
+context offers, the stack is ahead wherever a copy is on offer
+(0.054 a byte on near copies, 0.40 on copies only its reach finds,
+on test) and 0.025 behind on new contexts, three quarters of the
+bytes. Validation has fewer copyable bytes (13.5% near against
+16.6%) and its new contexts cost 0.030. So the same model is ahead
+on test and level on validation. What is left is knowledge.
+
+**Fast output synapses cost power-law stacks 0.01.** On this seed
+they cost 0.0097 on test and 0.0119 on validation, as they cost the
+first. By the record, power-law stacks are read without them from
+here on, and a scan of their threshold on both seeds is registered
+(`fast_synapse_threshold_power.json`).
+
+**Practice.** The Transformer's halves of two practice screens are
+in. Without rehearsal none of its three arms keeps its chains
+(`practice_within_reach.json`), as none of the stack's did. With
+rehearsal it ends with every chain of 6 and 8 steps right, but it
+lost them at rounds 100 to 200 and found them again, which the
+record counts as no pass (`practice_with_rehearsal.json`); the
+stack held at every evaluation. `practice_that_stands.json` makes
+attempts below their task's mean less likely, as a dopamine pause
+teaches. For the stack it ends the falls into filler (none of six
+runs, against five of six without it), but only four of six runs
+hold, and those reach less far, so by its rule it does not stand.
+
+**Running as this is published.** The gap's slope with data at full
+size (`full_size_data_slope.json`): the 180,000-update stack is
+being scored, and the Transformer's runs and the 45,000-update stack
+follow on the same GPU this weekend. The threshold scan, the
+Transformer's half of practice that stands, line heads in practice.
+
+**Limits.** Two seeds of the stack, one of the Transformer. The
+pulses a byte (507,237) are the trainer's count, not audited by a
+native decoder. The practice tasks are synthetic lookups, not
+language.
 
 ## v22: power-law cells at full length, and practice that has to stand
 
@@ -1420,6 +1486,16 @@ Transformer, the runner of the second seed on the fast path, and
 the flags of line heads and of the practice loop.
 [Restore and rescore](docs/V22_HANDOFF.md#restore-the-checkpoint) ·
 [Exact manifest](models/spiking-byte-lm-v22/manifest.json)
+
+The v23 archive holds the second seed of v22's recipe after 90,000
+updates, trained on the fast path: ahead of the Transformer on test
+and level on validation, read without fast output synapses as its
+record fixed in advance. A second asset holds the bits of its
+scorings. Its handoff has the restore command, the pairing with the
+first seed and with v19's Transformer, and how the two seeds' mean
+is formed.
+[Restore and rescore](docs/V23_HANDOFF.md#restore-the-checkpoint) ·
+[Exact manifest](models/spiking-byte-lm-v23/manifest.json)
 
 Regenerate the leaderboards, scientific figures and browser report
 from the checked-in records.

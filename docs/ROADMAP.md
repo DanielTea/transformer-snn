@@ -16,6 +16,7 @@ claims are made, and what to try next. Every number links to a record in
 
 | Scale | Stack | Transformer | Gap (bits per byte) |
 |---|---|---|---|
+| Full size, the lifted loop with power-law cells read without fast output synapses (v23, fsp-lift2-s2, second seed; 36.3M parameters, 507,000 pulses a byte), enwik8 test | 1.0751 | 1.0790 (34.75M, at 1.2e-3, frozen) | **0.004 ahead** on test, level on validation (+0.0003, interval -0.0007 to +0.0013); not beating by the registered rule |
 | Full size, the looped stack under the pool that lifts the ceiling (v21, fsp-lift: levels 2 to 8 run twice, 36.3M parameters, 1.63 times the pulses), enwik8 test | 1.0817 | 1.0790 (34.75M, at 1.2e-3) | **0.003 behind** (0.009 on validation) |
 | Full size, the looped stack (v20, fsp-loop: the same without the lifting pool), enwik8 test | 1.1039 | 1.0790 (34.75M, at 1.2e-3) | 0.025 behind |
 | Full size, each model at its best rate (v19: fsp-st at 6e-4, 36.3M parameters), enwik8 test | 1.1129 | 1.0790 (34.75M, at 1.2e-3) | 0.034 behind |
@@ -34,7 +35,14 @@ trained on streams at its best rate, 6e-4, and runs its levels 2 to 8 twice with
 tied synapses under the inhibitory pool that lifts the membranes' ceiling
 (`full_size_lifted_loop_run.json`): 1.0817 on test and 1.1136 on validation,
 0.0028 and 0.0088 behind the Transformer with each interval above zero, for
-1.63 times the plain stack's pulses. The full-size Transformer reads windows of
+1.63 times the plain stack's pulses. The same loop with power-law cells, read
+without its fast output synapses, is level with the Transformer or ahead of it
+with two seeds alike (`full_size_power_cells_second_seed.json`): fsp-lift2-s2
+scores 1.0751 on test and 1.1051 on validation, 0.0039 ahead (interval 0.0029
+to 0.0048) and 0.0003 behind (0.0007 ahead to 0.0013 behind). The first seed
+scored 1.0752 and 1.1054; the two lie 0.0001 and 0.0003 apart. Ahead on one
+split and level on the other is not a win by the rule the record set, so the
+claim is not made. The full-size Transformer reads windows of
 2,048 bytes. The test-bed stack has delayed fibres and trained on streams.
 Sources: `results/event_lm/knowledge_gap/full_size_lifted_loop_run.json`,
 `results/event_lm/knowledge_gap/full_size_loop_run.json`,
@@ -64,7 +72,12 @@ The stack remembers better than the Transformer. The whole gap is
 rather than from what it can copy. The best stack today, fsp-lift, has the
 same shape with a smaller last row: -0.087 on near copies, -0.40 to -0.44 on
 far ones, and +0.044 (test) to +0.052 (validation) on new contexts
-(`full_size_lifted_loop_run.json`). Spikes suit memory, because copying is
+(`full_size_lifted_loop_run.json`). With power-law cells, read without fast
+output synapses (fsp-lift2-s2), the last row shrinks again: -0.054 (test) and
+-0.070 (validation) on near copies, -0.40 and -0.38 on far ones, and +0.025 and
++0.030 on new contexts. Validation holds fewer copyable bytes than test (13.5%
+near against 16.6%), so the same model is ahead on test and level on
+validation. Spikes suit memory, because copying is
 exact matching. Knowledge is many fine-grained patterns held in synapses on
 top of each other, and that is where the work has to go.
 
@@ -414,7 +427,15 @@ them the stack's runs took 8 to 40 s a round.
    Transformer, neither model using fast synapses, the stack is 0.0038 ahead on test (interval 0.0027 to 0.0047)
    and 0.0006 behind on validation (0.0004 ahead to 0.0016 behind). That is not the measure the record named, so
    it decides nothing. A second seed is registered with this measure fixed in advance
-   (`full_size_power_cells_second_seed.json`), trained on the fast path. **In the loop the gain is larger**: on the
+   (`full_size_power_cells_second_seed.json`), trained on the fast path. **The second seed repeats the first,
+   and it is not a win by the rule.** fsp-lift2-s2 (seed 20002, 4.99 hours of training on the fast path against
+   16.5 for the first seed) scores 1.0751 on test and 1.1051 on validation without fast output synapses: 0.0039
+   ahead of the Transformer on test (interval 0.0029 to 0.0048) and 0.0003 behind on validation (0.0007 ahead to
+   0.0013 behind). The two seeds' mean says the same (0.0038 ahead, 0.0004 behind). The seeds lie 0.0001 and 0.0003
+   apart, the first measure of the spread at full size, so the lead on test is the recipe's, not luck. The fast
+   output synapses cost it 0.0097 and 0.0119 again, so power-law stacks are read without them from here on, and a
+   scan of their threshold is owed. What is left is new contexts: 0.025 to 0.030 a byte behind on three quarters
+   of the bytes, against 0.05 to 0.40 ahead on the bytes the context offers. **In the loop the gain is larger**: on the
    laptop's seed, after 24,000 updates, the looped bed with power-law cells leads the looped bed with plain cells
    by 0.0095 (interval 0.0086 to 0.0105) at equal pulses (`power_cells_in_loop_screen.json`), twice the same seed's
    lead on the plain bed, again on new contexts (0.015 better on 76% of bytes) with near copies 0.029 worse.
@@ -658,15 +679,19 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   capped arm that keeps GRPO's dips lost its chains between rounds 300 and 400. The uncapped arm in which only
   rewarded attempts teach lost them between rounds 100 and 200, after its staircase had climbed to 24 hops, where
   a guess pays. Reward on the answer alone does lengthen a spiking model's written chains; without rehearsal the
-  loop does not hold what it wins. The Transformer's three arms run on the laptop now.
+  loop does not hold what it wins. The Transformer's three arms fail the same way: each reached 6 hops along the
+  way and lost it (the capped arm with dips at 10 of 21 evaluations up to round 1,400, the other two at round 200
+  only), and after 2,000 rounds none answers more than 0.10 at 6 hops. Neither model practises further.
 - **Practice with rehearsal** (`practice_with_rehearsal.json`, `practice_loop.py --rehearse`): the capped,
   reward-only practice with the written chains of 16 fresh tasks of 1 to 4 hops rehearsed in every round, as the
   brain replays old memories among new ones. The stack's arm passes: it meets the three marks after 2,000 rounds
   and held them at every one of the 20 evaluations on the way. After practice it answers 0.99 of the tasks of 8
   hops right with the whole chain written right in 0.985, and it writes chains it never practised: whole chains
   in 0.975 of its answers at 12 hops, 0.875 at 16 and 0.345 at 20, from a corpus that showed it 1 to 4. Rehearsal
-  costs nothing on the way up (0.955 at 8 hops by round 100). One seed; the Transformer's arm follows on the
-  laptop.
+  costs nothing on the way up (0.955 at 8 hops by round 100). The Transformer's arm meets the three marks after
+  practice but not the fourth: at round 100 it answered 0.43 of the 8-hop tasks and at round 200 0.13, then 0.985
+  to 1.000 at every evaluation from round 300. It lost its chains early and found them again, which the record
+  counts as no pass. After 2,000 rounds the two models are level at 6 and 8 hops.
 - **The cap raised** (`practice_cap_raised.json`, on the server's GPU): the same loop with its cap at 8, 12 and
   16 hops, from both models, with three seeds each. The stack's nine runs are in. Every one holds its chains at
   every evaluation, so rehearsal keeps what practice wins with each seed and each cap. The cap at 12 reaches
@@ -750,10 +775,19 @@ replayed in sleep, and internalized into silent passes of the racing loop. The f
   the one started from the lookup model managed the running sum up to three readings. Neither reaches past the
   trained length without practice, where the stack's lookups reach 8 steps. By the registered tie rule the
   Transformer practises the lookups this weekend from the arm that started from the lookup model.
+- **Practice that stands** (`practice_that_stands.json`, on the server's GPU on 2026-11-28): the same loop with
+  GRPO's dips at full weight (`--dips 1`), so that attempts below their task's mean are made less likely, as the
+  pause of dopamine neurons teaches the indirect pathway what not to do again. Six seeds a model, paired with six
+  runs without dips. **The stack's half is in, and it does not stand by the record's rule.** Four of the six runs
+  with dips hold. No run with dips fills the room, where five of the six runs without them do. The two that do
+  not hold keep 1 to 4 steps and lose reach slowly: one does not keep it in the offset family at every late
+  evaluation, the other drops to 0.19 whole chains at 8 steps there. The runs that hold reach less far than the
+  one run without dips that held (lookups at 16 steps 0.43 on the mean against 0.98). So dips end the filler
+  falls and cost reach. The Transformer's runs finish today.
 
 ## How to continue
 
-- The newest handoff (`docs/V21_HANDOFF.md`) says how to restore checkpoints,
+- The newest handoff (`docs/V22_HANDOFF.md`) says how to restore checkpoints,
   rescore and retrain.
 - `experiments/train_event_lm.py` trains every arm; `experiments/eval_stream.py`
   scores streams, and `experiments/gap_by_piece.py` splits two scorings.
