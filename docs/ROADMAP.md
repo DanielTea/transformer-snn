@@ -471,8 +471,10 @@ them the stack's runs took 8 to 40 s a round.
    full-size pilot against the lifted loop with square cells (1.2870), and the laptop's seed. **On the bed the cube
    is worse**: after 24,000 updates it trails the square by 0.0308 and 0.0272 on the server's two seeds (intervals
    0.0297 to 0.0320 and 0.0262 to 0.0283) and by 0.0278 on the laptop's, at equal pulses, mostly on new contexts
-   (0.035 a byte on three quarters of the bytes) and on far copies. The steeper power silences too much. Its
-   full-size pilot is still to be scored. Two cheap full-size
+   (0.035 a byte on three quarters of the bytes) and on far copies. The steeper power silences too much. **Its
+   full-size pilot is worse too**: 1.3093 against the square's 1.2870, 0.0223 worse (interval 0.0214 to 0.0232) at
+   equal pulses, again on new contexts and far copies, with 43% to 68% as many cells firing level by level. The
+   square stays, and the steeper side of the power-law line is closed. Two cheap full-size
    pilots on the same loop needed no new code (`full_size_power_loop_variants.json`): skip fibres, which gave the
    looped bed a steady 0.006 under their own mark, and twice the rate, which gave the lifted loop 0.003. **Neither
    passes.** Skip fibres are 0.0011 better (interval 0.0003 to 0.0019), under the mark of 0.005, so they stay out.
