@@ -61,8 +61,12 @@ Daniel opened the server's two GPUs around the clock from Saturday 28 November u
 
 - **Saturday:** the data slope (`full_size_data_slope.json`). The Transformer trains at 45,000 and 180,000
   updates and the stack at 45,000; the stack at 180,000 has trained. The verdict comes on Saturday evening.
-  Beside it run the threshold scan of the fast output synapses for power-law cells
-  (`fast_synapse_threshold_power.json`) and the cubic-cells pilot at full size (`cubic_cells_with_data.json`).
+  Beside it ran the cubic-cells pilot at full size (`cubic_cells_with_data.json`) and the threshold scan of the
+  fast output synapses for power-law cells (`fast_synapse_threshold_power.json`). The scan's verdict: 2^27 is
+  adopted. On the first million validation bytes it reads 0.0014 bits a byte below the stack without fast
+  output synapses on the two seeds' mean (interval 0.0012 to 0.0016, below on each seed), where 2^24, the
+  threshold chosen on plain cells, costs 0.0101. Both seeds' test and validation splits are being scored at
+  2^27 and are reported beside the primary score, which stays as recorded.
 - **Saturday night to Sunday morning:** second seeds (`full_size_second_seeds.json`). The Transformer trains
   again at 90,000 updates, as every full-size claim needs, and both models at 180,000. That record fixes the
   win rule at 180,000 updates before any Transformer run at that length has trained.
