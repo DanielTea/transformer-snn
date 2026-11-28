@@ -1,0 +1,22 @@
+{
+ "study": "Where the square crosses: power-law cells at 4 and 16 thresholds",
+ "recorded_utc": "2026-11-28T10:07:41Z",
+ "kind": "pre-registration of a test-bed screen on the server's GPU 0 in the window Daniel opened until Thursday 2026-12-03 07:45 Berlin",
+ "why": "Power-law cells fire round(k*k/P) spikes for k thresholds of charge, fewer than a plain cell below P thresholds and more above it, up to the cap of 128. With P = 8 they lead the bed by 0.0125 after 24,000 updates on four seeds (power_cells_with_data.json) and lifted the full-size loop by 0.0074 after 90,000 (full_size_lifted_loop_second.json), most of it on new contexts, the part of the gap that is knowledge. The cube was worse on the bed and at full size (cubic_cells_with_data.json), so the steepness is settled. The crossing point has never moved: P = 8 was the only value tried. A smaller P silences fewer weak inputs and reaches the cap sooner (at 23 thresholds for P = 4, 32 for P = 8); a larger P silences more of them and reaches it later (45 for P = 16). Cortical neurons differ in where their rate curves bend, so the point is a property to fit, not a given. The bed is cheap and the window has room.",
+ "arms": {
+  "pwp4-24k-s1 ... -s4": "sched/bin/arm.sh stack NAME --lr 1.2e-3 --seed 2000N --granule-power 4 --fused-reads --fused-optimizer --compile-cells, the delayed bed's recipe of the pw8 runs at 1.2e-3, seeds 20001 to 20004; 5,249,060 parameters",
+  "pwp16-24k-s1 ... -s4": "the same with --granule-power 16",
+  "pw8f-24k-s1 ... -s4": "the base: the same with --granule-power 8, trained on the same fast path in the same job set (a run with fused reads or compiled cells is another run, as another seed is, so the earlier pw8 runs are not the base)",
+  "the 6,000-update runs": "each of the twelve again with --steps 6000 (pwp4-6k-sN, pwp16-6k-sN, pw8f-6k-sN), for the shared reading's growth with data",
+  "code": "Code copy v18o (a418100), on which the fast bed path was checked (fastbed-check, 2026-11-27)."
+ },
+ "measure": "The runner's score: the first 2,000,000 validation bytes as 16 unbroken streams after 8,192 lead bytes, paired with pw8f of the same seed and length (experiments/compare_stream_scores.py), split by context (experiments/gap_by_piece.py, near 240, far 8,192); the pulses a byte of every run.",
+ "reading": {
+  "for each P": "The leads over pw8f after 24,000 updates, seed by seed (above zero P is better). P beats the square if all four seeds lead and the mean lead is at least 0.003; it is worse if all four trail or the mean trails by 0.003 or more; otherwise level. The shared reading of power_cells_with_data.json is reported beside: the mean lead after 6,000 against after 24,000, a fix for late learning if it grows.",
+  "pulses": "If an arm fires more than a tenth more pulses a byte than pw8f, every claim states them.",
+  "scope": "One bed, two points beside the square, four seeds."
+ },
+ "what follows": "If one P beats the square (both: the larger mean lead), a full-size pilot fs-loop6-lift-pwP (sched/bin/full.sh, fs-loop6-lift-pw8's recipe with --granule-power P) is registered and run against fs-loop6-lift-pw8 (1.2870); if it is at least 0.005 better with the paired interval clear of zero, the next full-length run takes P, two seeds at 90,000 updates read without fast output synapses against both Transformer seeds, registered before it starts. If neither P beats the square, P = 8 stays and the power-law line is closed on both sides.",
+ "where": "The server's GPU 0 (GPU_MEM 24, two jobs side by side under MPS), after fsd-tf-180k-s2 (AFTER), at priority 38 ahead of the bed studies queued there; about four hours for the 24 runs.",
+ "seen_before_recording": "power_cells_with_data.json, power_cells_in_loop_screen.json, full_size_power_cells.json, full_size_lifted_loop_second.json and cubic_cells_with_data.json with all their results. No run with P other than 8 exists."
+}
