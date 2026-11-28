@@ -1,7 +1,7 @@
 """Figure of the full-size spiking stacks release by release against the Transformer they are read beside: each
 stack's registered reading after 90,000 updates (a stream reaching 8,192 cells with taught output synapses) on enwik8
-test and validation, the same stream without fast output synapses as a hollow mark, and the Transformer at its best
-rate, frozen. A stack joins the line once its record has a result.
+test and validation, the same stream without fast output synapses as a hollow mark (the registered reading from v23
+on), and the Transformer at its best rate, frozen. A stack joins the line once its record has a result.
 
 usage: python experiments/plot_full_size_line.py [--figure-dir DIR]
 """
@@ -17,10 +17,13 @@ from plot_dendrite import MUTED, ORANGE, RESULTS, TEXT, plt, save, style
 DARK_VIOLET = "#4a2a85"
 RECORDS = RESULTS / "event_lm" / "knowledge_gap"
 # (label, record, the run's key in the record's scores): the stacks in the order they were released.
-STACKS = (("Plain stack\n(v19)", "full_size_loop_run.json", "fsp-st"),
-          ("Looped stack\n(v20)", "full_size_loop_run.json", "fsp-loop"),
-          ("Lifted loop\n(v21)", "full_size_lifted_loop_run.json", "fsp-lift"),
-          ("Power-law cells\n(v22)", "full_size_lifted_loop_second.json", "fsp-lift2"))
+STACKS = (("Plain\nstack (v19)", "full_size_loop_run.json", "fsp-st"),
+          ("Looped\nstack (v20)", "full_size_loop_run.json", "fsp-loop"),
+          ("Lifted\nloop (v21)", "full_size_lifted_loop_run.json", "fsp-lift"),
+          ("Power-law\ncells (v22)", "full_size_lifted_loop_second.json", "fsp-lift2"),
+          ("Second\nseed (v23)", "full_size_power_cells_second_seed.json", "fsp-lift2-s2"))
+# From v23 on a stack's registered reading is the stream without fast output synapses.
+LOOSE_REGISTERED = {"fsp-lift2-s2"}
 
 
 def taught(scores, split):
@@ -36,41 +39,52 @@ def paired_loose(result, split):
     for name, block in result.items():
         if name.startswith("(1)") and isinstance(block, dict):
             for key, value in block.items():
-                if (key.startswith(f"reach {split}") or key.startswith(f"reach 8,192 {split}")) and "frozen" in key:
+                if (key.startswith(f"reach {split}") or key.startswith(f"reach 8,192 {split}")
+                        or key.startswith(f"{split} over")) and "frozen" in key:
                     return value["gap"]
     return None
 
 
 def line(records=RECORDS):
     """The stacks that have results, with their test and validation readings, and the Transformer's."""
-    found, transformer = [], None
+    found, transformer, registered = [], None, []
     for label, name, run in STACKS:
         path = Path(records) / name
         record = json.loads(path.read_text()) if path.exists() else {}
         scores = record.get("result", {}).get("scores", {})
         if run not in scores:
             continue
+        registered.append(run in LOOSE_REGISTERED)
         found.append((label, {split: taught(scores[run], split) for split in ("test", "validation")},
-                      {split: scores[run].get(f"reach 8,192 {split}") for split in ("test", "validation")},
+                      {split: loose(scores[run], split) for split in ("test", "validation")},
                       {split: paired_loose(record["result"], split) for split in ("test", "validation")}))
         if "fsp-tf" in scores:
             tf = scores["fsp-tf"]
             transformer = {"test": tf["frozen test (windows of 2,048)"], "validation": tf["frozen validation"]}
+    line.registered = registered
     return found, transformer
 
 
+def loose(scores, split):
+    """A run's stream at 8,192 without fast output synapses, whether or not its key names it the primary reading."""
+    keys = [key for key in scores if key == f"reach 8,192 {split}" or key.startswith(f"reach 8,192 {split} (")]
+    return scores[keys[0]] if len(keys) == 1 else None
+
+
 def figure(found, transformer, output):
-    fig, axes = plt.subplots(1, 2, figsize=(12.4, 6.3), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(14.2, 6.6), sharey=True)
     fig.subplots_adjust(left=0.075, right=0.975, bottom=0.13, top=0.70, wspace=0.07)
-    best = min(scores["test"] for _, scores, _, _ in found)
+    flags = getattr(line, "registered", [False] * len(found))
+    best = min(loose["test"] if flag else scores["test"] for (_, scores, loose, _), flag in zip(found, flags))
     fig.text(0.035, 0.97, "Release by release, the spiking stack against the Transformer", size=19.5,
              weight="bold", color=TEXT, va="top")
     fig.text(0.036, 0.895, "Bits per byte on enwik8 after 90,000 updates from random weights at full size (the stacks "
-             "36.3M parameters, the Transformer 34.8M), one seed a run.\nThe stacks read each split as 16 unbroken "
-             "streams reaching 8,192 cells, with fast output synapses (filled: the registered reading)\nand without "
-             "them (hollow: chosen after the scores were seen); the Transformer reads windows of 2,048 bytes. Lower is "
-             f"better.\nOn test the best registered reading is {best - transformer['test']:+.4f} from the "
-             "Transformer.", size=10, color=MUTED, va="top", linespacing=1.45)
+             "36.3M parameters, the Transformer 34.8M), one seed a run (v23 is the second seed of v22's recipe).\n"
+             "The stacks read each split as 16 unbroken streams reaching 8,192 cells, with fast output synapses (filled: "
+             "registered up to v22) and without them\n(hollow: registered in advance for v23, chosen after the scores "
+             "for the others); the Transformer reads windows of 2,048 bytes. Lower is better.\n"
+             f"On test the best registered reading is {best - transformer['test']:+.4f} from the Transformer.",
+             size=10, color=MUTED, va="top", linespacing=1.45)
     places = list(range(len(found)))
     for ax, split in zip(axes, ("test", "validation")):
         style(ax)
