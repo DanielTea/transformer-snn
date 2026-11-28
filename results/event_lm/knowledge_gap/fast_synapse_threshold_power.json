@@ -11,5 +11,178 @@
  "measure": "experiments/eval_stream.py on the server's GPU, the first 1,000,000 validation bytes as 16 unbroken streams after 8,192 unscored lead bytes, reach 8,192, pieces of 256, the bits of every piece kept. Each threshold paired with 'none' of the same seed (experiments/compare_stream_scores.py), and on the two seeds' mean bits piece by piece.",
  "reading": "The threshold with the fewest bits on the two seeds' mean is adopted for full-size stacks with power-law cells if on that mean it is at least 0.001 below 'none' with the paired interval below zero, and below 'none' on each seed. Then the test and validation splits of both seeds are scored at it, and reported as the stack's score with fast output synapses beside the primary score without them (the primary reading of full_size_power_cells_second_seed.json and its verdict stay as recorded). If no threshold meets this, power-law stacks are read without fast output synapses only, and the taught score at 2^24 is no longer reported for them.",
  "where": "A GPU job (sched/bin/power-teach-scan.sh, KIND=gpu, GPU=0, after fsd-st-180k has been scored), beside the first data-slope run that follows it on GPU 0; scoring a million bytes takes about two minutes, so about 16 scorings take under an hour.",
- "seen_before_recording": "Both seeds' scores on the full splits with fast output synapses at 2^24 and without them (full_size_lifted_loop_second.json, full_size_power_cells_second_seed.json), and their scans on the million at reach 2,048 and 8,192 without fast synapses (fsp-lift2 1.13271 at 8,192, fsp-lift2-s2 1.13086). No score of either model at any threshold other than 2^24, and none of them on the million with fast synapses."
+ "seen_before_recording": "Both seeds' scores on the full splits with fast output synapses at 2^24 and without them (full_size_lifted_loop_second.json, full_size_power_cells_second_seed.json), and their scans on the million at reach 2,048 and 8,192 without fast synapses (fsp-lift2 1.13271 at 8,192, fsp-lift2-s2 1.13086). No score of either model at any threshold other than 2^24, and none of them on the million with fast synapses.",
+ "result": {
+  "recorded_utc": "2026-11-28T11:21:03Z",
+  "runs": "power-teach-scan on the server's GPU 0 (code v18r, 452f365), 2026-11-28 from about 08:55 UTC, beside fsd-tf-45k: the averaged weights of fsp-lift2 and fsp-lift2-s2 at reach 8,192 on the first 1,000,000 validation bytes as 16 streams in pieces of 256, without fast output synapses and with them on all 18 passes at 2^23, 2^24, 2^25, 2^26, 2^27, 2^28. Read with checkpoints/scheduler/tools/power-teach/read-power-teach.py (experiments/compare_stream_scores.py's resampled pieces).",
+  "none (bits a byte)": {
+   "fsp-lift2": 1.132713,
+   "fsp-lift2-s2": 1.130861,
+   "two seeds' mean": 1.131787
+  },
+  "thresholds (over none; above zero the fast output synapses cost)": {
+   "2^23": {
+    "fsp-lift2": {
+     "bpb": 1.164373,
+     "over none": 0.03166,
+     "95% interval": [
+      0.03053,
+      0.03277
+     ]
+    },
+    "fsp-lift2-s2": {
+     "bpb": 1.163323,
+     "over none": 0.03246,
+     "95% interval": [
+      0.03143,
+      0.03354
+     ]
+    },
+    "two seeds' mean": {
+     "bpb": 1.163848,
+     "over none": 0.03206,
+     "95% interval": [
+      0.03102,
+      0.03311
+     ]
+    }
+   },
+   "2^24": {
+    "fsp-lift2": {
+     "bpb": 1.142303,
+     "over none": 0.00959,
+     "95% interval": [
+      0.00889,
+      0.01031
+     ]
+    },
+    "fsp-lift2-s2": {
+     "bpb": 1.141373,
+     "over none": 0.01051,
+     "95% interval": [
+      0.00985,
+      0.01117
+     ]
+    },
+    "two seeds' mean": {
+     "bpb": 1.141838,
+     "over none": 0.01005,
+     "95% interval": [
+      0.00938,
+      0.01073
+     ]
+    }
+   },
+   "2^25": {
+    "fsp-lift2": {
+     "bpb": 1.134167,
+     "over none": 0.00145,
+     "95% interval": [
+      0.00097,
+      0.00196
+     ]
+    },
+    "fsp-lift2-s2": {
+     "bpb": 1.133169,
+     "over none": 0.00231,
+     "95% interval": [
+      0.00187,
+      0.00276
+     ]
+    },
+    "two seeds' mean": {
+     "bpb": 1.133668,
+     "over none": 0.00188,
+     "95% interval": [
+      0.00143,
+      0.00235
+     ]
+    }
+   },
+   "2^26": {
+    "fsp-lift2": {
+     "bpb": 1.131563,
+     "over none": -0.00115,
+     "95% interval": [
+      -0.00149,
+      -0.0008
+     ]
+    },
+    "fsp-lift2-s2": {
+     "bpb": 1.130433,
+     "over none": -0.00043,
+     "95% interval": [
+      -0.00072,
+      -0.00012
+     ]
+    },
+    "two seeds' mean": {
+     "bpb": 1.130998,
+     "over none": -0.00079,
+     "95% interval": [
+      -0.00109,
+      -0.00047
+     ]
+    }
+   },
+   "2^27": {
+    "fsp-lift2": {
+     "bpb": 1.131059,
+     "over none": -0.00165,
+     "95% interval": [
+      -0.00188,
+      -0.00142
+     ]
+    },
+    "fsp-lift2-s2": {
+     "bpb": 1.129781,
+     "over none": -0.00108,
+     "95% interval": [
+      -0.00128,
+      -0.00087
+     ]
+    },
+    "two seeds' mean": {
+     "bpb": 1.13042,
+     "over none": -0.00137,
+     "95% interval": [
+      -0.00157,
+      -0.00115
+     ]
+    }
+   },
+   "2^28": {
+    "fsp-lift2": {
+     "bpb": 1.131264,
+     "over none": -0.00145,
+     "95% interval": [
+      -0.0016,
+      -0.00129
+     ]
+    },
+    "fsp-lift2-s2": {
+     "bpb": 1.129846,
+     "over none": -0.00101,
+     "95% interval": [
+      -0.00114,
+      -0.00088
+     ]
+    },
+    "two seeds' mean": {
+     "bpb": 1.130555,
+     "over none": -0.00123,
+     "95% interval": [
+      -0.00137,
+      -0.00109
+     ]
+    }
+   }
+  },
+  "reading": {
+   "the threshold": "Adopted: 2^27 has the fewest bits on the two seeds' mean, -0.0014 against none (interval -0.0016 to -0.0011), and is below none on each seed (-0.0016 and -0.0011). By the record the test and validation splits of both seeds are scored at it next and reported beside the primary score, which stays as full_size_power_cells_second_seed.json recorded it.",
+   "fewest bits on the two seeds' mean": "2^27",
+   "adopted": true
+  },
+  "what follows": "Score fsp-lift2 and fsp-lift2-s2 on the full test and validation splits at 2^27 on all 18 passes (a GPU job), and report those scores beside the primary ones."
+ }
 }
