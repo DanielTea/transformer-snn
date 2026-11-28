@@ -323,5 +323,132 @@
    "(4)": "The fast output synapses cost fsp-lift2-s2 0.0097 on test and 0.0119 on validation, at least 0.005 on both splits again. By the record, full-size stacks with power-law cells are read without them from here on, beside the taught score, and a scan of their threshold for power-law cells is registered."
   },
   "what follows": "Neither (1) nor (2) holds. The record says that in this case fsp-lift2's scores without fast synapses were one seed's luck within the spread that (3) measures, and the next full-size candidate is chosen from the bed as before. The second half is what follows. The first half is contradicted by (3): the second seed repeats the first to within 0.0003, so the result is not luck. The recipe is, reproducibly, 0.0038 ahead of fsp-tf on test and level with it on validation. Split by context, the stack is better on bytes the context offers (copyable near -0.054/-0.070, far only -0.40/-0.38 bits a byte) and worse on new contexts (+0.025/+0.030 on 74 to 77% of bytes). Validation holds fewer copyable bytes than test (13.5% near against 16.6%), which is why the same model is ahead on one split and level on the other. The deficit that stands between the stack and a win on both splits is knowledge on new contexts. Also owed by (4): the registration of a scan of the fast synapses' threshold for power-law cells."
+ },
+ "result_measurements": {
+  "recorded_utc": "2026-11-28T07:44:01Z",
+  "what": "The result's owed measurements (server CPU job sat-fsp-lift2-s2, v18r, 07:35 to 07:39 UTC), as for fsp-lift2: membrane saturation on the first 65,536 validation bytes (experiments/membrane_saturation.py), and the cells' firing on the first 8,192 validation bytes as 16 streams after 256 lead bytes beside fsp-lift2 (experiments/cell_activity.py, the eleven firing levels from the bottom up).",
+  "membrane saturation (share of entries at their cap)": {
+   "fsp-lift2-s2": {
+    "cells": 7.248873954120867e-08,
+    "other": 0.06816883294507976,
+    "reads": 7.562922343824104e-05,
+    "stream after cells": 0.0001237169565136891
+   }
+  },
+  "the cells' firing": {
+   "fsp-lift2-s2": {
+    "share_of_cells_firing_at_a_byte": [
+     0.062,
+     0.039,
+     0.037,
+     0.037,
+     0.036,
+     0.04,
+     0.046,
+     0.054,
+     0.059,
+     0.163,
+     0.249
+    ],
+    "share_of_cells_sending_nine_tenths": [
+     0.03,
+     0.018,
+     0.018,
+     0.018,
+     0.017,
+     0.019,
+     0.022,
+     0.026,
+     0.028,
+     0.073,
+     0.113
+    ],
+    "spikes_of_a_firing_cell_median": [
+     3.0,
+     4.0,
+     4.0,
+     4.0,
+     4.0,
+     4.0,
+     5.0,
+     5.0,
+     5.0,
+     8.0,
+     15.0
+    ],
+    "spikes_of_a_firing_cell_p90": [
+     21,
+     27,
+     26,
+     27,
+     30,
+     30,
+     31,
+     32,
+     37,
+     64,
+     128
+    ],
+    "cell_spikes_per_byte": 20650,
+    "cells_that_never_fire": 13
+   },
+   "fsp-lift2": {
+    "share_of_cells_firing_at_a_byte": [
+     0.059,
+     0.037,
+     0.038,
+     0.032,
+     0.035,
+     0.039,
+     0.049,
+     0.054,
+     0.068,
+     0.16,
+     0.234
+    ],
+    "share_of_cells_sending_nine_tenths": [
+     0.028,
+     0.016,
+     0.018,
+     0.015,
+     0.017,
+     0.019,
+     0.023,
+     0.026,
+     0.032,
+     0.071,
+     0.105
+    ],
+    "spikes_of_a_firing_cell_median": [
+     3.0,
+     4.0,
+     4.0,
+     4.0,
+     4.0,
+     4.0,
+     5.0,
+     5.0,
+     5.0,
+     9.0,
+     15.0
+    ],
+    "spikes_of_a_firing_cell_p90": [
+     21,
+     29,
+     30,
+     28,
+     29,
+     31,
+     30,
+     31,
+     37,
+     76,
+     128
+    ],
+    "cell_spikes_per_byte": 20675,
+    "cells_that_never_fire": 22
+   }
+  },
+  "reading": "Nothing is read from these. Saturation stays negligible (cells 7e-8, reads 8e-5, as fsp-lift2's 1e-8 and 1e-4). The two seeds fire alike: 20,650 and 20,675 cell spikes a byte, the same share of cells at every level within 0.01 (13 and 22 cells never fire)."
  }
 }
